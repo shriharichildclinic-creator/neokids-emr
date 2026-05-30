@@ -51,6 +51,14 @@ const bookAppointmentSchema = z.object({
   date: dateSchema,
   startTime: timeSchema,
   consultationType: z.enum(['ONLINE', 'OFFLINE'])
+}).refine((data) => {
+  // Validate appointment date is not in the past (IST-aware)
+  const { getTodayDateString } = require('./date');
+  const today = getTodayDateString();
+  return data.date >= today;
+}, {
+  message: 'Appointment date cannot be in the past',
+  path: ['date']
 });
 
 const prescriptionSchema = z.object({

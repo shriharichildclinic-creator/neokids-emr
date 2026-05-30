@@ -3,6 +3,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { bookAppointmentSchema } = require('../utils/validators');
 const slotService = require('../services/slot.service');
 const bookingService = require('../services/booking.service');
+const { getTodayDateString } = require('../utils/date');
 
 exports.listDoctors = asyncHandler(async (req, res) => {
   const { mode } = req.query;
@@ -75,6 +76,13 @@ exports.getSlots = asyncHandler(async (req, res) => {
 exports.book = asyncHandler(async (req, res) => {
   const parsed = bookAppointmentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+
+  // Double-check: backend IST-aware past-date guard (covers API calls bypassing the widget)
+  const today = getTodayDateString();
+  if (parsed.data.date < today) {
+    return res.status(400).json({ error: 'Appointment date cannot be in the past' });
+  }
+
   const result = await bookingService.bookAppointment(parsed.data);
   res.status(201).json(result);
 });

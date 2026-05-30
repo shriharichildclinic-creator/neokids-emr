@@ -59,7 +59,21 @@ async function loadDoctors(){const docs=await api('/public/doctors?mode='+state.
 function selectDoctor(id){api('/public/doctors/'+id).then(d=>{state.doctor=d;goTo(2);});}
 function goTo(step){[1,2,3,4].forEach(i=>$('#step'+i).classList.add('hidden'));$('#step'+step).classList.remove('hidden');[1,2,3,4].forEach(i=>$('#step'+i+'Label').className=i===step?'font-semibold text-[#4DA8FF]':'text-slate-400');if(step===3) initSlotPicker();if(step===4) renderSummary();}
 function validateStep2(){if(!$('#f_name').value||!$('#f_parent').value||!$('#f_dob').value||!$('#f_gender').value||!$('#f_phone').value||!$('#f_problem').value) return alert('Please fill all required fields');if(!/^[6-9]\d{9}$/.test($('#f_phone').value)) return alert('Please enter a valid 10-digit Indian phone number');goTo(3);}
-function initSlotPicker(){const today=new Date().toISOString().slice(0,10);if(!$('#f_date').value) $('#f_date').value=today;$('#f_date').min=today;loadSlots();$('#f_date').onchange=loadSlots;}
+function initSlotPicker(){
+  // IST-aware today — avoids UTC offset causing yesterday's date before 5:30 AM IST
+  const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const y = nowIST.getFullYear();
+  const m = String(nowIST.getMonth() + 1).padStart(2, '0');
+  const d = String(nowIST.getDate()).padStart(2, '0');
+  const todayIST = `${y}-${m}-${d}`;
+  if(!$('#f_date').value || $('#f_date').value < todayIST) $('#f_date').value=todayIST;
+  $('#f_date').min=todayIST;
+  loadSlots();
+  $('#f_date').onchange=function(){
+    if(this.value < todayIST){ this.value = todayIST; }
+    loadSlots();
+  };
+}
 async function loadSlots(){state.date=$('#f_date').value;state.slot=null;$('#continueSlot').disabled=true;$('#slotsGrid').innerHTML='<p class="col-span-full text-slate-400 text-center text-sm">Loading...</p>';try{const {slots}=await api(`/public/slots?doctorId=${state.doctor.id}&date=${state.date}&type=${state.mode}`);const available=slots.filter(s=>s.available);if(!available.length){$('#slotsGrid').innerHTML='<p class="col-span-full text-slate-400 text-center text-sm py-4">No available slots on this date</p>';return;}$('#slotsGrid').innerHTML=available.map(s=>`<button onclick="pickSlot(event,'${s.startTime}')" class="py-2 rounded-xl border text-sm hover:border-[#4DA8FF] hover:bg-[#4DA8FF]/10">${formatTime(s.startTime)}</button>`).join('');}catch(e){$('#slotsGrid').innerHTML=`<p class="col-span-full text-red-500 text-center text-sm">${e.message}</p>`;}}
 function pickSlot(ev,time){state.slot=time;$$('#slotsGrid button').forEach(b=>b.classList.remove('bg-[#4DA8FF]','text-white'));ev.target.classList.add('bg-[#4DA8FF]','text-white');$('#continueSlot').disabled=false;}
 function renderSummary(){const fee=state.mode==='ONLINE'?state.doctor.onlineConsultFee:state.doctor.physicalConsultFee;$('#summary').innerHTML=`<div class="flex justify-between"><span class="text-slate-500">Patient:</span><span class="font-medium">${$('#f_name').value}</span></div><div class="flex justify-between"><span class="text-slate-500">Phone:</span><span>+91 ${$('#f_phone').value}</span></div><div class="flex justify-between"><span class="text-slate-500">Doctor:</span><span class="font-medium">Dr. ${state.doctor.name}</span></div><div class="flex justify-between"><span class="text-slate-500">Type:</span><span>${state.mode==='ONLINE'?'🎥 Online':'🏥 In-Clinic'}</span></div><div class="flex justify-between"><span class="text-slate-500">Date:</span><span>${formatDate(state.date)}</span></div><div class="flex justify-between"><span class="text-slate-500">Time:</span><span>${formatTime(state.slot)}</span></div><div class="border-t pt-2 mt-2 flex justify-between text-lg font-bold"><span>Fee:</span><span class="text-[#4DA8FF]">₹${fee}</span></div>${state.mode==='ONLINE'?'<p class="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg mt-2">💳 Payment via Cashfree is required before booking confirmation.</p>':'<p class="text-xs text-green-700 bg-green-50 p-2 rounded-lg mt-2">💰 Pay at clinic on visit day</p>'}`;}
