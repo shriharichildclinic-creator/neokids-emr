@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("admins")
+}
+
+model Doctor {
+  id                   String   @id @default(uuid())
+  name                 String
+  email                String   @unique
+  passwordHash         String
+  phone                String
+  specialization       String   @default("Pediatrician")
+  qualification        String?
+  experience           Int      @default(0)
+  bio                  String?  @db.Text
+  photoUrl             String?
+  consultationModes    String   @default("BOTH")
+  onlineConsultFee     Decimal  @default(0) @db.Decimal(10, 2)
+  physicalConsultFee   Decimal  @default(0) @db.Decimal(10, 2)
+  availableFromOnline  String?
+  availableToOnline    String?
+  availableFromOffline String?
+  availableToOffline   String?
+  workingDays          String   @default("MON,TUE,WED,THU,FRI,SAT")
+  slotDuration         Int      @default(15)
+  isAvailable          Boolean  @default(true)
+  mustChangePassword   Boolean  @default(false)
+  deletedAt            DateTime?
+  consults             Int      @default(0)
+  revenue              Decimal  @default(0) @db.Decimal(12, 2)
+  appointments         Appointment[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@map("doctors")
+}
+
+model Patient {
+  id            String   @id @default(uuid())
+  name          String
+  phone         String   @unique
+  email         String?
+  dateOfBirth   DateTime?
+  gender        String?
+  parentName    String?
+  address       String?  @db.Text
+  appointments  Appointment[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([phone])
+  @@map("patients")
+}
+
+model Appointment {
+  id                String   @id @default(uuid())
+  doctorId          String
+  patientId         String
+  primaryProblem    String   @db.Text
+  date              DateTime @db.Date
+  startTime         String
+  endTime           String
+  consultationType  String
+  feeAtBooking      Decimal  @db.Decimal(10, 2)
+  status            String   @default("PENDING")
+  paymentStatus     String   @default("UNPAID")
+  cashfreeOrderId   String?
+  cashfreePaymentId String?
+  meetLink          String?  @db.Text
+  invoiceUrl        String?
+  prescriptionUrl   String?
+  rescheduleReason  String?  @db.Text
+  rescheduledAt     DateTime?
+  rescheduledFromId String?
+  expiresAt         DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  notes             String?  @db.Text
+  doctor            Doctor   @relation(fields: [doctorId], references: [id])
+  patient           Patient  @relation(fields: [patientId], references: [id])
+  prescription      Prescription?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([doctorId, date, startTime], name: "unique_doctor_slot")
+  @@index([date, doctorId])
+  @@index([patientId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("appointments")
+}
+
+model Prescription {
+  id             String      @id @default(uuid())
+  appointmentId  String      @unique
+  chiefComplaint String      @db.Text
+  diagnosis      String      @db.Text
+  allergies      String?     @db.Text
+  investigations String?     @db.Text
+  medications    Json
+  advice         String?     @db.Text
+  followUpDate   DateTime?
+  appointment    Appointment @relation(fields: [appointmentId], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@map("prescriptions")
+}
+
+model NotificationLog {
+  id            String   @id @default(uuid())
+  appointmentId String?
+  channel       String
+  recipient     String
+  template      String
+  status        String
+  payload       Json?
+  errorMessage  String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([appointmentId])
+  @@index([status])
+  @@map("notification_logs")
+}
+
+model PasswordToken {
+  id        String   @id @default(uuid())
+  userType  String
+  userId    String
+  purpose   String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userType, userId, purpose])
+  @@index([expiresAt])
+  @@map("password_tokens")
+}
