@@ -238,8 +238,18 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
   const updated = await prisma.appointment.update({
     where: { id },
     data: shouldComplete
-      ? { status: 'COMPLETED', completedAt: new Date() }
-      : { status: 'CONFIRMED', completedAt: null }
+      ? {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          // Offline appointments: mark cash as collected when doctor completes
+          ...(appt.paymentStatus === 'CASH_PENDING' && { paymentStatus: 'CASH_COLLECTED' })
+        }
+      : {
+          status: 'CONFIRMED',
+          completedAt: null,
+          // Reverse: if we're un-completing an offline appointment, revert to CASH_PENDING
+          ...(appt.paymentStatus === 'CASH_COLLECTED' && { paymentStatus: 'CASH_PENDING' })
+        }
   });
 
   // Update doctor revenue counter

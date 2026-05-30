@@ -112,6 +112,15 @@ function statusColor(s) {
   })[s] || 'bg-slate-100 text-slate-700';
 }
 
+function paymentLabel(status, type) {
+  if (status === 'PAID') return { text: '✅ Paid Online', cls: 'text-green-600' };
+  if (status === 'CASH_COLLECTED') return { text: '✅ Cash Collected', cls: 'text-green-600' };
+  if (status === 'CASH_PENDING') return { text: '💵 Cash at Clinic', cls: 'text-amber-600' };
+  if (status === 'FAILED') return { text: '❌ Payment Failed', cls: 'text-red-500' };
+  if (status === 'UNPAID' && type === 'ONLINE') return { text: '⏳ Awaiting Payment', cls: 'text-amber-600' };
+  return { text: status, cls: 'text-slate-400' };
+}
+
 async function loadStats() {
   const s = await api('/doctor/stats');
   const items = [
@@ -188,7 +197,7 @@ async function openPatient(id) {
         <p class="text-sm">📅 ${formatDate(a.date)}</p>
         <p class="text-sm">⏰ ${formatTime(a.startTime)} - ${formatTime(a.endTime)}</p>
         <p class="text-sm">${a.consultationType === 'ONLINE' ? '🎥' : '🏥'} ${a.consultationType}</p>
-        <p class="text-sm">💰 ₹${Number(a.feeAtBooking).toFixed(2)} · ${a.paymentStatus}</p>
+        <p class="text-sm">💰 ₹${Number(a.feeAtBooking).toFixed(2)} · <span class="${paymentLabel(a.paymentStatus, a.consultationType).cls}">${paymentLabel(a.paymentStatus, a.consultationType).text}</span></p>
         <p class="text-sm text-slate-500">Created: ${new Date(a.createdAt).toLocaleString('en-IN')}</p>
         ${a.completedAt ? `<p class="text-sm text-slate-500">Completed: ${new Date(a.completedAt).toLocaleString('en-IN')}</p>` : ''}
         ${a.meetLink ? `<a class="text-brand-blue text-sm underline" target="_blank" href="${a.meetLink}">Join Google Meet</a>` : ''}

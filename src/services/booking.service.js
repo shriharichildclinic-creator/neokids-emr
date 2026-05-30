@@ -1,9 +1,14 @@
 const prisma = require('../config/prisma');
 const { minutesToTime, timeToMinutes, getLiveSlots } = require('./slot.service');
-const automation = require('./automation.service');
 const cashfreeService = require('./cashfree.service');
 const { parseDateOnly, parseDateOnlyOrNull } = require('../utils/date');
 const { expirePendingAppointments } = require('./appointment-state.service');
+
+// NOTE: automation is NOT required at the top level — it creates a circular dep:
+//   booking → automation → slot → expirePending → (back to booking context)
+// This causes whatsapp.service to be a partially-initialized {} when Node resolves
+// the cycle, making whatsapp.sendWhatsApp undefined ("not a function").
+// FIX: require automation lazily inside each function that needs it.
 
 const UNPAID_BOOKING_EXPIRY_MINUTES = parseInt(process.env.UNPAID_BOOKING_EXPIRY_MINUTES || '15', 10);
 
@@ -79,7 +84,7 @@ async function bookAppointment(input) {
         consultationType,
         feeAtBooking,
         status: consultationType === 'OFFLINE' ? 'CONFIRMED' : 'PENDING',
-        paymentStatus: 'UNPAID',
+        paymentStatus: consultationType === 'OFFLINE' ? 'CASH_PENDING' : 'UNPAID',
         expiresAt
       },
       include: { doctor: true, patient: true }
@@ -92,6 +97,7 @@ async function bookAppointment(input) {
   }
 
   if (consultationType === 'OFFLINE') {
+    const automation = require('./automation.service');
     await automation.onPhysicalBookingConfirmed(appointment);
     return { appointment, requiresPayment: false };
   }
@@ -149,6 +155,7 @@ async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
     include: { doctor: true, patient: true }
   });
 
+  const automation = require('./automation.service');
   await automation.onOnlineBookingConfirmed(updated);
   return updated;
 }

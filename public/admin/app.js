@@ -80,6 +80,15 @@ function statusColor(s) {
   return ({ PENDING: 'bg-yellow-100 text-yellow-700', CONFIRMED: 'bg-blue-100 text-blue-700', COMPLETED: 'bg-green-100 text-green-700', CANCELLED: 'bg-red-100 text-red-700', NO_SHOW: 'bg-gray-100 text-gray-700' })[s] || 'bg-slate-100 text-slate-700';
 }
 
+function paymentLabel(status, type) {
+  if (status === 'PAID') return { text: '✅ Paid Online', cls: 'text-green-600' };
+  if (status === 'CASH_COLLECTED') return { text: '✅ Cash Collected', cls: 'text-green-600' };
+  if (status === 'CASH_PENDING') return { text: '💵 Cash at Clinic', cls: 'text-amber-600' };
+  if (status === 'FAILED') return { text: '❌ Payment Failed', cls: 'text-red-500' };
+  if (status === 'UNPAID' && type === 'ONLINE') return { text: '⏳ Awaiting Payment', cls: 'text-amber-600' };
+  return { text: status, cls: 'text-slate-400' };
+}
+
 async function loadDashboard() {
   const a = await api('/admin/analytics');
   const cards = [
@@ -155,7 +164,7 @@ async function loadAppointments() {
       <div class="text-right">
         <span class="px-3 py-1 text-xs rounded-full ${statusColor(a.status)}">${a.status}</span>
         <p class="text-sm font-semibold mt-1">₹${Number(a.feeAtBooking).toFixed(2)}</p>
-        <p class="text-xs ${a.paymentStatus === 'PAID' ? 'text-green-600' : 'text-slate-400'}">${a.paymentStatus}</p>
+        <p class="text-xs ${(() => { const p = paymentLabel(a.paymentStatus, a.consultationType); return p.cls; })()}">${(() => { const p = paymentLabel(a.paymentStatus, a.consultationType); return p.text; })()}</p>
       </div>
     </div>`).join('') || '<p class="p-12 text-center text-slate-400">No appointments</p>';
 }

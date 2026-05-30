@@ -4,7 +4,9 @@
 
 const prisma  = require('../config/prisma');
 const logger  = require('../utils/logger');
-const automation = require('./automation.service');
+// automation is lazy-required inside runLifecycleJobs to break circular dep chain:
+//   lifecycle → automation → slot → expirePending (already loaded) → ok
+//   BUT at startup Node hasn't finished loading automation yet when lifecycle loads it
 const { expirePendingAppointments } = require('./appointment-state.service');
 const { getTodayDateOnly, getCurrentTimeMinutes } = require('../utils/date');
 
@@ -37,9 +39,18 @@ async function autoCompletePassedAppointments() {
     data: { status: 'COMPLETED', completedAt: new Date() }
   });
 
+  // Mark offline (CASH_PENDING) appointments as CASH_COLLECTED on auto-complete
+  const cashIds = toComplete.filter(a => a.paymentStatus === 'CASH_PENDING').map(a => a.id);
+  if (cashIds.length) {
+    await prisma.appointment.updateMany({
+      where: { id: { in: cashIds } },
+      data: { paymentStatus: 'CASH_COLLECTED' }
+    });
+  }
+
   // Issue 6 fix: update revenue for each doctor after auto-complete
-  // Group completed paid appointments by doctorId
-  const paidCompleted = toComplete.filter(a => a.paymentStatus === 'PAID');
+  // Count both PAID (online) and CASH_COLLECTED (offline) appointments
+  const paidCompleted = toComplete.filter(a => a.paymentStatus === 'PAID' || a.paymentStatus === 'CASH_PENDING');
   const revenueByDoctor = {};
   for (const a of paidCompleted) {
     revenueByDoctor[a.doctorId] = (revenueByDoctor[a.doctorId] || 0) + Number(a.feeAtBooking);
@@ -62,7 +73,8 @@ async function autoCompletePassedAppointments() {
 // Issue 6 fix: Also call this when doctor manually marks complete
 // Exported so doctor.controller can call it
 async function incrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
-  if (paymentStatus !== 'PAID') return; // only count paid appointments
+  // Count online (PAID) and offline (CASH_PENDING or CASH_COLLECTED) appointments
+  if (paymentStatus !== 'PAID' && paymentStatus !== 'CASH_PENDING' && paymentStatus !== 'CASH_COLLECTED') return;
   await prisma.doctor.update({
     where: { id: doctorId },
     data: {
@@ -73,7 +85,7 @@ async function incrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
 }
 
 async function decrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
-  if (paymentStatus !== 'PAID') return;
+  if (paymentStatus !== 'PAID' && paymentStatus !== 'CASH_PENDING' && paymentStatus !== 'CASH_COLLECTED') return;
   await prisma.doctor.update({
     where: { id: doctorId },
     data: {
@@ -87,6 +99,7 @@ async function runLifecycleJobs() {
   try {
     await expirePendingAppointments();
     await autoCompletePassedAppointments();
+    const automation = require('./automation.service');
     await automation.processReminders();
   } catch (error) {
     logger.error('Lifecycle job failed', error);
