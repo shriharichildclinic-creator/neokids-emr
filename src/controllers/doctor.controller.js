@@ -264,7 +264,10 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
 
 exports.stats = asyncHandler(async (req, res) => {
   const today = getTodayDateOnly();
-  const [todayCount, completedToday, totalConsults, revenue] = await Promise.all([
+
+  // Revenue computed live from appointments — source of truth, always accurate
+  // Counts both online (PAID) and offline (CASH_COLLECTED + CASH_PENDING) completed appointments
+  const [todayCount, completedToday, totalConsults, revenueAgg] = await Promise.all([
     prisma.appointment.count({
       where: { doctorId: req.user.id, date: today, status: { not: 'CANCELLED' } }
     }),
@@ -274,10 +277,13 @@ exports.stats = asyncHandler(async (req, res) => {
     prisma.appointment.count({
       where: { doctorId: req.user.id, status: 'COMPLETED' }
     }),
-    // Issue 6 fix: revenue from doctor record (kept in sync by lifecycle + toggleComplete)
-    prisma.doctor.findFirst({
-      where: { id: req.user.id },
-      select: { revenue: true }
+    prisma.appointment.aggregate({
+      _sum: { feeAtBooking: true },
+      where: {
+        doctorId: req.user.id,
+        status: 'COMPLETED',
+        paymentStatus: { in: ['PAID', 'CASH_COLLECTED', 'CASH_PENDING'] }
+      }
     })
   ]);
 
@@ -285,6 +291,6 @@ exports.stats = asyncHandler(async (req, res) => {
     todayAppointments: todayCount,
     completedToday,
     totalConsults,
-    totalRevenue: Number(revenue?.revenue || 0)
+    totalRevenue: Number(revenueAgg._sum.feeAtBooking || 0)
   });
 });

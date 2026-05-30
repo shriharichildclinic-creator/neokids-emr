@@ -152,7 +152,7 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { status: 'COMPLETED' } }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { paymentStatus: 'PAID' }
+      where: { status: 'COMPLETED', paymentStatus: { in: ['PAID', 'CASH_COLLECTED', 'CASH_PENDING'] } }
     }),
     prisma.appointment.count({ where: { date: today } })
   ]);
