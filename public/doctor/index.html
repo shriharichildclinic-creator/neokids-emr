@@ -94,16 +94,84 @@
 
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h3 class="font-bold mb-4">Availability</h3>
-          <form id="availForm" class="space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-              <div><label class="text-sm text-slate-500">Online From</label><input name="availableFromOnline" type="time" class="w-full px-4 py-2 rounded-xl border"/></div>
-              <div><label class="text-sm text-slate-500">Online To</label><input name="availableToOnline" type="time" class="w-full px-4 py-2 rounded-xl border"/></div>
-              <div><label class="text-sm text-slate-500">Offline From</label><input name="availableFromOffline" type="time" class="w-full px-4 py-2 rounded-xl border"/></div>
-              <div><label class="text-sm text-slate-500">Offline To</label><input name="availableToOffline" type="time" class="w-full px-4 py-2 rounded-xl border"/></div>
+          <form id="availForm" class="space-y-5">
+
+            <!-- Online Hours -->
+            <div>
+              <p class="text-sm font-medium text-slate-600 mb-2">🎥 Online Hours</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs text-slate-400 mb-1 block">From</label>
+                  <div class="flex gap-1">
+                    <select name="availableFromOnline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
+                    <select name="availableFromOnline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
+                      <option>AM</option><option>PM</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 mb-1 block">To</label>
+                  <div class="flex gap-1">
+                    <select name="availableToOnline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
+                    <select name="availableToOnline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
+                      <option>AM</option><option>PM</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div><label class="text-sm text-slate-500">Slot Duration (minutes)</label><input name="slotDuration" type="number" min="5" max="120" class="w-full px-4 py-2 rounded-xl border"/></div>
-            <div><label class="text-sm text-slate-500">Working Days (CSV: MON,TUE,...)</label><input name="workingDays" class="w-full px-4 py-2 rounded-xl border"/></div>
-            <label class="flex items-center gap-2 cursor-pointer"><input name="isAvailable" type="checkbox" class="w-4 h-4"/><span>I am accepting appointments</span></label>
+
+            <!-- Offline Hours -->
+            <div>
+              <p class="text-sm font-medium text-slate-600 mb-2">🏥 In-Clinic Hours</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs text-slate-400 mb-1 block">From</label>
+                  <div class="flex gap-1">
+                    <select name="availableFromOffline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
+                    <select name="availableFromOffline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
+                      <option>AM</option><option>PM</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 mb-1 block">To</label>
+                  <div class="flex gap-1">
+                    <select name="availableToOffline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
+                    <select name="availableToOffline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
+                      <option>AM</option><option>PM</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden fields that hold the real HH:MM values submitted to backend -->
+            <input type="hidden" name="availableFromOnline"/>
+            <input type="hidden" name="availableToOnline"/>
+            <input type="hidden" name="availableFromOffline"/>
+            <input type="hidden" name="availableToOffline"/>
+
+            <!-- Slot Duration -->
+            <div>
+              <p class="text-sm font-medium text-slate-600 mb-2">⏱ Appointment Slot Duration</p>
+              <div id="slotDurationBtns" class="flex flex-wrap gap-2">
+                <input type="hidden" name="slotDuration" id="slotDurationVal"/>
+              </div>
+            </div>
+
+            <!-- Working Days -->
+            <div>
+              <p class="text-sm font-medium text-slate-600 mb-2">📅 Working Days</p>
+              <div class="flex flex-wrap gap-2" id="workingDaysBtns">
+                <input type="hidden" name="workingDays" id="workingDaysVal"/>
+              </div>
+            </div>
+
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input name="isAvailable" type="checkbox" class="w-4 h-4"/>
+              <span class="text-sm">I am accepting appointments</span>
+            </label>
             <button class="w-full py-2.5 rounded-xl bg-brand-blue text-white font-semibold">Save Availability</button>
           </form>
         </div>
@@ -142,13 +210,39 @@
 
 <div id="rescheduleModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-3xl w-full max-w-md p-6">
-    <h2 class="text-xl font-bold mb-4">Reschedule Appointment</h2>
-    <form id="rescheduleForm" class="space-y-3">
+    <h2 class="text-xl font-bold mb-1">Reschedule Appointment</h2>
+    <p class="text-sm text-slate-400 mb-4">Pick a new date to see available slots</p>
+    <form id="rescheduleForm" class="space-y-4">
       <input type="hidden" id="rsApptId"/>
-      <div><label class="text-sm text-slate-500">New Date</label><input name="date" type="date" required class="w-full px-4 py-2 rounded-xl border"/></div>
-      <div><label class="text-sm text-slate-500">New Time</label><input name="startTime" type="time" required class="w-full px-4 py-2 rounded-xl border"/></div>
-      <div><label class="text-sm text-slate-500">Reason (sent to patient)</label><textarea name="reason" required class="w-full px-4 py-2 rounded-xl border"></textarea></div>
-      <div class="flex gap-2 pt-2"><button type="button" onclick="closeRescheduleModal()" class="flex-1 py-2.5 rounded-xl border">Cancel</button><button class="flex-1 py-2.5 bg-brand-blue text-white rounded-xl font-semibold">Reschedule</button></div>
+      <input type="hidden" name="startTime" id="rsStartTimeHidden"/>
+
+      <!-- Date picker -->
+      <div>
+        <label class="text-sm font-medium text-slate-600 block mb-1">New Date</label>
+        <input name="date" id="rsDateInput" type="date" required class="w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:border-brand-blue"/>
+      </div>
+
+      <!-- Live slot grid -->
+      <div>
+        <label class="text-sm font-medium text-slate-600 block mb-2">Available Slots</label>
+        <div id="rsSlotsGrid" class="grid grid-cols-3 gap-2 min-h-[60px]">
+          <p class="col-span-3 text-sm text-slate-400 text-center py-3">Select a date above</p>
+        </div>
+      </div>
+
+      <!-- Selected slot display -->
+      <div id="rsSelectedDisplay" class="hidden bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-sm text-blue-700 font-medium text-center"></div>
+
+      <!-- Reason -->
+      <div>
+        <label class="text-sm font-medium text-slate-600 block mb-1">Reason <span class="text-slate-400 font-normal">(sent to patient)</span></label>
+        <textarea name="reason" required rows="2" class="w-full px-4 py-2.5 rounded-xl border resize-none focus:outline-none focus:border-brand-blue" placeholder="e.g. Doctor unavailable on original date"></textarea>
+      </div>
+
+      <div class="flex gap-2 pt-1">
+        <button type="button" onclick="closeRescheduleModal()" class="flex-1 py-2.5 rounded-xl border text-slate-600">Cancel</button>
+        <button id="rsSubmitBtn" disabled class="flex-1 py-2.5 bg-brand-blue text-white rounded-xl font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Reschedule</button>
+      </div>
     </form>
   </div>
 </div>

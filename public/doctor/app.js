@@ -6,6 +6,148 @@ let currentDoctor = null;
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
+// ── Time Picker Helpers ──────────────────────────────────────────────────────
+// We use split selects: [Hour 1–12 ▼] [AM/PM ▼] instead of a 96-item dropdown.
+// The hidden <input name="availableFromOnline"> holds the real HH:MM value.
+
+// Populate a hour select (1–12) with optional minute suffix (e.g. ":00")
+function populateHourSelect(sel, selectedHour12) {
+  if (!sel) return;
+  sel.innerHTML = Array.from({ length: 12 }, (_, i) => {
+    const h = i + 1;
+    return `<option value="${h}"${h === selectedHour12 ? ' selected' : ''}>${h}:00</option>`;
+  }).join('');
+}
+
+// Parse HH:MM → { hour12, ampm } e.g. "21:00" → { hour12: 9, ampm: "PM" }
+function parseHHMM(hhmm) {
+  if (!hhmm) return { hour12: null, ampm: 'AM' };
+  const [h] = hhmm.split(':').map(Number);
+  return { hour12: h % 12 || 12, ampm: h >= 12 ? 'PM' : 'AM' };
+}
+
+// Read split selects → HH:MM string e.g. hour=9, ampm=PM → "21:00"
+function readSplitTime(prefix, form) {
+  const hSel = form.querySelector(`[name="${prefix}_h"]`);
+  const ampmSel = form.querySelector(`[name="${prefix}_ampm"]`);
+  if (!hSel || !ampmSel) return '';
+  let h = parseInt(hSel.value, 10);
+  const ampm = ampmSel.value;
+  if (ampm === 'AM') { if (h === 12) h = 0; }
+  else { if (h !== 12) h += 12; }
+  return `${String(h).padStart(2, '0')}:00`;
+}
+
+// Set split selects from an HH:MM string
+function setSplitTime(prefix, form, hhmm) {
+  const { hour12, ampm } = parseHHMM(hhmm);
+  const hSel = form.querySelector(`[name="${prefix}_h"]`);
+  const ampmSel = form.querySelector(`[name="${prefix}_ampm"]`);
+  populateHourSelect(hSel, hour12);
+  if (ampmSel) ampmSel.value = ampm;
+}
+
+// Sync hidden HH:MM fields whenever split selects change
+function wireAvailabilitySelects(form) {
+  const pairs = [
+    ['availableFromOnline', 'availableFromOnline'],
+    ['availableToOnline',   'availableToOnline'],
+    ['availableFromOffline','availableFromOffline'],
+    ['availableToOffline',  'availableToOffline']
+  ];
+  pairs.forEach(([prefix, hiddenName]) => {
+    const hSel = form.querySelector(`[name="${prefix}_h"]`);
+    const ampmSel = form.querySelector(`[name="${prefix}_ampm"]`);
+    const hidden = form.querySelector(`[name="${hiddenName}"]`);
+    const sync = () => { if (hidden) hidden.value = readSplitTime(prefix, form); };
+    hSel?.addEventListener('change', sync);
+    ampmSel?.addEventListener('change', sync);
+  });
+}
+
+// Populate all 4 availability split-pickers from doctor record
+function populateAvailabilitySelects(doc) {
+  const form = $('#availForm');
+  if (!form) return;
+  const fields = ['availableFromOnline','availableToOnline','availableFromOffline','availableToOffline'];
+  fields.forEach(f => {
+    setSplitTime(f, form, doc?.[f] || '');
+    // Sync hidden field immediately
+    const hidden = form.querySelector(`[name="${f}"]`);
+    if (hidden) hidden.value = doc?.[f] || '';
+  });
+  wireAvailabilitySelects(form);
+}
+
+// ── Slot Duration Button Group ───────────────────────────────────────────────
+const SLOT_DURATIONS = [10, 15, 20, 30, 45, 60];
+function renderSlotDurationBtns(selected) {
+  const container = $('#slotDurationBtns');
+  const hidden = $('#slotDurationVal');
+  if (!container) return;
+  container.querySelectorAll('button').forEach(b => b.remove());
+  SLOT_DURATIONS.forEach(d => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = `${d} min`;
+    btn.className = `px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
+      d === selected
+        ? 'bg-brand-blue text-white border-brand-blue'
+        : 'bg-white text-slate-600 hover:border-brand-blue hover:text-brand-blue'
+    }`;
+    btn.onclick = () => {
+      if (hidden) hidden.value = d;
+      renderSlotDurationBtns(d);
+    };
+    container.appendChild(btn);
+  });
+  if (hidden && !hidden.value) hidden.value = selected || 15;
+}
+
+// ── Working Days Checkbox Group ──────────────────────────────────────────────
+const ALL_DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+const DAY_LABELS = { MON:'Mon', TUE:'Tue', WED:'Wed', THU:'Thu', FRI:'Fri', SAT:'Sat', SUN:'Sun' };
+function renderWorkingDaysBtns(selectedCsv) {
+  const container = $('#workingDaysBtns');
+  const hidden = $('#workingDaysVal');
+  if (!container) return;
+  const selected = new Set((selectedCsv || '').split(',').map(s => s.trim()).filter(Boolean));
+  container.querySelectorAll('button').forEach(b => b.remove());
+  const syncHidden = () => {
+    if (hidden) hidden.value = ALL_DAYS.filter(d => selected.has(d)).join(',');
+  };
+  ALL_DAYS.forEach(day => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = DAY_LABELS[day];
+    const active = () => selected.has(day);
+    const setStyle = () => {
+      btn.className = `px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+        active()
+          ? 'bg-brand-blue text-white border-brand-blue'
+          : 'bg-white text-slate-600 hover:border-brand-blue hover:text-brand-blue'
+      }`;
+    };
+    btn.onclick = () => {
+      if (active()) selected.delete(day); else selected.add(day);
+      setStyle();
+      syncHidden();
+    };
+    setStyle();
+    container.appendChild(btn);
+  });
+  syncHidden();
+}
+
+// ── Reschedule Time Select ───────────────────────────────────────────────────
+// Uses slot-duration-aware intervals so options match actual available slots
+
+
+
+
+
+
+
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('en-IN', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -158,7 +300,7 @@ function apptCard(a, showActions) {
         <span class="px-3 py-1 text-xs rounded-full ${statusColor(a.status)}">${a.status}</span>
         ${a.meetLink ? `<a href="${a.meetLink}" target="_blank" class="px-3 py-1.5 text-xs rounded-xl bg-brand-blue text-white">Join Meet</a>` : ''}
         <button onclick="openPatient('${a.id}')" class="px-3 py-1.5 text-xs rounded-xl border hover:bg-slate-50">Open</button>
-        ${showActions && !['CANCELLED','COMPLETED'].includes(a.status) ? `<button onclick="openReschedule('${a.id}')" class="px-3 py-1.5 text-xs rounded-xl border hover:bg-slate-50">Reschedule</button>` : ''}
+        ${showActions && !['CANCELLED','COMPLETED'].includes(a.status) ? `<button onclick="openReschedule('${a.id}','${a.consultationType}')" class="px-3 py-1.5 text-xs rounded-xl border hover:bg-slate-50">Reschedule</button>` : ''}
         ${showActions && !['CANCELLED','COMPLETED'].includes(a.status) ? `<button onclick="cancelAppt('${a.id}')" class="px-3 py-1.5 text-xs rounded-xl border border-red-200 text-red-500 hover:bg-red-50">Cancel</button>` : ''}
       </div>
     </div>`;
@@ -312,15 +454,94 @@ function showInlineError(elementId, message) {
 }
 
 function closePatientModal() { $('#patientModal').classList.add('hidden'); }
-function openReschedule(id) { $('#rsApptId').value = id; $('#rescheduleModal').classList.remove('hidden'); }
-function closeRescheduleModal() { $('#rescheduleModal').classList.add('hidden'); $('#rescheduleForm').reset(); }
+// ── Reschedule Modal ─────────────────────────────────────────────────────────
+let rsCurrentAppt = null;
+
+function openReschedule(id, consultationType) {
+  rsCurrentAppt = { id, consultationType: consultationType || 'OFFLINE' };
+  $('#rsApptId').value = id;
+  $('#rsStartTimeHidden').value = '';
+  $('#rsSelectedDisplay').classList.add('hidden');
+  $('#rsSelectedDisplay').textContent = '';
+  $('#rsSubmitBtn').disabled = true;
+  $('#rsSlotsGrid').innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">Select a date above</p>';
+
+  // IST today as min date
+  const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const todayIST = `${nowIST.getFullYear()}-${String(nowIST.getMonth()+1).padStart(2,'0')}-${String(nowIST.getDate()).padStart(2,'0')}`;
+  const dateInput = $('#rsDateInput');
+  dateInput.min = todayIST;
+  dateInput.value = '';
+
+  $('#rescheduleModal').classList.remove('hidden');
+}
+
+function closeRescheduleModal() {
+  $('#rescheduleModal').classList.add('hidden');
+  $('#rescheduleForm').reset();
+  $('#rsSlotsGrid').innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">Select a date above</p>';
+  $('#rsSelectedDisplay').classList.add('hidden');
+  $('#rsSubmitBtn').disabled = true;
+  rsCurrentAppt = null;
+}
+
+function selectRsSlot(time) {
+  $('#rsStartTimeHidden').value = time;
+  $('#rsSubmitBtn').disabled = false;
+  document.querySelectorAll('.rs-slot-btn').forEach(b => {
+    const active = b.dataset.time === time;
+    b.className = `rs-slot-btn py-2 rounded-xl border text-sm font-medium transition-colors ${
+      active ? 'bg-brand-blue text-white border-brand-blue'
+              : 'bg-white text-slate-600 border-slate-200 hover:border-brand-blue hover:text-brand-blue'}`;
+  });
+  const display = $('#rsSelectedDisplay');
+  display.textContent = `✅ Selected: ${formatTime(time)}`;
+  display.classList.remove('hidden');
+}
+
+async function loadRsSlots(date) {
+  const grid = $('#rsSlotsGrid');
+  if (!date) return;
+  grid.innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">Loading slots...</p>';
+  $('#rsStartTimeHidden').value = '';
+  $('#rsSubmitBtn').disabled = true;
+  $('#rsSelectedDisplay').classList.add('hidden');
+  try {
+    const doctorId = currentDoctor?.id;
+    const type = rsCurrentAppt?.consultationType || 'OFFLINE';
+    const { slots } = await api(`/public/slots?doctorId=${doctorId}&date=${date}&type=${type}`);
+    const available = slots.filter(s => s.available);
+    if (!available.length) {
+      grid.innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">No slots available on this date</p>';
+      return;
+    }
+    grid.innerHTML = available.map(s => `
+      <button type="button" data-time="${s.startTime}" onclick="selectRsSlot('${s.startTime}')"
+        class="rs-slot-btn py-2 rounded-xl border text-sm font-medium bg-white text-slate-600 border-slate-200 hover:border-brand-blue hover:text-brand-blue transition-colors">
+        ${formatTime(s.startTime)}
+      </button>`).join('');
+  } catch (err) {
+    grid.innerHTML = `<p class="col-span-3 text-sm text-red-400 text-center py-3">${err.message}</p>`;
+  }
+}
+
+$('#rsDateInput')?.addEventListener('change', e => loadRsSlots(e.target.value));
+
+
 
 $('#rescheduleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = $('#rsApptId').value;
-  const fd = new FormData(e.target);
+  const startTime = $('#rsStartTimeHidden').value;
+  const date = $('#rsDateInput').value;
+  const reason = e.target.reason.value;
+  if (!startTime) { alert('Please select a time slot.'); return; }
+  if (!date) { alert('Please select a date.'); return; }
   try {
-    await api(`/doctor/appointments/${id}/reschedule`, { method: 'POST', body: JSON.stringify(Object.fromEntries(fd.entries())) });
+    await api(`/doctor/appointments/${id}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify({ date, startTime, reason })
+    });
     alert('Appointment rescheduled. Patient notifications attempted.');
     closeRescheduleModal();
     loadWaiting();
@@ -328,17 +549,19 @@ $('#rescheduleForm').addEventListener('submit', async (e) => {
   } catch (err) { alert(err.message); }
 });
 
+
+
 async function loadSettings() {
   const me = await api('/doctor/me');
   currentDoctor = me;
   renderDoctorPhoto(me.photoUrl);
+  // Availability split-pickers
+  populateAvailabilitySelects(me);
+  // Slot duration button group
+  renderSlotDurationBtns(me.slotDuration || 15);
+  // Working days checkbox group
+  renderWorkingDaysBtns(me.workingDays || 'MON,TUE,WED,THU,FRI,SAT');
   const af = $('#availForm');
-  af.availableFromOnline.value = me.availableFromOnline || '';
-  af.availableToOnline.value = me.availableToOnline || '';
-  af.availableFromOffline.value = me.availableFromOffline || '';
-  af.availableToOffline.value = me.availableToOffline || '';
-  af.slotDuration.value = me.slotDuration || 15;
-  af.workingDays.value = me.workingDays || 'MON,TUE,WED,THU,FRI,SAT';
   af.isAvailable.checked = me.isAvailable;
   const ff = $('#feesForm');
   ff.onlineConsultFee.value = me.onlineConsultFee || 0;
@@ -372,6 +595,11 @@ $('#availForm').addEventListener('submit', async (e) => {
   const data = Object.fromEntries(fd.entries());
   data.isAvailable = e.target.isAvailable.checked;
   data.slotDuration = parseInt(data.slotDuration, 10);
+  // Remove the split-select fields (they are just UI — hidden fields hold HH:MM values)
+  ['availableFromOnline_h','availableFromOnline_ampm',
+   'availableToOnline_h','availableToOnline_ampm',
+   'availableFromOffline_h','availableFromOffline_ampm',
+   'availableToOffline_h','availableToOffline_ampm'].forEach(k => delete data[k]);
   try {
     await api('/doctor/availability', { method: 'PUT', body: JSON.stringify(data) });
     alert('Availability updated.');
@@ -406,6 +634,10 @@ async function init() {
   $('#docName').textContent = 'Dr. ' + me.name;
   $('#docSpec').textContent = me.specialization || 'Pediatrician';
   renderDoctorPhoto(me.photoUrl);
+  // Pre-populate availability pickers so settings tab is ready immediately
+  populateAvailabilitySelects(me);
+  renderSlotDurationBtns(me.slotDuration || 15);
+  renderWorkingDaysBtns(me.workingDays || 'MON,TUE,WED,THU,FRI,SAT');
   if (me.mustChangePassword) alert('Please change your password from Settings before continuing regular use.');
   await loadStats();
   await loadWaiting();

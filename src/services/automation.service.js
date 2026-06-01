@@ -11,6 +11,15 @@ function fmtDate(d) {
   return formatDateOnly(d);
 }
 
+// Convert HH:MM (24hr) → h:MM AM/PM for all patient-facing messages
+function fmtTime(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${suffix}`;
+}
+
 async function logNotification(data) {
   try {
     await prisma.notificationLog.create({ data });
@@ -35,7 +44,7 @@ async function onPhysicalBookingConfirmed(appointment) {
     `Dear ${a.patient.name},\n\n` +
     `Your visit with *Dr. ${a.doctor.name}* is confirmed:\n\n` +
     `📅 ${fmtDate(a.date)}\n` +
-    `⏰ ${a.startTime}\n` +
+    `⏰ ${fmtTime(a.startTime)}\n` +
     `📍 In-clinic visit\n` +
     `💰 Fee: ₹${Number(a.feeAtBooking).toFixed(2)} (pay at clinic)\n\n` +
     `Please arrive 10 minutes early. Reply HELP for support.\n\n— NeoKidsPro`;
@@ -53,7 +62,7 @@ async function onPhysicalBookingConfirmed(appointment) {
         subject: 'Your appointment is confirmed - NeoKidsPro',
         html: `<h2>Appointment Confirmed</h2><p>Dear ${a.patient.name},</p>
                <p>Your in-clinic visit with <strong>Dr. ${a.doctor.name}</strong> is confirmed for
-               <strong>${fmtDate(a.date)}</strong> at <strong>${a.startTime}</strong>.</p>
+               <strong>${fmtDate(a.date)}</strong> at <strong>${fmtTime(a.startTime)}</strong>.</p>
                <p>Fee: ₹${Number(a.feeAtBooking).toFixed(2)} (payable at clinic)</p>
                <p>— NeoKidsPro</p>`
       })
@@ -95,7 +104,7 @@ async function onOnlineBookingConfirmed(appointment) {
   const msg = `✅ *Booking Confirmed - NeoKidsPro*\n\n` +
     `Dear ${a.patient.name}, payment received!\n\n` +
     `Your *online* consultation with *Dr. ${a.doctor.name}*:\n` +
-    `📅 ${fmtDate(a.date)}\n⏰ ${a.startTime}\n` +
+    `📅 ${fmtDate(a.date)}\n⏰ ${fmtTime(a.startTime)}\n` +
     `💰 ₹${Number(a.feeAtBooking).toFixed(2)} (Paid)\n\n` +
     (meetLink ? `🎥 Join: ${meetLink}\n\n` : '') +
     (invoiceUrl ? `🧾 Invoice: ${process.env.API_URL || ''}${invoiceUrl}\n\n` : '') +
@@ -116,7 +125,7 @@ async function onOnlineBookingConfirmed(appointment) {
         html: `<h2>Consultation Confirmed</h2>
                <p>Dear ${a.patient.name},</p>
                <p>Your online consultation with <strong>Dr. ${a.doctor.name}</strong> on
-               <strong>${fmtDate(a.date)}</strong> at <strong>${a.startTime}</strong> is confirmed.</p>
+               <strong>${fmtDate(a.date)}</strong> at <strong>${fmtTime(a.startTime)}</strong> is confirmed.</p>
                ${meetLink ? `<p>Join here: <a href="${meetLink}">${meetLink}</a></p>` : ''}
                ${invoiceUrl ? `<p><a href="${process.env.API_URL || ''}${invoiceUrl}">Download Invoice</a></p>` : ''}
                <p>— NeoKidsPro</p>`
@@ -148,7 +157,7 @@ async function onAppointmentRescheduled(appointment) {
   const msg = `🔄 *Appointment Rescheduled*\n\n` +
     `Dear ${a.patient.name},\n` +
     `Your appointment with *Dr. ${a.doctor.name}* has been rescheduled.\n\n` +
-    `📅 New Date: ${fmtDate(a.date)}\n⏰ New Time: ${a.startTime}\n` +
+    `📅 New Date: ${fmtDate(a.date)}\n⏰ New Time: ${fmtTime(a.startTime)}\n` +
     `📝 Reason: ${a.rescheduleReason || 'Doctor unavailable'}\n` +
     (meetLink && a.consultationType === 'ONLINE' ? `\n🎥 New Meet link: ${meetLink}\n` : '') +
     `\nApologies for the inconvenience.\n— NeoKidsPro`;
@@ -168,7 +177,7 @@ async function onAppointmentRescheduled(appointment) {
         html: `<h2>Appointment Rescheduled</h2>
                <p>Dear ${a.patient.name},</p>
                <p>Your appointment with <strong>Dr. ${a.doctor.name}</strong> has been rescheduled to
-               <strong>${fmtDate(a.date)}</strong> at <strong>${a.startTime}</strong>.</p>
+               <strong>${fmtDate(a.date)}</strong> at <strong>${fmtTime(a.startTime)}</strong>.</p>
                <p>Reason: ${a.rescheduleReason || 'Doctor unavailable'}</p>
                ${meetLink && a.consultationType === 'ONLINE' ? `<p>New Meet link: <a href="${meetLink}">${meetLink}</a></p>` : ''}
                <p>— NeoKidsPro</p>`
@@ -241,7 +250,7 @@ async function processReminders() {
 
       const msg = `⏰ *Reminder - NeoKidsPro*\n\n` +
         `Dear ${a.patient.name}, your appointment with *Dr. ${a.doctor.name}* is in 30 minutes.\n` +
-        `⏰ ${a.startTime}\n` +
+        `⏰ ${fmtTime(a.startTime)}\n` +
         (a.consultationType === 'ONLINE' && a.meetLink ? `🎥 Join: ${a.meetLink}\n` : '📍 In-clinic\n') +
         `\nSee you soon!`;
       await whatsapp.sendWhatsApp({ to: a.patient.phone, body: msg })
