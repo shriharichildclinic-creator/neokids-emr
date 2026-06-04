@@ -2,7 +2,7 @@
 // Issue 3 fix: toggleComplete now DISABLED for PENDING appointments
 // Issue 6 fix: revenue + consults updated on manual complete/uncomplete
 // Issue 4 fix: history tab already works — just exposed clearly
-
+const { clinicSettingsSchema } = require('../utils/validators');
 const fs   = require('fs');
 const path = require('path');
 const prisma = require('../config/prisma');
@@ -293,4 +293,24 @@ exports.stats = asyncHandler(async (req, res) => {
     totalConsults,
     totalRevenue: Number(revenueAgg._sum.feeAtBooking || 0)
   });
+});
+
+// Bug 6 — Update clinic location for the logged-in doctor
+exports.updateClinic = asyncHandler(async (req, res) => {
+  const parsed = clinicSettingsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+  }
+  let { clinicName, clinicAddress, clinicMapUrl, clinicLat, clinicLng } = parsed.data;
+  // If admin only typed a clinic name + no URL → generate a Google Maps search URL
+  if (!clinicMapUrl) {
+    const q = [clinicName, clinicAddress].filter(Boolean).join(' ');
+    clinicMapUrl = `https://maps.google.com/?q=${encodeURIComponent(q)}`;
+  }
+  const updated = await prisma.doctor.update({
+    where: { id: req.user.id },
+    data: { clinicName, clinicAddress, clinicMapUrl, clinicLat, clinicLng }
+  });
+  const { passwordHash, ...safe } = updated;
+  res.json(safe);
 });

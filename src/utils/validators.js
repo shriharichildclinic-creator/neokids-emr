@@ -1,9 +1,13 @@
 const { z } = require('zod');
+const { getTodayDateString } = require('./date');
 
-const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number');
+const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number (10 digits, starts 6-9, no +91)');
 const strongPassword = z.string().min(8).regex(/^(?=.*[A-Za-z])(?=.*\d).+$/, 'Password must contain letters and numbers');
 const timeSchema = z.string().regex(/^\d{2}:\d{2}$/);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+// Helper: treat empty strings & whitespace-only as undefined so .optional() really works
+const optStr = z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string());
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -11,17 +15,37 @@ const loginSchema = z.object({
 });
 
 const createDoctorSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: strongPassword.optional().or(z.literal('')),
-  phone: phoneSchema,
-  specialization: z.string().optional(),
-  qualification: z.string().optional(),
-  experience: z.number().int().min(0).optional(),
-  bio: z.string().optional(),
+  name: z.string().trim().min(2),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.preprocess(
+    v => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    strongPassword.optional()
+  ),
+  phone: z.preprocess(
+    v => (typeof v === 'string' ? v.replace(/\D/g, '').replace(/^91/, '') : v),
+    phoneSchema
+  ),
+  specialization: optStr.optional(),
+  qualification: optStr.optional(),
+  experience: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? 0 : Number(v)),
+    z.number().int().min(0)
+  ).optional(),
+  bio: optStr.optional(),
   consultationModes: z.enum(['ONLINE', 'OFFLINE', 'BOTH']).optional(),
-  onlineConsultFee: z.number().nonnegative().optional(),
-  physicalConsultFee: z.number().nonnegative().optional()
+  onlineConsultFee: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? 0 : Number(v)),
+    z.number().nonnegative()
+  ).optional(),
+  physicalConsultFee: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? 0 : Number(v)),
+    z.number().nonnegative()
+  ).optional()
+});
+
+// Admin Update Doctor — every field optional
+const updateDoctorByAdminSchema = createDoctorSchema.partial().extend({
+  isAvailable: z.boolean().optional()
 });
 
 const updateDoctorAvailabilitySchema = z.object({
@@ -39,6 +63,21 @@ const updateDoctorFeesSchema = z.object({
   physicalConsultFee: z.number().nonnegative().optional()
 });
 
+// Bug 6 — clinic settings the doctor saves from their portal
+const clinicSettingsSchema = z.object({
+  clinicName: z.string().trim().min(2, 'Clinic name is required'),
+  clinicAddress: optStr.optional(),
+  clinicMapUrl: optStr.optional(),
+  clinicLat: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(-90).max(90).optional()
+  ),
+  clinicLng: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(-180).max(180).optional()
+  )
+});
+
 const bookAppointmentSchema = z.object({
   doctorId: z.string().uuid(),
   patientName: z.string().min(2),
@@ -50,31 +89,37 @@ const bookAppointmentSchema = z.object({
   primaryProblem: z.string().min(3),
   date: dateSchema,
   startTime: timeSchema,
-  consultationType: z.enum(['ONLINE', 'OFFLINE'])
-}).refine((data) => {
-  // Validate appointment date is not in the past (IST-aware)
-  const { getTodayDateString } = require('./date');
-  const today = getTodayDateString();
-  return data.date >= today;
-}, {
-  message: 'Appointment date cannot be in the past',
-  path: ['date']
-});
+  consultationType: z.enum(['ONLINE', 'OFFLINE']),
+  tncAccepted: z.boolean().refine(v => v === true, { message: 'You must accept the Terms & Conditions' })
+})
+  .refine(d => d.date >= getTodayDateString(), { message: 'Appointment date cannot be in the past', path: ['date'] })
+  // Bug 4 — pediatric clinic: DOB cannot be in the future and not older than 18 years
+  .refine(d => d.dateOfBirth <= getTodayDateString(), { message: 'Date of birth cannot be in the future', path: ['dateOfBirth'] })
+  .refine(d => {
+    const dob = new Date(d.dateOfBirth + 'T00:00:00.000Z');
+    const eighteenAgo = new Date();
+    eighteenAgo.setUTCFullYear(eighteenAgo.getUTCFullYear() - 18);
+    return dob >= eighteenAgo;
+  }, { message: 'This is a pediatric clinic — patient must be under 18 years old', path: ['dateOfBirth'] });
 
 const prescriptionSchema = z.object({
+  // Bug 3 — new fields
+  weight: optStr.optional(),
+  height: optStr.optional(),
+  pastHistory: optStr.optional(),
   chiefComplaint: z.string().min(2),
   diagnosis: z.string().min(2),
-  allergies: z.string().optional(),
-  investigations: z.string().optional(),
+  allergies: optStr.optional(),
+  investigations: optStr.optional(),
   medications: z.array(z.object({
     name: z.string().min(1),
     dose: z.string().min(1),
     frequency: z.string().min(1),
     duration: z.string().min(1),
-    instructions: z.string().optional()
+    instructions: optStr.optional()
   })).min(1, 'At least one medication is required'),
-  advice: z.string().optional(),
-  followUpDate: dateSchema.optional()
+  advice: optStr.optional(),
+  followUpDate: dateSchema.optional().or(z.literal(''))
 });
 
 const rescheduleSchema = z.object({
@@ -83,33 +128,27 @@ const rescheduleSchema = z.object({
   reason: z.string().min(3)
 });
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email()
-});
+const forgotPasswordSchema = z.object({ email: z.string().email() });
 
 const resetPasswordSchema = z.object({
   token: z.string().min(20),
   password: strongPassword,
   confirmPassword: strongPassword
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword']
-});
+}).refine(d => d.password === d.confirmPassword, { message: 'Passwords do not match', path: ['confirmPassword'] });
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(6),
   newPassword: strongPassword,
   confirmPassword: strongPassword
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword']
-});
+}).refine(d => d.newPassword === d.confirmPassword, { message: 'Passwords do not match', path: ['confirmPassword'] });
 
 module.exports = {
   loginSchema,
   createDoctorSchema,
+  updateDoctorByAdminSchema,
   updateDoctorAvailabilitySchema,
   updateDoctorFeesSchema,
+  clinicSettingsSchema,
   bookAppointmentSchema,
   prescriptionSchema,
   rescheduleSchema,

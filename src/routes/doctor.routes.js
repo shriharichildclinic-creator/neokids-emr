@@ -9,6 +9,7 @@ router.get('/me',                                           c.me);
 router.get('/stats',                                        c.stats);
 router.put('/availability',                                 c.updateAvailability);
 router.put('/fees',                                         c.updateFees);
+router.put('/clinic',                                       c.updateClinic);          // Bug 6
 router.post('/profile-image', uploadProfileImage.single('photo'), c.uploadProfileImage);
 router.delete('/profile-image',                             c.removeProfileImage);
 

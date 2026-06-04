@@ -29,6 +29,12 @@ model Doctor {
   qualification        String?
   experience           Int      @default(0)
   bio                  String?  @db.Text
+  // Bug 6 — clinic location (per-doctor)
+  clinicName           String?
+  clinicAddress        String?  @db.Text
+  clinicMapUrl         String?  @db.Text
+  clinicLat            Decimal? @db.Decimal(10, 7)
+  clinicLng            Decimal? @db.Decimal(10, 7)
   photoUrl             String?
   consultationModes    String   @default("BOTH")
   onlineConsultFee     Decimal  @default(0) @db.Decimal(10, 2)
@@ -111,6 +117,10 @@ model Prescription {
   id             String      @id @default(uuid())
   appointmentId  String      @unique
   chiefComplaint String      @db.Text
+  // Bug 3 — new clinical fields
+  weight         String?
+  height         String?
+  pastHistory    String?     @db.Text
   diagnosis      String      @db.Text
   allergies      String?     @db.Text
   investigations String?     @db.Text
@@ -130,6 +140,7 @@ model NotificationLog {
   channel       String
   recipient     String
   template      String
+  direction     String?  // PATIENT | DOCTOR
   status        String
   payload       Json?
   errorMessage  String?  @db.Text

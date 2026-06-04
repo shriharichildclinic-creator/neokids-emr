@@ -1,8 +1,39 @@
 const logger = require('../utils/logger');
 
 const PROVIDER = (process.env.WA_PROVIDER || 'MOCK').toUpperCase();
+const WA_LANG  = process.env.META_LANG_CODE || 'en'; // your templates are registered in 'en', not 'en_US'
 
-async function sendViaMeta({ to, templateName = 'hello_world', components = [] }) {
+/**
+ * Build Meta components from a simple shape:
+ *   bodyParams: ['Suresh', 'Anjali Sharma', '12 Jun 2026', '5:30 PM', '500']
+ *   urlButtonParam: 'abc-xyz-pqr'   // becomes button index 0, type URL, dynamic suffix
+ */
+function buildComponents({ bodyParams = [], urlButtonParam = null, headerParams = [] }) {
+  const components = [];
+  if (headerParams.length) {
+    components.push({
+      type: 'header',
+      parameters: headerParams.map(t => ({ type: 'text', text: String(t) }))
+    });
+  }
+  if (bodyParams.length) {
+    components.push({
+      type: 'body',
+      parameters: bodyParams.map(t => ({ type: 'text', text: String(t ?? '') }))
+    });
+  }
+  if (urlButtonParam !== null && urlButtonParam !== undefined && urlButtonParam !== '') {
+    components.push({
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: String(urlButtonParam) }]
+    });
+  }
+  return components;
+}
+
+async function sendViaMeta({ to, templateName, components = [] }) {
   const phoneId = process.env.META_PHONE_NUMBER_ID;
   const token   = process.env.META_ACCESS_TOKEN;
 
@@ -10,9 +41,11 @@ async function sendViaMeta({ to, templateName = 'hello_world', components = [] }
     logger.warn('[META] Missing META_PHONE_NUMBER_ID or META_ACCESS_TOKEN');
     return null;
   }
+  if (!templateName) {
+    throw new Error('META provider requires a templateName');
+  }
 
-  // Format: remove +, spaces, leading 91 then re-add 91
-  const digits    = to.replace(/\D/g, '');
+  const digits    = String(to).replace(/\D/g, '');
   const formatted = digits.startsWith('91') ? digits : `91${digits}`;
 
   const body = {
@@ -21,7 +54,7 @@ async function sendViaMeta({ to, templateName = 'hello_world', components = [] }
     type: 'template',
     template: {
       name: templateName,
-      language: { code: 'en_US' },
+      language: { code: WA_LANG },
       components
     }
   };
@@ -30,72 +63,41 @@ async function sendViaMeta({ to, templateName = 'hello_world', components = [] }
     `https://graph.facebook.com/v19.0/${phoneId}/messages`,
     {
       method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type':  'application/json'
-      },
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     }
   );
-
   const data = await res.json();
-
   if (!res.ok) {
     logger.error('[META] Failed:', JSON.stringify(data));
     throw new Error(data.error?.message || 'Meta API error');
   }
-
   logger.info(`[META] Sent "${templateName}" to ${formatted}`);
   return data;
 }
 
-async function sendViaBhash({ to, templateName, params = [], mediaUrl = null }) {
-  const user   = process.env.BHASH_USER   || 'bhashwapai';
-  const pass   = process.env.BHASH_PASS   || 'bwap@1234$';
-  const sender = process.env.BHASH_SENDER || 'BUZWAP';
-
-  const formatted = to.replace(/^\+?91/, '').replace(/\D/g, '');
-
-  const url = new URL('https://bhashsms.com/api/sendmsgutil.php');
-  url.searchParams.set('user',     user);
-  url.searchParams.set('pass',     pass);
-  url.searchParams.set('sender',   sender);
-  url.searchParams.set('phone',    formatted);
-  url.searchParams.set('text',     templateName);
-  url.searchParams.set('priority', 'wa');
-  url.searchParams.set('stype',    'auth');
-  if (params.length) url.searchParams.set('Params', params.join(','));
-  if (mediaUrl) {
-    url.searchParams.set('htype', 'image');
-    url.searchParams.set('url',   mediaUrl);
-  }
-
-  const res  = await fetch(url.toString());
-  const text = await res.text();
-  logger.info(`[BHASH] Sent "${templateName}" to ${formatted}: ${text}`);
-  return { response: text };
-}
-
-async function sendWhatsApp({ to, body, mediaUrl, templateName, params }) {
+/**
+ * Send a WhatsApp template message.
+ *   sendWhatsApp({
+ *     to: '9876543210',
+ *     templateName: 'neokids_booking_confirms_offline',
+ *     bodyParams: ['Suresh','Anjali Sharma','12 Jun 2026','5:30 PM','500'],
+ *     urlButtonParam: '?q=Shri+Hari+Clinic+Pune'
+ *   })
+ */
+async function sendWhatsApp({ to, templateName, bodyParams, urlButtonParam, headerParams, body /* legacy plain text — used only by MOCK */ }) {
   try {
     if (PROVIDER === 'META') {
-      const tpl = templateName || process.env.META_DEFAULT_TEMPLATE || 'hello_world';
-      return await sendViaMeta({ to, templateName: tpl, components: params || [] });
+      const components = buildComponents({ bodyParams, urlButtonParam, headerParams });
+      return await sendViaMeta({ to, templateName, components });
     }
-
-    if (PROVIDER === 'BHASH') {
-      const tpl = templateName || process.env.BHASH_DEFAULT_TEMPLATE || 'authe_bhash';
-      return await sendViaBhash({ to, templateName: tpl, params: params || [], mediaUrl });
-    }
-
-    // MOCK
-    logger.info(`[WA-MOCK] To ${to}: ${body || templateName}`);
+    // MOCK (for dev/staging without a Meta WABA)
+    logger.info(`[WA-MOCK] To ${to} | tpl=${templateName} | params=${JSON.stringify(bodyParams)} | btn=${urlButtonParam || '-'} | body="${body || ''}"`);
     return { sid: 'mock_' + Date.now(), status: 'mock' };
-
   } catch (err) {
     logger.error(`[WA-${PROVIDER}] Failed for ${to}:`, err.message);
     throw err;
   }
 }
 
-module.exports = { sendWhatsApp };
+module.exports = { sendWhatsApp, buildComponents };

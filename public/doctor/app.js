@@ -277,13 +277,18 @@ async function loadStats() {
       <div><div class="text-xs text-slate-500">${i.label}</div><div class="font-bold">${i.value}</div></div>
     </div>`).join('');
 }
-
 function apptCard(a, showActions) {
   const isOnline = a.consultationType === 'ONLINE';
-  // Issue 3 fix: Show clear warning for PENDING (unpaid online) appointments
   const pendingWarning = a.status === 'PENDING'
-    ? `<p class="text-xs text-amber-600 font-semibold mt-1">⚠️ Awaiting payment</p>`
-    : '';
+    ? `<p class="text-xs text-amber-600 font-semibold mt-1">⚠️ Awaiting payment</p>` : '';
+  // Feature: video icon button so doctor can clearly see and click Join Meet
+  const meetBtn = a.meetLink ? `
+    <a href="${a.meetLink}" target="_blank" title="Join Google Meet"
+       class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-blue text-white hover:bg-blue-500 shadow-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+      </svg>
+    </a>` : '';
   return `
     <div class="bg-white rounded-2xl p-4 shadow-sm flex items-center justify-between">
       <div class="flex items-center gap-3">
@@ -298,13 +303,14 @@ function apptCard(a, showActions) {
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <span class="px-3 py-1 text-xs rounded-full ${statusColor(a.status)}">${a.status}</span>
-        ${a.meetLink ? `<a href="${a.meetLink}" target="_blank" class="px-3 py-1.5 text-xs rounded-xl bg-brand-blue text-white">Join Meet</a>` : ''}
+        ${meetBtn}
         <button onclick="openPatient('${a.id}')" class="px-3 py-1.5 text-xs rounded-xl border hover:bg-slate-50">Open</button>
         ${showActions && !['CANCELLED','COMPLETED'].includes(a.status) ? `<button onclick="openReschedule('${a.id}','${a.consultationType}')" class="px-3 py-1.5 text-xs rounded-xl border hover:bg-slate-50">Reschedule</button>` : ''}
         ${showActions && !['CANCELLED','COMPLETED'].includes(a.status) ? `<button onclick="cancelAppt('${a.id}')" class="px-3 py-1.5 text-xs rounded-xl border border-red-200 text-red-500 hover:bg-red-50">Cancel</button>` : ''}
       </div>
     </div>`;
 }
+
 
 async function loadWaiting() {
   const list = await api('/doctor/waiting-room');
@@ -323,6 +329,20 @@ async function openPatient(id) {
   const h = data.history || [];
   const completeLabel = a.status === 'COMPLETED' ? 'Mark as Incomplete' : 'Mark as Complete';
 
+  // Auto age helper (matches backend)
+  function calcAge(dob) {
+    if (!dob) return '';
+    const d = new Date(dob); const today = new Date();
+    let y = today.getUTCFullYear() - d.getUTCFullYear();
+    let m = today.getUTCMonth() - d.getUTCMonth();
+    if (today.getUTCDate() < d.getUTCDate()) m--;
+    if (m < 0) { y--; m += 12; }
+    if (y < 0) return '';
+    if (y === 0) return `${m} month${m===1?'':'s'}`;
+    return `${y} yr${y===1?'':'s'} ${m} month${m===1?'':'s'}`;
+  }
+  const ageStr = calcAge(a.patient.dateOfBirth);
+
   $('#patientDetail').innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
       <div class="bg-slate-50 rounded-2xl p-4">
@@ -330,8 +350,8 @@ async function openPatient(id) {
         <p class="font-bold">${a.patient.name}</p>
         <p class="text-sm text-slate-600">+91 ${a.patient.phone}</p>
         ${a.patient.email ? `<p class="text-sm text-slate-600">${a.patient.email}</p>` : ''}
-        ${a.patient.dateOfBirth ? `<p class="text-sm text-slate-600">DOB: ${formatDate(a.patient.dateOfBirth)}</p>` : ''}
-        ${a.patient.gender ? `<p class="text-sm text-slate-600">${a.patient.gender}</p>` : ''}
+        ${ageStr ? `<p class="text-sm text-slate-600">Age: ${ageStr}</p>` : ''}
+        ${a.patient.gender ? `<p class="text-sm text-slate-600">Gender: ${a.patient.gender}</p>` : ''}
         ${a.patient.parentName ? `<p class="text-sm text-slate-600">Parent: ${a.patient.parentName}</p>` : ''}
       </div>
       <div class="bg-slate-50 rounded-2xl p-4">
@@ -340,8 +360,6 @@ async function openPatient(id) {
         <p class="text-sm">⏰ ${formatTime(a.startTime)} - ${formatTime(a.endTime)}</p>
         <p class="text-sm">${a.consultationType === 'ONLINE' ? '🎥' : '🏥'} ${a.consultationType}</p>
         <p class="text-sm">💰 ₹${Number(a.feeAtBooking).toFixed(2)} · <span class="${paymentLabel(a.paymentStatus, a.consultationType).cls}">${paymentLabel(a.paymentStatus, a.consultationType).text}</span></p>
-        <p class="text-sm text-slate-500">Created: ${new Date(a.createdAt).toLocaleString('en-IN')}</p>
-        ${a.completedAt ? `<p class="text-sm text-slate-500">Completed: ${new Date(a.completedAt).toLocaleString('en-IN')}</p>` : ''}
         ${a.meetLink ? `<a class="text-brand-blue text-sm underline" target="_blank" href="${a.meetLink}">Join Google Meet</a>` : ''}
       </div>
       <div class="bg-slate-50 rounded-2xl p-4">
@@ -357,15 +375,25 @@ async function openPatient(id) {
     <div class="bg-white rounded-2xl border p-4">
       <h3 class="font-bold mb-3">💊 Prescription Builder</h3>
       <form id="rxForm" class="space-y-3">
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="text-xs text-slate-500">Name (auto)</label><input value="${a.patient.name}" disabled class="w-full px-3 py-2 rounded-lg border bg-slate-50 text-sm"/></div>
+          <div><label class="text-xs text-slate-500">Age (auto)</label><input value="${ageStr}" disabled class="w-full px-3 py-2 rounded-lg border bg-slate-50 text-sm"/></div>
+          <div><label class="text-xs text-slate-500">Gender (auto)</label><input value="${a.patient.gender || ''}" disabled class="w-full px-3 py-2 rounded-lg border bg-slate-50 text-sm"/></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-xs text-slate-500">Weight</label><input name="weight" placeholder="e.g. 18 kg" value="${a.prescription?.weight || ''}" class="w-full px-3 py-2 rounded-lg border text-sm"/></div>
+          <div><label class="text-xs text-slate-500">Height</label><input name="height" placeholder="e.g. 105 cm" value="${a.prescription?.height || ''}" class="w-full px-3 py-2 rounded-lg border text-sm"/></div>
+        </div>
         <textarea name="chiefComplaint" required placeholder="Chief Complaint" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.chiefComplaint || a.primaryProblem || ''}</textarea>
+        <textarea name="pastHistory" placeholder="Past History (illnesses, surgeries, family history…)" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.pastHistory || ''}</textarea>
         <textarea name="diagnosis" required placeholder="Diagnosis" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.diagnosis || ''}</textarea>
         <div class="grid grid-cols-2 gap-2">
-          <textarea name="allergies" placeholder="Allergies (if any)" class="px-4 py-2 rounded-xl border">${a.prescription?.allergies || ''}</textarea>
+          <textarea name="allergies" placeholder="Allergy (if any)" class="px-4 py-2 rounded-xl border">${a.prescription?.allergies || ''}</textarea>
           <textarea name="investigations" placeholder="Investigations" class="px-4 py-2 rounded-xl border">${a.prescription?.investigations || ''}</textarea>
         </div>
-        <div><div class="flex justify-between items-center mb-2"><label class="font-medium">Medications</label><button type="button" onclick="addMedRow()" class="text-sm px-3 py-1 rounded-lg bg-brand-blue/10 text-brand-blue">+ Add Med</button></div><div id="medsList" class="space-y-2"></div></div>
+        <div><div class="flex justify-between items-center mb-2"><label class="font-medium">Medicine</label><button type="button" onclick="addMedRow()" class="text-sm px-3 py-1 rounded-lg bg-brand-blue/10 text-brand-blue">+ Add Med</button></div><div id="medsList" class="space-y-2"></div></div>
         <textarea name="advice" placeholder="Advice / Lifestyle" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.advice || ''}</textarea>
-        <div><label class="text-sm text-slate-500">Follow-up Date</label><input name="followUpDate" type="date" class="w-full px-4 py-2 rounded-xl border" value="${a.prescription?.followUpDate ? formatDateInput(a.prescription.followUpDate) : ''}"/></div>
+        <div><label class="text-sm text-slate-500">Follow Up Date</label><input name="followUpDate" type="date" class="w-full px-4 py-2 rounded-xl border" value="${a.prescription?.followUpDate ? formatDateInput(a.prescription.followUpDate) : ''}"/></div>
         <div class="flex gap-2"><button type="button" onclick="toggleComplete('${a.id}')" class="px-4 py-2.5 rounded-xl border">${completeLabel}</button><button type="submit" class="flex-1 py-2.5 bg-brand-blue text-white rounded-xl font-semibold">Save & Send to Patient</button></div>
       </form>
     </div>`;
@@ -375,6 +403,7 @@ async function openPatient(id) {
   $('#rxForm').addEventListener('submit', submitPrescription);
   $('#patientModal').classList.remove('hidden');
 }
+
 
 function addMedRow(m = { name: '', dose: '', frequency: '', duration: '', instructions: '' }) {
   const row = document.createElement('div');
@@ -555,18 +584,26 @@ async function loadSettings() {
   const me = await api('/doctor/me');
   currentDoctor = me;
   renderDoctorPhoto(me.photoUrl);
-  // Availability split-pickers
   populateAvailabilitySelects(me);
-  // Slot duration button group
   renderSlotDurationBtns(me.slotDuration || 15);
-  // Working days checkbox group
   renderWorkingDaysBtns(me.workingDays || 'MON,TUE,WED,THU,FRI,SAT');
   const af = $('#availForm');
   af.isAvailable.checked = me.isAvailable;
   const ff = $('#feesForm');
   ff.onlineConsultFee.value = me.onlineConsultFee || 0;
   ff.physicalConsultFee.value = me.physicalConsultFee || 0;
+
+  // Bug 6 — populate clinic form
+  const cf = $('#clinicForm');
+  if (cf) {
+    cf.clinicName.value = me.clinicName || '';
+    cf.clinicAddress.value = me.clinicAddress || '';
+    cf.clinicMapUrl.value = me.clinicMapUrl || '';
+    cf.clinicLat.value = me.clinicLat ?? '';
+    cf.clinicLng.value = me.clinicLng ?? '';
+  }
 }
+
 
 $('#photoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -642,6 +679,40 @@ async function init() {
   await loadStats();
   await loadWaiting();
 }
+
+// Bug 6 — Clinic form: press Enter on clinic name to auto-generate the Google Maps URL,
+// and save clinic settings on submit.
+(function wireClinicForm() {
+  const cf = document.getElementById('clinicForm');
+  if (!cf) return;
+  const nameInput = document.getElementById('clinicNameInput');
+  const urlInput  = cf.clinicMapUrl;
+  const addrInput = cf.clinicAddress;
+
+  function generateMapUrl() {
+    const name = (nameInput.value || '').trim();
+    const addr = (addrInput.value || '').trim();
+    if (!name) return;
+    const q = encodeURIComponent([name, addr].filter(Boolean).join(' '));
+    urlInput.value = `https://maps.google.com/?q=${q}`;
+  }
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); generateMapUrl(); }
+  });
+  addrInput.addEventListener('blur', () => { if (!urlInput.value) generateMapUrl(); });
+
+  cf.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(cf);
+    const payload = Object.fromEntries(fd.entries());
+    ['clinicLat','clinicLng'].forEach(k => { if (payload[k] === '') delete payload[k]; });
+    try {
+      await api('/doctor/clinic', { method: 'PUT', body: JSON.stringify(payload) });
+      alert('Clinic location saved. It will now appear in patient WhatsApp/email Get Directions buttons.');
+    } catch (err) { alert(err.message); }
+  });
+})();
+
 
 (async () => {
   if (TOKEN) {

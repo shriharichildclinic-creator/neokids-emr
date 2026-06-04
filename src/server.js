@@ -1,6 +1,6 @@
 // server.js — fixed version
-// Added ENABLE_INTERNAL_JOBS default to true in dev
-// Lifecycle jobs now always run in dev for Issue 6/8
+// - Added /payment-status route (was 404 previously)
+// - Lifecycle jobs always run by default
 
 require('dotenv').config();
 const express = require('express');
@@ -19,6 +19,7 @@ const adminRoutes   = require('./routes/admin.routes');
 const doctorRoutes  = require('./routes/doctor.routes');
 const publicRoutes  = require('./routes/public.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+const publicCtrl    = require('./controllers/public.controller');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -50,16 +51,20 @@ app.use('/doctor', express.static(path.join(__dirname, '..', 'public', 'doctor')
 app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets')));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'NeoKidsPro EMR', version: '1.2.0', time: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'NeoKidsPro EMR', version: '1.2.1', time: new Date().toISOString() });
 });
 
 app.get('/', (req, res) => {
   res.json({
     name: 'NeoKidsPro EMR API',
-    version: '1.2.0',
+    version: '1.2.1',
     panels: { admin: '/admin', doctor: '/doctor' }
   });
 });
+
+// ── Cashfree return URL lands here ─────────────────────────────────
+// /payment-status?order_id=appt_xxxxx
+app.get('/payment-status', publicCtrl.paymentStatusPage);
 
 app.use('/api/auth',     authRoutes);
 app.use('/api/admin',    adminRoutes);
@@ -72,16 +77,15 @@ app.use(errorHandler);
 
 app.listen(PORT, async () => {
   logger.info(`🚀 NeoKidsPro EMR running on port ${PORT}`);
-  logger.info(`📋 Admin Panel: http://localhost:${PORT}/admin`);
-  logger.info(`👨‍⚕️ Doctor Panel: http://localhost:${PORT}/doctor`);
+  logger.info(`📋 Admin Panel:    http://localhost:${PORT}/admin`);
+  logger.info(`👨‍⚕️ Doctor Panel:   http://localhost:${PORT}/doctor`);
   logger.info(`🔖 Booking Widget: http://localhost:${PORT}/assets/booking-widget.html`);
+  logger.info(`💳 Payment Status: http://localhost:${PORT}/payment-status`);
 
-  // Run lifecycle jobs — default ON in all environments
   const jobsEnabled = process.env.ENABLE_INTERNAL_JOBS !== 'false';
   const intervalMs  = parseInt(process.env.INTERNAL_JOBS_INTERVAL_MS || '300000', 10);
-
   if (jobsEnabled) {
-    await runLifecycleJobs(); // run immediately on startup
+    await runLifecycleJobs();
     setInterval(runLifecycleJobs, intervalMs);
     logger.info(`⏰ Lifecycle jobs running every ${intervalMs / 1000}s`);
   }

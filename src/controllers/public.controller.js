@@ -3,6 +3,8 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { bookAppointmentSchema } = require('../utils/validators');
 const slotService = require('../services/slot.service');
 const bookingService = require('../services/booking.service');
+const cashfreeService = require('../services/cashfree.service');
+const logger = require('../utils/logger');
 const { getTodayDateString } = require('../utils/date');
 
 exports.listDoctors = asyncHandler(async (req, res) => {
@@ -14,22 +16,11 @@ exports.listDoctors = asyncHandler(async (req, res) => {
   const doctors = await prisma.doctor.findMany({
     where,
     select: {
-      id: true,
-      name: true,
-      specialization: true,
-      qualification: true,
-      experience: true,
-      bio: true,
-      photoUrl: true,
-      consultationModes: true,
-      onlineConsultFee: true,
-      physicalConsultFee: true,
-      slotDuration: true,
-      availableFromOnline: true,
-      availableToOnline: true,
-      availableFromOffline: true,
-      availableToOffline: true,
-      workingDays: true
+      id: true, name: true, specialization: true, qualification: true,
+      experience: true, bio: true, photoUrl: true, consultationModes: true,
+      onlineConsultFee: true, physicalConsultFee: true, slotDuration: true,
+      availableFromOnline: true, availableToOnline: true,
+      availableFromOffline: true, availableToOffline: true, workingDays: true
     },
     orderBy: { name: 'asc' }
   });
@@ -41,22 +32,11 @@ exports.doctorDetail = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findFirst({
     where: { id, deletedAt: null },
     select: {
-      id: true,
-      name: true,
-      specialization: true,
-      qualification: true,
-      experience: true,
-      bio: true,
-      photoUrl: true,
-      consultationModes: true,
-      onlineConsultFee: true,
-      physicalConsultFee: true,
-      slotDuration: true,
-      availableFromOnline: true,
-      availableToOnline: true,
-      availableFromOffline: true,
-      availableToOffline: true,
-      workingDays: true,
+      id: true, name: true, specialization: true, qualification: true,
+      experience: true, bio: true, photoUrl: true, consultationModes: true,
+      onlineConsultFee: true, physicalConsultFee: true, slotDuration: true,
+      availableFromOnline: true, availableToOnline: true,
+      availableFromOffline: true, availableToOffline: true, workingDays: true,
       isAvailable: true
     }
   });
@@ -66,9 +46,7 @@ exports.doctorDetail = asyncHandler(async (req, res) => {
 
 exports.getSlots = asyncHandler(async (req, res) => {
   const { doctorId, date, type } = req.query;
-  if (!doctorId || !date || !type) {
-    return res.status(400).json({ error: 'doctorId, date, and type are required' });
-  }
+  if (!doctorId || !date || !type) return res.status(400).json({ error: 'doctorId, date, and type are required' });
   const slots = await slotService.getLiveSlots(doctorId, date, type);
   res.json({ doctorId, date, type, slots });
 });
@@ -76,13 +54,8 @@ exports.getSlots = asyncHandler(async (req, res) => {
 exports.book = asyncHandler(async (req, res) => {
   const parsed = bookAppointmentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
-
-  // Double-check: backend IST-aware past-date guard (covers API calls bypassing the widget)
   const today = getTodayDateString();
-  if (parsed.data.date < today) {
-    return res.status(400).json({ error: 'Appointment date cannot be in the past' });
-  }
-
+  if (parsed.data.date < today) return res.status(400).json({ error: 'Appointment date cannot be in the past' });
   const result = await bookingService.bookAppointment(parsed.data);
   res.status(201).json(result);
 });
@@ -99,3 +72,150 @@ exports.appointmentStatus = asyncHandler(async (req, res) => {
   if (!appt) return res.status(404).json({ error: 'Not found' });
   res.json(appt);
 });
+
+/**
+ * Force-verify a payment by asking Cashfree directly (server-to-server),
+ * bypassing webhook delay. Idempotent.
+ * GET /api/public/verify-payment?order_id=appt_<uuid>
+ */
+exports.verifyPayment = asyncHandler(async (req, res) => {
+  const orderId = req.query.order_id || req.query.orderId;
+  if (!orderId) return res.status(400).json({ error: 'order_id is required' });
+
+  const appt = await prisma.appointment.findFirst({
+    where: { cashfreeOrderId: orderId },
+    include: { doctor: { select: { name: true } }, patient: { select: { name: true } } }
+  });
+  if (!appt) return res.status(404).json({ error: 'Appointment not found for this order' });
+
+  if (appt.paymentStatus === 'PAID') {
+    return res.json({
+      orderId, appointmentId: appt.id,
+      paymentStatus: 'PAID', appointmentStatus: appt.status, source: 'db'
+    });
+  }
+
+  let cf;
+  try { cf = await cashfreeService.getOrderStatus(orderId); }
+  catch (e) {
+    logger.error('verifyPayment: Cashfree status fetch failed', e);
+    return res.status(502).json({
+      error: 'Could not verify payment with Cashfree',
+      orderId, appointmentId: appt.id, paymentStatus: appt.paymentStatus
+    });
+  }
+
+  const cfStatus = (cf.order_status || '').toUpperCase();
+  logger.info(`verifyPayment: order=${orderId} cashfree=${cfStatus} db=${appt.paymentStatus}`);
+
+  if (cfStatus === 'PAID') {
+    const updated = await bookingService.confirmOnlineBooking(appt.id, orderId);
+    return res.json({
+      orderId, appointmentId: appt.id,
+      paymentStatus: 'PAID', appointmentStatus: updated.status, source: 'cashfree'
+    });
+  }
+
+  if (['EXPIRED', 'TERMINATED', 'CANCELLED'].includes(cfStatus)) {
+    if (appt.paymentStatus !== 'FAILED' && appt.paymentStatus !== 'PAID') {
+      await prisma.appointment.update({ where: { id: appt.id }, data: { paymentStatus: 'FAILED' } });
+    }
+    return res.json({
+      orderId, appointmentId: appt.id,
+      paymentStatus: 'FAILED', cashfreeStatus: cfStatus, source: 'cashfree'
+    });
+  }
+
+  return res.json({
+    orderId, appointmentId: appt.id,
+    paymentStatus: appt.paymentStatus, cashfreeStatus: cfStatus, source: 'cashfree'
+  });
+});
+
+/**
+ * Cashfree redirects browser here after payment attempt.
+ * URL: /payment-status?order_id=appt_xxxxx
+ */
+exports.paymentStatusPage = (req, res) => {
+  res.type('html').send(PAYMENT_STATUS_HTML);
+};
+
+const PAYMENT_STATUS_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Payment Status · NeoKidsPro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .spinner { width:48px;height:48px;border:4px solid #e5e7eb;border-top-color:#4DA8FF;border-radius:50%;animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+    <div id="iconSlot" class="flex justify-center mb-4"><div class="spinner"></div></div>
+    <h1 id="title" class="text-2xl font-bold text-slate-800 mb-2">Verifying your payment…</h1>
+    <p id="message" class="text-slate-600 mb-6">Please wait while we confirm your transaction with Cashfree. This usually takes 5–30 seconds.</p>
+    <div id="details" class="text-left text-sm bg-slate-50 rounded-xl p-4 hidden"></div>
+    <div id="actions" class="mt-6 hidden">
+      <a id="homeBtn" href="/" class="inline-block px-5 py-2 rounded-xl bg-[#4DA8FF] text-white font-medium hover:opacity-90">Done</a>
+    </div>
+  </div>
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const orderId = params.get('order_id') || params.get('orderId');
+  const $ = (id)=>document.getElementById(id);
+  function showFinal(state, appt){
+    const ICONS = {
+      success: '<div style="width:64px;height:64px;border-radius:50%;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;font-size:36px;">✓</div>',
+      failed:  '<div style="width:64px;height:64px;border-radius:50%;background:#ef4444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:36px;">✕</div>',
+      pending: '<div style="width:64px;height:64px;border-radius:50%;background:#f59e0b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:36px;">⏱</div>'
+    };
+    $('iconSlot').innerHTML = ICONS[state] || ICONS.pending;
+    if(state==='success'){
+      $('title').textContent = 'Payment Successful 🎉';
+      $('message').innerHTML = 'Your online consultation is confirmed.<br/>Confirmation has been sent via <b>WhatsApp & Email</b> along with the Google Meet link and PDF invoice.';
+    } else if(state==='failed'){
+      $('title').textContent = 'Payment Failed';
+      $('message').textContent = 'Your transaction was not completed. No amount has been charged. Please try booking again.';
+    } else {
+      $('title').textContent = 'Payment Still Processing';
+      $('message').innerHTML = 'We have not received the final status from Cashfree yet. Don\\'t worry — if your payment succeeded, you will receive a WhatsApp & Email confirmation within a few minutes.';
+    }
+    if(appt){
+      $('details').classList.remove('hidden');
+      $('details').innerHTML =
+        '<div class="flex justify-between"><span class="text-slate-500">Order:</span><span class="font-mono">'+orderId+'</span></div>'+
+        '<div class="flex justify-between"><span class="text-slate-500">Appointment:</span><span class="font-mono">'+(appt.appointmentId||'').slice(0,8).toUpperCase()+'</span></div>';
+    }
+    $('actions').classList.remove('hidden');
+  }
+  if(!orderId){
+    showFinal('failed', null);
+    $('message').textContent = 'Missing order_id in URL. If you completed a payment, please contact support.';
+    return;
+  }
+  let attempts = 0;
+  const MAX_ATTEMPTS = 20, INTERVAL_MS = 3000;
+  async function poll(){
+    attempts++;
+    try{
+      const r = await fetch('/api/public/verify-payment?order_id='+encodeURIComponent(orderId), { cache:'no-store' });
+      const data = await r.json();
+      if(data.paymentStatus === 'PAID')   return showFinal('success', data);
+      if(data.paymentStatus === 'FAILED') return showFinal('failed', data);
+      if(attempts >= MAX_ATTEMPTS)        return showFinal('pending', data);
+      setTimeout(poll, INTERVAL_MS);
+    }catch(e){
+      if(attempts >= MAX_ATTEMPTS) return showFinal('pending', null);
+      setTimeout(poll, INTERVAL_MS);
+    }
+  }
+  poll();
+})();
+</script>
+</body>
+</html>`;
