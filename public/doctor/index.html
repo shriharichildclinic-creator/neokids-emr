@@ -1,277 +1,731 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NeoKidsPro · Doctor Dashboard</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NeoKidsPro EMR — Doctor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          brand: { blue: '#4DA8FF', mint: '#B8F2E6', cream: '#FFF8E7', coral: '#FFB5A7' }
-        }
+          'brand-primary': '#2A7AD9',
+          'brand-blue':    '#4DA8FF',
+          'brand-mint':    '#B8F2E6',
+          'brand-cream':   '#FFF8E7',
+          'brand-coral':   '#FFB5A7',
+          'brand-ink':     '#0F2A47',
+          'brand-surface': '#F4F8FB'
+        },
+        fontFamily: { sans: ['Inter','system-ui','sans-serif'] }
       }
     }
   }
 </script>
-<style>body{font-family:system-ui,-apple-system,sans-serif;background:#F4F8FB}</style>
+<link rel="stylesheet" href="/doctor/styles.css"/>
 </head>
-<body class="text-slate-800">
-<div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
-  <div class="bg-white rounded-3xl shadow-xl w-full max-w-md p-8">
-    <div class="text-center mb-8">
-      <div class="w-16 h-16 rounded-2xl bg-brand-mint mx-auto flex items-center justify-center mb-3 text-3xl">🩺</div>
-      <h1 class="text-2xl font-bold">Doctor Login</h1>
-      <p class="text-sm text-slate-500">NeoKidsPro EMR</p>
+<body class="bg-brand-surface text-slate-800">
+
+<!-- =====================================================================
+     LOGIN SCREEN
+     ===================================================================== -->
+<div id="loginScreen" class="np-login">
+  <div class="np-login__card">
+    <div class="np-login__logo" aria-hidden="true">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
     </div>
-    <form id="loginForm" class="space-y-4">
-      <input id="email" type="email" required placeholder="doctor@neokidspro.in" class="w-full px-4 py-3 rounded-xl border focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none"/>
-      <input id="password" type="password" required placeholder="Password" class="w-full px-4 py-3 rounded-xl border focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none"/>
-      <button class="w-full py-3 rounded-xl bg-brand-blue text-white font-semibold hover:bg-blue-500">Sign In</button>
-      <button type="button" onclick="forgotPassword()" class="w-full py-2 rounded-xl border text-sm">Forgot password</button>
-      <p id="loginError" class="text-red-500 text-sm text-center hidden"></p>
+    <h1 class="np-login__title">NeoKidsPro Doctor</h1>
+    <p class="np-login__subtitle">Sign in to your pediatric EMR</p>
+
+    <form id="loginForm" class="space-y-4" novalidate action="javascript:void(0)" onsubmit="return false">
+      <div class="np-field">
+        <label class="np-field__label" for="email">Email address</label>
+        <input id="email" name="email" type="email" class="np-input" placeholder="you@clinic.com" required autocomplete="username">
+      </div>
+      <div class="np-field">
+        <label class="np-field__label" for="password">Password</label>
+        <input id="password" name="password" type="password" class="np-input" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      <div id="loginError" class="np-error hidden"></div>
+      <button type="submit" class="np-btn np-btn--primary w-full justify-center" style="width:100%; padding:.75rem 1rem;">
+        Sign in
+      </button>
+      <button type="button" onclick="forgotPassword()" class="w-full text-sm text-slate-500 hover:text-brand-primary" style="background:none;border:0;cursor:pointer;width:100%;padding:.25rem;">
+        Forgot password?
+      </button>
     </form>
   </div>
 </div>
 
-<div id="dashboard" class="hidden min-h-screen">
-  <header class="bg-white shadow-sm">
-    <div class="px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-brand-blue flex items-center justify-center text-white text-xl">🩺</div>
+
+<!-- =====================================================================
+     MAIN DASHBOARD SHELL
+     ===================================================================== -->
+<div id="dashboard" class="hidden">
+  <!-- Mobile backdrop (sibling of grid so it doesn't take a grid track) -->
+  <div id="sidebarBackdrop" class="np-backdrop" aria-hidden="true"></div>
+
+  <div class="np-shell">
+
+    <!-- =================== SIDEBAR =================== -->
+    <aside id="sidebar" class="np-sidebar" aria-label="Primary navigation">
+      <div class="np-sidebar__brand">
+        <div class="np-sidebar__logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+        </div>
         <div>
-          <div class="font-bold">NeoKidsPro</div>
-          <div class="text-xs text-slate-500">Doctor Dashboard</div>
+          <div class="np-sidebar__title">NeoKidsPro</div>
+          <div class="np-sidebar__subtitle">Doctor EMR</div>
         </div>
       </div>
-      <div class="flex items-center gap-4">
-        <img id="docPhotoTop" class="hidden w-12 h-12 rounded-2xl object-cover border" alt="Doctor photo"/>
-        <div class="text-right">
-          <p class="text-sm font-medium" id="docName">Dr. -</p>
-          <p class="text-xs text-slate-500" id="docSpec">-</p>
-        </div>
-        <button onclick="logout()" class="px-4 py-2 rounded-xl border hover:bg-slate-50 text-sm">Logout</button>
+
+      <nav class="np-sidebar__nav">
+        <div class="np-sidebar__section">Workspace</div>
+
+        <button class="np-nav-item tab-btn active" data-tab="dashboardTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg>
+          Dashboard
+        </button>
+        <button class="np-nav-item tab-btn" data-tab="waitingTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Waiting Room
+        </button>
+        <button class="np-nav-item tab-btn" data-tab="allTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Appointments
+        </button>
+        <button class="np-nav-item tab-btn" data-tab="settingsTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.1a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.1a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.1a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+      </nav>
+
+      <div class="np-sidebar__footer">
+        <div>NeoKidsPro &middot; v2.0</div>
+        <div style="margin-top:.15rem;">Pediatric EMR</div>
       </div>
-    </div>
-    <div class="px-6 pb-4 grid grid-cols-2 md:grid-cols-4 gap-3" id="statsBar"></div>
-    <div class="px-6 border-t flex gap-1 overflow-x-auto">
-      <button class="tab-btn px-4 py-3 border-b-2 border-brand-blue font-medium" data-tab="waitingTab">Waiting Room</button>
-      <button class="tab-btn px-4 py-3 border-b-2 border-transparent text-slate-500" data-tab="allTab">All Appointments</button>
-      <button class="tab-btn px-4 py-3 border-b-2 border-transparent text-slate-500" data-tab="settingsTab">Settings</button>
-    </div>
-  </header>
+    </aside>
 
-  <main class="p-6">
-    <div id="waitingTab" class="tab-pane">
-      <h2 class="text-xl font-bold mb-4">Today's Patients</h2>
-      <div id="waitingList" class="space-y-3"></div>
-    </div>
+    <!-- =================== MAIN =================== -->
+    <main class="np-main">
 
-    <div id="allTab" class="tab-pane hidden">
-      <h2 class="text-xl font-bold mb-4">All Appointments</h2>
-      <div id="allList" class="space-y-3"></div>
-    </div>
+      <!-- HEADER -->
+      <header class="np-header">
+        <div class="np-header__inner">
+          <button id="sidebarToggle" type="button" class="np-iconbtn np-menu-toggle" aria-label="Open menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
 
-    <div id="settingsTab" class="tab-pane hidden">
-      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div class="bg-white rounded-2xl p-6 shadow-sm space-y-4">
-          <h3 class="font-bold">Profile Image</h3>
-          <div class="flex items-center gap-4">
-            <img id="docPhotoLarge" class="w-24 h-24 rounded-3xl object-cover border bg-slate-50 hidden" alt="Doctor photo"/>
-            <div class="w-24 h-24 rounded-3xl bg-brand-blue/10 flex items-center justify-center text-4xl" id="docPhotoPlaceholder">👨‍⚕️</div>
-            <div class="flex-1 text-sm text-slate-500">Upload JPG, PNG, or WebP up to 2 MB.</div>
-          </div>
-          <form id="photoForm" class="space-y-3">
-            <input id="photoInput" name="photo" type="file" accept="image/png,image/jpeg,image/webp" class="w-full px-4 py-2 rounded-xl border"/>
-            <div class="flex gap-2">
-              <button class="flex-1 py-2.5 rounded-xl bg-brand-blue text-white font-semibold">Upload Photo</button>
-              <button type="button" onclick="removePhoto()" class="px-4 py-2.5 rounded-xl border">Remove</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h3 class="font-bold mb-4">Availability</h3>
-          <form id="availForm" class="space-y-5">
-
-            <!-- Online Hours -->
-            <div>
-              <p class="text-sm font-medium text-slate-600 mb-2">🎥 Online Hours</p>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="text-xs text-slate-400 mb-1 block">From</label>
-                  <div class="flex gap-1">
-                    <select name="availableFromOnline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
-                    <select name="availableFromOnline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
-                      <option>AM</option><option>PM</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label class="text-xs text-slate-400 mb-1 block">To</label>
-                  <div class="flex gap-1">
-                    <select name="availableToOnline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
-                    <select name="availableToOnline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
-                      <option>AM</option><option>PM</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Offline Hours -->
-            <div>
-              <p class="text-sm font-medium text-slate-600 mb-2">🏥 In-Clinic Hours</p>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="text-xs text-slate-400 mb-1 block">From</label>
-                  <div class="flex gap-1">
-                    <select name="availableFromOffline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
-                    <select name="availableFromOffline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
-                      <option>AM</option><option>PM</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label class="text-xs text-slate-400 mb-1 block">To</label>
-                  <div class="flex gap-1">
-                    <select name="availableToOffline_h" class="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"></select>
-                    <select name="availableToOffline_ampm" class="w-20 px-2 py-2 rounded-xl border bg-white text-sm">
-                      <option>AM</option><option>PM</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Hidden fields that hold the real HH:MM values submitted to backend -->
-            <input type="hidden" name="availableFromOnline"/>
-            <input type="hidden" name="availableToOnline"/>
-            <input type="hidden" name="availableFromOffline"/>
-            <input type="hidden" name="availableToOffline"/>
-
-            <!-- Slot Duration -->
-            <div>
-              <p class="text-sm font-medium text-slate-600 mb-2">⏱ Appointment Slot Duration</p>
-              <div id="slotDurationBtns" class="flex flex-wrap gap-2">
-                <input type="hidden" name="slotDuration" id="slotDurationVal"/>
-              </div>
-            </div>
-
-            <!-- Working Days -->
-            <div>
-              <p class="text-sm font-medium text-slate-600 mb-2">📅 Working Days</p>
-              <div class="flex flex-wrap gap-2" id="workingDaysBtns">
-                <input type="hidden" name="workingDays" id="workingDaysVal"/>
-              </div>
-            </div>
-
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input name="isAvailable" type="checkbox" class="w-4 h-4"/>
-              <span class="text-sm">I am accepting appointments</span>
-            </label>
-            <button class="w-full py-2.5 rounded-xl bg-brand-blue text-white font-semibold">Save Availability</button>
-          </form>
-        </div>
-
-                <div class="space-y-6">
-          <div class="bg-white rounded-2xl p-6 shadow-sm">
-            <h3 class="font-bold mb-4">🏥 Clinic Location</h3>
-            <form id="clinicForm" class="space-y-3">
-              <div>
-                <label class="text-sm text-slate-500">Clinic Name <span class="text-red-500">*</span></label>
-                <input id="clinicNameInput" name="clinicName" required placeholder="Type clinic name and press Enter to auto-generate the map URL" class="w-full px-4 py-2 rounded-xl border"/>
-              </div>
-              <div>
-                <label class="text-sm text-slate-500">Clinic Address</label>
-                <textarea name="clinicAddress" rows="2" placeholder="Street, area, city, pincode" class="w-full px-4 py-2 rounded-xl border"></textarea>
-              </div>
-              <div>
-                <label class="text-sm text-slate-500">Google Maps URL <span class="text-xs text-slate-400">(auto-filled — you can paste a custom one)</span></label>
-                <input name="clinicMapUrl" placeholder="https://maps.google.com/?q=..." class="w-full px-4 py-2 rounded-xl border"/>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <input name="clinicLat" type="number" step="0.0000001" placeholder="Latitude (optional)" class="px-4 py-2 rounded-xl border"/>
-                <input name="clinicLng" type="number" step="0.0000001" placeholder="Longitude (optional)" class="px-4 py-2 rounded-xl border"/>
-              </div>
-              <button class="w-full py-2.5 rounded-xl bg-brand-blue text-white font-semibold">Save Clinic Location</button>
-            </form>
-            <p class="text-xs text-slate-500 mt-3">This map URL is used in the "Get Directions" button of every WhatsApp/email sent for your offline appointments.</p>
+          <div class="np-header__title">
+            <div id="pageTitle" class="np-header__page-title">Dashboard</div>
+            <div id="pageSubtitle" class="np-header__page-subtitle">Welcome back — here's what's happening today.</div>
           </div>
 
-          <div class="bg-white rounded-2xl p-6 shadow-sm">
-            <h3 class="font-bold mb-4">Consultation Fees</h3>
-            <form id="feesForm" class="space-y-3">
-              <div><label class="text-sm text-slate-500">Online Consultation Fee (₹)</label><input name="onlineConsultFee" type="number" step="0.01" class="w-full px-4 py-2 rounded-xl border"/></div>
-              <div><label class="text-sm text-slate-500">Physical Consultation Fee (₹)</label><input name="physicalConsultFee" type="number" step="0.01" class="w-full px-4 py-2 rounded-xl border"/></div>
-              <button class="w-full py-2.5 rounded-xl bg-brand-blue text-white font-semibold">Save Fees</button>
-            </form>
-          </div>
-
-          <div class="bg-white rounded-2xl p-6 shadow-sm">
-            <h3 class="font-bold mb-4">Change Password</h3>
-            <form id="passwordForm" class="space-y-3">
-              <input name="currentPassword" type="password" required placeholder="Current password" class="w-full px-4 py-2 rounded-xl border"/>
-              <input name="newPassword" type="password" required placeholder="New password" class="w-full px-4 py-2 rounded-xl border"/>
-              <input name="confirmPassword" type="password" required placeholder="Confirm new password" class="w-full px-4 py-2 rounded-xl border"/>
-              <button class="w-full py-2.5 rounded-xl bg-brand-blue text-white font-semibold">Change Password</button>
-            </form>
+          <!-- Profile dropdown -->
+          <div id="profileMenu" class="np-profile">
+            <button id="profileTrigger" type="button" class="np-profile__trigger" aria-haspopup="true" aria-expanded="false">
+              <div class="np-profile__avatar" id="docPhotoTop">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div class="np-profile__meta">
+                <div class="np-profile__name" id="docName">Doctor</div>
+                <div class="np-profile__role" id="docSpec">Pediatrician</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#64748B;"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div id="profileDropdown" class="np-profile__menu" role="menu">
+              <button type="button" class="np-profile__menu-item" data-go="settingsTab" data-section="profile">
+                <svg class="np-profile__menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                My Profile
+              </button>
+              <button type="button" class="np-profile__menu-item" data-go="settingsTab">
+                <svg class="np-profile__menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.1a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.1a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.1a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Settings
+              </button>
+              <button type="button" class="np-profile__menu-item" data-go="settingsTab" data-section="password">
+                <svg class="np-profile__menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Change Password
+              </button>
+              <div class="np-profile__menu-divider"></div>
+              <button type="button" class="np-profile__menu-item is-danger" onclick="logout()">
+                <svg class="np-profile__menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
+      </header>
 
-      </div>
+      <!-- CONTENT -->
+      <div class="np-content">
+
+        <!-- ============ DASHBOARD TAB ============ -->
+        <section id="dashboardTab" class="tab-pane">
+          <!-- KPI cards (rendered by JS into #statsBar) -->
+          <div id="statsBar" class="np-kpi-grid"></div>
+
+          <div class="np-divider"></div>
+
+          <div style="display:grid; grid-template-columns: 2fr 1fr; gap:1rem;" class="np-dash-grid">
+            <div class="np-panel">
+              <div class="np-panel__head">
+                <div style="flex:1">
+                  <div class="np-panel__title">Today's Snapshot</div>
+                  <div class="np-panel__subtitle">Patients currently waiting and upcoming consults</div>
+                </div>
+                <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="document.querySelector('[data-tab=waitingTab]').click()">
+                  View all
+                </button>
+              </div>
+              <div id="dashSnapshot" class="np-panel__body">
+                <div class="np-empty">
+                  <div class="np-empty__icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div class="np-empty__title">Loading…</div>
+                  <div class="np-empty__sub">Fetching today's appointments</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="np-panel">
+              <div class="np-panel__head">
+                <div class="np-panel__title">Quick Tips</div>
+              </div>
+              <div class="np-panel__body" style="font-size:.88rem; color:var(--np-text);">
+                <ul style="display:flex; flex-direction:column; gap:.65rem; padding-left:0; list-style:none;">
+                  <li class="np-row" style="align-items:flex-start;">
+                    <span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span>
+                    <span>Join the Meet link from a patient card to start a virtual consult.</span>
+                  </li>
+                  <li class="np-row" style="align-items:flex-start;">
+                    <span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>Tip</span>
+                    <span>Use the search & filters on the Appointments tab to quickly find any patient.</span>
+                  </li>
+                  <li class="np-row" style="align-items:flex-start;">
+                    <span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Setup</span>
+                    <span>Update your availability and clinic details in Settings for accurate bookings.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ WAITING ROOM TAB ============ -->
+        <section id="waitingTab" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1">
+                <div class="np-panel__title">Waiting Room</div>
+                <div class="np-panel__subtitle">Patients waiting to be seen</div>
+              </div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshWaiting" title="Refresh">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Refresh
+              </button>
+            </div>
+            <div class="np-panel__body">
+              <div id="waitingList" class="np-appt-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ APPOINTMENTS TAB ============ -->
+        <section id="allTab" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1">
+                <div class="np-panel__title">All Appointments</div>
+                <div class="np-panel__subtitle">Search, filter, and manage your appointments</div>
+              </div>
+            </div>
+            <div class="np-panel__body">
+
+              <div class="np-filterbar">
+                <div class="np-search">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input id="apptSearch" type="search" placeholder="Search by patient name, phone, or problem…" autocomplete="off"/>
+                </div>
+                <select id="apptStatusFilter" class="np-select" aria-label="Filter by status">
+                  <option value="">All statuses</option>
+                  <option value="CONFIRMED">Confirmed</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+                <select id="apptTypeFilter" class="np-select" aria-label="Filter by type">
+                  <option value="">All types</option>
+                  <option value="ONLINE">Online</option>
+                  <option value="OFFLINE">In-person</option>
+                </select>
+                <select id="apptSort" class="np-select" aria-label="Sort">
+                  <option value="date_desc">Newest first</option>
+                  <option value="date_asc">Oldest first</option>
+                </select>
+              </div>
+
+              <div id="allList" class="np-appt-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ SETTINGS TAB ============ -->
+        <section id="settingsTab" class="tab-pane hidden">
+          <div class="np-settings-grid">
+
+            <!-- Profile Photo -->
+            <div class="np-setting-card" id="setting-profile">
+              <div class="np-setting-card__head">
+                <div class="np-setting-card__icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div>
+                  <div class="np-setting-card__title">Profile Photo</div>
+                  <div class="np-setting-card__sub">Shown to your patients during consults</div>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
+                <div class="np-profile__avatar" style="width:64px; height:64px;" id="docPhotoLarge">
+                  <span id="docPhotoPlaceholder">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </span>
+                </div>
+                <button type="button" class="np-btn np-btn--danger np-btn--sm" onclick="removePhoto()">Remove photo</button>
+              </div>
+
+              <form id="photoForm">
+                <div class="np-field">
+                  <label class="np-field__label" for="photoInput">Upload a new photo</label>
+                  <input id="photoInput" name="photo" type="file" accept="image/*" class="np-input" required>
+                  <div class="np-field__hint">JPG or PNG. Square images work best.</div>
+                </div>
+                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Upload photo</button>
+              </form>
+            </div>
+
+            <!-- Availability -->
+            <div class="np-setting-card">
+              <div class="np-setting-card__head">
+                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#2BB39F,#4CD0BC);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div>
+                  <div class="np-setting-card__title">Availability</div>
+                  <div class="np-setting-card__sub">Working hours, days, and consultation slot length</div>
+                </div>
+              </div>
+
+              <form id="availForm">
+                <div class="np-grid-2">
+                  <div class="np-field">
+                    <label class="np-field__label">Online — From</label>
+                    <div style="display:flex; gap:.4rem;">
+                      <select name="availableFromOnline_h" class="np-select-native" style="flex:1"></select>
+                      <select name="availableFromOnline_ampm" class="np-select-native" style="width:90px">
+                        <option value="AM">AM</option><option value="PM">PM</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="np-field">
+                    <label class="np-field__label">Online — To</label>
+                    <div style="display:flex; gap:.4rem;">
+                      <select name="availableToOnline_h" class="np-select-native" style="flex:1"></select>
+                      <select name="availableToOnline_ampm" class="np-select-native" style="width:90px">
+                        <option value="AM">AM</option><option value="PM">PM</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="np-field">
+                    <label class="np-field__label">In-Person — From</label>
+                    <div style="display:flex; gap:.4rem;">
+                      <select name="availableFromOffline_h" class="np-select-native" style="flex:1"></select>
+                      <select name="availableFromOffline_ampm" class="np-select-native" style="width:90px">
+                        <option value="AM">AM</option><option value="PM">PM</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="np-field">
+                    <label class="np-field__label">In-Person — To</label>
+                    <div style="display:flex; gap:.4rem;">
+                      <select name="availableToOffline_h" class="np-select-native" style="flex:1"></select>
+                      <select name="availableToOffline_ampm" class="np-select-native" style="width:90px">
+                        <option value="AM">AM</option><option value="PM">PM</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Hidden inputs to preserve original API field names -->
+                <input type="hidden" name="availableFromOnline"  id="availableFromOnline" />
+                <input type="hidden" name="availableToOnline"    id="availableToOnline" />
+                <input type="hidden" name="availableFromOffline" id="availableFromOffline" />
+                <input type="hidden" name="availableToOffline"   id="availableToOffline" />
+
+                <div class="np-field">
+                  <label class="np-field__label">Slot duration (minutes)</label>
+                  <div class="np-pills" id="slotDurationBtns">
+                    <button type="button" class="np-pill" data-val="10">10</button>
+                    <button type="button" class="np-pill" data-val="15">15</button>
+                    <button type="button" class="np-pill" data-val="20">20</button>
+                    <button type="button" class="np-pill" data-val="30">30</button>
+                  </div>
+                  <input type="hidden" name="slotDuration" id="slotDurationVal" />
+                </div>
+
+                <div class="np-field">
+                  <label class="np-field__label">Working days</label>
+                  <div class="np-pills" id="workingDaysBtns">
+                    <button type="button" class="np-pill" data-val="MON">Mon</button>
+                    <button type="button" class="np-pill" data-val="TUE">Tue</button>
+                    <button type="button" class="np-pill" data-val="WED">Wed</button>
+                    <button type="button" class="np-pill" data-val="THU">Thu</button>
+                    <button type="button" class="np-pill" data-val="FRI">Fri</button>
+                    <button type="button" class="np-pill" data-val="SAT">Sat</button>
+                    <button type="button" class="np-pill" data-val="SUN">Sun</button>
+                  </div>
+                  <input type="hidden" name="workingDays" id="workingDaysVal" />
+                </div>
+
+                <div class="np-field">
+                  <label style="display:flex; align-items:center; gap:.5rem; font-size:.88rem; color:var(--np-text); cursor:pointer;">
+                    <input type="checkbox" name="isAvailable" style="width:18px;height:18px;accent-color:var(--np-primary);">
+                    <span>I'm currently accepting new appointments</span>
+                  </label>
+                </div>
+
+                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save availability</button>
+              </form>
+            </div>
+
+            <!-- Clinic Details -->
+            <div class="np-setting-card">
+              <div class="np-setting-card__head">
+                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#FF8A75,#FFB5A7);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                </div>
+                <div>
+                  <div class="np-setting-card__title">Clinic Location</div>
+                  <div class="np-setting-card__sub">Where patients will visit you</div>
+                </div>
+              </div>
+              <form id="clinicForm">
+                <div class="np-field">
+                  <label class="np-field__label" for="clinicNameInput">Clinic Name</label>
+                  <input id="clinicNameInput" name="clinicName" class="np-input" placeholder="NeoKids Clinic - Indiranagar">
+                </div>
+                <div class="np-field">
+                  <label class="np-field__label">Address</label>
+                  <textarea name="clinicAddress" class="np-textarea" placeholder="Full street address"></textarea>
+                </div>
+                <div class="np-field">
+                  <label class="np-field__label">Google Maps URL</label>
+                  <input name="clinicMapUrl" class="np-input" placeholder="https://maps.google.com/...">
+                </div>
+                <div class="np-grid-2">
+                  <div class="np-field">
+                    <label class="np-field__label">Latitude</label>
+                    <input name="clinicLat" type="number" step="any" class="np-input" placeholder="12.971">
+                  </div>
+                  <div class="np-field">
+                    <label class="np-field__label">Longitude</label>
+                    <input name="clinicLng" type="number" step="any" class="np-input" placeholder="77.594">
+                  </div>
+                </div>
+                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save clinic details</button>
+              </form>
+            </div>
+
+            <!-- Consultation Fees -->
+            <div class="np-setting-card">
+              <div class="np-setting-card__head">
+                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#E5A93A,#F2C770);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div>
+                  <div class="np-setting-card__title">Consultation Fees</div>
+                  <div class="np-setting-card__sub">Charged at the time of booking</div>
+                </div>
+              </div>
+              <form id="feesForm">
+                <div class="np-grid-2">
+                  <div class="np-field">
+                    <label class="np-field__label">Online (₹)</label>
+                    <input name="onlineConsultFee" type="number" min="0" class="np-input" placeholder="500">
+                  </div>
+                  <div class="np-field">
+                    <label class="np-field__label">In-Person (₹)</label>
+                    <input name="physicalConsultFee" type="number" min="0" class="np-input" placeholder="750">
+                  </div>
+                </div>
+                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save fees</button>
+              </form>
+            </div>
+
+            <!-- Password -->
+            <div class="np-setting-card" id="setting-password">
+              <div class="np-setting-card__head">
+                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#7A4FE0,#9F7DEF);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <div>
+                  <div class="np-setting-card__title">Security</div>
+                  <div class="np-setting-card__sub">Update your account password</div>
+                </div>
+              </div>
+              <form id="passwordForm">
+                <div class="np-field">
+                  <label class="np-field__label">Current password</label>
+                  <input name="currentPassword" type="password" class="np-input" autocomplete="current-password" required>
+                </div>
+                <div class="np-grid-2">
+                  <div class="np-field">
+                    <label class="np-field__label">New password</label>
+                    <input name="newPassword" type="password" class="np-input" autocomplete="new-password" required minlength="6">
+                  </div>
+                  <div class="np-field">
+                    <label class="np-field__label">Confirm new password</label>
+                    <input name="confirmPassword" type="password" class="np-input" autocomplete="new-password" required minlength="6">
+                  </div>
+                </div>
+                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Update password</button>
+              </form>
+            </div>
+
+          </div>
+        </section>
+
+      </div><!-- /np-content -->
+    </main>
+  </div>
+</div><!-- /dashboard -->
+
+
+<!-- =====================================================================
+     PATIENT MODAL
+     ===================================================================== -->
+<div id="patientModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="patientModalTitle">
+  <div class="np-modal__panel np-modal__panel--lg">
+    <div class="np-modal__head">
+      <div id="patientModalTitle" class="np-modal__title">Patient Consultation</div>
+      <button type="button" class="np-modal__close" onclick="closePatientModal()" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-  </main>
+    <div class="np-modal__body">
+      <div id="patientDetail"></div>
+
+      <!-- Prescription form (preserved IDs) -->
+      <form id="rxForm" class="hidden" style="margin-top:1rem;">
+        <div class="np-panel" style="box-shadow:none; border-radius:14px;">
+          <div class="np-panel__head">
+            <div class="np-panel__title">Prescription</div>
+          </div>
+          <div class="np-panel__body">
+            <table class="np-meds-table">
+              <thead>
+                <tr>
+                  <th style="width:24%">Medicine</th>
+                  <th style="width:14%">Dosage</th>
+                  <th style="width:16%">Frequency</th>
+                  <th style="width:14%">Duration</th>
+                  <th>Instructions</th>
+                  <th style="width:42px"></th>
+                </tr>
+              </thead>
+              <tbody id="medsList"></tbody>
+            </table>
+            <button type="button" class="np-btn np-btn--ghost np-btn--sm" style="margin-top:.75rem;" onclick="addMedRow()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add medicine
+            </button>
+
+            <div class="np-divider"></div>
+
+         <div class="np-field">
+  <label class="np-field__label" for="rxChiefComplaint">
+    Chief Complaint *
+  </label>
+  <input
+    id="rxChiefComplaint"
+    name="chiefComplaint"
+    class="np-input"
+    required
+    minlength="2"
+    placeholder="e.g. Fever and cough for 3 days"
+  />
 </div>
 
-<div id="patientModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-3xl w-full max-w-5xl p-6 max-h-[90vh] overflow-y-auto">
-    <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Patient Consultation</h2><button onclick="closePatientModal()" class="w-8 h-8 rounded-full hover:bg-slate-100">✕</button></div>
-    <div id="patientDetail"></div>
+<div class="np-field">
+  <label class="np-field__label" for="rxDiagnosis">
+    Diagnosis *
+  </label>
+  <input
+    id="rxDiagnosis"
+    name="diagnosis"
+    class="np-input"
+    required
+    minlength="2"
+    placeholder="e.g. Acute viral pharyngitis"
+  />
+</div>
+
+<div class="np-grid-2">
+  <div class="np-field">
+    <label class="np-field__label">Weight (kg)</label>
+    <input
+      name="vitalsWeight"
+      class="np-input"
+      placeholder="e.g. 12.5"
+    />
+  </div>
+
+  <div class="np-field">
+    <label class="np-field__label">Height (cm)</label>
+    <input
+      name="vitalsHeight"
+      class="np-input"
+      placeholder="e.g. 88"
+    />
   </div>
 </div>
 
-<div id="rescheduleModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-3xl w-full max-w-md p-6">
-    <h2 class="text-xl font-bold mb-1">Reschedule Appointment</h2>
-    <p class="text-sm text-slate-400 mb-4">Pick a new date to see available slots</p>
-    <form id="rescheduleForm" class="space-y-4">
-      <input type="hidden" id="rsApptId"/>
-      <input type="hidden" name="startTime" id="rsStartTimeHidden"/>
+<div class="np-field">
+  <label class="np-field__label">Allergies</label>
+  <input
+    name="allergies"
+    class="np-input"
+    placeholder="e.g. Penicillin"
+  />
+</div>
 
-      <!-- Date picker -->
-      <div>
-        <label class="text-sm font-medium text-slate-600 block mb-1">New Date</label>
-        <input name="date" id="rsDateInput" type="date" required class="w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:border-brand-blue"/>
-      </div>
+<div class="np-field">
+  <label class="np-field__label">Past History</label>
+  <input
+    name="pastHistory"
+    class="np-input"
+    placeholder="e.g. Asthma since 2022"
+  />
+</div>
 
-      <!-- Live slot grid -->
-      <div>
-        <label class="text-sm font-medium text-slate-600 block mb-2">Available Slots</label>
-        <div id="rsSlotsGrid" class="grid grid-cols-3 gap-2 min-h-[60px]">
-          <p class="col-span-3 text-sm text-slate-400 text-center py-3">Select a date above</p>
+<div class="np-field">
+  <label class="np-field__label">Investigations</label>
+  <textarea
+    name="investigations"
+    class="np-textarea"
+    rows="2"
+    placeholder="CBC, CRP, throat swab"
+  ></textarea>
+</div>
+
+<div class="np-field">
+  <label class="np-field__label">Advice</label>
+  <textarea
+    name="advice"
+    class="np-textarea"
+    rows="2"
+    placeholder="Plenty of fluids, paracetamol PRN"
+  ></textarea>
+</div>
+
+<div class="np-field">
+  <label class="np-field__label">Follow-up Date</label>
+  <input
+    type="date"
+    name="followUpDate"
+    class="np-input"
+  />
+</div>
+
+            <button type="submit" class="np-btn np-btn--primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save prescription
+            </button>
+          </div>
         </div>
-      </div>
+      </form>
+    </div>
+  </div>
+</div>
 
-      <!-- Selected slot display -->
-      <div id="rsSelectedDisplay" class="hidden bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-sm text-blue-700 font-medium text-center"></div>
 
-      <!-- Reason -->
-      <div>
-        <label class="text-sm font-medium text-slate-600 block mb-1">Reason <span class="text-slate-400 font-normal">(sent to patient)</span></label>
-        <textarea name="reason" required rows="2" class="w-full px-4 py-2.5 rounded-xl border resize-none focus:outline-none focus:border-brand-blue" placeholder="e.g. Doctor unavailable on original date"></textarea>
-      </div>
+<!-- =====================================================================
+     RESCHEDULE MODAL
+     ===================================================================== -->
+<div id="rescheduleModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rescheduleModalTitle">
+  <div class="np-modal__panel">
+    <div class="np-modal__head">
+      <div id="rescheduleModalTitle" class="np-modal__title">Reschedule appointment</div>
+      <button type="button" class="np-modal__close" onclick="closeRescheduleModal()" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="np-modal__body">
+      <form id="rescheduleForm">
+        <input type="hidden" id="rsApptId">
+        <input type="hidden" name="startTime" id="rsStartTimeHidden">
 
-      <div class="flex gap-2 pt-1">
-        <button type="button" onclick="closeRescheduleModal()" class="flex-1 py-2.5 rounded-xl border text-slate-600">Cancel</button>
-        <button id="rsSubmitBtn" disabled class="flex-1 py-2.5 bg-brand-blue text-white rounded-xl font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Reschedule</button>
+        <div class="np-field">
+          <label class="np-field__label" for="rsDateInput">New date</label>
+          <input id="rsDateInput" name="date" type="date" class="np-input" required>
+        </div>
+
+        <div class="np-field">
+          <label class="np-field__label">Available slots</label>
+          <div id="rsSlotsGrid" class="np-slots"></div>
+          <div class="np-field__hint">Selected: <span id="rsSelectedDisplay" class="np-ink">—</span></div>
+        </div>
+
+        <div class="np-field">
+          <label class="np-field__label">Reason for rescheduling</label>
+          <textarea name="reason" class="np-textarea" placeholder="Let the patient know why…"></textarea>
+        </div>
+
+        <div style="display:flex; gap:.5rem; justify-content:flex-end;">
+          <button type="button" class="np-btn np-btn--ghost" onclick="closeRescheduleModal()">Cancel</button>
+          <button type="submit" id="rsSubmitBtn" class="np-btn np-btn--primary" disabled>Confirm reschedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<!-- =====================================================================
+     CANCEL APPOINTMENT MODAL (Bug 4)
+     ===================================================================== -->
+<div id="cancelModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="cancelTitle">
+  <div class="np-modal__backdrop" onclick="closeCancelModal()"></div>
+  <div class="np-modal__card" style="max-width:480px;">
+    <header class="np-modal__head">
+      <h3 id="cancelTitle">Cancel appointment</h3>
+      <button type="button" class="np-modal__close" onclick="closeCancelModal()" aria-label="Close">×</button>
+    </header>
+    <form id="cancelForm" class="np-modal__body" novalidate>
+      <input type="hidden" id="cancelApptId"/>
+      <p class="np-mut" style="font-size:.9rem;margin-bottom:.75rem;">
+        This will cancel the appointment, remove the Google Meet event,
+        and notify the patient via WhatsApp & email. This cannot be undone.
+      </p>
+      <div class="np-field">
+        <label class="np-field__label" for="cancelReason">Reason for cancellation *</label>
+        <textarea id="cancelReason" name="reason" class="np-input" rows="3"
+                  required minlength="3" maxlength="500"
+                  placeholder="e.g. Doctor unavailable due to emergency"></textarea>
+        <small class="np-mut">Minimum 3 characters. Shown to the patient.</small>
       </div>
+      <footer class="np-modal__foot" style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem;">
+        <button type="button" class="np-btn" onclick="closeCancelModal()">Keep appointment</button>
+        <button type="submit" id="cancelSubmitBtn" class="np-btn np-btn--danger">Yes, cancel it</button>
+      </footer>
     </form>
   </div>
 </div>
 
 <script src="app.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>

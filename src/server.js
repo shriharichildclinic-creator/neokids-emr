@@ -1,6 +1,7 @@
 // server.js — fixed version
 // - Added /payment-status route (was 404 previously)
 // - Lifecycle jobs always run by default
+// - Additional Issue 9: CORS no longer pairs '*' with credentials
 
 require('dotenv').config();
 const express = require('express');
@@ -25,12 +26,19 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? [process.env.APP_URL, 'https://neokidspro.in'].filter(Boolean)
-    : '*',
-  credentials: true
-}));
+
+// Additional Issue 9 — `Access-Control-Allow-Origin: *` is incompatible with
+// `Access-Control-Allow-Credentials: true`. We use Bearer tokens (no
+// cookies), so credentials is unnecessary; drop it in dev. In production
+// we lock the origin list down anyway.
+if (process.env.NODE_ENV === 'production') {
+  app.use(cors({
+    origin: [process.env.APP_URL, 'https://neokidspro.in'].filter(Boolean),
+    credentials: true
+  }));
+} else {
+  app.use(cors({ origin: '*' /* credentials intentionally omitted */ }));
+}
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -46,18 +54,19 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/files',  express.static(path.join(__dirname, '..', 'storage')));
-app.use('/admin',  express.static(path.join(__dirname, '..', 'public', 'admin')));
-app.use('/doctor', express.static(path.join(__dirname, '..', 'public', 'doctor')));
+const staticOpts = { maxAge: '1h', etag: true, lastModified: true };
+app.use('/doctor', express.static(path.join(__dirname, '..', 'public', 'doctor'), staticOpts));
+app.use('/admin',  express.static(path.join(__dirname, '..', 'public', 'admin'),  staticOpts));
 app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets')));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'NeoKidsPro EMR', version: '1.2.1', time: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'NeoKidsPro EMR', version: '1.2.2', time: new Date().toISOString() });
 });
 
 app.get('/', (req, res) => {
   res.json({
     name: 'NeoKidsPro EMR API',
-    version: '1.2.1',
+    version: '1.2.2',
     panels: { admin: '/admin', doctor: '/doctor' }
   });
 });

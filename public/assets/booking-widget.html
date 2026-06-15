@@ -6,7 +6,8 @@
 <title>Book Appointment · NeoKidsPro</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
-<style>body{font-family:system-ui,-apple-system,sans-serif;background:#F4F8FB}</style>
+<style>body{font-family:system-ui,-apple-system,sans-serif;background:#F4F8FB}@keyframes spin{to{transform:rotate(360deg)}}
+</style>
 </head>
 <body class="text-slate-800 min-h-screen">
 <div class="max-w-3xl mx-auto p-4 sm:p-8">
@@ -60,7 +61,24 @@
       <div class="flex gap-2 pt-2"><button onclick="goTo(3)" class="flex-1 py-3 rounded-xl border">Back</button><button onclick="submitBooking()" id="btnSubmit" disabled class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold disabled:opacity-50"><span id="btnSubmitText">Confirm Booking</span></button></div>
     </div>
 
-    <div id="successScreen" class="hidden p-8 text-center"><div class="text-6xl mb-4">🎉</div><h2 class="text-2xl font-bold mb-2">Booking Recorded!</h2><p class="text-slate-500 mb-4" id="successMsg"></p><div id="successDetails" class="bg-[#B8F2E6]/30 rounded-2xl p-4 text-left text-sm"></div></div>
+    <!-- Bug 3 — Success screen ONLY shown when payment is truly confirmed (or offline cash booking). -->
+    <div id="successScreen" class="hidden p-8 text-center">
+      <div class="text-6xl mb-4">🎉</div>
+      <h2 class="text-2xl font-bold mb-2">Booking Confirmed</h2>
+      <p class="text-slate-500 mb-4" id="successMsg"></p>
+      <div id="successDetails" class="bg-[#B8F2E6]/30 rounded-2xl p-4 text-left text-sm"></div>
+    </div>
+
+    <!-- Bug 3 — Dedicated failure screen for payment problems. -->
+    <div id="failureScreen" class="hidden p-8 text-center">
+      <div class="text-6xl mb-4">❌</div>
+      <h2 class="text-2xl font-bold mb-2 text-red-600">Payment Not Completed</h2>
+      <p class="text-slate-600 mb-4" id="failureMsg">Your payment could not be confirmed by Cashfree. No amount has been charged to your account.</p>
+      <div id="failureDetails" class="bg-red-50 border border-red-100 rounded-2xl p-4 text-left text-sm mb-4"></div>
+      <div class="flex gap-2 justify-center">
+        <button onclick="resetWidget()" class="px-6 py-2.5 bg-[#4DA8FF] text-white rounded-xl font-semibold">Try Again</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -94,6 +112,8 @@ function applyDobBounds() {
 
 function goTo(step){
   [1,2,3,4].forEach(i=>$('#step'+i).classList.add('hidden'));
+  $('#successScreen').classList.add('hidden');
+  $('#failureScreen').classList.add('hidden');
   $('#step'+step).classList.remove('hidden');
   [1,2,3,4].forEach(i=>$('#step'+i+'Label').className=i===step?'font-semibold text-[#4DA8FF]':'text-slate-400');
   if(step===2) applyDobBounds();
@@ -137,24 +157,27 @@ function renderSummary(){
     : `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" class="underline text-[#4DA8FF]">Terms & Conditions</a> for in-clinic consultations at NeoKidsPro.`;
   tnc.onchange = () => { $('#btnSubmit').disabled = !tnc.checked; };
 }
-async function pollPaymentStatus(apptId){
-  const maxAttempts=10, delay=2000;
-  for(let i=0;i<maxAttempts;i++){
-    await new Promise(r=>setTimeout(r,delay));
-    try{
-      const status=await api('/public/appointments/'+apptId);
-      if(status.paymentStatus==='PAID'){
-        $('#successMsg').textContent='✅ Payment successful! Your consultation is confirmed. Details sent via WhatsApp & email.';
-        return;
-      }
-      if(status.paymentStatus==='FAILED'){
-        $('#successMsg').textContent='❌ Payment failed. Please try booking again.';
-        return;
-      }
-    }catch(e){}
-  }
-  $('#successMsg').textContent='Payment verification in progress. You will receive a WhatsApp confirmation shortly.';
+
+// Bug 3 — utility: tear down any leftover Cashfree modal/backdrops
+function nukeCashfreeOverlay() {
+  document.querySelectorAll('iframe').forEach(el=>{
+    let p=el.parentElement;
+    while(p&&p!==document.body){
+      const s=p.style;
+      if(s.position==='fixed'||(parseInt(s.zIndex)||0)>100||s.backdropFilter||(s.background||'').includes('rgba')){p.remove();return;}
+      p=p.parentElement;
+    }
+    el.remove();
+  });
+  document.querySelectorAll('div').forEach(el=>{
+    const s=window.getComputedStyle(el);
+    if((s.position==='fixed'||s.position==='absolute')&&parseInt(s.zIndex)>1000&&el.parentElement===document.body) el.remove();
+  });
+  document.body.style.overflow='';
+  document.body.style.backdropFilter='';
+  document.documentElement.style.overflow='';
 }
+
 async function submitBooking(){
   if (!$('#f_tnc').checked) return alert('Please accept the Terms & Conditions to continue.');
   $('#btnSubmit').disabled=true;$('#btnSubmitText').textContent='Booking...';
@@ -177,21 +200,188 @@ async function submitBooking(){
     if(res.requiresPayment&&res.cashfree){
       if(typeof Cashfree!=='function') throw new Error('Cashfree SDK failed to load');
       const cashfree=Cashfree({mode:res.cashfree.environment||'sandbox'});
-     const checkoutResult=await cashfree.checkout({paymentSessionId:res.cashfree.paymentSessionId,redirectTarget:'_modal'});
-if(checkoutResult&&checkoutResult.error) throw new Error(checkoutResult.error.message||'Payment could not be initiated');
-showSuccess(res.appointment,true,'Verifying payment...');
-await pollPaymentStatus(res.appointment.id);
+      const orderId=res.cashfree.orderId;
+      const appt=res.appointment;
+
+      // ── KEY FIX ──────────────────────────────────────────────────────────────
+      // cashfree.checkout() with _modal does NOT reliably resolve its promise
+      // after sandbox error popups — the modal stays open and the await hangs.
+      // Solution: fire checkout WITHOUT await, then independently start polling
+      // the server-side verify endpoint every 2s. The moment Cashfree marks the
+      // order PAID on their end (which happens even before the modal closes in
+      // sandbox), our poll catches it and shows the success screen. If the
+      // payment is never confirmed within the timeout, the poll shows the
+      // dedicated failure screen — NOT a misleading "Booking Recorded" screen.
+      // ─────────────────────────────────────────────────────────────────────────
+      cashfree.checkout({paymentSessionId:res.cashfree.paymentSessionId,redirectTarget:'_modal'})
+        .then(r=>console.log('[Cashfree] checkout resolved:',JSON.stringify(r)))
+        .catch(e=>console.warn('[Cashfree] checkout rejected:',e));
+
+      startPaymentPolling(appt, orderId);
+
     }else{showSuccess(res.appointment,false);}
   }catch(e){alert(e.message);$('#btnSubmit').disabled=false;$('#btnSubmitText').textContent='Confirm Booking';}
 }
 
+function startPaymentPolling(appt, orderId){
+  // Show a floating status bar while the Cashfree modal is still open
+  let bar=document.getElementById('payStatusBar');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='payStatusBar';
+    bar.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#fff;text-align:center;padding:10px 16px;font-size:13px;z-index:99999;display:flex;align-items:center;justify-content:center;gap:10px;';
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML='<span style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:#4DA8FF;border-radius:50%;animation:spin 1s linear infinite"></span> Verifying payment with Cashfree…';
+  bar.style.display='flex';
+
+  const maxAttempts=30, interval=2000;
+  let attempts=0;
+  const timer=setInterval(async()=>{
+    attempts++;
+    let status;
+    try{
+      status=await fetch('/api/public/verify-payment?order_id='+encodeURIComponent(orderId),{cache:'no-store'}).then(r=>r.json());
+      console.log('[Poll] attempt',attempts,'status:',status.paymentStatus,'cashfree:',status.cashfreeStatus);
+    }catch(e){ console.warn('[Poll] error',e); status = null; }
+
+    // ── SUCCESS PATH ────────────────────────────────────────────────────────
+    // Only the literal DB row flipped to PAID counts as a real success.
+    if(status && status.paymentStatus==='PAID'){
+      clearInterval(timer);
+      bar.style.display='none';
+      nukeCashfreeOverlay();
+      showSuccess(appt,true,'✅ Payment confirmed! Consultation booked. Details sent via WhatsApp & email.');
+      return;
+    }
+
+    // ── EXPLICIT FAILURE PATH ───────────────────────────────────────────────
+    // Cashfree said this order is FAILED / EXPIRED / TERMINATED / CANCELLED.
+    if(status && (
+        status.paymentStatus==='FAILED' ||
+        ['EXPIRED','FAILED','TERMINATED','CANCELLED'].includes(status.cashfreeStatus)
+      )){
+      clearInterval(timer);
+      bar.style.display='none';
+      nukeCashfreeOverlay();
+      showFailure(appt, status.cashfreeStatus || 'FAILED',
+        'Your transaction was not completed by Cashfree. No amount has been charged. Please try booking again.');
+      return;
+    }
+
+    // ── TIMEOUT PATH ────────────────────────────────────────────────────────
+    // 30 attempts × 2s = 60s and Cashfree never confirmed PAID.
+    // This is NOT a "booking recorded" outcome — the user did not pay.
+    if(attempts>=maxAttempts){
+      clearInterval(timer);
+      bar.style.display='none';
+      nukeCashfreeOverlay();
+      showFailure(appt, (status && status.cashfreeStatus) || 'TIMED_OUT',
+        'We did not receive a payment confirmation from Cashfree within the expected time. '+
+        'If you completed the payment, you will receive a WhatsApp confirmation within a few minutes. '+
+        'If you did not complete the payment, please try booking again.');
+    }
+  }, interval);
+}
+
+// Bug 3 — Real success screen. Only invoked after a confirmed PAID or after
+// an offline cash booking (which is confirmed at create time, no payment).
 function showSuccess(appt,isOnline,customMessage=''){
   [1,2,3,4].forEach(i=>$('#step'+i).classList.add('hidden'));
+  $('#failureScreen').classList.add('hidden');
   $('#successScreen').classList.remove('hidden');
   $('#successMsg').textContent=customMessage||(isOnline?'Online payment is being verified. Final confirmation will be sent shortly.':'Your in-clinic visit is confirmed. Confirmation sent via WhatsApp.');
   $('#successDetails').innerHTML=`<p><strong>Appointment ID:</strong> ${appt.id.slice(0,8).toUpperCase()}</p><p><strong>Doctor:</strong> Dr. ${state.doctor.name}</p><p><strong>Date & Time:</strong> ${formatDate(state.date)} at ${formatTime(state.slot)}</p><p class="mt-2 text-slate-600">A reminder will be sent around 30 minutes before your appointment.</p>`;
 }
-loadDoctors();
+
+// Bug 3 — Real failure screen. Distinct from successScreen so the user can
+// never see "Booking Recorded 🎉" while the payment is actually unconfirmed.
+function showFailure(appt, cashfreeStatus, message){
+  [1,2,3,4].forEach(i=>$('#step'+i).classList.add('hidden'));
+  $('#successScreen').classList.add('hidden');
+  $('#failureScreen').classList.remove('hidden');
+  $('#failureMsg').textContent = message || 'Your payment could not be confirmed.';
+  $('#failureDetails').innerHTML =
+    (appt ? `<p><strong>Booking ref:</strong> ${appt.id.slice(0,8).toUpperCase()}</p>` : '') +
+    `<p><strong>Cashfree status:</strong> ${cashfreeStatus || 'unknown'}</p>` +
+    `<p class="text-xs text-slate-500 mt-2">No money has been deducted. If you see a charge on your bank statement, it will be auto-reversed within 5–7 working days as per RBI guidelines.</p>`;
+  $('#btnSubmit').disabled=false;
+  $('#btnSubmitText').textContent='Confirm Booking';
+}
+
+// Bug 3 — Restart flow when user clicks "Try Again" on failure screen.
+function resetWidget(){
+  state.slot=null;
+  $('#failureScreen').classList.add('hidden');
+  $('#successScreen').classList.add('hidden');
+  goTo(1);
+}
+// Bug 3 — recall pre-fill: if launched with ?doctor=<id> and optionally ?recall=<rxId>,
+// skip the doctor list step and jump straight to the patient form (or slot step).
+async function bootFromQueryString(){
+  const qs = new URLSearchParams(window.location.search);
+  const doctorId = qs.get('doctor');
+  const recallId = qs.get('recall');
+
+  if (!doctorId && !recallId){
+    loadDoctors();
+    return;
+  }
+
+  // 1. Pre-fill from recall if provided
+  let prefill = null;
+  if (recallId){
+    try {
+      prefill = await api('/public/recall/' + encodeURIComponent(recallId));
+    } catch (e){
+      // Bad recall id — fall back to normal flow but show a soft note
+      console.warn('Recall lookup failed:', e.message);
+    }
+  }
+
+  // 2. Determine doctor to pre-select
+  const targetDoctorId = doctorId || (prefill && prefill.doctorId);
+  if (!targetDoctorId){
+    loadDoctors();
+    return;
+  }
+
+  // 3. Pre-select doctor (skip step 1)
+  try {
+    state.doctor = await api('/public/doctors/' + encodeURIComponent(targetDoctorId));
+  } catch (e){
+    alert('Doctor link is no longer valid. Please pick a doctor.');
+    loadDoctors();
+    return;
+  }
+
+  // 4. Pre-fill patient identity if recall succeeded
+  if (prefill && prefill.patient){
+    goTo(2);   // step 2 = patient form (this also calls applyDobBounds)
+    const p = prefill.patient;
+    if (p.name)        $('#f_name').value    = p.name;
+    if (p.parentName)  $('#f_parent').value  = p.parentName;
+    if (p.dateOfBirth) $('#f_dob').value     = p.dateOfBirth;
+    if (p.gender)      $('#f_gender').value  = p.gender;
+    if (p.phone)       $('#f_phone').value   = p.phone;
+    if (prefill.primaryProblem) $('#f_problem').value = prefill.primaryProblem + ' (follow-up)';
+    // Show a friendly banner so the parent knows what's happening
+    const banner = document.createElement('div');
+    banner.className = 'bg-[#B8F2E6]/30 border border-[#4DA8FF]/30 rounded-xl p-3 text-sm mb-3';
+    banner.innerHTML = `📋 <b>Follow-up booking</b> with Dr. ${prefill.doctorName}. Your details are pre-filled — please verify and proceed.`;
+    const step2 = document.getElementById('step2');
+    if (step2 && step2.firstElementChild) step2.insertBefore(banner, step2.firstElementChild);
+  } else {
+    // Doctor pre-selected only (no recall context)
+    goTo(2);
+  }
+}
+
+bootFromQueryString();
+</script>
+</body>
+</html>
+
 </script>
 </body>
 </html>

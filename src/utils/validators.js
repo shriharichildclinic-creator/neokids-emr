@@ -43,7 +43,11 @@ const createDoctorSchema = z.object({
   ).optional()
 });
 
-// Admin Update Doctor — every field optional
+// Bug 2 — Admin Update Doctor uses .partial(), so omitting email entirely
+// is valid. The frontend was sending `email: ''` because the disabled input
+// is excluded from FormData, then the `email: (raw.email || '').trim()...`
+// substituted empty string, which fails .email(). The fix is on the
+// frontend: do not include `email` in the payload when editing.
 const updateDoctorByAdminSchema = createDoctorSchema.partial().extend({
   isAvailable: z.boolean().optional()
 });
@@ -63,7 +67,6 @@ const updateDoctorFeesSchema = z.object({
   physicalConsultFee: z.number().nonnegative().optional()
 });
 
-// Bug 6 — clinic settings the doctor saves from their portal
 const clinicSettingsSchema = z.object({
   clinicName: z.string().trim().min(2, 'Clinic name is required'),
   clinicAddress: optStr.optional(),
@@ -93,7 +96,6 @@ const bookAppointmentSchema = z.object({
   tncAccepted: z.boolean().refine(v => v === true, { message: 'You must accept the Terms & Conditions' })
 })
   .refine(d => d.date >= getTodayDateString(), { message: 'Appointment date cannot be in the past', path: ['date'] })
-  // Bug 4 — pediatric clinic: DOB cannot be in the future and not older than 18 years
   .refine(d => d.dateOfBirth <= getTodayDateString(), { message: 'Date of birth cannot be in the future', path: ['dateOfBirth'] })
   .refine(d => {
     const dob = new Date(d.dateOfBirth + 'T00:00:00.000Z');
@@ -103,7 +105,6 @@ const bookAppointmentSchema = z.object({
   }, { message: 'This is a pediatric clinic — patient must be under 18 years old', path: ['dateOfBirth'] });
 
 const prescriptionSchema = z.object({
-  // Bug 3 — new fields
   weight: optStr.optional(),
   height: optStr.optional(),
   pastHistory: optStr.optional(),
@@ -122,11 +123,14 @@ const prescriptionSchema = z.object({
   followUpDate: dateSchema.optional().or(z.literal(''))
 });
 
+// Additional Issue 3 — reject reschedules into the past at the validator
+// layer as well as the controller (defense in depth).
 const rescheduleSchema = z.object({
   date: dateSchema,
   startTime: timeSchema,
   reason: z.string().min(3)
-});
+})
+  .refine(d => d.date >= getTodayDateString(), { message: 'Cannot reschedule to a past date', path: ['date'] });
 
 const forgotPasswordSchema = z.object({ email: z.string().email() });
 

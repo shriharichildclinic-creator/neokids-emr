@@ -3,6 +3,7 @@ const { minutesToTime, timeToMinutes, getLiveSlots } = require('./slot.service')
 const cashfreeService = require('./cashfree.service');
 const { parseDateOnly, parseDateOnlyOrNull } = require('../utils/date');
 const { expirePendingAppointments } = require('./appointment-state.service');
+const logger = require('../utils/logger');
 
 // NOTE: automation is NOT required at the top level — it creates a circular dep:
 //   booking → automation → slot → expirePending → (back to booking context)
@@ -11,6 +12,68 @@ const { expirePendingAppointments } = require('./appointment-state.service');
 // FIX: require automation lazily inside each function that needs it.
 
 const UNPAID_BOOKING_EXPIRY_MINUTES = parseInt(process.env.UNPAID_BOOKING_EXPIRY_MINUTES || '15', 10);
+
+// Normalize a name for sibling lookup: lowercase, collapse whitespace, trim.
+// This is what we match on so "Ravi Kumar" and "  ravi   kumar " are the same kid
+// but "Ravi Kumar" and "Sneha Kumar" stay separate even on the same parent phone.
+function normalizeName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Bug 1 — Resolve patient row by (phone + normalized name).
+ *
+ * Old behavior: prisma.patient.upsert({ where: { phone }, ... })
+ *   → @unique on phone meant ONE patient per phone, so sibling B's booking
+ *     was forcibly merged into sibling A's row. Even with `name` removed from
+ *     the update block, gender / DOB / parentName were still being overwritten
+ *     on the shared row, contaminating sibling A's clinical record.
+ *
+ * New behavior:
+ *   - Look up patient by phone + normalized name.
+ *   - If found  → update non-identity fields (email, parentName, DOB, gender)
+ *                 on THAT specific child only.
+ *   - If not found → create a brand new patient row (new patientId).
+ *
+ * Result: Each child gets their own immutable patientId. Doctor history,
+ * prescriptions, and visit list for sibling A are no longer touched when
+ * sibling B books.
+ */
+async function findOrCreatePatient({ patientName, phone, email, parentName, dateOfBirth, gender }) {
+  const nameKey = normalizeName(patientName);
+
+  // findFirst with a name comparison done in code (MySQL collation may or may
+  // not be case-insensitive depending on column; we normalize manually for safety).
+  const candidates = await prisma.patient.findMany({
+    where: { phone },
+    orderBy: { createdAt: 'asc' }
+  });
+  const existing = candidates.find(p => normalizeName(p.name) === nameKey);
+
+  if (existing) {
+    return prisma.patient.update({
+      where: { id: existing.id },
+      data: {
+        // name intentionally NOT updated — identity field, set once on create.
+        email:       email || existing.email || null,
+        parentName:  parentName || existing.parentName,
+        dateOfBirth: parseDateOnlyOrNull(dateOfBirth) || existing.dateOfBirth,
+        gender:      gender || existing.gender
+      }
+    });
+  }
+
+  return prisma.patient.create({
+    data: {
+      name: String(patientName).trim(),
+      phone,
+      email: email || null,
+      parentName,
+      dateOfBirth: parseDateOnlyOrNull(dateOfBirth),
+      gender
+    }
+  });
+}
 
 async function bookAppointment(input) {
   const {
@@ -47,23 +110,9 @@ async function bookAppointment(input) {
   const endTime = minutesToTime(startMin + (doctor.slotDuration || 15));
   const feeAtBooking = consultationType === 'ONLINE' ? doctor.onlineConsultFee : doctor.physicalConsultFee;
 
-  const patient = await prisma.patient.upsert({
-    where: { phone },
-    update: {
-      name: patientName,
-      email: email || null,
-      parentName,
-      dateOfBirth: parseDateOnlyOrNull(dateOfBirth),
-      gender
-    },
-    create: {
-      name: patientName,
-      phone,
-      email: email || null,
-      parentName,
-      dateOfBirth: parseDateOnlyOrNull(dateOfBirth),
-      gender
-    }
+  // Bug 1 — resolve patient by (phone + child name), not by phone alone.
+  const patient = await findOrCreatePatient({
+    patientName, phone, email, parentName, dateOfBirth, gender
   });
 
   const appointmentDate = parseDateOnly(date);
@@ -102,19 +151,30 @@ async function bookAppointment(input) {
     return { appointment, requiresPayment: false };
   }
 
-  const order = await cashfreeService.createOrder({
-    orderId: `appt_${appointment.id}`,
-    amount: Number(feeAtBooking),
-    currency: 'INR',
-    customer: {
-      customerId: patient.id,
-      customerName: patientName,
-      customerEmail: email || 'no-reply@neokidspro.in',
-      customerPhone: phone
-    },
-    orderNote: `Consultation booking for Dr. ${doctor.name}`,
-    orderTags: { appointmentId: appointment.id, consultationType }
-  });
+  let order;
+  try {
+    order = await cashfreeService.createOrder({
+      orderId: `appt_${appointment.id}`,
+      amount: Number(feeAtBooking),
+      currency: 'INR',
+      customer: {
+        customerId: patient.id,
+        customerName: patientName,
+        customerEmail: email || 'no-reply@neokidspro.in',
+        customerPhone: phone
+      },
+      orderNote: `Consultation booking for Dr. ${doctor.name}`,
+      orderTags: { appointmentId: appointment.id, consultationType }
+    });
+  } catch (e) {
+    // Cashfree order creation failed — release the slot immediately
+    // instead of leaving a dead PENDING row blocking the time.
+    await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: { status: 'CANCELLED', paymentStatus: 'FAILED', cancelledAt: new Date(), notes: 'Cashfree order creation failed' }
+    }).catch(err => logger.error('Failed to roll back appointment after CF error', err));
+    throw e;
+  }
 
   await prisma.appointment.update({
     where: { id: appointment.id },
@@ -135,29 +195,53 @@ async function bookAppointment(input) {
   };
 }
 
+/**
+ * Idempotent + race-safe confirmation.
+ *
+ * Both the webhook handler and the verifyPayment poll endpoint can race
+ * to confirm the same order. The old code did:
+ *   if (appt.paymentStatus === 'PAID') return appt;   // check
+ *   await prisma.appointment.update(...)              // then act
+ * which is TOCTOU — two concurrent calls could both see UNPAID, both
+ * update to PAID, and both fire onOnlineBookingConfirmed (duplicate
+ * WhatsApp + duplicate Meet link + duplicate invoice).
+ *
+ * Fix: use a conditional updateMany. Only the call that flips the row
+ * gets to run the automation.
+ */
 async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
-  const appt = await prisma.appointment.findUnique({
+  const before = await prisma.appointment.findUnique({
     where: { id: appointmentId },
     include: { doctor: true, patient: true }
   });
-  if (!appt) throw new Error('Appointment not found');
-  if (appt.paymentStatus === 'PAID') return appt;
-  if (appt.status === 'CANCELLED') return appt;
+  if (!before) throw new Error('Appointment not found');
+  if (before.status === 'CANCELLED') return before;
+  if (before.paymentStatus === 'PAID') return before;
 
-  const updated = await prisma.appointment.update({
-    where: { id: appointmentId },
+  // Atomic flip: only succeeds for the FIRST caller that finds it not-PAID.
+  const flipped = await prisma.appointment.updateMany({
+    where: { id: appointmentId, paymentStatus: { not: 'PAID' }, status: { not: 'CANCELLED' } },
     data: {
       status: 'CONFIRMED',
       paymentStatus: 'PAID',
-      cashfreePaymentId,
+      cashfreePaymentId: String(cashfreePaymentId),
       expiresAt: null
-    },
+    }
+  });
+
+  const updated = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
     include: { doctor: true, patient: true }
   });
+
+  if (flipped.count === 0) {
+    // Some other concurrent caller already confirmed; skip automation.
+    return updated;
+  }
 
   const automation = require('./automation.service');
   await automation.onOnlineBookingConfirmed(updated);
   return updated;
 }
 
-module.exports = { bookAppointment, confirmOnlineBooking };
+module.exports = { bookAppointment, confirmOnlineBooking, findOrCreatePatient };

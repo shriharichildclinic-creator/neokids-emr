@@ -15,29 +15,15 @@ exports.cashfree = async (req, res) => {
   try {
     const signature = req.headers['x-webhook-signature'];
     const timestamp = req.headers['x-webhook-timestamp'];
-    const rawBody   = req.body; // Buffer (thanks to express.raw())
+    const rawBody = req.body;
 
     const ok = cashfreeService.verifyWebhookSignature(rawBody, signature, timestamp);
-
     if (!ok) {
-      logger.warn('Cashfree webhook signature mismatch', {
-        hasSig: !!signature,
-        hasTs:  !!timestamp,
-        bodyLen: rawBody ? rawBody.length : 0,
-        keyConfigured: !!process.env.CASHFREE_SECRET_KEY,
-        bodyPreview: rawBody ? rawBody.toString('utf8').slice(0, 120) : ''
-      });
+      logger.warn('Cashfree webhook signature mismatch');
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
-    let event;
-    try {
-      event = JSON.parse(rawBody.toString('utf-8'));
-    } catch (e) {
-      logger.error('Cashfree webhook: invalid JSON body');
-      return res.status(400).json({ error: 'Invalid JSON' });
-    }
-
+    const event = JSON.parse(rawBody.toString('utf-8'));
     const orderId = getValue(event, [
       'data.order.order_id', 'order.order_id',
       'data.payment.order_id', 'payment.order_id', 'order_id'
@@ -46,41 +32,63 @@ exports.cashfree = async (req, res) => {
       'data.payment.cf_payment_id', 'payment.cf_payment_id', 'cf_payment_id'
     ]);
     const paymentStatus = getValue(event, [
-      'data.payment.payment_status', 'payment.payment_status', 'payment_status'
+      'data.payment.payment_status', 'payment.payment_status',
+      'payment_status', 'type'
     ]);
-    const eventType = event.type || event.event;
+    const paymentAmount = Number(getValue(event, [
+      'data.payment.payment_amount', 'payment.payment_amount', 'payment_amount'
+    ]));
 
-    logger.info(`Cashfree webhook OK · type=${eventType || '-'} status=${paymentStatus || '-'} order=${orderId || '-'}`);
+    logger.info('Cashfree event:', paymentStatus || 'unknown', orderId || 'no-order-id');
 
-    const SUCCESS_STATES = ['SUCCESS', 'PAID'];
-    const SUCCESS_TYPES  = ['PAYMENT_SUCCESS_WEBHOOK'];
-    const FAIL_STATES    = ['FAILED', 'CANCELLED', 'USER_DROPPED', 'NOT_ATTEMPTED'];
-    const FAIL_TYPES     = ['PAYMENT_FAILED_WEBHOOK', 'PAYMENT_USER_DROPPED_WEBHOOK'];
-
-    const isSuccess = SUCCESS_STATES.includes(paymentStatus) || SUCCESS_TYPES.includes(eventType);
-    const isFailure = FAIL_STATES.includes(paymentStatus)    || FAIL_TYPES.includes(eventType);
-
-    if (isSuccess && orderId) {
-      const appt = await prisma.appointment.findFirst({ where: { cashfreeOrderId: orderId } });
-      if (appt) {
-        await bookingService.confirmOnlineBooking(appt.id, paymentId || orderId);
-        logger.info(`✅ Appointment ${appt.id} marked PAID via webhook`);
-      } else {
-        logger.warn(`Cashfree webhook: no appointment for order ${orderId}`);
-      }
-    } else if (isFailure && orderId) {
-      const result = await prisma.appointment.updateMany({
-        where: { cashfreeOrderId: orderId, paymentStatus: { not: 'PAID' } },
-        data:  { paymentStatus: 'FAILED' }
+    if (paymentStatus === 'SUCCESS') {
+      const appt = await prisma.appointment.findFirst({
+        where: { cashfreeOrderId: orderId }
       });
-      logger.info(`❌ Marked ${result.count} appointment(s) FAILED for order ${orderId}`);
-    } else {
-      logger.info(`Cashfree webhook: ignoring status=${paymentStatus} type=${eventType}`);
+      if (!appt) {
+        logger.warn('Cashfree webhook: no appointment for order', orderId);
+        return res.json({ received: true });
+      }
+
+      // Bug 1 hardening — re-verify with Cashfree before confirming.
+      // The webhook is signed, but a replay/forgery beyond our control could
+      // still arrive. Server-to-server check + amount match is bulletproof.
+      const verdict = await cashfreeService
+        .isOrderTrulyPaid(orderId, appt.feeAtBooking)
+        .catch(e => ({ paid: false, reason: `verify-error:${e.message}` }));
+
+      if (!verdict.paid) {
+        logger.warn(
+          `Webhook SUCCESS rejected — verification failed. order=${orderId} reason=${verdict.reason}`
+        );
+        return res.json({ received: true, accepted: false, reason: verdict.reason });
+      }
+
+      // Optional sanity check on the webhook's own amount field
+      if (Number.isFinite(paymentAmount) &&
+          Math.abs(paymentAmount - Number(appt.feeAtBooking)) > 0.01) {
+        logger.warn(
+          `Webhook amount mismatch order=${orderId} ` +
+          `webhook=${paymentAmount} appt=${appt.feeAtBooking}`
+        );
+        return res.json({ received: true, accepted: false, reason: 'amount-mismatch' });
+      }
+
+      await bookingService.confirmOnlineBooking(appt.id, verdict.cfPaymentId || paymentId || orderId);
+    } else if (['FAILED', 'CANCELLED', 'USER_DROPPED', 'NOT_ATTEMPTED'].includes(paymentStatus)) {
+      await prisma.appointment.updateMany({
+        where: {
+          cashfreeOrderId: orderId,
+          paymentStatus: { not: 'PAID' },
+          status: { not: 'CANCELLED' }
+        },
+        data: { paymentStatus: 'FAILED' }
+      });
     }
 
-    return res.json({ received: true });
+    res.json({ received: true });
   } catch (e) {
     logger.error('Webhook error', e);
-    return res.status(500).json({ error: 'Webhook processing failed' });
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 };

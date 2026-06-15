@@ -1,19 +1,18 @@
 /**
- * Cashfree Payment Gateway Integration
+ * Cashfree Payment Gateway Integration — hardened
  * -----------------------------------------------------------------
- *  1. createOrder()            → create PG order from backend
- *  2. verifyWebhookSignature() → verify x-webhook-signature
- *  3. getOrderStatus()         → server-to-server source-of-truth check
- *                                (used when webhook is delayed)
- *
- *  IMPORTANT FACT (the source of all your previous webhook pain):
- *  Cashfree PG does NOT issue a separate "webhook secret".
- *  Webhooks are signed with your CASHFREE_SECRET_KEY (the same API
- *  Client Secret you use to call /pg/orders).
- *  Ref: https://www.cashfree.com/docs/payments/online/webhooks/signature-verification
+ *  Adds:
+ *   - hasRealCredentials() rejects placeholder values like "your_cashfree_app_id"
+ *   - getOrderPayments() fetches the actual payment rows for an order
+ *   - isOrderTrulyPaid() composite check: order_status PAID + a SUCCESS
+ *     payment row whose amount matches the order amount
+ *  This closes the "phantom confirmation" gap where Cashfree sandbox
+ *  occasionally returns order_status: PAID without a real payment.
  * -----------------------------------------------------------------
  */
 const crypto = require('crypto');
+
+const PLACEHOLDER_PATTERN = /^(your_|<.*>|changeme|placeholder|undefined|null)/i;
 
 function getMode() {
   return (process.env.CASHFREE_ENV ||
@@ -41,17 +40,31 @@ function authHeaders() {
   };
 }
 
+function isPlaceholder(v) {
+  if (!v) return true;
+  return PLACEHOLDER_PATTERN.test(String(v).trim());
+}
+
+function hasRealCredentials() {
+  const id  = process.env.CASHFREE_APP_ID;
+  const key = process.env.CASHFREE_SECRET_KEY;
+  if (!id || !key) return false;
+  if (isPlaceholder(id) || isPlaceholder(key)) return false;
+  return true;
+}
+
 async function createOrder({
   orderId, amount, currency = 'INR', customer,
   orderNote, orderTags, returnUrl, notifyUrl
 }) {
-  if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) {
+  if (!hasRealCredentials()) {
     return {
       order_id: orderId || `order_mock_${Date.now()}`,
       order_amount: Number(amount),
       order_currency: currency,
       payment_session_id: `session_mock_${Date.now()}`,
-      order_status: 'ACTIVE'
+      order_status: 'ACTIVE',
+      mock: true
     };
   }
 
@@ -93,14 +106,9 @@ async function createOrder({
   return data;
 }
 
-/**
- * Server-to-server status check. Used by /payment-status page and the
- * /api/public/verify-payment endpoint as the SOURCE OF TRUTH when the
- * webhook hasn't fired yet (sandbox can take 30s–2min).
- */
 async function getOrderStatus(orderId) {
-  if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) {
-    return { order_id: orderId, order_status: 'PAID', mock: true };
+  if (!hasRealCredentials()) {
+    return { order_id: orderId, order_status: 'ACTIVE', mock: true };
   }
   const res = await fetch(`${getBaseUrl()}/pg/orders/${encodeURIComponent(orderId)}`, {
     method: 'GET',
@@ -116,6 +124,77 @@ async function getOrderStatus(orderId) {
   return data;
 }
 
+/**
+ * NEW — fetch the actual payment attempts for an order.
+ * Returns [] in mock mode (no real payments possible).
+ * Used by isOrderTrulyPaid() to verify a real SUCCESS row exists.
+ */
+async function getOrderPayments(orderId) {
+  if (!hasRealCredentials()) return [];
+  const res = await fetch(
+    `${getBaseUrl()}/pg/orders/${encodeURIComponent(orderId)}/payments`,
+    { method: 'GET', headers: authHeaders() }
+  );
+  const data = await res.json().catch(() => ([]));
+  if (!res.ok) {
+    throw Object.assign(
+      new Error((data && data.message) || 'Cashfree payments fetch failed'),
+      { statusCode: 502, details: data }
+    );
+  }
+  return Array.isArray(data) ? data : [];
+}
+
+/**
+ * NEW — composite proof that an order is genuinely paid.
+ * Returns: { paid: boolean, cfPaymentId?: string, reason?: string }
+ *
+ * Required signals:
+ *   1. /pg/orders/:id           → order_status === 'PAID'
+ *   2. /pg/orders/:id/payments  → at least one row with
+ *        payment_status === 'SUCCESS' AND payment_amount == order amount
+ *
+ * If STRICT_PAYMENT_VERIFICATION is 'false', signal (2) is skipped
+ * and only the order_status check is used (legacy behavior).
+ */
+async function isOrderTrulyPaid(orderId, expectedAmount) {
+  const order = await getOrderStatus(orderId);
+  const cfStatus = (order.order_status || '').toUpperCase();
+
+  if (cfStatus !== 'PAID') {
+    return { paid: false, reason: `order_status=${cfStatus}`, order };
+  }
+
+  // Mock mode never reaches here (mock returns ACTIVE).
+  const strict = process.env.STRICT_PAYMENT_VERIFICATION !== 'false';
+  if (!strict) {
+    return { paid: true, reason: 'order_status=PAID (non-strict)', order };
+  }
+
+  const payments = await getOrderPayments(orderId);
+  const successful = payments.find(p => {
+    const status = String(p.payment_status || '').toUpperCase();
+    const amt = Number(p.payment_amount);
+    return status === 'SUCCESS' &&
+           Number.isFinite(amt) &&
+           Number.isFinite(Number(expectedAmount)) &&
+           Math.abs(amt - Number(expectedAmount)) < 0.01;
+  });
+  if (!successful) {
+    return {
+      paid: false,
+      reason: `order_status=PAID but no matching SUCCESS payment (got ${payments.length} rows)`,
+      order, payments
+    };
+  }
+  return {
+    paid: true,
+    reason: 'strict-verified',
+    cfPaymentId: successful.cf_payment_id || successful.payment_id,
+    order, payments
+  };
+}
+
 function verifyWebhookSignature(rawBody, signature, timestamp, secret) {
   if (!rawBody || !signature || !timestamp) return false;
   const key = secret || getWebhookSigningSecret();
@@ -123,23 +202,21 @@ function verifyWebhookSignature(rawBody, signature, timestamp, secret) {
 
   const bodyString = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody);
   const signedPayload = `${timestamp}${bodyString}`;
-
   const expected = crypto.createHmac('sha256', key).update(signedPayload).digest('base64');
 
   const a = Buffer.from(expected);
   const b = Buffer.from(String(signature));
   if (a.length !== b.length) return false;
-  try {
-    return crypto.timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
+  try { return crypto.timingSafeEqual(a, b); } catch { return false; }
 }
 
 module.exports = {
   createOrder,
   getOrderStatus,
+  getOrderPayments,         // NEW
+  isOrderTrulyPaid,         // NEW
   verifyWebhookSignature,
   getMode,
-  getWebhookSigningSecret
+  getWebhookSigningSecret,
+  hasRealCredentials
 };

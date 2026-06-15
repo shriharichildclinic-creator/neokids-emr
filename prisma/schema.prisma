@@ -58,10 +58,13 @@ model Doctor {
   @@map("doctors")
 }
 
+// Bug 1 fix — phone is NO LONGER @unique on its own.
+// A single parent phone may have multiple children (sibling patients).
+// Uniqueness is enforced application-side on (phone + lowercase(name)).
 model Patient {
   id            String   @id @default(uuid())
   name          String
-  phone         String   @unique
+  phone         String
   email         String?
   dateOfBirth   DateTime?
   gender        String?
@@ -72,6 +75,7 @@ model Patient {
   updatedAt     DateTime @updatedAt
 
   @@index([phone])
+  @@index([phone, name])
   @@map("patients")
 }
 
@@ -90,6 +94,7 @@ model Appointment {
   cashfreeOrderId   String?
   cashfreePaymentId String?
   meetLink          String?  @db.Text
+  meetEventId       String?
   invoiceUrl        String?
   prescriptionUrl   String?
   rescheduleReason  String?  @db.Text

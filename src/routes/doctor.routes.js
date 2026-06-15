@@ -22,4 +22,7 @@ router.post('/appointments/:id/cancel',                     c.cancelAppointment)
 router.post('/appointments/:id/complete',                   c.toggleComplete);
 router.post('/appointments/:id/toggle-complete',            c.toggleComplete);
 
+// Bug 3 — Doctor's pending follow-ups inbox
+router.get('/follow-ups/pending',                           c.pendingFollowUps);
+
 module.exports = router;

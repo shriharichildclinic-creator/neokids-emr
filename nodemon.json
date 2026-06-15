@@ -1,0 +1,15 @@
+{
+  "watch": ["src"],
+  "ext": "js,json",
+  "ignore": [
+    "storage/**",
+    "public/**",
+    "node_modules/**",
+    "prisma/**",
+    ".git/**",
+    "**/*.test.js",
+    "**/*.spec.js",
+    "*.log"
+  ],
+  "delay": 200
+}

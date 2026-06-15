@@ -77,6 +77,17 @@ exports.appointmentStatus = asyncHandler(async (req, res) => {
  * Force-verify a payment by asking Cashfree directly (server-to-server),
  * bypassing webhook delay. Idempotent.
  * GET /api/public/verify-payment?order_id=appt_<uuid>
+ *
+ * Bug 3 fix: the DB row is the ultimate source of truth. We confirm via
+ * Cashfree ONLY when Cashfree explicitly says PAID. Any other Cashfree
+ * status (ACTIVE, EXPIRED, TERMINATED, FAILED) → never fire automations.
+ */
+/**
+ * Force-verify a payment by asking Cashfree directly.
+ * Hardened (Bug 1): only confirms when BOTH
+ *   (a) Cashfree order_status === 'PAID' AND
+ *   (b) a SUCCESS payment row exists with amount == appt.feeAtBooking
+ * (b) can be disabled via STRICT_PAYMENT_VERIFICATION=false.
  */
 exports.verifyPayment = asyncHandler(async (req, res) => {
   const orderId = req.query.order_id || req.query.orderId;
@@ -88,37 +99,57 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
   });
   if (!appt) return res.status(404).json({ error: 'Appointment not found for this order' });
 
+  // Already paid — short-circuit, do nothing
   if (appt.paymentStatus === 'PAID') {
     return res.json({
       orderId, appointmentId: appt.id,
       paymentStatus: 'PAID', appointmentStatus: appt.status, source: 'db'
     });
   }
+  // Already failed or cancelled — short-circuit, do nothing
+  if (appt.paymentStatus === 'FAILED' || appt.status === 'CANCELLED') {
+    return res.json({
+      orderId, appointmentId: appt.id,
+      paymentStatus: 'FAILED', appointmentStatus: appt.status, source: 'db'
+    });
+  }
 
-  let cf;
-  try { cf = await cashfreeService.getOrderStatus(orderId); }
-  catch (e) {
-    logger.error('verifyPayment: Cashfree status fetch failed', e);
+  let verdict;
+  try {
+    verdict = await cashfreeService.isOrderTrulyPaid(orderId, appt.feeAtBooking);
+  } catch (e) {
+    logger.error('verifyPayment: Cashfree verification failed', e);
     return res.status(502).json({
       error: 'Could not verify payment with Cashfree',
       orderId, appointmentId: appt.id, paymentStatus: appt.paymentStatus
     });
   }
 
-  const cfStatus = (cf.order_status || '').toUpperCase();
-  logger.info(`verifyPayment: order=${orderId} cashfree=${cfStatus} db=${appt.paymentStatus}`);
+  const cfStatus = (verdict.order && verdict.order.order_status || '').toUpperCase();
+  logger.info(
+    `verifyPayment: order=${orderId} cfStatus=${cfStatus} db=${appt.paymentStatus} ` +
+    `paid=${verdict.paid} reason=${verdict.reason}`
+  );
 
-  if (cfStatus === 'PAID') {
-    const updated = await bookingService.confirmOnlineBooking(appt.id, orderId);
+  // ── ONLY TRUE-PAID ORDERS TRIGGER CONFIRMATION ──
+  if (verdict.paid) {
+    const updated = await bookingService.confirmOnlineBooking(
+      appt.id,
+      verdict.cfPaymentId || orderId
+    );
     return res.json({
       orderId, appointmentId: appt.id,
-      paymentStatus: 'PAID', appointmentStatus: updated.status, source: 'cashfree'
+      paymentStatus: 'PAID', appointmentStatus: updated.status, source: 'cashfree-strict'
     });
   }
 
-  if (['EXPIRED', 'TERMINATED', 'CANCELLED'].includes(cfStatus)) {
+  // ── Mark FAILED only on explicit terminal states ──
+  if (['EXPIRED', 'TERMINATED', 'CANCELLED', 'FAILED'].includes(cfStatus)) {
     if (appt.paymentStatus !== 'FAILED' && appt.paymentStatus !== 'PAID') {
-      await prisma.appointment.update({ where: { id: appt.id }, data: { paymentStatus: 'FAILED' } });
+      await prisma.appointment.update({
+        where: { id: appt.id },
+        data: { paymentStatus: 'FAILED' }
+      });
     }
     return res.json({
       orderId, appointmentId: appt.id,
@@ -126,9 +157,12 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
     });
   }
 
+  // Everything else (ACTIVE, PARTIALLY_PAID, PAID-without-payment-row) → still pending.
+  // Crucially: a "PAID-without-payment-row" no longer fires automation.
   return res.json({
     orderId, appointmentId: appt.id,
-    paymentStatus: appt.paymentStatus, cashfreeStatus: cfStatus, source: 'cashfree'
+    paymentStatus: appt.paymentStatus, cashfreeStatus: cfStatus,
+    note: verdict.reason, source: 'cashfree'
   });
 });
 
@@ -139,6 +173,58 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
 exports.paymentStatusPage = (req, res) => {
   res.type('html').send(PAYMENT_STATUS_HTML);
 };
+
+// ─────────────────────────────────────────────────────────────────
+// Bug 3 — Follow-up recall prefill
+// Returns the minimum patient identity needed to pre-fill the booking
+// widget from a recall link, plus the recommending doctor's id and the
+// original primaryProblem string. No PHI beyond what the patient already
+// knows about themselves — but we still 404 hard if the recall id is fake.
+// ─────────────────────────────────────────────────────────────────
+exports.recallPrefill = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!id || id.length < 8) return res.status(400).json({ error: 'Invalid recall id' });
+
+  const rx = await prisma.prescription.findUnique({
+    where: { id },
+    include: {
+      appointment: {
+        include: {
+          patient: {
+            select: {
+              name: true, phone: true, email: true,
+              parentName: true, gender: true, dateOfBirth: true
+            }
+          },
+          doctor: { select: { id: true, name: true } }
+        }
+      }
+    }
+  });
+  if (!rx || !rx.appointment) {
+    return res.status(404).json({ error: 'Recall not found' });
+  }
+
+  const a = rx.appointment;
+  res.json({
+    recallId: rx.id,
+    doctorId: a.doctor.id,
+    doctorName: a.doctor.name,
+    followUpDate: rx.followUpDate,
+    primaryProblem: a.primaryProblem,
+    patient: {
+      name: a.patient.name,
+      phone: a.patient.phone,
+      email: a.patient.email || '',
+      parentName: a.patient.parentName || '',
+      gender: a.patient.gender || '',
+      dateOfBirth: a.patient.dateOfBirth
+        ? new Date(a.patient.dateOfBirth).toISOString().slice(0, 10)
+        : ''
+    }
+  });
+});
+
 
 const PAYMENT_STATUS_HTML = `<!doctype html>
 <html lang="en">
@@ -180,10 +266,10 @@ const PAYMENT_STATUS_HTML = `<!doctype html>
       $('message').innerHTML = 'Your online consultation is confirmed.<br/>Confirmation has been sent via <b>WhatsApp & Email</b> along with the Google Meet link and PDF invoice.';
     } else if(state==='failed'){
       $('title').textContent = 'Payment Failed';
-      $('message').textContent = 'Your transaction was not completed. No amount has been charged. Please try booking again.';
+      $('message').textContent = 'Your transaction was not completed. No amount has been charged. Please go back and try booking again.';
     } else {
       $('title').textContent = 'Payment Still Processing';
-      $('message').innerHTML = 'We have not received the final status from Cashfree yet. Don\\'t worry — if your payment succeeded, you will receive a WhatsApp & Email confirmation within a few minutes.';
+      $('message').innerHTML = 'We have not received the final status from Cashfree yet. If your payment succeeded, you will receive a WhatsApp & Email confirmation within a few minutes. Otherwise please try booking again.';
     }
     if(appt){
       $('details').classList.remove('hidden');
@@ -207,10 +293,10 @@ const PAYMENT_STATUS_HTML = `<!doctype html>
       const data = await r.json();
       if(data.paymentStatus === 'PAID')   return showFinal('success', data);
       if(data.paymentStatus === 'FAILED') return showFinal('failed', data);
-      if(attempts >= MAX_ATTEMPTS)        return showFinal('pending', data);
+      if(attempts >= MAX_ATTEMPTS)        return showFinal('failed', data);
       setTimeout(poll, INTERVAL_MS);
     }catch(e){
-      if(attempts >= MAX_ATTEMPTS) return showFinal('pending', null);
+      if(attempts >= MAX_ATTEMPTS) return showFinal('failed', null);
       setTimeout(poll, INTERVAL_MS);
     }
   }

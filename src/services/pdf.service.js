@@ -99,18 +99,29 @@ async function generatePrescription(appointment, prescription) {
       doc.fontSize(9).fillColor('#777').text(`${appointment.doctor.clinicName}`);
     }
 
-    // Patient block — Bug 3: Name, Age (auto), Gender, Weight, Height
+     // Bug 1 — Age is ALWAYS derived from DOB at render time. DOB is the
+    // single source of truth (Patient.dateOfBirth); we never store age.
+    // Print BOTH "Age: 3 yrs 4 months  (DOB 12 Mar 2022)" so the printed
+    // record carries the immutable source-of-truth date alongside the
+    // derived value.
     const py = 160;
-    const ageStr = calcAge(appointment.patient.dateOfBirth);
+    const dobObj = appointment.patient.dateOfBirth;
+    const ageStr = calcAge(dobObj);
+    const dobStr = dobObj ? dayjs(dobObj).format('DD MMM YYYY') : '';
     doc.fillColor('#000').fontSize(11);
     doc.font('Helvetica-Bold').text('Patient: ', 50, py, { continued: true })
        .font('Helvetica').text(appointment.patient.name);
     doc.font('Helvetica-Bold').text('Age: ', 50, py + 15, { continued: true })
-       .font('Helvetica').text(ageStr || 'N/A');
+       .font('Helvetica').text(
+         ageStr
+           ? (dobStr ? `${ageStr}  (DOB ${dobStr})` : ageStr)
+           : (dobStr ? `(DOB ${dobStr})` : 'N/A')
+       );
     doc.font('Helvetica-Bold').text('Gender: ', 50, py + 30, { continued: true })
        .font('Helvetica').text(appointment.patient.gender || 'N/A');
     doc.font('Helvetica-Bold').text('Phone: ', 50, py + 45, { continued: true })
        .font('Helvetica').text(`+91 ${appointment.patient.phone}`);
+
 
     doc.font('Helvetica-Bold').text('Date: ', 320, py, { continued: true })
        .font('Helvetica').text(dayjs(appointment.date).format('DD MMM YYYY'));

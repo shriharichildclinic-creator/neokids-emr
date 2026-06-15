@@ -81,10 +81,12 @@ async function runLifecycleJobs() {
     await autoCompletePassedAppointments();   // Bug 9
     const automation = require('./automation.service');
     await automation.processReminders();
+    await automation.processFollowUpRecalls();   // Bug 3 — soft recall
   } catch (error) {
     logger.error('Lifecycle job failed', error);
   }
 }
+
 
 module.exports = {
   expirePendingAppointments,

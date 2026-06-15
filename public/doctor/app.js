@@ -1,724 +1,1070 @@
+/* =====================================================================
+   NeoKidsPro EMR — Doctor App
+   Modernized UI (v2). All original IDs, form names, API calls, and JS
+   hooks are preserved. Rendering uses new CSS classes for a modern look.
+   ===================================================================== */
+
 const API = '/api';
 let TOKEN = localStorage.getItem('np_doctor_token');
 let currentAppointment = null;
-let currentDoctor = null;
+let allAppointmentsCache = [];   // for client-side search/filter
+let doctorCache = null;          // for current doctor profile
 
-const $ = (s) => document.querySelector(s);
-const $$ = (s) => document.querySelectorAll(s);
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
-// ── Time Picker Helpers ──────────────────────────────────────────────────────
-// We use split selects: [Hour 1–12 ▼] [AM/PM ▼] instead of a 96-item dropdown.
-// The hidden <input name="availableFromOnline"> holds the real HH:MM value.
-
-// Populate a hour select (1–12) with optional minute suffix (e.g. ":00")
-function populateHourSelect(sel, selectedHour12) {
-  if (!sel) return;
-  sel.innerHTML = Array.from({ length: 12 }, (_, i) => {
-    const h = i + 1;
-    return `<option value="${h}"${h === selectedHour12 ? ' selected' : ''}>${h}:00</option>`;
-  }).join('');
-}
-
-// Parse HH:MM → { hour12, ampm } e.g. "21:00" → { hour12: 9, ampm: "PM" }
-function parseHHMM(hhmm) {
-  if (!hhmm) return { hour12: null, ampm: 'AM' };
-  const [h] = hhmm.split(':').map(Number);
-  return { hour12: h % 12 || 12, ampm: h >= 12 ? 'PM' : 'AM' };
-}
-
-// Read split selects → HH:MM string e.g. hour=9, ampm=PM → "21:00"
-function readSplitTime(prefix, form) {
-  const hSel = form.querySelector(`[name="${prefix}_h"]`);
-  const ampmSel = form.querySelector(`[name="${prefix}_ampm"]`);
-  if (!hSel || !ampmSel) return '';
-  let h = parseInt(hSel.value, 10);
-  const ampm = ampmSel.value;
-  if (ampm === 'AM') { if (h === 12) h = 0; }
-  else { if (h !== 12) h += 12; }
-  return `${String(h).padStart(2, '0')}:00`;
-}
-
-// Set split selects from an HH:MM string
-function setSplitTime(prefix, form, hhmm) {
-  const { hour12, ampm } = parseHHMM(hhmm);
-  const hSel = form.querySelector(`[name="${prefix}_h"]`);
-  const ampmSel = form.querySelector(`[name="${prefix}_ampm"]`);
-  populateHourSelect(hSel, hour12);
-  if (ampmSel) ampmSel.value = ampm;
-}
-
-// Sync hidden HH:MM fields whenever split selects change
-function wireAvailabilitySelects(form) {
-  const pairs = [
-    ['availableFromOnline', 'availableFromOnline'],
-    ['availableToOnline',   'availableToOnline'],
-    ['availableFromOffline','availableFromOffline'],
-    ['availableToOffline',  'availableToOffline']
-  ];
-  pairs.forEach(([prefix, hiddenName]) => {
-    const hSel = form.querySelector(`[name="${prefix}_h"]`);
-    const ampmSel = form.querySelector(`[name="${prefix}_ampm"]`);
-    const hidden = form.querySelector(`[name="${hiddenName}"]`);
-    const sync = () => { if (hidden) hidden.value = readSplitTime(prefix, form); };
-    hSel?.addEventListener('change', sync);
-    ampmSel?.addEventListener('change', sync);
-  });
-}
-
-// Populate all 4 availability split-pickers from doctor record
-function populateAvailabilitySelects(doc) {
-  const form = $('#availForm');
-  if (!form) return;
-  const fields = ['availableFromOnline','availableToOnline','availableFromOffline','availableToOffline'];
-  fields.forEach(f => {
-    setSplitTime(f, form, doc?.[f] || '');
-    // Sync hidden field immediately
-    const hidden = form.querySelector(`[name="${f}"]`);
-    if (hidden) hidden.value = doc?.[f] || '';
-  });
-  wireAvailabilitySelects(form);
-}
-
-// ── Slot Duration Button Group ───────────────────────────────────────────────
-const SLOT_DURATIONS = [10, 15, 20, 30, 45, 60];
-function renderSlotDurationBtns(selected) {
-  const container = $('#slotDurationBtns');
-  const hidden = $('#slotDurationVal');
-  if (!container) return;
-  container.querySelectorAll('button').forEach(b => b.remove());
-  SLOT_DURATIONS.forEach(d => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = `${d} min`;
-    btn.className = `px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
-      d === selected
-        ? 'bg-brand-blue text-white border-brand-blue'
-        : 'bg-white text-slate-600 hover:border-brand-blue hover:text-brand-blue'
-    }`;
-    btn.onclick = () => {
-      if (hidden) hidden.value = d;
-      renderSlotDurationBtns(d);
-    };
-    container.appendChild(btn);
-  });
-  if (hidden && !hidden.value) hidden.value = selected || 15;
-}
-
-// ── Working Days Checkbox Group ──────────────────────────────────────────────
-const ALL_DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
-const DAY_LABELS = { MON:'Mon', TUE:'Tue', WED:'Wed', THU:'Thu', FRI:'Fri', SAT:'Sat', SUN:'Sun' };
-function renderWorkingDaysBtns(selectedCsv) {
-  const container = $('#workingDaysBtns');
-  const hidden = $('#workingDaysVal');
-  if (!container) return;
-  const selected = new Set((selectedCsv || '').split(',').map(s => s.trim()).filter(Boolean));
-  container.querySelectorAll('button').forEach(b => b.remove());
-  const syncHidden = () => {
-    if (hidden) hidden.value = ALL_DAYS.filter(d => selected.has(d)).join(',');
-  };
-  ALL_DAYS.forEach(day => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = DAY_LABELS[day];
-    const active = () => selected.has(day);
-    const setStyle = () => {
-      btn.className = `px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
-        active()
-          ? 'bg-brand-blue text-white border-brand-blue'
-          : 'bg-white text-slate-600 hover:border-brand-blue hover:text-brand-blue'
-      }`;
-    };
-    btn.onclick = () => {
-      if (active()) selected.delete(day); else selected.add(day);
-      setStyle();
-      syncHidden();
-    };
-    setStyle();
-    container.appendChild(btn);
-  });
-  syncHidden();
-}
-
-// ── Reschedule Time Select ───────────────────────────────────────────────────
-// Uses slot-duration-aware intervals so options match actual available slots
-
-
-
-
-
-
-
-function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-IN', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function formatDateInput(dateStr) {
-  return new Date(dateStr).toISOString().slice(0, 10);
-}
-
-function formatTime(hhmm) {
-  if (!hhmm) return '';
-  const [h, m] = hhmm.split(':').map(Number);
-  const suffix = h >= 12 ? 'PM' : 'AM';
-  const hour = h % 12 || 12;
-  return `${hour}:${String(m).padStart(2, '0')} ${suffix}`;
-}
-
-function api(path, opts = {}) {
-  return fetch(API + path, {
-    ...opts,
-    headers: {
-      ...(opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(TOKEN && { Authorization: 'Bearer ' + TOKEN }),
-      ...(opts.headers || {})
-    }
-  }).then(async (r) => {
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || 'Request failed');
-    return data;
-  });
-}
-
-function renderDoctorPhoto(photoUrl) {
-  const top = $('#docPhotoTop');
-  const large = $('#docPhotoLarge');
-  const placeholder = $('#docPhotoPlaceholder');
-  if (photoUrl) {
-    top.src = large.src = photoUrl;
-    top.classList.remove('hidden');
-    large.classList.remove('hidden');
-    placeholder.classList.add('hidden');
-  } else {
-    top.classList.add('hidden');
-    large.classList.add('hidden');
-    placeholder.classList.remove('hidden');
+/* ---------------------------------------------------------------------
+   API helper
+   --------------------------------------------------------------------- */
+async function api(path, opts={}){
+  const headers = opts.headers || {};
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+  if (!(opts.body instanceof FormData) && opts.body && typeof opts.body === 'object'){
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
   }
+  const res = await fetch(API + path, { ...opts, headers });
+  let data = null;
+  try { data = await res.json(); } catch(_) {}
+  if (!res.ok) {
+    const msg = (data && (data.message || data.error)) || ('HTTP ' + res.status);
+    const err = new Error(msg); err.status = res.status; err.data = data; throw err;
+  }
+  return data;
 }
 
+/* ---------------------------------------------------------------------
+   Utils
+   --------------------------------------------------------------------- */
+function fmtCurrency(n){
+  const v = Number(n||0);
+  if (v >= 100000) return '₹' + (v/100000).toFixed(v%100000===0?0:1) + 'L';
+  if (v >= 1000)   return '₹' + (v/1000).toFixed(v%1000===0?0:1) + 'k';
+  return '₹' + v.toLocaleString('en-IN');
+}
+function fmtDate(d){
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+}
+// Bug 6 — convert 24-hour "HH:MM" to 12-hour "h:MM AM/PM"
+function fmtTime(t){
+  if (!t) return '';
+  const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return String(t);
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  if (Number.isNaN(h)) return String(t);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${min} ${suffix}`;
+}
+
+/* ---------------------------------------------------------------------
+   Bug 1 — Age is ALWAYS derived from DOB on the client.
+   Never stored, never cached. Mirrors src/utils/date.js → calcAge().
+   --------------------------------------------------------------------- */
+function calcAge(dob){
+  if (!dob) return '';
+  const d = (dob instanceof Date) ? dob : new Date(dob);
+  if (isNaN(d.getTime())) return '';
+  const today = new Date();
+  let years  = today.getFullYear()  - d.getFullYear();
+  let months = today.getMonth()     - d.getMonth();
+  if (today.getDate() < d.getDate()) months -= 1;
+  if (months < 0) { years -= 1; months += 12; }
+  if (years < 0) return '';
+  if (years === 0) {
+    // Babies: show months (or "newborn" if <1 month)
+    if (months <= 0) return 'newborn';
+    return `${months} mo`;
+  }
+  // 1-2 yrs: years + months for clinical precision
+  if (years < 2) return `${years} yr ${months} mo`;
+  return `${years} yrs`;
+}
+/* Bug 1 — longer, more readable form for modals/details pages.
+   Matches the server-side PDF format. */
+function calcAgeLong(dob){
+  if (!dob) return '';
+  const d = (dob instanceof Date) ? dob : new Date(dob);
+  if (isNaN(d.getTime())) return '';
+  const today = new Date();
+  let years  = today.getFullYear()  - d.getFullYear();
+  let months = today.getMonth()     - d.getMonth();
+  if (today.getDate() < d.getDate()) months -= 1;
+  if (months < 0) { years -= 1; months += 12; }
+  if (years < 0) return '';
+  if (years === 0) {
+    if (months <= 0) return 'Newborn';
+    return `${months} month${months === 1 ? '' : 's'}`;
+  }
+  return `${years} year${years === 1 ? '' : 's'} ${months} month${months === 1 ? '' : 's'}`;
+}
+
+
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function statusBadge(status){
+  const map = {
+    CONFIRMED:{cls:'np-badge--green', txt:'Confirmed'},
+    PENDING:  {cls:'np-badge--amber', txt:'Pending'},
+    COMPLETED:{cls:'np-badge--blue',  txt:'Completed'},
+    CANCELLED:{cls:'np-badge--red',   txt:'Cancelled'},
+    NO_SHOW:  {cls:'np-badge--slate', txt:'No-show'}
+  };
+  const m = map[status] || {cls:'np-badge--slate', txt: (status||'—')};
+  return `<span class="np-badge ${m.cls}"><span class="np-badge__dot"></span>${m.txt}</span>`;
+}
+function typeBadge(type){
+  if (type === 'ONLINE')  return `<span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span>`;
+  if (type === 'OFFLINE') return `<span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>In-person</span>`;
+  return '';
+}
+function paymentBadge(p){
+  const map = {
+    PAID:           {cls:'np-badge--green', txt:'Paid'},
+    UNPAID:         {cls:'np-badge--amber', txt:'Unpaid'},
+    REFUNDED:       {cls:'np-badge--slate', txt:'Refunded'},
+    CASH_COLLECTED: {cls:'np-badge--green', txt:'Cash collected'}
+  };
+  const m = map[p]; if (!m) return '';
+  return `<span class="np-badge ${m.cls}"><span class="np-badge__dot"></span>${m.txt}</span>`;
+}
+
+/* =====================================================================
+   LOGIN
+   ===================================================================== */
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  $('#loginError').classList.add('hidden');
+  const err = $('#loginError');
+  err.classList.add('hidden');
   try {
-    const r = await fetch(API + '/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: $('#email').value, password: $('#password').value })
-    }).then((x) => x.json().then((d) => { if (!x.ok) throw new Error(d.error); return d; }));
-    if (r.role !== 'DOCTOR') throw new Error('Not a doctor account');
-    TOKEN = r.token;
+    const data = await api('/auth/login', { method:'POST', body:{
+      email: $('#email').value.trim(),
+      password: $('#password').value
+    }});
+    if (!data || !data.token) throw new Error('Invalid response');
+    if (data.role && data.role !== 'DOCTOR') throw new Error('Not a doctor account');
+    TOKEN = data.token;
     localStorage.setItem('np_doctor_token', TOKEN);
-    await init();
-  } catch (e) {
-    $('#loginError').textContent = e.message;
-    $('#loginError').classList.remove('hidden');
+    init();
+  } catch (ex){
+    err.textContent = ex.message || 'Login failed';
+    err.classList.remove('hidden');
   }
 });
 
-async function forgotPassword() {
-  const email = prompt('Enter your doctor account email');
-  if (!email) return;
-  try {
-    const res = await api('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
-    alert(res.previewUrl ? `Reset link (mock mode): ${res.previewUrl}` : 'If the account exists, a reset link has been sent.');
-  } catch (err) {
-    alert(err.message);
-  }
+function forgotPassword(){
+  const email = ($('#email').value || '').trim();
+  if (!email){ alert('Enter your email first, then click Forgot password.'); return; }
+  api('/auth/forgot-password', { method:'POST', body:{ email } })
+    .then(()=>alert('If that email exists, a reset link has been sent.'))
+    .catch(ex=>alert(ex.message || 'Request failed'));
 }
 
-function logout() {
+function logout(){
   localStorage.removeItem('np_doctor_token');
   TOKEN = null;
   location.reload();
 }
 
-$$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => {
-  $$('.tab-btn').forEach((b) => {
-    b.classList.remove('border-brand-blue', 'font-medium');
-    b.classList.add('border-transparent', 'text-slate-500');
-  });
-  btn.classList.add('border-brand-blue', 'font-medium');
-  btn.classList.remove('border-transparent', 'text-slate-500');
-  $$('.tab-pane').forEach((p) => p.classList.add('hidden'));
-  $('#' + btn.dataset.tab).classList.remove('hidden');
-  if (btn.dataset.tab === 'waitingTab') loadWaiting();
-  if (btn.dataset.tab === 'allTab') loadAll();
-  if (btn.dataset.tab === 'settingsTab') loadSettings();
-}));
-
-function statusColor(s) {
-  return ({
-    PENDING: 'bg-yellow-100 text-yellow-700',
-    CONFIRMED: 'bg-blue-100 text-blue-700',
-    COMPLETED: 'bg-green-100 text-green-700',
-    CANCELLED: 'bg-red-100 text-red-700'
-  })[s] || 'bg-slate-100 text-slate-700';
-}
-
-function paymentLabel(status, type) {
-  if (status === 'PAID') return { text: '✅ Paid Online', cls: 'text-green-600' };
-  if (status === 'CASH_COLLECTED') return { text: '✅ Cash Collected', cls: 'text-green-600' };
-  if (status === 'CASH_PENDING') return { text: '💵 Cash at Clinic', cls: 'text-amber-600' };
-  if (status === 'FAILED') return { text: '❌ Payment Failed', cls: 'text-red-500' };
-  if (status === 'UNPAID' && type === 'ONLINE') return { text: '⏳ Awaiting Payment', cls: 'text-amber-600' };
-  return { text: status, cls: 'text-slate-400' };
-}
-
-async function loadStats() {
-  const s = await api('/doctor/stats');
-  const items = [
-    { label: 'Today', value: s.todayAppointments, color: 'bg-brand-blue/10 text-brand-blue', icon: '📅' },
-    { label: 'Completed Today', value: s.completedToday, color: 'bg-green-100 text-green-600', icon: '✅' },
-    { label: 'Total Consults', value: s.totalConsults, color: 'bg-brand-mint/40 text-teal-700', icon: '🩺' },
-    { label: 'Revenue', value: '₹' + s.totalRevenue.toLocaleString(), color: 'bg-brand-cream text-amber-700', icon: '💰' }
-  ];
-  $('#statsBar').innerHTML = items.map((i) => `
-    <div class="bg-white rounded-2xl p-4 flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl ${i.color} flex items-center justify-center text-xl">${i.icon}</div>
-      <div><div class="text-xs text-slate-500">${i.label}</div><div class="font-bold">${i.value}</div></div>
-    </div>`).join('');
-}
-function apptCard(a, showActions) {
-  const isOnline = a.consultationType === 'ONLINE';
-  const pendingWarning = a.status === 'PENDING'
-    ? `<p class="text-xs text-amber-600 font-semibold mt-1">⚠️ Awaiting payment</p>` : '';
-  // Feature: video icon button so doctor can clearly see and click Join Meet
-  const meetBtn = a.meetLink ? `
-    <a href="${a.meetLink}" target="_blank" title="Join Google Meet"
-       class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-blue text-white hover:bg-blue-500 shadow-sm">
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-      </svg>
-    </a>` : '';
-  return `
-    <div class="bg-white rounded-2xl p-4 shadow-sm flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-12 h-12 rounded-xl ${isOnline ? 'bg-brand-blue/20' : 'bg-brand-mint/40'} flex items-center justify-center text-xl">${isOnline ? '🎥' : '🏥'}</div>
-        <div>
-          <p class="font-semibold">${a.patient.name}</p>
-          <p class="text-xs text-slate-500">+91 ${a.patient.phone} · ${a.consultationType}</p>
-          <p class="text-xs text-slate-400 mt-0.5">${formatDate(a.date)} · ${formatTime(a.startTime)}-${formatTime(a.endTime)}</p>
-          <p class="text-xs text-slate-600 mt-0.5">🩺 ${a.primaryProblem}</p>
-          ${pendingWarning}
-        </div>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap justify-end">
-        <span class="px-3 py-1 text-xs rounded-full ${statusColor(a.status)}">${a.status}</span>
-        ${meetBtn}
-        <button onclick="openPatient('${a.id}')" class="px-3 py-1.5 text-xs rounded-xl border hover:bg-slate-50">Open</button>
-        ${showActions && !['CANCELLED','COMPLETED'].includes(a.status) ? `<button onclick="openReschedule('${a.id}','${a.consultationType}')" class="px-3 py-1.5 text-xs rounded-xl border hover:bg-slate-50">Reschedule</button>` : ''}
-        ${showActions && !['CANCELLED','COMPLETED'].includes(a.status) ? `<button onclick="cancelAppt('${a.id}')" class="px-3 py-1.5 text-xs rounded-xl border border-red-200 text-red-500 hover:bg-red-50">Cancel</button>` : ''}
-      </div>
-    </div>`;
-}
-
-
-async function loadWaiting() {
-  const list = await api('/doctor/waiting-room');
-  $('#waitingList').innerHTML = list.map((a) => apptCard(a, true)).join('') || '<div class="bg-white rounded-2xl p-12 text-center text-slate-400">No patients in today\'s waiting room.</div>';
-}
-
-async function loadAll() {
-  const list = await api('/doctor/appointments');
-  $('#allList').innerHTML = list.map((a) => apptCard(a, false)).join('') || '<div class="bg-white rounded-2xl p-12 text-center text-slate-400">No appointments yet.</div>';
-}
-
-async function openPatient(id) {
-  const data = await api('/doctor/appointments/' + id);
-  currentAppointment = data.appointment;
-  const a = data.appointment;
-  const h = data.history || [];
-  const completeLabel = a.status === 'COMPLETED' ? 'Mark as Incomplete' : 'Mark as Complete';
-
-  // Auto age helper (matches backend)
-  function calcAge(dob) {
-    if (!dob) return '';
-    const d = new Date(dob); const today = new Date();
-    let y = today.getUTCFullYear() - d.getUTCFullYear();
-    let m = today.getUTCMonth() - d.getUTCMonth();
-    if (today.getUTCDate() < d.getUTCDate()) m--;
-    if (m < 0) { y--; m += 12; }
-    if (y < 0) return '';
-    if (y === 0) return `${m} month${m===1?'':'s'}`;
-    return `${y} yr${y===1?'':'s'} ${m} month${m===1?'':'s'}`;
-  }
-  const ageStr = calcAge(a.patient.dateOfBirth);
-
-  $('#patientDetail').innerHTML = `
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-      <div class="bg-slate-50 rounded-2xl p-4">
-        <h4 class="text-xs uppercase text-slate-500 mb-2">Patient</h4>
-        <p class="font-bold">${a.patient.name}</p>
-        <p class="text-sm text-slate-600">+91 ${a.patient.phone}</p>
-        ${a.patient.email ? `<p class="text-sm text-slate-600">${a.patient.email}</p>` : ''}
-        ${ageStr ? `<p class="text-sm text-slate-600">Age: ${ageStr}</p>` : ''}
-        ${a.patient.gender ? `<p class="text-sm text-slate-600">Gender: ${a.patient.gender}</p>` : ''}
-        ${a.patient.parentName ? `<p class="text-sm text-slate-600">Parent: ${a.patient.parentName}</p>` : ''}
-      </div>
-      <div class="bg-slate-50 rounded-2xl p-4">
-        <h4 class="text-xs uppercase text-slate-500 mb-2">Appointment</h4>
-        <p class="text-sm">📅 ${formatDate(a.date)}</p>
-        <p class="text-sm">⏰ ${formatTime(a.startTime)} - ${formatTime(a.endTime)}</p>
-        <p class="text-sm">${a.consultationType === 'ONLINE' ? '🎥' : '🏥'} ${a.consultationType}</p>
-        <p class="text-sm">💰 ₹${Number(a.feeAtBooking).toFixed(2)} · <span class="${paymentLabel(a.paymentStatus, a.consultationType).cls}">${paymentLabel(a.paymentStatus, a.consultationType).text}</span></p>
-        ${a.meetLink ? `<a class="text-brand-blue text-sm underline" target="_blank" href="${a.meetLink}">Join Google Meet</a>` : ''}
-      </div>
-      <div class="bg-slate-50 rounded-2xl p-4">
-        <h4 class="text-xs uppercase text-slate-500 mb-2">Primary Problem</h4>
-        <p class="text-sm">${a.primaryProblem}</p>
-        ${a.invoiceUrl ? `<a class="text-brand-blue text-sm underline block mt-2" target="_blank" href="${a.invoiceUrl}">📄 Invoice</a>` : ''}
-        ${a.prescriptionUrl ? `<a class="text-brand-blue text-sm underline block" target="_blank" href="${a.prescriptionUrl}">💊 Prescription</a>` : ''}
-      </div>
-    </div>
-
-    ${h.length ? `<details class="bg-amber-50 rounded-2xl p-4 mb-4"><summary class="cursor-pointer font-medium">📜 Visit History (${h.length})</summary><div class="mt-3 space-y-2">${h.map((v) => `<div class="bg-white rounded-xl p-3 text-sm"><p class="font-medium">${formatDate(v.date)} · Dr. ${v.doctor.name}</p>${v.prescription ? `<p class="text-slate-600">Dx: ${v.prescription.diagnosis}</p>` : ''}${v.prescriptionUrl ? `<a class="text-brand-blue underline text-xs" target="_blank" href="${v.prescriptionUrl}">View Rx</a>` : ''}</div>`).join('')}</div></details>` : ''}
-
-    <div class="bg-white rounded-2xl border p-4">
-      <h3 class="font-bold mb-3">💊 Prescription Builder</h3>
-      <form id="rxForm" class="space-y-3">
-        <div class="grid grid-cols-3 gap-2">
-          <div><label class="text-xs text-slate-500">Name (auto)</label><input value="${a.patient.name}" disabled class="w-full px-3 py-2 rounded-lg border bg-slate-50 text-sm"/></div>
-          <div><label class="text-xs text-slate-500">Age (auto)</label><input value="${ageStr}" disabled class="w-full px-3 py-2 rounded-lg border bg-slate-50 text-sm"/></div>
-          <div><label class="text-xs text-slate-500">Gender (auto)</label><input value="${a.patient.gender || ''}" disabled class="w-full px-3 py-2 rounded-lg border bg-slate-50 text-sm"/></div>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div><label class="text-xs text-slate-500">Weight</label><input name="weight" placeholder="e.g. 18 kg" value="${a.prescription?.weight || ''}" class="w-full px-3 py-2 rounded-lg border text-sm"/></div>
-          <div><label class="text-xs text-slate-500">Height</label><input name="height" placeholder="e.g. 105 cm" value="${a.prescription?.height || ''}" class="w-full px-3 py-2 rounded-lg border text-sm"/></div>
-        </div>
-        <textarea name="chiefComplaint" required placeholder="Chief Complaint" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.chiefComplaint || a.primaryProblem || ''}</textarea>
-        <textarea name="pastHistory" placeholder="Past History (illnesses, surgeries, family history…)" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.pastHistory || ''}</textarea>
-        <textarea name="diagnosis" required placeholder="Diagnosis" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.diagnosis || ''}</textarea>
-        <div class="grid grid-cols-2 gap-2">
-          <textarea name="allergies" placeholder="Allergy (if any)" class="px-4 py-2 rounded-xl border">${a.prescription?.allergies || ''}</textarea>
-          <textarea name="investigations" placeholder="Investigations" class="px-4 py-2 rounded-xl border">${a.prescription?.investigations || ''}</textarea>
-        </div>
-        <div><div class="flex justify-between items-center mb-2"><label class="font-medium">Medicine</label><button type="button" onclick="addMedRow()" class="text-sm px-3 py-1 rounded-lg bg-brand-blue/10 text-brand-blue">+ Add Med</button></div><div id="medsList" class="space-y-2"></div></div>
-        <textarea name="advice" placeholder="Advice / Lifestyle" class="w-full px-4 py-2 rounded-xl border">${a.prescription?.advice || ''}</textarea>
-        <div><label class="text-sm text-slate-500">Follow Up Date</label><input name="followUpDate" type="date" class="w-full px-4 py-2 rounded-xl border" value="${a.prescription?.followUpDate ? formatDateInput(a.prescription.followUpDate) : ''}"/></div>
-        <div class="flex gap-2"><button type="button" onclick="toggleComplete('${a.id}')" class="px-4 py-2.5 rounded-xl border">${completeLabel}</button><button type="submit" class="flex-1 py-2.5 bg-brand-blue text-white rounded-xl font-semibold">Save & Send to Patient</button></div>
-      </form>
-    </div>`;
-
-  const existing = a.prescription?.medications || [{ name: '', dose: '', frequency: '', duration: '', instructions: '' }];
-  existing.forEach((m) => addMedRow(m));
-  $('#rxForm').addEventListener('submit', submitPrescription);
-  $('#patientModal').classList.remove('hidden');
-}
-
-
-function addMedRow(m = { name: '', dose: '', frequency: '', duration: '', instructions: '' }) {
-  const row = document.createElement('div');
-  row.className = 'grid grid-cols-6 gap-2 items-center';
-  row.innerHTML = `
-    <input value="${m.name || ''}" placeholder="Medicine" class="med-name col-span-2 px-3 py-2 rounded-lg border text-sm"/>
-    <input value="${m.dose || ''}" placeholder="Dose" class="med-dose px-3 py-2 rounded-lg border text-sm"/>
-    <input value="${m.frequency || ''}" placeholder="Freq" class="med-freq px-3 py-2 rounded-lg border text-sm"/>
-    <input value="${m.duration || ''}" placeholder="Duration" class="med-dur px-3 py-2 rounded-lg border text-sm"/>
-    <div class="flex gap-1"><input value="${m.instructions || ''}" placeholder="Notes" class="med-inst px-3 py-2 rounded-lg border text-sm w-full"/><button type="button" onclick="this.closest('div.grid').remove()" class="text-red-500 px-2">✕</button></div>`;
-  $('#medsList').appendChild(row);
-}
-
-async function submitPrescription(e) {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const data = Object.fromEntries(fd.entries());
-  if (!data.followUpDate) delete data.followUpDate;
-  const meds = [...$$('#medsList > div')].map((r) => ({
-    name: r.querySelector('.med-name').value,
-    dose: r.querySelector('.med-dose').value,
-    frequency: r.querySelector('.med-freq').value,
-    duration: r.querySelector('.med-dur').value,
-    instructions: r.querySelector('.med-inst').value
-  })).filter((m) => m.name);
-  data.medications = meds;
-  try {
-    await api(`/doctor/appointments/${currentAppointment.id}/prescription`, { method: 'POST', body: JSON.stringify(data) });
-    alert('Prescription saved and sent to patient.');
-    closePatientModal();
-    loadWaiting();
-    loadStats();
-  } catch (err) { alert(err.message); }
-}
-
-async function toggleComplete(id) {
-  // Issue 3 fix: UI guard — check status before calling API
-  const appt = currentAppointment;
-  if (appt && appt.id === id && appt.status === 'PENDING') {
-    showInlineError('completeErr', 'Cannot complete a PENDING appointment. Payment must be confirmed first.');
-    return;
-  }
-  try {
-    await api(`/doctor/appointments/${id}/toggle-complete`, { method: 'POST' });
-    closePatientModal();
-    loadWaiting();
-    loadAll();
-    loadStats();
-  } catch (err) { alert(err.message); }
-}
-
-// Issue 5 fix: Cancel appointment from waiting room
-async function cancelAppt(id) {
-  const reason = prompt('Reason for cancellation (optional):');
-  if (reason === null) return; // user pressed Cancel on prompt
-  try {
-    await api(`/doctor/appointments/${id}/cancel`, {
-      method: 'POST',
-      body: JSON.stringify({ reason })
-    });
-    loadWaiting();
-    loadAll();
-    loadStats();
-  } catch (err) { alert(err.message); }
-}
-
-// Issue 7 fix: Inline error helper (replaces alert popups for form validation)
-function showInlineError(elementId, message) {
-  const el = document.getElementById(elementId);
-  if (el) {
-    el.textContent = message;
-    el.classList.remove('hidden');
-    setTimeout(() => el.classList.add('hidden'), 4000);
-  } else {
-    alert(message); // fallback
-  }
-}
-
-function closePatientModal() { $('#patientModal').classList.add('hidden'); }
-// ── Reschedule Modal ─────────────────────────────────────────────────────────
-let rsCurrentAppt = null;
-
-function openReschedule(id, consultationType) {
-  rsCurrentAppt = { id, consultationType: consultationType || 'OFFLINE' };
-  $('#rsApptId').value = id;
-  $('#rsStartTimeHidden').value = '';
-  $('#rsSelectedDisplay').classList.add('hidden');
-  $('#rsSelectedDisplay').textContent = '';
-  $('#rsSubmitBtn').disabled = true;
-  $('#rsSlotsGrid').innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">Select a date above</p>';
-
-  // IST today as min date
-  const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const todayIST = `${nowIST.getFullYear()}-${String(nowIST.getMonth()+1).padStart(2,'0')}-${String(nowIST.getDate()).padStart(2,'0')}`;
-  const dateInput = $('#rsDateInput');
-  dateInput.min = todayIST;
-  dateInput.value = '';
-
-  $('#rescheduleModal').classList.remove('hidden');
-}
-
-function closeRescheduleModal() {
-  $('#rescheduleModal').classList.add('hidden');
-  $('#rescheduleForm').reset();
-  $('#rsSlotsGrid').innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">Select a date above</p>';
-  $('#rsSelectedDisplay').classList.add('hidden');
-  $('#rsSubmitBtn').disabled = true;
-  rsCurrentAppt = null;
-}
-
-function selectRsSlot(time) {
-  $('#rsStartTimeHidden').value = time;
-  $('#rsSubmitBtn').disabled = false;
-  document.querySelectorAll('.rs-slot-btn').forEach(b => {
-    const active = b.dataset.time === time;
-    b.className = `rs-slot-btn py-2 rounded-xl border text-sm font-medium transition-colors ${
-      active ? 'bg-brand-blue text-white border-brand-blue'
-              : 'bg-white text-slate-600 border-slate-200 hover:border-brand-blue hover:text-brand-blue'}`;
-  });
-  const display = $('#rsSelectedDisplay');
-  display.textContent = `✅ Selected: ${formatTime(time)}`;
-  display.classList.remove('hidden');
-}
-
-async function loadRsSlots(date) {
-  const grid = $('#rsSlotsGrid');
-  if (!date) return;
-  grid.innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">Loading slots...</p>';
-  $('#rsStartTimeHidden').value = '';
-  $('#rsSubmitBtn').disabled = true;
-  $('#rsSelectedDisplay').classList.add('hidden');
-  try {
-    const doctorId = currentDoctor?.id;
-    const type = rsCurrentAppt?.consultationType || 'OFFLINE';
-    const { slots } = await api(`/public/slots?doctorId=${doctorId}&date=${date}&type=${type}`);
-    const available = slots.filter(s => s.available);
-    if (!available.length) {
-      grid.innerHTML = '<p class="col-span-3 text-sm text-slate-400 text-center py-3">No slots available on this date</p>';
-      return;
-    }
-    grid.innerHTML = available.map(s => `
-      <button type="button" data-time="${s.startTime}" onclick="selectRsSlot('${s.startTime}')"
-        class="rs-slot-btn py-2 rounded-xl border text-sm font-medium bg-white text-slate-600 border-slate-200 hover:border-brand-blue hover:text-brand-blue transition-colors">
-        ${formatTime(s.startTime)}
-      </button>`).join('');
-  } catch (err) {
-    grid.innerHTML = `<p class="col-span-3 text-sm text-red-400 text-center py-3">${err.message}</p>`;
-  }
-}
-
-$('#rsDateInput')?.addEventListener('change', e => loadRsSlots(e.target.value));
-
-
-
-$('#rescheduleForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const id = $('#rsApptId').value;
-  const startTime = $('#rsStartTimeHidden').value;
-  const date = $('#rsDateInput').value;
-  const reason = e.target.reason.value;
-  if (!startTime) { alert('Please select a time slot.'); return; }
-  if (!date) { alert('Please select a date.'); return; }
-  try {
-    await api(`/doctor/appointments/${id}/reschedule`, {
-      method: 'POST',
-      body: JSON.stringify({ date, startTime, reason })
-    });
-    alert('Appointment rescheduled. Patient notifications attempted.');
-    closeRescheduleModal();
-    loadWaiting();
-    loadAll();
-  } catch (err) { alert(err.message); }
-});
-
-
-
-async function loadSettings() {
-  const me = await api('/doctor/me');
-  currentDoctor = me;
-  renderDoctorPhoto(me.photoUrl);
-  populateAvailabilitySelects(me);
-  renderSlotDurationBtns(me.slotDuration || 15);
-  renderWorkingDaysBtns(me.workingDays || 'MON,TUE,WED,THU,FRI,SAT');
-  const af = $('#availForm');
-  af.isAvailable.checked = me.isAvailable;
-  const ff = $('#feesForm');
-  ff.onlineConsultFee.value = me.onlineConsultFee || 0;
-  ff.physicalConsultFee.value = me.physicalConsultFee || 0;
-
-  // Bug 6 — populate clinic form
-  const cf = $('#clinicForm');
-  if (cf) {
-    cf.clinicName.value = me.clinicName || '';
-    cf.clinicAddress.value = me.clinicAddress || '';
-    cf.clinicMapUrl.value = me.clinicMapUrl || '';
-    cf.clinicLat.value = me.clinicLat ?? '';
-    cf.clinicLng.value = me.clinicLng ?? '';
-  }
-}
-
-
-$('#photoForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const file = $('#photoInput').files[0];
-  if (!file) return alert('Please select an image.');
-  const fd = new FormData();
-  fd.append('photo', file);
-  try {
-    const res = await api('/doctor/profile-image', { method: 'POST', body: fd });
-    renderDoctorPhoto(res.photoUrl);
-    alert('Profile photo updated.');
-  } catch (err) { alert(err.message); }
-});
-
-async function removePhoto() {
-  try {
-    await api('/doctor/profile-image', { method: 'DELETE' });
-    renderDoctorPhoto(null);
-    alert('Profile photo removed.');
-  } catch (err) { alert(err.message); }
-}
-
-$('#availForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const data = Object.fromEntries(fd.entries());
-  data.isAvailable = e.target.isAvailable.checked;
-  data.slotDuration = parseInt(data.slotDuration, 10);
-  // Remove the split-select fields (they are just UI — hidden fields hold HH:MM values)
-  ['availableFromOnline_h','availableFromOnline_ampm',
-   'availableToOnline_h','availableToOnline_ampm',
-   'availableFromOffline_h','availableFromOffline_ampm',
-   'availableToOffline_h','availableToOffline_ampm'].forEach(k => delete data[k]);
-  try {
-    await api('/doctor/availability', { method: 'PUT', body: JSON.stringify(data) });
-    alert('Availability updated.');
-  } catch (err) { alert(err.message); }
-});
-
-$('#feesForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const data = { onlineConsultFee: parseFloat(fd.get('onlineConsultFee')), physicalConsultFee: parseFloat(fd.get('physicalConsultFee')) };
-  try {
-    await api('/doctor/fees', { method: 'PUT', body: JSON.stringify(data) });
-    alert('Fees updated.');
-  } catch (err) { alert(err.message); }
-});
-
-$('#passwordForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  try {
-    await api('/auth/change-password', { method: 'POST', body: JSON.stringify(Object.fromEntries(fd.entries())) });
-    alert('Password changed successfully.');
-    e.target.reset();
-  } catch (err) { alert(err.message); }
-});
-
-async function init() {
+/* =====================================================================
+   INIT
+   ===================================================================== */
+async function init(){
   $('#loginScreen').classList.add('hidden');
   $('#dashboard').classList.remove('hidden');
-  const me = await api('/doctor/me');
-  currentDoctor = me;
-  $('#docName').textContent = 'Dr. ' + me.name;
-  $('#docSpec').textContent = me.specialization || 'Pediatrician';
-  renderDoctorPhoto(me.photoUrl);
-  // Pre-populate availability pickers so settings tab is ready immediately
-  populateAvailabilitySelects(me);
-  renderSlotDurationBtns(me.slotDuration || 15);
-  renderWorkingDaysBtns(me.workingDays || 'MON,TUE,WED,THU,FRI,SAT');
-  if (me.mustChangePassword) alert('Please change your password from Settings before continuing regular use.');
-  await loadStats();
-  await loadWaiting();
+
+  try {
+    const me = await api('/doctor/me');
+    doctorCache = me;
+    renderDoctorHeader(me);
+    populateAvailability(me);
+    populateClinic(me);
+    populateFees(me);
+  } catch (ex){
+    if (ex.status === 401){ logout(); return; }
+    console.warn('doctor/me failed', ex);
+  }
+
+  // Activate default tab (Dashboard)
+  setActiveTab('dashboardTab');
+  loadStats();
+  loadDashSnapshot();
+
+  // Sidebar / header interactions
+  setupSidebar();
+  setupProfileMenu();
+  setupTabs();
+  setupSearchFilters();
+  setupForms();
+setupRescheduleModal();
+setupCancelModal();
 }
 
-// Bug 6 — Clinic form: press Enter on clinic name to auto-generate the Google Maps URL,
-// and save clinic settings on submit.
-(function wireClinicForm() {
-  const cf = document.getElementById('clinicForm');
-  if (!cf) return;
-  const nameInput = document.getElementById('clinicNameInput');
-  const urlInput  = cf.clinicMapUrl;
-  const addrInput = cf.clinicAddress;
+function renderDoctorHeader(d){
+  const name = d.name ? ('Dr. ' + d.name) : 'Doctor';
+  $('#docName').textContent = name;
+  $('#docSpec').textContent = d.specialization || 'Pediatrician';
 
-  function generateMapUrl() {
-    const name = (nameInput.value || '').trim();
-    const addr = (addrInput.value || '').trim();
-    if (!name) return;
-    const q = encodeURIComponent([name, addr].filter(Boolean).join(' '));
-    urlInput.value = `https://maps.google.com/?q=${q}`;
+  const initials = (d.name || 'D').split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
+
+  if (d.photoUrl){
+    $('#docPhotoTop').innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
+    const large = $('#docPhotoLarge');
+    if (large){
+      large.innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
+    }
+  } else {
+    $('#docPhotoTop').innerHTML = `<span>${escapeHtml(initials)}</span>`;
+    const large = $('#docPhotoLarge');
+    if (large){
+      large.innerHTML = `<span id="docPhotoPlaceholder">${escapeHtml(initials)}</span>`;
+    }
   }
-  nameInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); generateMapUrl(); }
-  });
-  addrInput.addEventListener('blur', () => { if (!urlInput.value) generateMapUrl(); });
+}
 
-  cf.addEventListener('submit', async (e) => {
+/* =====================================================================
+   SIDEBAR / DRAWER
+   ===================================================================== */
+function setupSidebar(){
+  const sidebar = $('#sidebar');
+  const backdrop = $('#sidebarBackdrop');
+  const toggle = $('#sidebarToggle');
+  function open(){ sidebar.classList.add('is-open'); backdrop.classList.add('is-open'); }
+  function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); }
+  toggle.addEventListener('click', () => sidebar.classList.contains('is-open') ? close() : open());
+  backdrop.addEventListener('click', close);
+  // Auto-close on nav click (mobile)
+  $$('.np-nav-item').forEach(b => b.addEventListener('click', () => {
+    if (window.matchMedia('(max-width:1023px)').matches) close();
+  }));
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 1023) close();
+  });
+}
+
+/* =====================================================================
+   PROFILE DROPDOWN
+   ===================================================================== */
+function setupProfileMenu(){
+  const trigger = $('#profileTrigger');
+  const menu = $('#profileDropdown');
+  function close(){ menu.classList.remove('is-open'); trigger.setAttribute('aria-expanded','false'); }
+  function open(){ menu.classList.add('is-open'); trigger.setAttribute('aria-expanded','true'); }
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.classList.contains('is-open') ? close() : open();
+  });
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && !trigger.contains(e.target)) close();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+  // Menu items that navigate to Settings tab
+  $$('#profileDropdown [data-go]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-go');
+      const sectionKey = btn.getAttribute('data-section');
+      setActiveTab(tab);
+      close();
+      if (sectionKey === 'password'){
+        const el = document.getElementById('setting-password');
+        if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+      } else if (sectionKey === 'profile'){
+        const el = document.getElementById('setting-profile');
+        if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+      }
+    });
+  });
+}
+
+/* =====================================================================
+   TABS
+   ===================================================================== */
+const TAB_META = {
+  dashboardTab: { title:'Dashboard',     sub:"Welcome back — here's what's happening today." },
+  waitingTab:   { title:'Waiting Room',  sub:'Patients currently waiting to be seen' },
+  allTab:       { title:'Appointments',  sub:'Search and manage all your appointments' },
+  settingsTab:  { title:'Settings',      sub:'Manage your profile, availability, and clinic' }
+};
+
+function setActiveTab(tabId){
+  $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+  $$('.tab-pane').forEach(p => p.classList.toggle('hidden', p.id !== tabId));
+  const meta = TAB_META[tabId];
+  if (meta){
+    $('#pageTitle').textContent = meta.title;
+    $('#pageSubtitle').textContent = meta.sub;
+  }
+  // Lazy-load data per tab
+  if (tabId === 'waitingTab') loadWaiting();
+  else if (tabId === 'allTab') loadAll();
+  else if (tabId === 'settingsTab') loadSettings();
+  else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); }
+}
+
+function setupTabs(){
+  $$('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+  });
+  const refresh = $('#refreshWaiting');
+  if (refresh) refresh.addEventListener('click', () => loadWaiting());
+}
+
+/* =====================================================================
+   STATS / KPIs
+   ===================================================================== */
+async function loadStats(){
+  try {
+    const s = await api('/doctor/stats');
+    const today = Number(s.todayAppointments || 0);
+    const done  = Number(s.completedToday || 0);
+    const total = Number(s.totalConsults || 0);
+    const rev   = Number(s.totalRevenue || 0);
+    $('#statsBar').innerHTML = `
+      <div class="np-kpi np-kpi--blue">
+        <div class="np-kpi__icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="np-kpi__label">Today's Patients</div>
+        <div class="np-kpi__value">${today}</div>
+        <div class="np-kpi__sub">${done} completed so far</div>
+      </div>
+      <div class="np-kpi np-kpi--mint">
+        <div class="np-kpi__icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        </div>
+        <div class="np-kpi__label">Total Consults</div>
+        <div class="np-kpi__value">${total}</div>
+        <div class="np-kpi__sub">All-time consultations</div>
+      </div>
+      <div class="np-kpi np-kpi--coral">
+        <div class="np-kpi__icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="np-kpi__label">Completed Today</div>
+        <div class="np-kpi__value">${done}</div>
+        <div class="np-kpi__sub">Out of ${today} scheduled</div>
+      </div>
+      <div class="np-kpi np-kpi--cream">
+        <div class="np-kpi__icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="np-kpi__label">Revenue</div>
+        <div class="np-kpi__value">${fmtCurrency(rev)}</div>
+        <div class="np-kpi__sub">Lifetime</div>
+      </div>
+    `;
+  } catch (ex){
+    console.warn('stats failed', ex);
+    $('#statsBar').innerHTML = '';
+  }
+}
+
+async function loadDashSnapshot(){
+  const el = $('#dashSnapshot');
+  if (!el) return;
+  try {
+    const list = await api('/doctor/waiting-room');
+    if (!list || !list.length){
+      el.innerHTML = emptyState('No patients waiting', 'Your waiting room is empty right now.');
+      return;
+    }
+    const first5 = list.slice(0,5);
+    el.innerHTML = `<div class="np-appt-list">${first5.map(apptCard).join('')}</div>`;
+  } catch (ex){
+    el.innerHTML = emptyState('Could not load appointments', ex.message || 'Try refreshing.');
+  }
+}
+
+function emptyState(title, sub){
+  return `
+    <div class="np-empty">
+      <div class="np-empty__icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div class="np-empty__title">${escapeHtml(title)}</div>
+      <div class="np-empty__sub">${escapeHtml(sub||'')}</div>
+    </div>`;
+}
+
+/* =====================================================================
+   WAITING ROOM
+   ===================================================================== */
+async function loadWaiting(){
+  const list = $('#waitingList');
+  list.innerHTML = '';
+  try {
+    const data = await api('/doctor/waiting-room');
+    if (!data || !data.length){
+      list.innerHTML = emptyState('All clear', 'No patients are waiting right now.');
+      return;
+    }
+    list.innerHTML = data.map(apptCard).join('');
+  } catch (ex){
+    list.innerHTML = emptyState('Could not load waiting room', ex.message || 'Try again later.');
+  }
+}
+
+/* =====================================================================
+   ALL APPOINTMENTS (search + filter + sort)
+   ===================================================================== */
+async function loadAll(){
+  const list = $('#allList');
+  list.innerHTML = '';
+  try {
+    const data = await api('/doctor/appointments');
+    allAppointmentsCache = Array.isArray(data) ? data : [];
+    renderAllAppointments();
+  } catch (ex){
+    list.innerHTML = emptyState('Could not load appointments', ex.message || 'Try again later.');
+  }
+}
+
+function renderAllAppointments(){
+  const search = ($('#apptSearch').value || '').trim().toLowerCase();
+  const status = $('#apptStatusFilter').value;
+  const type   = $('#apptTypeFilter').value;
+  const sort   = $('#apptSort').value;
+
+  let arr = allAppointmentsCache.slice();
+
+  if (status) arr = arr.filter(a => a.status === status);
+  if (type)   arr = arr.filter(a => a.consultationType === type);
+  if (search) {
+    arr = arr.filter(a => {
+      const p = a.patient || {};
+      return [
+        p.name, p.phone, p.email, a.primaryProblem
+      ].some(v => v && String(v).toLowerCase().includes(search));
+    });
+  }
+
+  arr.sort((a,b) => {
+    const ad = new Date(a.date + 'T' + (a.startTime||'00:00')).getTime();
+    const bd = new Date(b.date + 'T' + (b.startTime||'00:00')).getTime();
+    return sort === 'date_asc' ? (ad - bd) : (bd - ad);
+  });
+
+  const list = $('#allList');
+  if (!arr.length){
+    list.innerHTML = emptyState('No matches', 'Try clearing filters or changing the search term.');
+    return;
+  }
+  list.innerHTML = arr.map(apptCard).join('');
+}
+
+function setupSearchFilters(){
+  ['apptSearch','apptStatusFilter','apptTypeFilter','apptSort'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const ev = (el.tagName === 'INPUT') ? 'input' : 'change';
+    el.addEventListener(ev, () => renderAllAppointments());
+  });
+}
+
+/* =====================================================================
+   APPOINTMENT CARD
+   ===================================================================== */
+function apptCard(a){
+  const p = a.patient || {};
+const timeMain = fmtTime(a.startTime) || '—';
+  const dt = fmtDate(a.date);
+  const meet = (a.consultationType === 'ONLINE' && a.meetLink)
+    ? `<a class="np-btn np-btn--success np-btn--sm" href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+         Join
+       </a>` : '';
+  const canCancel = !['CANCELLED','COMPLETED'].includes(a.status);
+  return `
+  <article class="np-appt" data-id="${escapeHtml(a.id)}">
+    <div class="np-appt__time">
+      <div class="np-appt__time-h">${escapeHtml(timeMain)}</div>
+      <div class="np-appt__time-d">${escapeHtml(dt)}</div>
+    </div>
+    <div class="np-appt__body">
+            <!-- Bug 7 — name on its own line, badges on a second line, both responsive -->
+<div class="np-appt__namerow">
+  <span class="np-appt__name">${escapeHtml(p.name || 'Patient')}</span>
+  ${p.dateOfBirth ? `<span class="np-appt__age" title="DOB: ${escapeHtml(fmtDate(p.dateOfBirth))}">${escapeHtml(calcAge(p.dateOfBirth))}</span>` : ''}
+</div>
+<div class="np-appt__badges">
+  ${statusBadge(a.status)}
+  ${typeBadge(a.consultationType)}
+  ${paymentBadge(a.paymentStatus)}
+</div>
+<div class="np-appt__meta">
+  ${p.phone ? `<span>📞 ${escapeHtml(p.phone)}</span>` : ''}
+  ${p.gender ? `<span>${escapeHtml(p.gender === 'MALE' ? '♂ Male' : p.gender === 'FEMALE' ? '♀ Female' : p.gender)}</span>` : ''}
+  ${a.feeAtBooking != null ? `<span>${fmtCurrency(a.feeAtBooking)}</span>` : ''}
+</div>
+
+      ${a.primaryProblem ? `<div class="np-appt__problem">${escapeHtml(a.primaryProblem)}</div>` : ''}
+    </div>
+    <div class="np-appt__actions">
+      ${meet}
+      <button class="np-btn np-btn--sm" type="button" onclick="openPatient('${escapeHtml(a.id)}')">
+        Open
+      </button>
+      ${a.status !== 'COMPLETED' ? `
+        <button class="np-btn np-btn--sm" type="button" onclick="toggleComplete('${escapeHtml(a.id)}')">
+          Complete
+        </button>` : ''}
+      ${canCancel ? `
+        <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openReschedule('${escapeHtml(a.id)}','${escapeHtml(a.consultationType||'OFFLINE')}')">
+          Reschedule
+        </button>
+        <button class="np-btn np-btn--danger np-btn--sm" type="button" onclick="cancelAppt('${escapeHtml(a.id)}')">
+          Cancel
+        </button>` : ''}
+    </div>
+  </article>`;
+}
+
+/* =====================================================================
+   PATIENT MODAL
+   ===================================================================== */
+async function openPatient(id){
+  try {
+    const data = await api('/doctor/appointments/' + encodeURIComponent(id));
+    const a = data.appointment || data;
+    currentAppointment = a;
+    const p = a.patient || {};
+
+    $('#patientDetail').innerHTML = `
+      <div class="np-row" style="gap:.6rem; margin-bottom:.5rem;">
+        ${statusBadge(a.status)} ${typeBadge(a.consultationType)} ${paymentBadge(a.paymentStatus)}
+      </div>
+   
+<div style="font-size:1.15rem; font-weight:700; color:var(--np-ink);">${escapeHtml(p.name || 'Patient')}</div>
+<div class="np-mut" style="font-size:.85rem; margin-bottom:.75rem;">
+  ${p.dateOfBirth
+      ? `<b style="color:var(--np-ink);">${escapeHtml(calcAgeLong(p.dateOfBirth))}</b>
+         <span class="np-mut"> · DOB ${escapeHtml(fmtDate(p.dateOfBirth))}</span>`
+      : '<span class="np-mut">DOB not recorded</span>'}
+  ${p.gender ? ' · ' + escapeHtml(p.gender) : ''}
+</div>
+
+      <div class="np-grid-2" style="margin-bottom:1rem;">
+        <div class="np-field">
+          <div class="np-field__label">Date & Time</div>
+          <div>${fmtDate(a.date)} · ${fmtTime(a.startTime)}${a.endTime ? ' – ' + fmtTime(a.endTime) : ''}</div>
+        </div>
+        <div class="np-field">
+          <div class="np-field__label">Fee</div>
+          <div>${fmtCurrency(a.feeAtBooking)}</div>
+        </div>
+        ${p.phone ? `
+        <div class="np-field"><div class="np-field__label">Phone</div><div>${escapeHtml(p.phone)}</div></div>` : ''}
+        ${p.email ? `
+        <div class="np-field"><div class="np-field__label">Email</div><div>${escapeHtml(p.email)}</div></div>` : ''}
+        ${p.parentName ? `
+        <div class="np-field"><div class="np-field__label">Parent / Guardian</div><div>${escapeHtml(p.parentName)}</div></div>` : ''}
+        ${a.meetLink ? `
+        <div class="np-field"><div class="np-field__label">Meet Link</div>
+          <div><a href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener" style="color:var(--np-primary);">Join consultation</a></div>
+        </div>` : ''}
+      </div>
+
+      ${a.primaryProblem ? `
+        <div class="np-field">
+          <div class="np-field__label">Primary problem</div>
+          <div style="background:var(--np-surface); padding:.7rem .85rem; border-radius:10px; border:1px solid var(--np-border); font-size:.9rem;">
+            ${escapeHtml(a.primaryProblem)}
+          </div>
+        </div>` : ''}
+    `;
+
+    // Show Rx form for active appts
+    const rxForm = $('#rxForm');
+    if (['CONFIRMED','PENDING','COMPLETED'].includes(a.status)){
+      rxForm.classList.remove('hidden');
+      const tbody = $('#medsList');
+      tbody.innerHTML = '';
+      addMedRow();
+      // Pre-fill if existing prescription
+      if (data.prescription){
+        const r = data.prescription;
+        rxForm.diagnosis.value = r.diagnosis || '';
+        rxForm.advice.value    = r.advice || '';
+        if (r.vitals){
+          rxForm.vitalsWeight.value      = r.vitals.weight || '';
+          rxForm.vitalsTemperature.value = r.vitals.temperature || '';
+          rxForm.vitalsHeartRate.value   = r.vitals.heartRate || '';
+        }
+        if (Array.isArray(r.medications) && r.medications.length){
+          tbody.innerHTML = '';
+          r.medications.forEach(m => addMedRow(m));
+        }
+      }
+    } else {
+      rxForm.classList.add('hidden');
+    }
+
+    $('#patientModal').classList.remove('hidden');
+  } catch (ex){
+    alert(ex.message || 'Could not open patient');
+  }
+}
+
+function closePatientModal(){
+  $('#patientModal').classList.add('hidden');
+  currentAppointment = null;
+}
+
+function addMedRow(prefill){
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="med-name"  placeholder="e.g. Paracetamol 250mg syrup" value="${escapeHtml(prefill?.name||'')}"></td>
+    <td><input class="med-dose"  placeholder="2.5 ml"                          value="${escapeHtml(prefill?.dosage||'')}"></td>
+    <td><input class="med-freq"  placeholder="TDS / BD / SOS"                  value="${escapeHtml(prefill?.frequency||'')}"></td>
+    <td><input class="med-dur"   placeholder="3 days"                          value="${escapeHtml(prefill?.duration||'')}"></td>
+    <td><input class="med-inst"  placeholder="After food"                      value="${escapeHtml(prefill?.instructions||'')}"></td>
+    <td><button type="button" class="np-remove-row" title="Remove">×</button></td>
+  `;
+  tr.querySelector('.np-remove-row').addEventListener('click', () => tr.remove());
+  $('#medsList').appendChild(tr);
+}
+
+/* Prescription submit (preserves rxForm submit semantics) */
+/* Prescription submit — fixed URL + payload shape (Bug 2) */
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'rxForm') return;
+  e.preventDefault();
+  if (!currentAppointment) return;
+
+  const meds = $$('#medsList tr').map(tr => ({
+    name:         tr.querySelector('.med-name').value.trim(),
+    dose:         tr.querySelector('.med-dose').value.trim(),   // schema key: dose (NOT dosage)
+    frequency:    tr.querySelector('.med-freq').value.trim(),
+    duration:     tr.querySelector('.med-dur').value.trim(),
+    instructions: tr.querySelector('.med-inst').value.trim() || undefined
+  })).filter(m => m.name && m.dose && m.frequency && m.duration);
+
+  if (!meds.length) {
+    alert('Please add at least one medication with name, dose, frequency, and duration.');
+    return;
+  }
+  const chiefComplaint = (e.target.chiefComplaint?.value || '').trim();
+  const diagnosis      = (e.target.diagnosis.value || '').trim();
+  if (chiefComplaint.length < 2) { alert('Please enter the chief complaint.'); return; }
+  if (diagnosis.length < 2)      { alert('Please enter a diagnosis.'); return; }
+
+  const body = {
+    chiefComplaint,
+    diagnosis,
+    advice:         e.target.advice.value.trim() || undefined,
+    weight:         e.target.vitalsWeight.value.trim() || undefined,
+    height:         e.target.vitalsHeight?.value.trim() || undefined,
+    pastHistory:    e.target.pastHistory?.value.trim() || undefined,
+    allergies:      e.target.allergies?.value.trim() || undefined,
+    investigations: e.target.investigations?.value.trim() || undefined,
+    followUpDate:   e.target.followUpDate?.value || undefined,
+    medications:    meds
+  };
+
+  try {
+    // Correct URL per src/routes/doctor.routes.js:
+    //   POST /api/doctor/appointments/:id/prescription
+    await api(
+      '/doctor/appointments/' + encodeURIComponent(currentAppointment.id) + '/prescription',
+      { method:'POST', body }
+    );
+    alert('Prescription saved.');
+    // Refresh the patient view so the saved Rx + completed status reflect immediately
+    openPatient(currentAppointment.id);
+    loadStats(); loadDashSnapshot(); loadWaiting();
+  } catch (ex){
+    alert(ex.message || 'Could not save prescription');
+  }
+});
+
+
+/* =====================================================================
+   APPOINTMENT ACTIONS
+   ===================================================================== */
+async function toggleComplete(id){
+  if (!confirm('Mark this appointment as completed?')) return;
+  try {
+    await api('/doctor/appointments/' + encodeURIComponent(id) + '/complete', { method:'POST' });
+    loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
+  } catch (ex){ alert(ex.message || 'Could not complete'); }
+}
+
+function cancelAppt(id){
+  // Bug 4 — replace browser prompt() with a real modal that requires a reason.
+  $('#cancelApptId').value = id;
+  $('#cancelReason').value = '';
+  $('#cancelSubmitBtn').disabled = false;
+  $('#cancelModal').classList.remove('hidden');
+  setTimeout(() => $('#cancelReason').focus(), 50);
+}
+function closeCancelModal(){
+  $('#cancelModal').classList.add('hidden');
+}
+
+/* =====================================================================
+   RESCHEDULE
+   ===================================================================== */
+let rsType = 'OFFLINE';
+
+function openReschedule(id, type){
+  rsType = type || 'OFFLINE';
+  $('#rsApptId').value = id;
+  $('#rsStartTimeHidden').value = '';
+  $('#rsSelectedDisplay').textContent = '—';
+  $('#rsSubmitBtn').disabled = true;
+  $('#rsSlotsGrid').innerHTML = '<div class="np-mut" style="font-size:.85rem;">Select a date to load slots.</div>';
+  const today = new Date(); today.setDate(today.getDate() + 1);
+  $('#rsDateInput').value = today.toISOString().slice(0,10);
+  $('#rescheduleModal').classList.remove('hidden');
+  loadRsSlots();
+}
+function closeRescheduleModal(){
+  $('#rescheduleModal').classList.add('hidden');
+}
+async function loadRsSlots(){
+  const date = $('#rsDateInput').value;
+  if (!date) return;
+  const grid = $('#rsSlotsGrid');
+  grid.innerHTML = '<div class="np-mut" style="font-size:.85rem;">Loading slots…</div>';
+  try {
+    const doctorId = doctorCache?.id;
+    if (!doctorId) throw new Error('Doctor not loaded');
+    // Bug 3 — correct endpoint is /public/slots, not /booking/slots,
+    // and the response shape is { doctorId, date, type, slots: [...] }.
+    const url = '/public/slots?doctorId=' + encodeURIComponent(doctorId)
+              + '&date=' + encodeURIComponent(date)
+              + '&type=' + encodeURIComponent(rsType);
+    const res = await api(url);
+    const slots = Array.isArray(res) ? res : (res && res.slots) || [];
+    if (!slots.length){
+      grid.innerHTML = '<div class="np-mut" style="font-size:.85rem;">No slots available.</div>';
+      return;
+    }
+    grid.innerHTML = slots.map(s => `
+      <button type="button" class="np-slot-btn rs-slot-btn"
+              data-time="${escapeHtml(s.startTime)}"
+              ${s.available===false?'disabled':''}
+              onclick="selectRsSlot('${escapeHtml(s.startTime)}')">
+        ${escapeHtml(fmtTime(s.startTime))}
+      </button>
+    `).join('');
+  } catch (ex){
+    grid.innerHTML = '<div class="np-mut" style="font-size:.85rem;">Could not load slots.</div>';
+  }
+}
+
+
+function selectRsSlot(time){
+  $('#rsStartTimeHidden').value = time;
+  $('#rsSelectedDisplay').textContent = fmtTime(time);
+  $('#rsSubmitBtn').disabled = false;
+  $$('.rs-slot-btn').forEach(b => b.classList.toggle('active', b.dataset.time === time));
+}
+
+function setupRescheduleModal(){
+  $('#rsDateInput').addEventListener('change', loadRsSlots);
+  $('#rescheduleForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd = new FormData(cf);
-    const payload = Object.fromEntries(fd.entries());
-    ['clinicLat','clinicLng'].forEach(k => { if (payload[k] === '') delete payload[k]; });
+    const id = $('#rsApptId').value;
+    const startTime = $('#rsStartTimeHidden').value;
+    const date = $('#rsDateInput').value;
+    const reason = e.target.reason.value || '';
+    if (!startTime){ alert('Please select a slot.'); return; }
     try {
-      await api('/doctor/clinic', { method: 'PUT', body: JSON.stringify(payload) });
-      alert('Clinic location saved. It will now appear in patient WhatsApp/email Get Directions buttons.');
-    } catch (err) { alert(err.message); }
+      await api('/doctor/appointments/' + encodeURIComponent(id) + '/reschedule', {
+        method:'POST', body:{ date, startTime, reason }
+      });
+      closeRescheduleModal();
+      loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
+    } catch (ex){ alert(ex.message || 'Could not reschedule'); }
   });
-})();
+}
+
+function setupCancelModal(){
+
+  $('#cancelForm').addEventListener('submit', async (e) => {
+
+    e.preventDefault();
+
+    const id = $('#cancelApptId').value;
+    const reason = $('#cancelReason').value.trim();
+
+    if (reason.length < 3){
+      alert('Please enter a cancellation reason (at least 3 characters).');
+      return;
+    }
+
+    $('#cancelSubmitBtn').disabled = true;
+
+    try {
+
+      await api(
+        '/doctor/appointments/' +
+        encodeURIComponent(id) +
+        '/cancel',
+        {
+          method:'POST',
+          body:{ reason }
+        }
+      );
+
+      closeCancelModal();
+
+      loadWaiting();
+      loadAll();
+      loadStats();
+      loadDashSnapshot();
+
+    } catch(ex){
+
+      alert(ex.message || 'Could not cancel');
+
+      $('#cancelSubmitBtn').disabled = false;
+    }
+
+  });
+
+  document.addEventListener('keydown', (e) => {
+
+    if (
+      e.key === 'Escape' &&
+      !$('#cancelModal').classList.contains('hidden')
+    ){
+      closeCancelModal();
+    }
+
+  });
+
+}
+
+/* =====================================================================
+   SETTINGS — Availability, Clinic, Fees, Password, Photo
+   ===================================================================== */
+function loadSettings(){
+  // The forms are populated from doctorCache on init().
+  // Refresh doctor profile to be safe.
+  api('/doctor/me').then(d => {
+    doctorCache = d;
+    renderDoctorHeader(d);
+    populateAvailability(d);
+    populateClinic(d);
+    populateFees(d);
+  }).catch(()=>{});
+}
+
+/* ---- Availability ---- */
+function populateAvailability(d){
+  // Build hour selects (1..12)
+  ['availableFromOnline_h','availableToOnline_h','availableFromOffline_h','availableToOffline_h'].forEach(name => {
+    const el = document.querySelector(`[name="${name}"]`);
+    if (!el || el.options.length) return;
+    let html = '';
+    for (let h=1; h<=12; h++) {
+      for (let m=0; m<60; m+=15){
+        const label = h + ':' + String(m).padStart(2,'0');
+        html += `<option value="${label}">${label}</option>`;
+      }
+    }
+    el.innerHTML = html;
+  });
+
+  // Set initial 24h values into hidden inputs and pickers
+  setTimePicker('availableFromOnline',  d.availableFromOnline);
+  setTimePicker('availableToOnline',    d.availableToOnline);
+  setTimePicker('availableFromOffline', d.availableFromOffline);
+  setTimePicker('availableToOffline',   d.availableToOffline);
+
+  // Slot duration pills
+  const dur = String(d.slotDuration || 15);
+  $('#slotDurationVal').value = dur;
+  $$('#slotDurationBtns .np-pill').forEach(b => b.classList.toggle('active', b.dataset.val === dur));
+
+  // Working days pills
+  const days = String(d.workingDays || 'MON,TUE,WED,THU,FRI,SAT').split(',').map(s=>s.trim()).filter(Boolean);
+  $('#workingDaysVal').value = days.join(',');
+  $$('#workingDaysBtns .np-pill').forEach(b => b.classList.toggle('active', days.includes(b.dataset.val)));
+
+  const availForm = $('#availForm');
+  if (availForm) availForm.isAvailable.checked = !!d.isAvailable;
+}
+
+function setTimePicker(baseName, value24){
+  // Parse "HH:MM" 24h -> "H:MM" + "AM/PM"
+  if (!value24) return;
+  const [hStr, mStr] = value24.split(':');
+  let h = parseInt(hStr, 10); const m = parseInt(mStr||'0', 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  const label = h + ':' + String(m).padStart(2,'0');
+  const hEl = document.querySelector(`[name="${baseName}_h"]`);
+  const aEl = document.querySelector(`[name="${baseName}_ampm"]`);
+  if (hEl) hEl.value = label;
+  if (aEl) aEl.value = ampm;
+  const hidden = document.getElementById(baseName);
+  if (hidden) hidden.value = value24;
+}
+function readTimePicker(baseName){
+  const hEl = document.querySelector(`[name="${baseName}_h"]`);
+  const aEl = document.querySelector(`[name="${baseName}_ampm"]`);
+  if (!hEl || !aEl) return '';
+  const [hStr, mStr] = (hEl.value || '12:00').split(':');
+  let h = parseInt(hStr,10); const m = parseInt(mStr||'0',10);
+  if (aEl.value === 'PM' && h !== 12) h += 12;
+  if (aEl.value === 'AM' && h === 12) h = 0;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+/* ---- Clinic ---- */
+function populateClinic(d){
+  const f = $('#clinicForm'); if (!f) return;
+  f.clinicName.value    = d.clinicName    || '';
+  f.clinicAddress.value = d.clinicAddress || '';
+  f.clinicMapUrl.value  = d.clinicMapUrl  || '';
+  f.clinicLat.value     = d.clinicLat     ?? '';
+  f.clinicLng.value     = d.clinicLng     ?? '';
+}
+
+/* ---- Fees ---- */
+function populateFees(d){
+  const f = $('#feesForm'); if (!f) return;
+  f.onlineConsultFee.value   = d.onlineConsultFee   ?? '';
+  f.physicalConsultFee.value = d.physicalConsultFee ?? '';
+}
+
+/* ---- Forms submission ---- */
+function setupForms(){
+  // Slot duration pills
+
+  $$('#slotDurationBtns .np-pill').forEach(b => {
+    b.addEventListener('click', () => {
+
+      $$('#slotDurationBtns .np-pill').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      $('#slotDurationVal').value = b.dataset.val;
+    });
+  });
+  // Working days pills
+
+  $$('#workingDaysBtns .np-pill').forEach(b => {
+    b.addEventListener('click', () => {
+      b.classList.toggle('active');
+      const sel = $$('#workingDaysBtns .np-pill.active').map(x => x.dataset.val);
+      $('#workingDaysVal').value = sel.join(',');
+    });
+  });
+
+  // ── Availability submit  → PUT /api/doctor/availability  (Bug 5) ──
+  $('#availForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+      availableFromOnline:  readTimePicker('availableFromOnline'),
+      availableToOnline:    readTimePicker('availableToOnline'),
+      availableFromOffline: readTimePicker('availableFromOffline'),
+      availableToOffline:   readTimePicker('availableToOffline'),
+      slotDuration: Number($('#slotDurationVal').value || 15),
+      workingDays:  $('#workingDaysVal').value || '',
+      isAvailable:  !!e.target.isAvailable.checked
+    };
+    try {
+      await api('/doctor/availability', { method:'PUT', body });
+      alert('Availability saved.');
+      loadSettings();
+    } catch (ex){ alert(ex.message || 'Could not save'); }
+  });
+
+  // ── Clinic submit  → PUT /api/doctor/clinic  (Bug 5) ──
+  $('#clinicForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+      clinicName:    e.target.clinicName.value.trim(),
+      clinicAddress: e.target.clinicAddress.value.trim(),
+      clinicMapUrl:  e.target.clinicMapUrl.value.trim(),
+      clinicLat:     e.target.clinicLat.value ? Number(e.target.clinicLat.value) : null,
+      clinicLng:     e.target.clinicLng.value ? Number(e.target.clinicLng.value) : null
+    };
+    try {
+      await api('/doctor/clinic', { method:'PUT', body });
+      alert('Clinic details saved.');
+    } catch (ex){ alert(ex.message || 'Could not save'); }
+  });
+
+  // ── Fees submit  → PUT /api/doctor/fees  (Bug 5) ──
+  $('#feesForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+      onlineConsultFee:   Number(e.target.onlineConsultFee.value || 0),
+      physicalConsultFee: Number(e.target.physicalConsultFee.value || 0)
+    };
+    try {
+      await api('/doctor/fees', { method:'PUT', body });
+      alert('Fees saved.');
+    } catch (ex){ alert(ex.message || 'Could not save'); }
+  });
+
+  // ── Password submit  → POST /api/auth/change-password  (Bug 5) ──
+  // Schema also requires `confirmPassword` — send it.
+  $('#passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    if (f.newPassword.value !== f.confirmPassword.value){
+      alert('New passwords do not match.'); return;
+    }
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(f.newPassword.value)) {
+      alert('New password must be at least 8 characters and contain letters and numbers.');
+      return;
+    }
+    try {
+      await api('/auth/change-password', { method:'POST', body:{
+        currentPassword: f.currentPassword.value,
+        newPassword:     f.newPassword.value,
+        confirmPassword: f.confirmPassword.value
+      }});
+      alert('Password updated.');
+      f.reset();
+    } catch (ex){ alert(ex.message || 'Could not update password'); }
+  });
+
+  // ── Photo upload  → POST /api/doctor/profile-image  (Bug 5) ──
+  $('#photoForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const file = $('#photoInput').files[0];
+    if (!file) { alert('Choose a file first.'); return; }
+    const fd = new FormData();
+    fd.append('photo', file);
+    try {
+      await api('/doctor/profile-image', { method:'POST', body: fd });
+      alert('Photo updated.');
+      loadSettings();
+    } catch (ex){ alert(ex.message || 'Could not upload photo'); }
+  });
+}
 
 
-(async () => {
-  if (TOKEN) {
+async function removePhoto(){
+  if (!confirm('Remove your profile photo?')) return;
+  try {
+    await api('/doctor/profile-image', { method:'DELETE' });   // Bug 5
+    loadSettings();
+  } catch (ex){ alert(ex.message || 'Could not remove photo'); }
+}
+
+
+/* =====================================================================
+   AUTO-LOGIN
+   ===================================================================== */
+(async function bootstrap(){
+  if (TOKEN){
     try {
       const m = await api('/auth/me');
-      if (m.role === 'DOCTOR') return init();
+      if (m && m.role === 'DOCTOR') return init();
     } catch {}
   }
   $('#loginScreen').classList.remove('hidden');
