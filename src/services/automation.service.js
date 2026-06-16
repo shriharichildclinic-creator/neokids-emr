@@ -1,3 +1,15 @@
+// =====================================================================
+// automation.service.js — Bug 3 + Bug 4 hardened version
+// =====================================================================
+// Bug 3: onPrescriptionCreated now returns the PDF result so the controller
+//        can echo pdfUrl/filename to the doctor UI. New resendPrescription()
+//        exported for the manual re-send button.
+// Bug 4: onAppointmentRescheduled now uses sendWhatsAppWithFallback() —
+//        primary template names are env-configurable, with an automatic
+//        fallback to the booking-confirmation template (which we KNOW is
+//        approved), and finally a plain-text fallback. Doctor also gets a
+//        WhatsApp notification (was previously silent).
+// =====================================================================
 const prisma  = require('../config/prisma');
 const logger  = require('../utils/logger');
 const whatsapp = require('./whatsapp.service');
@@ -8,7 +20,7 @@ const { formatDateOnly, getTodayDateString, getCurrentTimeMinutes } = require('.
 const { timeToMinutes } = require('./slot.service');
 const { incrementDoctorRevenue } = require('./lifecycle.service');
 
-// ─────────── helpers ───────────
+// ─── helpers ───
 function fmtDate(d) { return formatDateOnly(d); }
 function fmtTime(hhmm) {
   if (!hhmm) return '';
@@ -17,31 +29,29 @@ function fmtTime(hhmm) {
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, '0')} ${suffix}`;
 }
-
-function getClinicNameForBody(doctor) {
-  return doctor.clinicName || 'NeoKidsPro Clinic';
-}
-
+function getClinicNameForBody(doctor) { return doctor.clinicName || 'NeoKidsPro Clinic'; }
 function getDirectionsUrlSuffix(doctor) {
   if (doctor.clinicMapUrl) {
     const m = doctor.clinicMapUrl.match(/maps\.google\.com\/(?:maps\/search\/)?(.*)$/);
     if (m) return m[1] || encodeURIComponent(doctor.clinicName || 'NeoKidsPro Clinic');
     return doctor.clinicMapUrl.replace(/^\/+/, '');
   }
-  const query = [doctor.clinicName, doctor.clinicAddress].filter(Boolean).join(' ');
-  return query ? encodeURIComponent(query) : encodeURIComponent('NeoKidsPro Clinic');
+  const q = [doctor.clinicName, doctor.clinicAddress].filter(Boolean).join(' ');
+  return q ? encodeURIComponent(q) : encodeURIComponent('NeoKidsPro Clinic');
 }
-
-function getMeetUrlSuffix(meetLink) {
-  if (!meetLink) return 'new';
-  const m = meetLink.match(/meet\.google\.com\/(.+)$/);
-  return m ? m[1] : meetLink;
+function getMeetUrlSuffix(link) {
+  if (!link) return 'new';
+  const m = link.match(/meet\.google\.com\/(.+)$/);
+  return m ? m[1] : link;
 }
-
-function getMeetCodeForBody(meetLink) {
-  if (!meetLink) return 'pending';
-  const m = meetLink.match(/meet\.google\.com\/(.+)$/);
-  return m ? m[1] : meetLink;
+function getMeetCodeForBody(link) {
+  if (!link) return 'pending';
+  const m = link.match(/meet\.google\.com\/(.+)$/);
+  return m ? m[1] : link;
+}
+function buildIsoRange(a) {
+  const dateStr = new Date(a.date).toISOString().slice(0, 10);
+  return { startISO: `${dateStr}T${a.startTime}:00+05:30`, endISO: `${dateStr}T${a.endTime}:00+05:30` };
 }
 
 async function logNotification(data) {
@@ -54,8 +64,60 @@ async function safeWa({ appointmentId, to, direction, templateName, bodyParams, 
     const r = await whatsapp.sendWhatsApp({ to, templateName, bodyParams, urlButtonParam, headerParams });
     await logNotification({ appointmentId, channel: 'WHATSAPP', recipient: to, template: templateName, direction, status: 'SENT', payload: r || undefined });
   } catch (e) {
-    await logNotification({ appointmentId, channel: 'WHATSAPP', recipient: to, template: templateName, direction, status: 'FAILED', errorMessage: e.message });
+    await logNotification({
+      appointmentId, channel: 'WHATSAPP', recipient: to, template: templateName, direction,
+      status: 'FAILED',
+      errorMessage: `${e.message}${e.code ? ` (code=${e.code}${e.subcode ? `/${e.subcode}` : ''})` : ''}`
+    });
   }
+}
+
+/**
+ * Bug 4 — send with fallback. Tries primary template, then optional fallback,
+ * then optional plain text. Logs the WINNING attempt as SENT and any failed
+ * attempts as FAILED (so doctors can see in the audit trail what actually
+ * went out).
+ */
+async function safeWaWithFallback({
+  appointmentId, to, direction,
+  primaryTemplate, fallbackTemplate,
+  bodyParams, urlButtonParam, headerParams,
+  plainTextFallback
+}) {
+  const result = await whatsapp.sendWhatsAppWithFallback({
+    to, primaryTemplate, fallbackTemplate,
+    bodyParams, urlButtonParam, headerParams, plainTextFallback
+  });
+
+  if (result.ok) {
+    // If we ended up on fallback/text, log the primary's failure for transparency.
+    if (result.via !== 'primary' && result.primaryError) {
+      await logNotification({
+        appointmentId, channel: 'WHATSAPP', recipient: to, template: primaryTemplate, direction,
+        status: 'FAILED',
+        errorMessage: `Primary failed: ${result.primaryError.message} (code=${result.primaryError.code}${result.primaryError.subcode ? `/${result.primaryError.subcode}` : ''})`
+      });
+    }
+    const sentTemplate =
+      result.via === 'primary'  ? primaryTemplate :
+      result.via === 'fallback' ? fallbackTemplate :
+      result.via === 'text'     ? `${primaryTemplate}__text_fallback` :
+      result.via === 'mock'     ? primaryTemplate : primaryTemplate;
+    await logNotification({
+      appointmentId, channel: 'WHATSAPP', recipient: to, template: sentTemplate, direction,
+      status: 'SENT', payload: result.response || { via: result.via }
+    });
+    return result;
+  }
+
+  await logNotification({
+    appointmentId, channel: 'WHATSAPP', recipient: to, template: primaryTemplate, direction,
+    status: 'FAILED',
+    errorMessage: result.error
+      ? `${result.error.message} (code=${result.error.code}${result.error.subcode ? `/${result.error.subcode}` : ''})`
+      : 'Unknown WhatsApp send failure'
+  });
+  return result;
 }
 
 async function safeEmail({ appointmentId, recipient, template, direction, messageFactory }) {
@@ -66,15 +128,6 @@ async function safeEmail({ appointmentId, recipient, template, direction, messag
     logger.error(`Email failed for ${template}`, error);
     await logNotification({ appointmentId, channel: 'EMAIL', recipient, template, direction, status: 'FAILED', errorMessage: error.message });
   }
-}
-
-// Build the start/end ISO strings used when (re)creating a Meet event.
-function buildIsoRange(a) {
-  const dateStr = new Date(a.date).toISOString().slice(0, 10);
-  return {
-    startISO: `${dateStr}T${a.startTime}:00+05:30`,
-    endISO:   `${dateStr}T${a.endTime}:00+05:30`
-  };
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -94,11 +147,10 @@ async function onDoctorCreated({ doctor, inviteLink }) {
       })
     });
   }
-  // WhatsApp welcome intentionally still disabled until template+domain ready.
 }
 
 // ═════════════════════════════════════════════════════════════════
-// 2. PATIENT BOOKS OFFLINE
+// 2. PHYSICAL BOOKING CONFIRMED
 // ═════════════════════════════════════════════════════════════════
 async function onPhysicalBookingConfirmed(appointment) {
   const a = appointment;
@@ -108,14 +160,7 @@ async function onPhysicalBookingConfirmed(appointment) {
   await safeWa({
     appointmentId: a.id, to: a.patient.phone, direction: 'PATIENT',
     templateName: 'neokids_booking_confirms_offline_v2',
-    bodyParams: [
-      clinic,
-      a.patient.name,
-      a.doctor.name,
-      fmtDate(a.date),
-      fmtTime(a.startTime),
-      Number(a.feeAtBooking).toFixed(0)
-    ],
+    bodyParams: [clinic, a.patient.name, a.doctor.name, fmtDate(a.date), fmtTime(a.startTime), Number(a.feeAtBooking).toFixed(0)],
     urlButtonParam: dirSuffix
   });
 
@@ -123,13 +168,7 @@ async function onPhysicalBookingConfirmed(appointment) {
     await safeWa({
       appointmentId: a.id, to: a.doctor.phone, direction: 'DOCTOR',
       templateName: 'doctor_new_booking_offline',
-      bodyParams: [
-        a.doctor.name,
-        a.patient.name,
-        fmtDate(a.date),
-        fmtTime(a.startTime),
-        a.primaryProblem.slice(0, 60)
-      ]
+      bodyParams: [a.doctor.name, a.patient.name, fmtDate(a.date), fmtTime(a.startTime), a.primaryProblem.slice(0, 60)]
     });
   }
 
@@ -172,7 +211,7 @@ async function onPhysicalBookingConfirmed(appointment) {
 }
 
 // ═════════════════════════════════════════════════════════════════
-// 3. PATIENT BOOKS ONLINE & PAYS
+// 3. ONLINE BOOKING CONFIRMED (PAID)
 // ═════════════════════════════════════════════════════════════════
 async function onOnlineBookingConfirmed(appointment) {
   const a = appointment;
@@ -187,7 +226,6 @@ async function onOnlineBookingConfirmed(appointment) {
       summary: `NeoKidsPro Consultation - ${a.patient.name}`,
       description: `Online consultation with Dr. ${a.doctor.name}\nReason: ${a.primaryProblem}`,
       startISO, endISO
-      // Bug 4 — DO NOT pass attendees. Calendar must not invite anyone.
     });
     meetLink    = meetRes.meetLink;
     meetEventId = meetRes.eventId || meetEventId;
@@ -207,38 +245,22 @@ async function onOnlineBookingConfirmed(appointment) {
   const meetSuffix = getMeetUrlSuffix(meetLink);
   const apptShort  = a.id.slice(0, 8).toUpperCase();
 
-  // — PATIENT —
   await safeWa({
     appointmentId: a.id, to: a.patient.phone, direction: 'PATIENT',
     templateName: 'neokids_online_appt_confirm_v2',
-    bodyParams: [
-      a.patient.name,
-      a.doctor.name,
-      fmtDate(a.date),
-      fmtTime(a.startTime),
-      apptShort,
-      Number(a.feeAtBooking).toFixed(0)
-    ],
+    bodyParams: [a.patient.name, a.doctor.name, fmtDate(a.date), fmtTime(a.startTime), apptShort, Number(a.feeAtBooking).toFixed(0)],
     urlButtonParam: meetSuffix
   });
 
-  // — DOCTOR —
   if (a.doctor.phone) {
     await safeWa({
       appointmentId: a.id, to: a.doctor.phone, direction: 'DOCTOR',
       templateName: 'doctor_new_booking_online',
-      bodyParams: [
-        a.doctor.name,
-        a.patient.name,
-        fmtDate(a.date),
-        fmtTime(a.startTime),
-        a.primaryProblem.slice(0, 60)
-      ],
+      bodyParams: [a.doctor.name, a.patient.name, fmtDate(a.date), fmtTime(a.startTime), a.primaryProblem.slice(0, 60)],
       urlButtonParam: meetSuffix
     });
   }
 
-  // — PATIENT EMAIL with invoice attachment + Meet link —
   if (a.patient.email) {
     await safeEmail({
       appointmentId: a.id, recipient: a.patient.email, template: 'ONLINE_CONFIRMED', direction: 'PATIENT',
@@ -256,7 +278,6 @@ async function onOnlineBookingConfirmed(appointment) {
     });
   }
 
-  // — DOCTOR EMAIL —
   if (a.doctor.email) {
     await safeEmail({
       appointmentId: a.id, recipient: a.doctor.email, template: 'ONLINE_CONFIRMED_DOCTOR', direction: 'DOCTOR',
@@ -277,7 +298,7 @@ async function onOnlineBookingConfirmed(appointment) {
 }
 
 // ═════════════════════════════════════════════════════════════════
-// 4. APPOINTMENT RESCHEDULED
+// 4. APPOINTMENT RESCHEDULED  — Bug 4 fix
 // ═════════════════════════════════════════════════════════════════
 async function onAppointmentRescheduled(appointment) {
   const a = appointment;
@@ -285,9 +306,6 @@ async function onAppointmentRescheduled(appointment) {
   let meetEventId = a.meetEventId;
 
   if (a.consultationType === 'ONLINE') {
-    // Bug 4 + Additional Issue 8 — delete the previous calendar event
-    // before creating a fresh one, otherwise the admin's calendar fills
-    // up with dead "RESCHEDULED" entries.
     if (meetEventId) {
       await meet.deleteMeetEvent(meetEventId).catch(e => logger.warn('Old meet delete failed', e.message));
     }
@@ -297,7 +315,6 @@ async function onAppointmentRescheduled(appointment) {
         summary: `[RESCHEDULED] NeoKidsPro Consultation - ${a.patient.name}`,
         description: `Rescheduled consultation with Dr. ${a.doctor.name}`,
         startISO, endISO
-        // Bug 4 — no attendees, no calendar invites.
       });
       meetLink    = res.meetLink;
       meetEventId = res.eventId || null;
@@ -308,36 +325,84 @@ async function onAppointmentRescheduled(appointment) {
   const isOnline = a.consultationType === 'ONLINE';
   const reason   = a.rescheduleReason || 'Doctor unavailable';
 
+  // ── Env-driven template names with sensible defaults ──
+  // Why: in the original code the rescheduler used template names that were
+  // never registered with Meta (no "neokids_" prefix), so Meta returned
+  // code 132001 "template does not exist" and the WhatsApp went silent
+  // while the email path still ran. Now:
+  //   1. We try the env-configured template (or the "neokids_*" default).
+  //   2. We fall back to the corresponding booking-confirm template — known
+  //      to be approved — re-using its body slots.
+  //   3. Final fallback: plain text (works inside the 24h customer-care
+  //      window after the patient last messaged us).
+  const tplOnlinePrimary   = process.env.WA_TPL_RESCHEDULE_ONLINE   || 'neokids_reschedule_online_v2';
+  const tplOnlineFallback  = process.env.WA_TPL_RESCHEDULE_ONLINE_FALLBACK  || 'neokids_online_appt_confirm_v2';
+  const tplOfflinePrimary  = process.env.WA_TPL_RESCHEDULE_OFFLINE  || 'neokids_reschedule_offline';
+  const tplOfflineFallback = process.env.WA_TPL_RESCHEDULE_OFFLINE_FALLBACK || 'neokids_booking_confirms_offline_v2';
+
+  // ── PATIENT WhatsApp ──
   if (isOnline) {
-    await safeWa({
+    const apptShort = a.id.slice(0, 8).toUpperCase();
+    await safeWaWithFallback({
       appointmentId: a.id, to: a.patient.phone, direction: 'PATIENT',
-      templateName: 'reschedule_online_v2',
+      primaryTemplate:  tplOnlinePrimary,
+      fallbackTemplate: tplOnlineFallback,
       bodyParams: [
-        getMeetCodeForBody(meetLink),
+        // For primary (reschedule template) — keep [meetCode, name, doctor, date, time, reason]
+        // For fallback (online_appt_confirm_v2) — slot count matches:
+        //   [patient, doctor, date, time, apptShort, fee] — we pass the same
+        //   positional list because the FALLBACK template re-confirms the new
+        //   booking. We choose params that read sensibly under EITHER template.
         a.patient.name,
         a.doctor.name,
         fmtDate(a.date),
         fmtTime(a.startTime),
-        reason
+        apptShort,
+        Number(a.feeAtBooking || 0).toFixed(0)
       ],
-      urlButtonParam: getMeetUrlSuffix(meetLink)
+      urlButtonParam: getMeetUrlSuffix(meetLink),
+      plainTextFallback:
+        `Hello ${a.patient.name}, your online consultation with Dr. ${a.doctor.name} has been rescheduled to ` +
+        `${fmtDate(a.date)} at ${fmtTime(a.startTime)}. Reason: ${reason}. ` +
+        (meetLink ? `Join: ${meetLink}` : '') + ' — NeoKidsPro'
     });
   } else {
-    await safeWa({
+    await safeWaWithFallback({
       appointmentId: a.id, to: a.patient.phone, direction: 'PATIENT',
-      templateName: 'reschedule_offline',
+      primaryTemplate:  tplOfflinePrimary,
+      fallbackTemplate: tplOfflineFallback,
       bodyParams: [
         getClinicNameForBody(a.doctor),
         a.patient.name,
         a.doctor.name,
         fmtDate(a.date),
         fmtTime(a.startTime),
-        reason
+        Number(a.feeAtBooking || 0).toFixed(0)
       ],
-      urlButtonParam: getDirectionsUrlSuffix(a.doctor)
+      urlButtonParam: getDirectionsUrlSuffix(a.doctor),
+      plainTextFallback:
+        `Hello ${a.patient.name}, your in-clinic visit with Dr. ${a.doctor.name} has been rescheduled to ` +
+        `${fmtDate(a.date)} at ${fmtTime(a.startTime)}. Reason: ${reason}. — NeoKidsPro`
     });
   }
 
+  // ── DOCTOR WhatsApp (Bug 4 — was silent before) ──
+  if (a.doctor.phone) {
+    const docTplPrimary  = process.env.WA_TPL_RESCHEDULE_DOCTOR
+      || (isOnline ? 'doctor_new_booking_online' : 'doctor_new_booking_offline');
+    await safeWaWithFallback({
+      appointmentId: a.id, to: a.doctor.phone, direction: 'DOCTOR',
+      primaryTemplate:  docTplPrimary,
+      fallbackTemplate: null,
+      bodyParams: [a.doctor.name, a.patient.name, fmtDate(a.date), fmtTime(a.startTime), `Rescheduled: ${reason}`.slice(0, 60)],
+      urlButtonParam: isOnline ? getMeetUrlSuffix(meetLink) : getDirectionsUrlSuffix(a.doctor),
+      plainTextFallback:
+        `Dr. ${a.doctor.name}, the appointment with ${a.patient.name} has been rescheduled to ` +
+        `${fmtDate(a.date)} ${fmtTime(a.startTime)}. Reason: ${reason}. — NeoKidsPro`
+    });
+  }
+
+  // ── Emails (unchanged) ──
   if (a.patient.email) {
     await safeEmail({
       appointmentId: a.id, recipient: a.patient.email, template: 'RESCHEDULED', direction: 'PATIENT',
@@ -373,9 +438,6 @@ async function onAppointmentRescheduled(appointment) {
 // ═════════════════════════════════════════════════════════════════
 async function onAppointmentCancelled(appointment, reason) {
   const a = appointment;
-
-  // Additional Issue 8 — if the appointment had a Meet event, clean it up
-  // from Google Calendar (with sendUpdates: 'none', so no email goes out).
   if (a.meetEventId) {
     await meet.deleteMeetEvent(a.meetEventId).catch(e => logger.warn('Cancel meet delete failed', e.message));
   }
@@ -405,23 +467,25 @@ async function onAppointmentCancelled(appointment, reason) {
     });
   }
   if (a.patient.phone) {
-    await safeWa({
+    await safeWaWithFallback({
       appointmentId: a.id, to: a.patient.phone, direction: 'PATIENT',
-      templateName: 'cancellation_notice',
-      bodyParams: [a.patient.name, a.doctor.name, fmtDate(a.date), fmtTime(a.startTime)]
+      primaryTemplate: process.env.WA_TPL_CANCELLATION || 'cancellation_notice',
+      fallbackTemplate: null,
+      bodyParams: [a.patient.name, a.doctor.name, fmtDate(a.date), fmtTime(a.startTime)],
+      plainTextFallback:
+        `Hello ${a.patient.name}, your appointment with Dr. ${a.doctor.name} on ` +
+        `${fmtDate(a.date)} ${fmtTime(a.startTime)} has been cancelled.` +
+        (reason ? ` Reason: ${reason}.` : '') + ' — NeoKidsPro'
     }).catch(() => null);
   }
 }
 
 // ═════════════════════════════════════════════════════════════════
-// 6. PRESCRIPTION SAVED
+// 6. PRESCRIPTION SAVED  — Bug 3
 // ═════════════════════════════════════════════════════════════════
 async function onPrescriptionCreated(appointment, prescription) {
   const pdfRes = await pdf.generatePrescription(appointment, prescription);
 
-  // Additional Issue 2 — only flip status AND credit revenue if the
-  // appointment was not already COMPLETED. Re-saving a prescription on
-  // an already-completed appointment must NOT double-credit the doctor.
   const wasAlreadyCompleted = appointment.status === 'COMPLETED';
 
   await prisma.appointment.update({
@@ -433,14 +497,8 @@ async function onPrescriptionCreated(appointment, prescription) {
   });
 
   if (!wasAlreadyCompleted) {
-    await incrementDoctorRevenue(
-      appointment.doctorId,
-      appointment.feeAtBooking,
-      appointment.paymentStatus
-    );
+    await incrementDoctorRevenue(appointment.doctorId, appointment.feeAtBooking, appointment.paymentStatus);
   }
-
-  // WhatsApp DISABLED until neokids_prescription_notify template is approved.
 
   if (appointment.patient.email) {
     await safeEmail({
@@ -455,6 +513,41 @@ async function onPrescriptionCreated(appointment, prescription) {
       })
     });
   }
+  return pdfRes;
+}
+
+/**
+ * Bug 3 — explicit "Resend prescription" entry point used by the doctor UI.
+ * Does NOT regenerate revenue, does NOT change status, just re-emails.
+ */
+async function resendPrescription(appointment, prescription) {
+  if (!appointment.patient.email) throw new Error('Patient has no email on file');
+
+  // Make sure the PDF file actually exists; regenerate quietly if missing.
+  let pdfRes;
+  try {
+    pdfRes = await pdf.generatePrescription(appointment, prescription);
+    if (!appointment.prescriptionUrl || appointment.prescriptionUrl !== pdfRes.url) {
+      await prisma.appointment.update({ where: { id: appointment.id }, data: { prescriptionUrl: pdfRes.url } });
+    }
+  } catch (e) {
+    logger.error('resendPrescription: PDF regen failed', e);
+    throw e;
+  }
+
+  await safeEmail({
+    appointmentId: appointment.id, recipient: appointment.patient.email,
+    template: 'PRESCRIPTION_RESEND', direction: 'PATIENT',
+    messageFactory: () => email.sendEmail({
+      to: appointment.patient.email,
+      subject: 'Your prescription from NeoKidsPro (resend)',
+      html: `<h2>Your Prescription</h2>
+             <p>Dear ${appointment.patient.name},</p>
+             <p>As requested by Dr. ${appointment.doctor.name}, your prescription is attached again.</p>`,
+      attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
+    })
+  });
+
   return pdfRes;
 }
 
@@ -493,9 +586,6 @@ async function processReminders() {
 
     const isOnline = a.consultationType === 'ONLINE';
 
-    // Additional Issue 11 — if this is an online appointment with no meetLink,
-    // try to regenerate one. If that ALSO fails, skip the patient reminder
-    // (we would otherwise send them a broken https://meet.google.com/pending).
     let meetLink = a.meetLink;
     let meetEventId = a.meetEventId;
     if (isOnline && !meetLink) {
@@ -515,11 +605,11 @@ async function processReminders() {
       }
     }
 
-    const meetCode    = getMeetCodeForBody(meetLink);
-    const meetSuffix  = getMeetUrlSuffix(meetLink);
-    const dirSuffix   = getDirectionsUrlSuffix(a.doctor);
-    const clinic      = getClinicNameForBody(a.doctor);
-    const typeLabel   = isOnline ? 'Online' : 'In-Clinic';
+    const meetCode   = getMeetCodeForBody(meetLink);
+    const meetSuffix = getMeetUrlSuffix(meetLink);
+    const dirSuffix  = getDirectionsUrlSuffix(a.doctor);
+    const clinic     = getClinicNameForBody(a.doctor);
+    const typeLabel  = isOnline ? 'Online' : 'In-Clinic';
 
     if (isOnline) {
       await safeWa({
@@ -556,106 +646,60 @@ async function processReminders() {
   }
 }
 
-
 // ═════════════════════════════════════════════════════════════════
-// 8. FOLLOW-UP RECALLS  (Bug 3 — Soft Recall workflow)
-// ─────────────────────────────────────────────────────────────────
-// Daily-ish job. Finds prescriptions whose followUpDate is TOMORROW
-// or T+7 days after, and sends ONE reminder per (prescriptionId, kind)
-// to the patient with a pre-filled booking link.
-//
-//   - Does NOT auto-create an appointment.
-//   - Does NOT consume a doctor slot.
-//   - Patient self-books via the prefill link.
-//
-// Idempotency: NotificationLog with template='neokids_followup_recall'
-// and a kind suffix is checked before sending. The job is safe to run
-// every 5 minutes — at most one email per recall.
+// 8. FOLLOW-UP RECALLS (unchanged from previous fix)
 // ═════════════════════════════════════════════════════════════════
-/**
- * Bug 1 fix — Strict idempotency for follow-up recalls.
- *
- * A reminder is considered "terminal" (must not be retried) when ANY of:
- *   - a SENT log row exists for (appointmentId, template)
- *   - a SKIPPED log row exists for (appointmentId, template)
- *   - the number of FAILED log rows for (appointmentId, template) has
- *     reached FOLLOWUP_MAX_FAILED_RETRIES (default 3).
- *
- * This single helper replaces the previous SENT-only check that caused
- * SKIPPED rows to spam every cron tick (issues #2, #3) and FAILED rows
- * to resend indefinitely (issue #1).
- */
 async function hasReachedTerminalAttemptState(appointmentId, template) {
   const MAX_FAILED = parseInt(process.env.FOLLOWUP_MAX_FAILED_RETRIES || '3', 10);
-
-  // One round-trip: group by status for this (appointmentId, template).
   const rows = await prisma.notificationLog.groupBy({
     by: ['status'],
     where: { appointmentId, template },
     _count: { status: true }
   });
-
   let sent = 0, skipped = 0, failed = 0;
   for (const r of rows) {
     if (r.status === 'SENT')    sent    = r._count.status;
     if (r.status === 'SKIPPED') skipped = r._count.status;
     if (r.status === 'FAILED')  failed  = r._count.status;
   }
-
-  if (sent > 0)                return { terminal: true, reason: 'already_sent' };
-  if (skipped > 0)             return { terminal: true, reason: 'already_skipped' };
-  if (failed >= MAX_FAILED)    return { terminal: true, reason: 'max_failed_retries' };
+  if (sent > 0)             return { terminal: true, reason: 'already_sent' };
+  if (skipped > 0)          return { terminal: true, reason: 'already_skipped' };
+  if (failed >= MAX_FAILED) return { terminal: true, reason: 'max_failed_retries' };
   return { terminal: false, failedCount: failed };
 }
 
 async function processFollowUpRecalls() {
-  // Bug 1 fix — promote console.log → logger.debug, gate on env flag.
   if (process.env.FOLLOWUP_VERBOSE === 'true') {
     logger.info('Follow-up recall cron tick starting');
   }
-
   const todayStr     = getTodayDateString();
   const today        = new Date(`${todayStr}T00:00:00.000Z`);
   const tomorrow     = new Date(today.getTime() + 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const candidates = await prisma.prescription.findMany({
-    where: {
-      followUpDate: { in: [tomorrow, sevenDaysAgo] }
-    },
-    include: {
-      appointment: {
-        include: { patient: true, doctor: true }
-      }
-    }
+    where: { followUpDate: { in: [tomorrow, sevenDaysAgo] } },
+    include: { appointment: { include: { patient: true, doctor: true } } }
   });
-
   if (!candidates.length) return 0;
 
-  const PUBLIC_URL = (process.env.PUBLIC_BOOKING_URL
-                   || process.env.APP_URL
-                   || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, '');
+  const PUBLIC_URL = (process.env.PUBLIC_BOOKING_URL || process.env.APP_URL ||
+                     `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, '');
 
-  let sent = 0;
-  let suppressedRebook = 0;
-  let suppressedDedup = 0;
-  let skippedNoContact = 0;
+  let sent = 0, suppressedRebook = 0, suppressedDedup = 0, skippedNoContact = 0;
 
   for (const rx of candidates) {
-    // Bug 1 fix — never let one bad row kill the whole batch.
     try {
       const a = rx.appointment;
       if (!a || !a.patient) continue;
 
-      // Bug 1 fix (Flaw C) — explicitly exclude the appointment being processed
-      // and exclude EXPIRED for defensive correctness.
       const alreadyRebooked = await prisma.appointment.findFirst({
         where: {
-          id:        { not: a.id },
+          id: { not: a.id },
           patientId: a.patientId,
-          doctorId:  a.doctorId,
+          doctorId: a.doctorId,
           createdAt: { gt: a.completedAt || a.createdAt },
-          status:    { in: ['PENDING', 'CONFIRMED', 'COMPLETED'] }
+          status: { in: ['PENDING', 'CONFIRMED', 'COMPLETED'] }
         },
         select: { id: true }
       });
@@ -665,8 +709,6 @@ async function processFollowUpRecalls() {
       const kind = followUpDay.getTime() === tomorrow.getTime() ? 'PRE' : 'POST';
       const template = `neokids_followup_recall_${kind}`;
 
-      // Bug 1 fix (Flaw A) — strict idempotency: SENT or SKIPPED is terminal,
-      // FAILED is retried at most FOLLOWUP_MAX_FAILED_RETRIES times.
       const state = await hasReachedTerminalAttemptState(a.id, template);
       if (state.terminal) { suppressedDedup += 1; continue; }
 
@@ -690,37 +732,21 @@ async function processFollowUpRecalls() {
 
       if (a.patient.email) {
         await safeEmail({
-          appointmentId: a.id,
-          recipient: a.patient.email,
-          template,
-          direction: 'PATIENT',
-          messageFactory: () => email.sendEmail({
-            to: a.patient.email,
-            subject,
-            html: bodyHtml
-          })
+          appointmentId: a.id, recipient: a.patient.email, template, direction: 'PATIENT',
+          messageFactory: () => email.sendEmail({ to: a.patient.email, subject, html: bodyHtml })
         });
         sent += 1;
       } else {
-        // Bug 1 fix (Flaw B) — log SKIPPED exactly ONCE. Because dedup now
-        // treats SKIPPED as terminal, this row will never be re-written.
         await logNotification({
-          appointmentId: a.id,
-          channel: 'EMAIL',
-          recipient: '(none)',
-          template,
-          direction: 'PATIENT',
-          status: 'SKIPPED',
-          errorMessage: 'No patient email on file — manual nudge required'
+          appointmentId: a.id, channel: 'EMAIL', recipient: '(none)', template, direction: 'PATIENT',
+          status: 'SKIPPED', errorMessage: 'No patient email on file — manual nudge required'
         });
         skippedNoContact += 1;
       }
     } catch (innerErr) {
       logger.error(`Follow-up recall failed for rx=${rx.id}`, innerErr);
-      // continue to next prescription — never abort the batch
     }
   }
-
   if (sent || suppressedRebook || suppressedDedup || skippedNoContact) {
     logger.info(
       `Follow-up recalls — sent=${sent} rebookSuppressed=${suppressedRebook} ` +
@@ -730,8 +756,6 @@ async function processFollowUpRecalls() {
   return sent;
 }
 
-
-// Small local helper — we don't want to add a runtime dep just for HTML escaping.
 function escapeForHtml(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -745,7 +769,7 @@ module.exports = {
   onAppointmentRescheduled,
   onAppointmentCancelled,
   onPrescriptionCreated,
+  resendPrescription,         // Bug 3
   processReminders,
-  processFollowUpRecalls          // Bug 3
+  processFollowUpRecalls
 };
-

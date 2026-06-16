@@ -54,7 +54,18 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/files',  express.static(path.join(__dirname, '..', 'storage')));
-const staticOpts = { maxAge: '1h', etag: true, lastModified: true };
+
+// HTML must never be cached long — JS/CSS use ?v=… for cache-busting (see index.html).
+const staticOpts = {
+  maxAge: '1h',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  },
+};
 app.use('/doctor', express.static(path.join(__dirname, '..', 'public', 'doctor'), staticOpts));
 app.use('/admin',  express.static(path.join(__dirname, '..', 'public', 'admin'),  staticOpts));
 app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets')));

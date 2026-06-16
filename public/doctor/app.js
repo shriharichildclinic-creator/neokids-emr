@@ -1,21 +1,21 @@
 /* =====================================================================
-   NeoKidsPro EMR — Doctor App
-   Modernized UI (v2). All original IDs, form names, API calls, and JS
-   hooks are preserved. Rendering uses new CSS classes for a modern look.
+   NeoKidsPro EMR — Doctor App (Bug 2/3/5 hardened)
+   - Bug 3: prescription success card with View/Download/Resend buttons
+   - Bug 5: patient history panel inside the patient modal (visits,
+            prescriptions, diagnoses, notes, follow-ups)
+   - Bug 2: patient search bar (siblings supported)
    ===================================================================== */
 
 const API = '/api';
 let TOKEN = localStorage.getItem('np_doctor_token');
 let currentAppointment = null;
-let allAppointmentsCache = [];   // for client-side search/filter
-let doctorCache = null;          // for current doctor profile
+let allAppointmentsCache = [];
+let doctorCache = null;
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
-/* ---------------------------------------------------------------------
-   API helper
-   --------------------------------------------------------------------- */
+/* ---------------- API helper ---------------- */
 async function api(path, opts={}){
   const headers = opts.headers || {};
   if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
@@ -33,9 +33,7 @@ async function api(path, opts={}){
   return data;
 }
 
-/* ---------------------------------------------------------------------
-   Utils
-   --------------------------------------------------------------------- */
+/* ---------------- Utils ---------------- */
 function fmtCurrency(n){
   const v = Number(n||0);
   if (v >= 100000) return '₹' + (v/100000).toFixed(v%100000===0?0:1) + 'L';
@@ -48,7 +46,6 @@ function fmtDate(d){
   if (isNaN(dt)) return d;
   return dt.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
 }
-// Bug 6 — convert 24-hour "HH:MM" to 12-hour "h:MM AM/PM"
 function fmtTime(t){
   if (!t) return '';
   const m = String(t).match(/^(\d{1,2}):(\d{2})/);
@@ -60,11 +57,6 @@ function fmtTime(t){
   h = h % 12 || 12;
   return `${h}:${min} ${suffix}`;
 }
-
-/* ---------------------------------------------------------------------
-   Bug 1 — Age is ALWAYS derived from DOB on the client.
-   Never stored, never cached. Mirrors src/utils/date.js → calcAge().
-   --------------------------------------------------------------------- */
 function calcAge(dob){
   if (!dob) return '';
   const d = (dob instanceof Date) ? dob : new Date(dob);
@@ -75,17 +67,10 @@ function calcAge(dob){
   if (today.getDate() < d.getDate()) months -= 1;
   if (months < 0) { years -= 1; months += 12; }
   if (years < 0) return '';
-  if (years === 0) {
-    // Babies: show months (or "newborn" if <1 month)
-    if (months <= 0) return 'newborn';
-    return `${months} mo`;
-  }
-  // 1-2 yrs: years + months for clinical precision
+  if (years === 0) return months <= 0 ? 'newborn' : `${months} mo`;
   if (years < 2) return `${years} yr ${months} mo`;
   return `${years} yrs`;
 }
-/* Bug 1 — longer, more readable form for modals/details pages.
-   Matches the server-side PDF format. */
 function calcAgeLong(dob){
   if (!dob) return '';
   const d = (dob instanceof Date) ? dob : new Date(dob);
@@ -96,14 +81,9 @@ function calcAgeLong(dob){
   if (today.getDate() < d.getDate()) months -= 1;
   if (months < 0) { years -= 1; months += 12; }
   if (years < 0) return '';
-  if (years === 0) {
-    if (months <= 0) return 'Newborn';
-    return `${months} month${months === 1 ? '' : 's'}`;
-  }
+  if (years === 0) return months <= 0 ? 'Newborn' : `${months} month${months === 1 ? '' : 's'}`;
   return `${years} year${years === 1 ? '' : 's'} ${months} month${months === 1 ? '' : 's'}`;
 }
-
-
 function escapeHtml(s){
   return String(s==null?'':s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -158,7 +138,6 @@ $('#loginForm').addEventListener('submit', async (e) => {
     err.classList.remove('hidden');
   }
 });
-
 function forgotPassword(){
   const email = ($('#email').value || '').trim();
   if (!email){ alert('Enter your email first, then click Forgot password.'); return; }
@@ -166,7 +145,6 @@ function forgotPassword(){
     .then(()=>alert('If that email exists, a reset link has been sent.'))
     .catch(ex=>alert(ex.message || 'Request failed'));
 }
-
 function logout(){
   localStorage.removeItem('np_doctor_token');
   TOKEN = null;
@@ -179,7 +157,6 @@ function logout(){
 async function init(){
   $('#loginScreen').classList.add('hidden');
   $('#dashboard').classList.remove('hidden');
-
   try {
     const me = await api('/doctor/me');
     doctorCache = me;
@@ -191,46 +168,36 @@ async function init(){
     if (ex.status === 401){ logout(); return; }
     console.warn('doctor/me failed', ex);
   }
-
-  // Activate default tab (Dashboard)
   setActiveTab('dashboardTab');
   loadStats();
   loadDashSnapshot();
-
-  // Sidebar / header interactions
   setupSidebar();
   setupProfileMenu();
   setupTabs();
   setupSearchFilters();
   setupForms();
-setupRescheduleModal();
-setupCancelModal();
+  setupRescheduleModal();
+  setupCancelModal();
+  setupPatientModalTabs();   // Bug 5
 }
-
 function renderDoctorHeader(d){
   const name = d.name ? ('Dr. ' + d.name) : 'Doctor';
   $('#docName').textContent = name;
   $('#docSpec').textContent = d.specialization || 'Pediatrician';
-
   const initials = (d.name || 'D').split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
-
   if (d.photoUrl){
     $('#docPhotoTop').innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
     const large = $('#docPhotoLarge');
-    if (large){
-      large.innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
-    }
+    if (large) large.innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
   } else {
     $('#docPhotoTop').innerHTML = `<span>${escapeHtml(initials)}</span>`;
     const large = $('#docPhotoLarge');
-    if (large){
-      large.innerHTML = `<span id="docPhotoPlaceholder">${escapeHtml(initials)}</span>`;
-    }
+    if (large) large.innerHTML = `<span id="docPhotoPlaceholder">${escapeHtml(initials)}</span>`;
   }
 }
 
 /* =====================================================================
-   SIDEBAR / DRAWER
+   SIDEBAR / DRAWER / PROFILE
    ===================================================================== */
 function setupSidebar(){
   const sidebar = $('#sidebar');
@@ -240,18 +207,11 @@ function setupSidebar(){
   function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); }
   toggle.addEventListener('click', () => sidebar.classList.contains('is-open') ? close() : open());
   backdrop.addEventListener('click', close);
-  // Auto-close on nav click (mobile)
   $$('.np-nav-item').forEach(b => b.addEventListener('click', () => {
     if (window.matchMedia('(max-width:1023px)').matches) close();
   }));
-  window.addEventListener('resize', () => {
-    if (window.innerWidth > 1023) close();
-  });
+  window.addEventListener('resize', () => { if (window.innerWidth > 1023) close(); });
 }
-
-/* =====================================================================
-   PROFILE DROPDOWN
-   ===================================================================== */
 function setupProfileMenu(){
   const trigger = $('#profileTrigger');
   const menu = $('#profileDropdown');
@@ -265,14 +225,11 @@ function setupProfileMenu(){
     if (!menu.contains(e.target) && !trigger.contains(e.target)) close();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-
-  // Menu items that navigate to Settings tab
   $$('#profileDropdown [data-go]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.getAttribute('data-go');
       const sectionKey = btn.getAttribute('data-section');
-      setActiveTab(tab);
-      close();
+      setActiveTab(tab); close();
       if (sectionKey === 'password'){
         const el = document.getElementById('setting-password');
         if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -293,7 +250,6 @@ const TAB_META = {
   allTab:       { title:'Appointments',  sub:'Search and manage all your appointments' },
   settingsTab:  { title:'Settings',      sub:'Manage your profile, availability, and clinic' }
 };
-
 function setActiveTab(tabId){
   $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
   $$('.tab-pane').forEach(p => p.classList.toggle('hidden', p.id !== tabId));
@@ -302,23 +258,19 @@ function setActiveTab(tabId){
     $('#pageTitle').textContent = meta.title;
     $('#pageSubtitle').textContent = meta.sub;
   }
-  // Lazy-load data per tab
   if (tabId === 'waitingTab') loadWaiting();
   else if (tabId === 'allTab') loadAll();
   else if (tabId === 'settingsTab') loadSettings();
   else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); }
 }
-
 function setupTabs(){
-  $$('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
-  });
+  $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
   const refresh = $('#refreshWaiting');
   if (refresh) refresh.addEventListener('click', () => loadWaiting());
 }
 
 /* =====================================================================
-   STATS / KPIs
+   STATS / DASHBOARD
    ===================================================================== */
 async function loadStats(){
   try {
@@ -329,44 +281,30 @@ async function loadStats(){
     const rev   = Number(s.totalRevenue || 0);
     $('#statsBar').innerHTML = `
       <div class="np-kpi np-kpi--blue">
-        <div class="np-kpi__icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
         <div class="np-kpi__label">Today's Patients</div>
         <div class="np-kpi__value">${today}</div>
         <div class="np-kpi__sub">${done} completed so far</div>
       </div>
       <div class="np-kpi np-kpi--mint">
-        <div class="np-kpi__icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        </div>
         <div class="np-kpi__label">Total Consults</div>
         <div class="np-kpi__value">${total}</div>
         <div class="np-kpi__sub">All-time consultations</div>
       </div>
       <div class="np-kpi np-kpi--coral">
-        <div class="np-kpi__icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        </div>
         <div class="np-kpi__label">Completed Today</div>
         <div class="np-kpi__value">${done}</div>
         <div class="np-kpi__sub">Out of ${today} scheduled</div>
       </div>
       <div class="np-kpi np-kpi--cream">
-        <div class="np-kpi__icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        </div>
         <div class="np-kpi__label">Revenue</div>
         <div class="np-kpi__value">${fmtCurrency(rev)}</div>
         <div class="np-kpi__sub">Lifetime</div>
-      </div>
-    `;
+      </div>`;
   } catch (ex){
     console.warn('stats failed', ex);
     $('#statsBar').innerHTML = '';
   }
 }
-
 async function loadDashSnapshot(){
   const el = $('#dashSnapshot');
   if (!el) return;
@@ -382,20 +320,15 @@ async function loadDashSnapshot(){
     el.innerHTML = emptyState('Could not load appointments', ex.message || 'Try refreshing.');
   }
 }
-
 function emptyState(title, sub){
-  return `
-    <div class="np-empty">
-      <div class="np-empty__icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      </div>
+  return `<div class="np-empty">
       <div class="np-empty__title">${escapeHtml(title)}</div>
       <div class="np-empty__sub">${escapeHtml(sub||'')}</div>
     </div>`;
 }
 
 /* =====================================================================
-   WAITING ROOM
+   WAITING ROOM / ALL APPTS
    ===================================================================== */
 async function loadWaiting(){
   const list = $('#waitingList');
@@ -411,10 +344,6 @@ async function loadWaiting(){
     list.innerHTML = emptyState('Could not load waiting room', ex.message || 'Try again later.');
   }
 }
-
-/* =====================================================================
-   ALL APPOINTMENTS (search + filter + sort)
-   ===================================================================== */
 async function loadAll(){
   const list = $('#allList');
   list.innerHTML = '';
@@ -426,32 +355,26 @@ async function loadAll(){
     list.innerHTML = emptyState('Could not load appointments', ex.message || 'Try again later.');
   }
 }
-
 function renderAllAppointments(){
   const search = ($('#apptSearch').value || '').trim().toLowerCase();
   const status = $('#apptStatusFilter').value;
   const type   = $('#apptTypeFilter').value;
   const sort   = $('#apptSort').value;
-
   let arr = allAppointmentsCache.slice();
-
   if (status) arr = arr.filter(a => a.status === status);
   if (type)   arr = arr.filter(a => a.consultationType === type);
   if (search) {
     arr = arr.filter(a => {
       const p = a.patient || {};
-      return [
-        p.name, p.phone, p.email, a.primaryProblem
-      ].some(v => v && String(v).toLowerCase().includes(search));
+      return [p.name, p.phone, p.email, a.primaryProblem]
+        .some(v => v && String(v).toLowerCase().includes(search));
     });
   }
-
   arr.sort((a,b) => {
     const ad = new Date(a.date + 'T' + (a.startTime||'00:00')).getTime();
     const bd = new Date(b.date + 'T' + (b.startTime||'00:00')).getTime();
     return sort === 'date_asc' ? (ad - bd) : (bd - ad);
   });
-
   const list = $('#allList');
   if (!arr.length){
     list.innerHTML = emptyState('No matches', 'Try clearing filters or changing the search term.');
@@ -459,7 +382,6 @@ function renderAllAppointments(){
   }
   list.innerHTML = arr.map(apptCard).join('');
 }
-
 function setupSearchFilters(){
   ['apptSearch','apptStatusFilter','apptTypeFilter','apptSort'].forEach(id => {
     const el = document.getElementById(id);
@@ -474,13 +396,11 @@ function setupSearchFilters(){
    ===================================================================== */
 function apptCard(a){
   const p = a.patient || {};
-const timeMain = fmtTime(a.startTime) || '—';
+  const timeMain = fmtTime(a.startTime) || '—';
   const dt = fmtDate(a.date);
   const meet = (a.consultationType === 'ONLINE' && a.meetLink)
-    ? `<a class="np-btn np-btn--success np-btn--sm" href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener">
-         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-         Join
-       </a>` : '';
+    ? `<a class="np-btn np-btn--success np-btn--sm" href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener">Join</a>`
+    : '';
   const canCancel = !['CANCELLED','COMPLETED'].includes(a.status);
   return `
   <article class="np-appt" data-id="${escapeHtml(a.id)}">
@@ -489,47 +409,50 @@ const timeMain = fmtTime(a.startTime) || '—';
       <div class="np-appt__time-d">${escapeHtml(dt)}</div>
     </div>
     <div class="np-appt__body">
-            <!-- Bug 7 — name on its own line, badges on a second line, both responsive -->
-<div class="np-appt__namerow">
-  <span class="np-appt__name">${escapeHtml(p.name || 'Patient')}</span>
-  ${p.dateOfBirth ? `<span class="np-appt__age" title="DOB: ${escapeHtml(fmtDate(p.dateOfBirth))}">${escapeHtml(calcAge(p.dateOfBirth))}</span>` : ''}
-</div>
-<div class="np-appt__badges">
-  ${statusBadge(a.status)}
-  ${typeBadge(a.consultationType)}
-  ${paymentBadge(a.paymentStatus)}
-</div>
-<div class="np-appt__meta">
-  ${p.phone ? `<span>📞 ${escapeHtml(p.phone)}</span>` : ''}
-  ${p.gender ? `<span>${escapeHtml(p.gender === 'MALE' ? '♂ Male' : p.gender === 'FEMALE' ? '♀ Female' : p.gender)}</span>` : ''}
-  ${a.feeAtBooking != null ? `<span>${fmtCurrency(a.feeAtBooking)}</span>` : ''}
-</div>
-
+      <div class="np-appt__namerow">
+        <span class="np-appt__name">${escapeHtml(p.name || 'Patient')}</span>
+        ${p.dateOfBirth ? `<span class="np-appt__age" title="DOB: ${escapeHtml(fmtDate(p.dateOfBirth))}">${escapeHtml(calcAge(p.dateOfBirth))}</span>` : ''}
+      </div>
+      <div class="np-appt__badges">
+        ${statusBadge(a.status)}
+        ${typeBadge(a.consultationType)}
+        ${paymentBadge(a.paymentStatus)}
+      </div>
+      <div class="np-appt__meta">
+        ${p.phone ? `<span>📞 ${escapeHtml(p.phone)}</span>` : ''}
+        ${p.gender ? `<span>${escapeHtml(p.gender === 'MALE' ? '♂ Male' : p.gender === 'FEMALE' ? '♀ Female' : p.gender)}</span>` : ''}
+        ${a.feeAtBooking != null ? `<span>${fmtCurrency(a.feeAtBooking)}</span>` : ''}
+      </div>
       ${a.primaryProblem ? `<div class="np-appt__problem">${escapeHtml(a.primaryProblem)}</div>` : ''}
     </div>
     <div class="np-appt__actions">
       ${meet}
-      <button class="np-btn np-btn--sm" type="button" onclick="openPatient('${escapeHtml(a.id)}')">
-        Open
-      </button>
-      ${a.status !== 'COMPLETED' ? `
-        <button class="np-btn np-btn--sm" type="button" onclick="toggleComplete('${escapeHtml(a.id)}')">
-          Complete
-        </button>` : ''}
+      <button class="np-btn np-btn--sm" type="button" onclick="openPatient('${escapeHtml(a.id)}')">Open</button>
+      ${a.status !== 'COMPLETED' ? `<button class="np-btn np-btn--sm" type="button" onclick="toggleComplete('${escapeHtml(a.id)}')">Complete</button>` : ''}
       ${canCancel ? `
-        <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openReschedule('${escapeHtml(a.id)}','${escapeHtml(a.consultationType||'OFFLINE')}')">
-          Reschedule
-        </button>
-        <button class="np-btn np-btn--danger np-btn--sm" type="button" onclick="cancelAppt('${escapeHtml(a.id)}')">
-          Cancel
-        </button>` : ''}
+        <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openReschedule('${escapeHtml(a.id)}','${escapeHtml(a.consultationType||'OFFLINE')}')">Reschedule</button>
+        <button class="np-btn np-btn--danger np-btn--sm" type="button" onclick="cancelAppt('${escapeHtml(a.id)}')">Cancel</button>` : ''}
     </div>
   </article>`;
 }
 
 /* =====================================================================
-   PATIENT MODAL
+   PATIENT MODAL — with Bug 5 history tabs and Bug 3 prescription card
    ===================================================================== */
+function setupPatientModalTabs(){
+  // Delegated click — tabs are rendered dynamically inside the modal.
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('.np-pm-tab');
+    if (!t || !t.dataset.pmTab) return;
+    const target = t.dataset.pmTab;
+    $$('.np-pm-tab').forEach(x => x.classList.toggle('active', x.dataset.pmTab === target));
+    $$('.np-pm-pane').forEach(x => x.classList.toggle('hidden', x.id !== 'pm-' + target));
+    if (target === 'history' && currentAppointment){
+      loadPatientHistoryInModal(currentAppointment.patientId || (currentAppointment.patient && currentAppointment.patient.id));
+    }
+  });
+}
+
 async function openPatient(id){
   try {
     const data = await api('/doctor/appointments/' + encodeURIComponent(id));
@@ -541,67 +464,101 @@ async function openPatient(id){
       <div class="np-row" style="gap:.6rem; margin-bottom:.5rem;">
         ${statusBadge(a.status)} ${typeBadge(a.consultationType)} ${paymentBadge(a.paymentStatus)}
       </div>
-   
-<div style="font-size:1.15rem; font-weight:700; color:var(--np-ink);">${escapeHtml(p.name || 'Patient')}</div>
-<div class="np-mut" style="font-size:.85rem; margin-bottom:.75rem;">
-  ${p.dateOfBirth
-      ? `<b style="color:var(--np-ink);">${escapeHtml(calcAgeLong(p.dateOfBirth))}</b>
-         <span class="np-mut"> · DOB ${escapeHtml(fmtDate(p.dateOfBirth))}</span>`
-      : '<span class="np-mut">DOB not recorded</span>'}
-  ${p.gender ? ' · ' + escapeHtml(p.gender) : ''}
-</div>
-
-      <div class="np-grid-2" style="margin-bottom:1rem;">
-        <div class="np-field">
-          <div class="np-field__label">Date & Time</div>
-          <div>${fmtDate(a.date)} · ${fmtTime(a.startTime)}${a.endTime ? ' – ' + fmtTime(a.endTime) : ''}</div>
-        </div>
-        <div class="np-field">
-          <div class="np-field__label">Fee</div>
-          <div>${fmtCurrency(a.feeAtBooking)}</div>
-        </div>
-        ${p.phone ? `
-        <div class="np-field"><div class="np-field__label">Phone</div><div>${escapeHtml(p.phone)}</div></div>` : ''}
-        ${p.email ? `
-        <div class="np-field"><div class="np-field__label">Email</div><div>${escapeHtml(p.email)}</div></div>` : ''}
-        ${p.parentName ? `
-        <div class="np-field"><div class="np-field__label">Parent / Guardian</div><div>${escapeHtml(p.parentName)}</div></div>` : ''}
-        ${a.meetLink ? `
-        <div class="np-field"><div class="np-field__label">Meet Link</div>
-          <div><a href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener" style="color:var(--np-primary);">Join consultation</a></div>
-        </div>` : ''}
+      <div style="font-size:1.15rem; font-weight:700; color:var(--np-ink);">${escapeHtml(p.name || 'Patient')}</div>
+      <div class="np-mut" style="font-size:.85rem; margin-bottom:.75rem;">
+        ${p.dateOfBirth
+            ? `<b style="color:var(--np-ink);">${escapeHtml(calcAgeLong(p.dateOfBirth))}</b>
+               <span class="np-mut"> · DOB ${escapeHtml(fmtDate(p.dateOfBirth))}</span>`
+            : '<span class="np-mut">DOB not recorded</span>'}
+        ${p.gender ? ' · ' + escapeHtml(p.gender) : ''}
       </div>
 
-      ${a.primaryProblem ? `
-        <div class="np-field">
-          <div class="np-field__label">Primary problem</div>
-          <div style="background:var(--np-surface); padding:.7rem .85rem; border-radius:10px; border:1px solid var(--np-border); font-size:.9rem;">
-            ${escapeHtml(a.primaryProblem)}
+      <!-- Bug 5 — patient modal tabs -->
+      <div class="np-pm-tabs np-row" style="gap:.25rem; border-bottom:1px solid var(--np-border); margin-bottom:.75rem;">
+        <button type="button" class="np-pm-tab active" data-pm-tab="current">Current Visit</button>
+        <button type="button" class="np-pm-tab" data-pm-tab="prescription">Prescription</button>
+        <button type="button" class="np-pm-tab" data-pm-tab="history">Patient History</button>
+      </div>
+
+      <!-- Current visit pane -->
+      <div id="pm-current" class="np-pm-pane">
+        <div class="np-grid-2" style="margin-bottom:1rem;">
+          <div class="np-field">
+            <div class="np-field__label">Date &amp; Time</div>
+            <div>${fmtDate(a.date)} · ${fmtTime(a.startTime)}${a.endTime ? ' – ' + fmtTime(a.endTime) : ''}</div>
           </div>
-        </div>` : ''}
+          <div class="np-field">
+            <div class="np-field__label">Fee</div>
+            <div>${fmtCurrency(a.feeAtBooking)}</div>
+          </div>
+          ${p.phone ? `<div class="np-field"><div class="np-field__label">Phone</div><div>${escapeHtml(p.phone)}</div></div>` : ''}
+          ${p.email ? `<div class="np-field"><div class="np-field__label">Email</div><div>${escapeHtml(p.email)}</div></div>` : ''}
+          ${p.parentName ? `<div class="np-field"><div class="np-field__label">Parent / Guardian</div><div>${escapeHtml(p.parentName)}</div></div>` : ''}
+          ${a.meetLink ? `<div class="np-field"><div class="np-field__label">Meet Link</div>
+              <div><a href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener" style="color:var(--np-primary);">Join consultation</a></div>
+            </div>` : ''}
+        </div>
+        ${a.primaryProblem ? `
+          <div class="np-field">
+            <div class="np-field__label">Primary problem</div>
+            <div style="background:var(--np-surface); padding:.7rem .85rem; border-radius:10px; border:1px solid var(--np-border); font-size:.9rem;">
+              ${escapeHtml(a.primaryProblem)}
+            </div>
+          </div>` : ''}
+      </div>
+
+      <!-- Prescription pane — Bug 3 success card lives here -->
+      <div id="pm-prescription" class="np-pm-pane hidden">
+        <div id="rxSuccessCard" class="hidden" style="background:#ecfdf5; border:1px solid #10b981; padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
+          <div style="font-weight:700; color:#065f46; margin-bottom:.25rem;">✓ Prescription saved</div>
+          <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">PDF generated and emailed to patient.</div>
+          <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
+            <a id="rxViewBtn" class="np-btn np-btn--sm" href="#" target="_blank" rel="noopener">View PDF</a>
+            <a id="rxDownloadBtn" class="np-btn np-btn--sm" href="#" download>Download PDF</a>
+            <button id="rxResendBtn" type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="resendPrescription()">Resend to patient</button>
+          </div>
+        </div>
+        <div id="rxFormSlot"></div>
+      </div>
+
+      <!-- History pane -->
+      <div id="pm-history" class="np-pm-pane hidden">
+        <div id="patientHistoryBody" class="np-mut" style="font-size:.9rem;">Loading patient history…</div>
+      </div>
     `;
 
-    // Show Rx form for active appts
+    // Move the existing rxForm into the Prescription pane.
     const rxForm = $('#rxForm');
+    const slot = $('#rxFormSlot');
+    if (rxForm && slot) slot.appendChild(rxForm);
+
+    // Show Rx form for active appts
     if (['CONFIRMED','PENDING','COMPLETED'].includes(a.status)){
       rxForm.classList.remove('hidden');
       const tbody = $('#medsList');
       tbody.innerHTML = '';
       addMedRow();
-      // Pre-fill if existing prescription
-      if (data.prescription){
-        const r = data.prescription;
-        rxForm.diagnosis.value = r.diagnosis || '';
-        rxForm.advice.value    = r.advice || '';
-        if (r.vitals){
-          rxForm.vitalsWeight.value      = r.vitals.weight || '';
-          rxForm.vitalsTemperature.value = r.vitals.temperature || '';
-          rxForm.vitalsHeartRate.value   = r.vitals.heartRate || '';
-        }
+      if (data.appointment && data.appointment.prescription){
+        const r = data.appointment.prescription;
+        rxForm.diagnosis.value      = r.diagnosis || '';
+        rxForm.chiefComplaint.value = r.chiefComplaint || '';
+        rxForm.advice.value         = r.advice || '';
+        if (rxForm.vitalsWeight)    rxForm.vitalsWeight.value    = r.weight || '';
+        if (rxForm.vitalsHeight)    rxForm.vitalsHeight.value    = r.height || '';
+        if (rxForm.allergies)       rxForm.allergies.value       = r.allergies || '';
+        if (rxForm.pastHistory)     rxForm.pastHistory.value     = r.pastHistory || '';
+        if (rxForm.investigations)  rxForm.investigations.value  = r.investigations || '';
+        if (rxForm.followUpDate)    rxForm.followUpDate.value    = r.followUpDate ? r.followUpDate.slice(0,10) : '';
         if (Array.isArray(r.medications) && r.medications.length){
           tbody.innerHTML = '';
           r.medications.forEach(m => addMedRow(m));
         }
+        // Bug 3 — if an Rx already exists, show the success card with View/Download/Resend.
+        showRxSuccessCard({
+          pdfUrl: a.prescriptionUrl,
+          emailRecipient: p.email,
+          subtitle: 'Existing prescription on file. You can edit and re-save, or re-send to the patient.'
+        });
       }
     } else {
       rxForm.classList.add('hidden');
@@ -618,11 +575,92 @@ function closePatientModal(){
   currentAppointment = null;
 }
 
+/* ---------- Bug 5 — Patient history panel ---------- */
+async function loadPatientHistoryInModal(patientId){
+  const slot = $('#patientHistoryBody');
+  if (!slot) return;
+  if (!patientId){ slot.innerHTML = 'No patient id available.'; return; }
+  slot.innerHTML = 'Loading patient history…';
+  try {
+    const h = await api('/doctor/patients/' + encodeURIComponent(patientId) + '/history');
+    const sum = h.summary || {};
+    const siblings = (h.siblings || []).map(s => `
+      <span class="np-badge np-badge--slate" title="DOB: ${escapeHtml(fmtDate(s.dateOfBirth))}">
+        ${escapeHtml(s.name)} ${s.dateOfBirth ? '· ' + escapeHtml(calcAge(s.dateOfBirth)) : ''}
+      </span>`).join(' ');
+
+    const visitsHtml = (h.visits || []).map(v => `
+      <article class="np-history-row">
+        <div class="np-history-row__date">
+          <div><b>${escapeHtml(fmtDate(v.date))}</b></div>
+          <div class="np-mut" style="font-size:.8rem;">${escapeHtml(fmtTime(v.startTime))}</div>
+        </div>
+        <div class="np-history-row__body">
+          <div class="np-row" style="gap:.4rem; margin-bottom:.25rem;">
+            ${statusBadge(v.status)} ${typeBadge(v.consultationType)}
+          </div>
+          ${v.primaryProblem ? `<div style="font-size:.88rem; margin-bottom:.25rem;"><b>Complaint:</b> ${escapeHtml(v.primaryProblem)}</div>` : ''}
+          ${v.notes ? `<div style="font-size:.85rem;" class="np-mut"><b>Notes:</b> ${escapeHtml(v.notes)}</div>` : ''}
+          <div class="np-row" style="gap:.5rem; margin-top:.4rem; flex-wrap:wrap;">
+            ${v.hasPrescription && v.prescriptionUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(v.prescriptionUrl)}" target="_blank" rel="noopener">📄 Prescription PDF</a>` : ''}
+            ${v.meetLink ? `<a class="np-btn np-btn--ghost np-btn--sm" href="${escapeHtml(v.meetLink)}" target="_blank" rel="noopener">Meet</a>` : ''}
+          </div>
+        </div>
+      </article>`).join('');
+
+    const rxHtml = (h.prescriptions || []).map(rx => `
+      <article class="np-history-rx">
+        <div class="np-row" style="justify-content:space-between; align-items:center; margin-bottom:.25rem;">
+          <b>${escapeHtml(fmtDate(rx.visitDate))}</b>
+          ${rx.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(rx.pdfUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
+        </div>
+        <div style="font-size:.88rem;"><b>Diagnosis:</b> ${escapeHtml(rx.diagnosis || '—')}</div>
+        ${rx.chiefComplaint ? `<div style="font-size:.85rem;" class="np-mut"><b>Complaint:</b> ${escapeHtml(rx.chiefComplaint)}</div>` : ''}
+        ${rx.medications && rx.medications.length ? `<div style="font-size:.82rem; margin-top:.3rem;">${
+          rx.medications.map(m => `• ${escapeHtml(m.name||'')} ${escapeHtml(m.dose||'')} ${escapeHtml(m.frequency||'')} × ${escapeHtml(m.duration||'')}`).join('<br/>')
+        }</div>` : ''}
+        ${rx.followUpDate ? `<div class="np-mut" style="font-size:.82rem; margin-top:.25rem;">Follow-up: ${escapeHtml(fmtDate(rx.followUpDate))}</div>` : ''}
+      </article>`).join('');
+
+    slot.innerHTML = `
+      <div class="np-grid-2" style="gap:.6rem; margin-bottom:.85rem;">
+        <div class="np-field"><div class="np-field__label">Total visits</div><div>${escapeHtml(String(sum.totalVisits||0))}</div></div>
+        <div class="np-field"><div class="np-field__label">Completed</div><div>${escapeHtml(String(sum.completedVisits||0))}</div></div>
+        <div class="np-field"><div class="np-field__label">Last visit</div><div>${sum.lastVisitAt ? escapeHtml(fmtDate(sum.lastVisitAt)) : '—'}</div></div>
+        <div class="np-field"><div class="np-field__label">Open follow-ups</div><div>${escapeHtml(String(sum.openFollowUps||0))}</div></div>
+      </div>
+
+      ${siblings ? `<div class="np-field" style="margin-bottom:.85rem;">
+        <div class="np-field__label">Siblings on same parent phone</div>
+        <div class="np-row" style="gap:.35rem; flex-wrap:wrap;">${siblings}</div>
+      </div>` : ''}
+
+      ${(h.diagnoses||[]).length ? `<div class="np-field" style="margin-bottom:.85rem;">
+        <div class="np-field__label">Past diagnoses</div>
+        <div>${h.diagnoses.map(d => `<span class="np-badge np-badge--mint" style="margin-right:.25rem; margin-bottom:.25rem;">${escapeHtml(d)}</span>`).join(' ')}</div>
+      </div>` : ''}
+
+      <div class="np-field" style="margin-bottom:.5rem;">
+        <div class="np-field__label">Visits (${(h.visits||[]).length})</div>
+      </div>
+      ${visitsHtml || '<div class="np-mut">No previous visits with this doctor.</div>'}
+
+      ${(h.prescriptions||[]).length ? `
+        <div class="np-field" style="margin:.85rem 0 .5rem;">
+          <div class="np-field__label">Prescriptions (${h.prescriptions.length})</div>
+        </div>
+        ${rxHtml}` : ''}
+    `;
+  } catch (ex){
+    slot.innerHTML = `Could not load patient history: ${escapeHtml(ex.message || 'unknown error')}`;
+  }
+}
+
 function addMedRow(prefill){
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input class="med-name"  placeholder="e.g. Paracetamol 250mg syrup" value="${escapeHtml(prefill?.name||'')}"></td>
-    <td><input class="med-dose"  placeholder="2.5 ml"                          value="${escapeHtml(prefill?.dosage||'')}"></td>
+    <td><input class="med-dose"  placeholder="2.5 ml"                          value="${escapeHtml(prefill?.dose||prefill?.dosage||'')}"></td>
     <td><input class="med-freq"  placeholder="TDS / BD / SOS"                  value="${escapeHtml(prefill?.frequency||'')}"></td>
     <td><input class="med-dur"   placeholder="3 days"                          value="${escapeHtml(prefill?.duration||'')}"></td>
     <td><input class="med-inst"  placeholder="After food"                      value="${escapeHtml(prefill?.instructions||'')}"></td>
@@ -632,8 +670,44 @@ function addMedRow(prefill){
   $('#medsList').appendChild(tr);
 }
 
-/* Prescription submit (preserves rxForm submit semantics) */
-/* Prescription submit — fixed URL + payload shape (Bug 2) */
+/* ---------- Bug 3 — Prescription success card helpers ---------- */
+function showRxSuccessCard({ pdfUrl, emailRecipient, subtitle }){
+  const card = $('#rxSuccessCard');
+  if (!card) return;
+  $('#rxSuccessSub').textContent = subtitle ||
+    (emailRecipient ? `PDF generated and emailed to ${emailRecipient}.` : 'PDF generated. No patient email on file — use Resend after adding one.');
+  const view = $('#rxViewBtn');
+  const dl   = $('#rxDownloadBtn');
+  if (pdfUrl){
+    view.href = pdfUrl;
+    dl.href   = pdfUrl;
+    view.classList.remove('np-btn--disabled');
+    dl.classList.remove('np-btn--disabled');
+  } else {
+    view.removeAttribute('href');
+    dl.removeAttribute('href');
+    view.classList.add('np-btn--disabled');
+    dl.classList.add('np-btn--disabled');
+  }
+  $('#rxResendBtn').disabled = !emailRecipient;
+  card.classList.remove('hidden');
+}
+
+async function resendPrescription(){
+  if (!currentAppointment){ alert('No appointment selected'); return; }
+  const btn = $('#rxResendBtn'); if (btn) btn.disabled = true;
+  try {
+    const r = await api('/doctor/appointments/' + encodeURIComponent(currentAppointment.id) + '/prescription/resend',
+      { method:'POST' });
+    alert('Prescription re-sent to ' + (r.recipient || 'patient'));
+  } catch (ex){
+    alert(ex.message || 'Could not resend');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* Prescription submit — Bug 3: show real success card with View/Download/Resend */
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'rxForm') return;
   e.preventDefault();
@@ -641,24 +715,20 @@ document.addEventListener('submit', async (e) => {
 
   const meds = $$('#medsList tr').map(tr => ({
     name:         tr.querySelector('.med-name').value.trim(),
-    dose:         tr.querySelector('.med-dose').value.trim(),   // schema key: dose (NOT dosage)
+    dose:         tr.querySelector('.med-dose').value.trim(),
     frequency:    tr.querySelector('.med-freq').value.trim(),
     duration:     tr.querySelector('.med-dur').value.trim(),
     instructions: tr.querySelector('.med-inst').value.trim() || undefined
   })).filter(m => m.name && m.dose && m.frequency && m.duration);
 
-  if (!meds.length) {
-    alert('Please add at least one medication with name, dose, frequency, and duration.');
-    return;
-  }
+  if (!meds.length) { alert('Please add at least one medication with name, dose, frequency, and duration.'); return; }
   const chiefComplaint = (e.target.chiefComplaint?.value || '').trim();
   const diagnosis      = (e.target.diagnosis.value || '').trim();
   if (chiefComplaint.length < 2) { alert('Please enter the chief complaint.'); return; }
   if (diagnosis.length < 2)      { alert('Please enter a diagnosis.'); return; }
 
   const body = {
-    chiefComplaint,
-    diagnosis,
+    chiefComplaint, diagnosis,
     advice:         e.target.advice.value.trim() || undefined,
     weight:         e.target.vitalsWeight.value.trim() || undefined,
     height:         e.target.vitalsHeight?.value.trim() || undefined,
@@ -669,22 +739,31 @@ document.addEventListener('submit', async (e) => {
     medications:    meds
   };
 
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
   try {
-    // Correct URL per src/routes/doctor.routes.js:
-    //   POST /api/doctor/appointments/:id/prescription
-    await api(
+    const r = await api(
       '/doctor/appointments/' + encodeURIComponent(currentAppointment.id) + '/prescription',
       { method:'POST', body }
     );
-    alert('Prescription saved.');
-    // Refresh the patient view so the saved Rx + completed status reflect immediately
-    openPatient(currentAppointment.id);
+    // Bug 3 — render the rich success card.
+    showRxSuccessCard({
+      pdfUrl: (r.delivery && r.delivery.pdfUrl) || (r.appointment && r.appointment.prescriptionUrl),
+      emailRecipient: r.delivery && r.delivery.emailRecipient,
+      subtitle: r.delivery && r.delivery.emailQueued
+        ? `PDF generated and emailed to ${r.delivery.emailRecipient}.`
+        : 'PDF generated. Patient has no email — use Resend after adding one.'
+    });
+    // Switch to the Prescription tab so the doctor sees the result.
+    const tab = document.querySelector('.np-pm-tab[data-pm-tab="prescription"]');
+    if (tab) tab.click();
     loadStats(); loadDashSnapshot(); loadWaiting();
   } catch (ex){
     alert(ex.message || 'Could not save prescription');
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 });
-
 
 /* =====================================================================
    APPOINTMENT ACTIONS
@@ -696,24 +775,19 @@ async function toggleComplete(id){
     loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
   } catch (ex){ alert(ex.message || 'Could not complete'); }
 }
-
 function cancelAppt(id){
-  // Bug 4 — replace browser prompt() with a real modal that requires a reason.
   $('#cancelApptId').value = id;
   $('#cancelReason').value = '';
   $('#cancelSubmitBtn').disabled = false;
   $('#cancelModal').classList.remove('hidden');
   setTimeout(() => $('#cancelReason').focus(), 50);
 }
-function closeCancelModal(){
-  $('#cancelModal').classList.add('hidden');
-}
+function closeCancelModal(){ $('#cancelModal').classList.add('hidden'); }
 
 /* =====================================================================
    RESCHEDULE
    ===================================================================== */
 let rsType = 'OFFLINE';
-
 function openReschedule(id, type){
   rsType = type || 'OFFLINE';
   $('#rsApptId').value = id;
@@ -726,9 +800,7 @@ function openReschedule(id, type){
   $('#rescheduleModal').classList.remove('hidden');
   loadRsSlots();
 }
-function closeRescheduleModal(){
-  $('#rescheduleModal').classList.add('hidden');
-}
+function closeRescheduleModal(){ $('#rescheduleModal').classList.add('hidden'); }
 async function loadRsSlots(){
   const date = $('#rsDateInput').value;
   if (!date) return;
@@ -737,38 +809,28 @@ async function loadRsSlots(){
   try {
     const doctorId = doctorCache?.id;
     if (!doctorId) throw new Error('Doctor not loaded');
-    // Bug 3 — correct endpoint is /public/slots, not /booking/slots,
-    // and the response shape is { doctorId, date, type, slots: [...] }.
     const url = '/public/slots?doctorId=' + encodeURIComponent(doctorId)
-              + '&date=' + encodeURIComponent(date)
-              + '&type=' + encodeURIComponent(rsType);
+              + '&date=' + encodeURIComponent(date) + '&type=' + encodeURIComponent(rsType);
     const res = await api(url);
     const slots = Array.isArray(res) ? res : (res && res.slots) || [];
-    if (!slots.length){
-      grid.innerHTML = '<div class="np-mut" style="font-size:.85rem;">No slots available.</div>';
-      return;
-    }
+    if (!slots.length){ grid.innerHTML = '<div class="np-mut" style="font-size:.85rem;">No slots available.</div>'; return; }
     grid.innerHTML = slots.map(s => `
       <button type="button" class="np-slot-btn rs-slot-btn"
               data-time="${escapeHtml(s.startTime)}"
               ${s.available===false?'disabled':''}
               onclick="selectRsSlot('${escapeHtml(s.startTime)}')">
         ${escapeHtml(fmtTime(s.startTime))}
-      </button>
-    `).join('');
+      </button>`).join('');
   } catch (ex){
     grid.innerHTML = '<div class="np-mut" style="font-size:.85rem;">Could not load slots.</div>';
   }
 }
-
-
 function selectRsSlot(time){
   $('#rsStartTimeHidden').value = time;
   $('#rsSelectedDisplay').textContent = fmtTime(time);
   $('#rsSubmitBtn').disabled = false;
   $$('.rs-slot-btn').forEach(b => b.classList.toggle('active', b.dataset.time === time));
 }
-
 function setupRescheduleModal(){
   $('#rsDateInput').addEventListener('change', loadRsSlots);
   $('#rescheduleForm').addEventListener('submit', async (e) => {
@@ -784,73 +846,36 @@ function setupRescheduleModal(){
       });
       closeRescheduleModal();
       loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
+      alert('Appointment rescheduled. Patient and doctor have been notified by email and WhatsApp.');
     } catch (ex){ alert(ex.message || 'Could not reschedule'); }
   });
 }
-
 function setupCancelModal(){
-
   $('#cancelForm').addEventListener('submit', async (e) => {
-
     e.preventDefault();
-
     const id = $('#cancelApptId').value;
     const reason = $('#cancelReason').value.trim();
-
-    if (reason.length < 3){
-      alert('Please enter a cancellation reason (at least 3 characters).');
-      return;
-    }
-
+    if (reason.length < 3){ alert('Please enter a cancellation reason (at least 3 characters).'); return; }
     $('#cancelSubmitBtn').disabled = true;
-
     try {
-
-      await api(
-        '/doctor/appointments/' +
-        encodeURIComponent(id) +
-        '/cancel',
-        {
-          method:'POST',
-          body:{ reason }
-        }
-      );
-
+      await api('/doctor/appointments/' + encodeURIComponent(id) + '/cancel',
+        { method:'POST', body:{ reason } });
       closeCancelModal();
-
-      loadWaiting();
-      loadAll();
-      loadStats();
-      loadDashSnapshot();
-
+      loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
     } catch(ex){
-
       alert(ex.message || 'Could not cancel');
-
       $('#cancelSubmitBtn').disabled = false;
     }
-
   });
-
   document.addEventListener('keydown', (e) => {
-
-    if (
-      e.key === 'Escape' &&
-      !$('#cancelModal').classList.contains('hidden')
-    ){
-      closeCancelModal();
-    }
-
+    if (e.key === 'Escape' && !$('#cancelModal').classList.contains('hidden')) closeCancelModal();
   });
-
 }
 
 /* =====================================================================
-   SETTINGS — Availability, Clinic, Fees, Password, Photo
+   SETTINGS
    ===================================================================== */
 function loadSettings(){
-  // The forms are populated from doctorCache on init().
-  // Refresh doctor profile to be safe.
   api('/doctor/me').then(d => {
     doctorCache = d;
     renderDoctorHeader(d);
@@ -859,10 +884,7 @@ function loadSettings(){
     populateFees(d);
   }).catch(()=>{});
 }
-
-/* ---- Availability ---- */
 function populateAvailability(d){
-  // Build hour selects (1..12)
   ['availableFromOnline_h','availableToOnline_h','availableFromOffline_h','availableToOffline_h'].forEach(name => {
     const el = document.querySelector(`[name="${name}"]`);
     if (!el || el.options.length) return;
@@ -875,29 +897,20 @@ function populateAvailability(d){
     }
     el.innerHTML = html;
   });
-
-  // Set initial 24h values into hidden inputs and pickers
   setTimePicker('availableFromOnline',  d.availableFromOnline);
   setTimePicker('availableToOnline',    d.availableToOnline);
   setTimePicker('availableFromOffline', d.availableFromOffline);
   setTimePicker('availableToOffline',   d.availableToOffline);
-
-  // Slot duration pills
   const dur = String(d.slotDuration || 15);
   $('#slotDurationVal').value = dur;
   $$('#slotDurationBtns .np-pill').forEach(b => b.classList.toggle('active', b.dataset.val === dur));
-
-  // Working days pills
   const days = String(d.workingDays || 'MON,TUE,WED,THU,FRI,SAT').split(',').map(s=>s.trim()).filter(Boolean);
   $('#workingDaysVal').value = days.join(',');
   $$('#workingDaysBtns .np-pill').forEach(b => b.classList.toggle('active', days.includes(b.dataset.val)));
-
   const availForm = $('#availForm');
   if (availForm) availForm.isAvailable.checked = !!d.isAvailable;
 }
-
 function setTimePicker(baseName, value24){
-  // Parse "HH:MM" 24h -> "H:MM" + "AM/PM"
   if (!value24) return;
   const [hStr, mStr] = value24.split(':');
   let h = parseInt(hStr, 10); const m = parseInt(mStr||'0', 10);
@@ -921,8 +934,6 @@ function readTimePicker(baseName){
   if (aEl.value === 'AM' && h === 12) h = 0;
   return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
 }
-
-/* ---- Clinic ---- */
 function populateClinic(d){
   const f = $('#clinicForm'); if (!f) return;
   f.clinicName.value    = d.clinicName    || '';
@@ -931,28 +942,19 @@ function populateClinic(d){
   f.clinicLat.value     = d.clinicLat     ?? '';
   f.clinicLng.value     = d.clinicLng     ?? '';
 }
-
-/* ---- Fees ---- */
 function populateFees(d){
   const f = $('#feesForm'); if (!f) return;
   f.onlineConsultFee.value   = d.onlineConsultFee   ?? '';
   f.physicalConsultFee.value = d.physicalConsultFee ?? '';
 }
-
-/* ---- Forms submission ---- */
 function setupForms(){
-  // Slot duration pills
-
   $$('#slotDurationBtns .np-pill').forEach(b => {
     b.addEventListener('click', () => {
-
       $$('#slotDurationBtns .np-pill').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       $('#slotDurationVal').value = b.dataset.val;
     });
   });
-  // Working days pills
-
   $$('#workingDaysBtns .np-pill').forEach(b => {
     b.addEventListener('click', () => {
       b.classList.toggle('active');
@@ -960,8 +962,6 @@ function setupForms(){
       $('#workingDaysVal').value = sel.join(',');
     });
   });
-
-  // ── Availability submit  → PUT /api/doctor/availability  (Bug 5) ──
   $('#availForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = {
@@ -973,14 +973,9 @@ function setupForms(){
       workingDays:  $('#workingDaysVal').value || '',
       isAvailable:  !!e.target.isAvailable.checked
     };
-    try {
-      await api('/doctor/availability', { method:'PUT', body });
-      alert('Availability saved.');
-      loadSettings();
-    } catch (ex){ alert(ex.message || 'Could not save'); }
+    try { await api('/doctor/availability', { method:'PUT', body }); alert('Availability saved.'); loadSettings(); }
+    catch (ex){ alert(ex.message || 'Could not save'); }
   });
-
-  // ── Clinic submit  → PUT /api/doctor/clinic  (Bug 5) ──
   $('#clinicForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = {
@@ -990,36 +985,24 @@ function setupForms(){
       clinicLat:     e.target.clinicLat.value ? Number(e.target.clinicLat.value) : null,
       clinicLng:     e.target.clinicLng.value ? Number(e.target.clinicLng.value) : null
     };
-    try {
-      await api('/doctor/clinic', { method:'PUT', body });
-      alert('Clinic details saved.');
-    } catch (ex){ alert(ex.message || 'Could not save'); }
+    try { await api('/doctor/clinic', { method:'PUT', body }); alert('Clinic details saved.'); }
+    catch (ex){ alert(ex.message || 'Could not save'); }
   });
-
-  // ── Fees submit  → PUT /api/doctor/fees  (Bug 5) ──
   $('#feesForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = {
       onlineConsultFee:   Number(e.target.onlineConsultFee.value || 0),
       physicalConsultFee: Number(e.target.physicalConsultFee.value || 0)
     };
-    try {
-      await api('/doctor/fees', { method:'PUT', body });
-      alert('Fees saved.');
-    } catch (ex){ alert(ex.message || 'Could not save'); }
+    try { await api('/doctor/fees', { method:'PUT', body }); alert('Fees saved.'); }
+    catch (ex){ alert(ex.message || 'Could not save'); }
   });
-
-  // ── Password submit  → POST /api/auth/change-password  (Bug 5) ──
-  // Schema also requires `confirmPassword` — send it.
   $('#passwordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;
-    if (f.newPassword.value !== f.confirmPassword.value){
-      alert('New passwords do not match.'); return;
-    }
+    if (f.newPassword.value !== f.confirmPassword.value){ alert('New passwords do not match.'); return; }
     if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(f.newPassword.value)) {
-      alert('New password must be at least 8 characters and contain letters and numbers.');
-      return;
+      alert('New password must be at least 8 characters and contain letters and numbers.'); return;
     }
     try {
       await api('/auth/change-password', { method:'POST', body:{
@@ -1027,35 +1010,23 @@ function setupForms(){
         newPassword:     f.newPassword.value,
         confirmPassword: f.confirmPassword.value
       }});
-      alert('Password updated.');
-      f.reset();
+      alert('Password updated.'); f.reset();
     } catch (ex){ alert(ex.message || 'Could not update password'); }
   });
-
-  // ── Photo upload  → POST /api/doctor/profile-image  (Bug 5) ──
   $('#photoForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const file = $('#photoInput').files[0];
     if (!file) { alert('Choose a file first.'); return; }
-    const fd = new FormData();
-    fd.append('photo', file);
-    try {
-      await api('/doctor/profile-image', { method:'POST', body: fd });
-      alert('Photo updated.');
-      loadSettings();
-    } catch (ex){ alert(ex.message || 'Could not upload photo'); }
+    const fd = new FormData(); fd.append('photo', file);
+    try { await api('/doctor/profile-image', { method:'POST', body: fd }); alert('Photo updated.'); loadSettings(); }
+    catch (ex){ alert(ex.message || 'Could not upload photo'); }
   });
 }
-
-
 async function removePhoto(){
   if (!confirm('Remove your profile photo?')) return;
-  try {
-    await api('/doctor/profile-image', { method:'DELETE' });   // Bug 5
-    loadSettings();
-  } catch (ex){ alert(ex.message || 'Could not remove photo'); }
+  try { await api('/doctor/profile-image', { method:'DELETE' }); loadSettings(); }
+  catch (ex){ alert(ex.message || 'Could not remove photo'); }
 }
-
 
 /* =====================================================================
    AUTO-LOGIN

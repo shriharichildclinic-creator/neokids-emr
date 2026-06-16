@@ -703,3 +703,126 @@ html,body{
   vertical-align:middle;
   white-space:nowrap;
 }
+
+.np-btn--disabled {
+  pointer-events: none;
+  opacity: .5;
+}/* =====================================================================
+   NeoKidsPro EMR — styles.append.css
+   APPEND-ONLY. Do NOT delete or replace existing rules in styles.css.
+   Append this file to the end of styles.css:
+       cat styles.append.css >> styles.css
+   ----------------------------------------------------------------------
+   Adds:
+   - Patient-modal tab bar       (.np-pm-tab / .np-pm-pane)
+   - Patient history row layout  (.np-history-row / .np-history-rx)
+   - Disabled-button visual      (.np-btn--disabled)
+   - Rx success card polish      (#rxSuccessCard)
+   ===================================================================== */
+
+/* ---- Patient modal: tab bar (Current / Prescription / Patient History) ---- */
+.np-pm-tabs {
+  display: flex;
+  gap: .25rem;
+  border-bottom: 1px solid var(--np-border, #e5e7eb);
+  margin-bottom: .75rem;
+  flex-wrap: wrap;
+}
+.np-pm-tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: .55rem .9rem;
+  font: inherit;
+  font-weight: 600;
+  font-size: .9rem;
+  color: var(--np-mut, #64748b);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+  border-radius: 8px 8px 0 0;
+}
+.np-pm-tab:hover {
+  color: var(--np-ink, #0f172a);
+  background: rgba(77, 168, 255, .06);
+}
+.np-pm-tab.active {
+  color: var(--np-primary, #2563eb);
+  border-bottom-color: var(--np-primary, #2563eb);
+  background: rgba(77, 168, 255, .08);
+}
+.np-pm-tab:focus-visible {
+  outline: 2px solid var(--np-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+.np-pm-pane {
+  animation: np-pm-fade .18s ease;
+}
+.np-pm-pane.hidden {
+  display: none !important;
+}
+@keyframes np-pm-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Patient history: visit rows ---- */
+.np-history-row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: .85rem;
+  padding: .75rem .85rem;
+  border: 1px solid var(--np-border, #e5e7eb);
+  border-radius: 12px;
+  background: var(--np-surface, #fff);
+  margin-bottom: .55rem;
+}
+.np-history-row__date {
+  text-align: center;
+  padding: .35rem .25rem;
+  background: rgba(77, 168, 255, .08);
+  border-radius: 10px;
+  color: var(--np-ink, #0f172a);
+}
+.np-history-row__body {
+  min-width: 0;
+}
+
+/* ---- Patient history: prescription cards ---- */
+.np-history-rx {
+  padding: .75rem .85rem;
+  border: 1px solid var(--np-border, #e5e7eb);
+  border-left: 3px solid var(--np-primary, #2563eb);
+  border-radius: 12px;
+  background: var(--np-surface, #fff);
+  margin-bottom: .55rem;
+}
+
+/* ---- Disabled-button visual (used by View / Download when PDF missing) ---- */
+.np-btn--disabled,
+.np-btn[disabled],
+.np-btn--disabled:hover {
+  opacity: .5;
+  pointer-events: none;
+  cursor: not-allowed;
+  filter: grayscale(.2);
+}
+
+/* ---- Rx success card (Bug 3) ---- */
+#rxSuccessCard {
+  background: #ecfdf5;
+  border: 1px solid #10b981;
+  padding: .85rem 1rem;
+  border-radius: 12px;
+  margin-bottom: .85rem;
+  animation: np-pm-fade .22s ease;
+}
+#rxSuccessCard.hidden { display: none !important; }
+#rxSuccessSub { color: #047857; }
+
+/* ---- Mobile tweaks ---- */
+@media (max-width: 640px) {
+  .np-pm-tab { padding: .5rem .55rem; font-size: .82rem; }
+  .np-history-row { grid-template-columns: 76px 1fr; gap: .55rem; padding: .6rem; }
+}
