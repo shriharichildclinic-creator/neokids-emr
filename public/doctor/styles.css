@@ -826,3 +826,123 @@ html,body{
   .np-pm-tab { padding: .5rem .55rem; font-size: .82rem; }
   .np-history-row { grid-template-columns: 76px 1fr; gap: .55rem; padding: .6rem; }
 }
+
+/* =====================================================================
+   v2.0 ADDITIONS — Overflow menu, sidebar badge, cancel reason, consult workspace
+   ===================================================================== */
+
+/* Sidebar live-count badge */
+.np-nav-badge{
+  margin-left:auto;
+  background: var(--np-coral, #FFB5A7);
+  color:#7C2D12;
+  font-size:.65rem;
+  font-weight:700;
+  padding:.1rem .45rem;
+  border-radius:999px;
+  min-width:20px;
+  text-align:center;
+}
+
+/* Overflow (⋮) menu on appointment cards */
+.np-overflow{
+  position:relative;
+  display:inline-flex;
+}
+.np-overflow-trigger{
+  width:32px; height:32px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:transparent;
+  border:1px solid var(--np-border);
+  border-radius:8px;
+  color: var(--np-muted);
+  cursor:pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.np-overflow-trigger:hover{
+  background:#EEF4FB;
+  color: var(--np-primary);
+  border-color: rgba(42,122,217,.2);
+}
+.np-overflow-menu{
+  position:absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background:#fff;
+  border:1px solid var(--np-border);
+  border-radius:12px;
+  box-shadow: 0 14px 32px -8px rgba(15,42,71,.18), 0 2px 6px rgba(15,42,71,.05);
+  min-width: 200px;
+  padding:.35rem;
+  z-index: 50;
+  display:none;
+  flex-direction:column;
+}
+.np-overflow-menu.is-open{ display:flex; }
+.np-overflow-item{
+  display:flex; align-items:center; gap:.55rem;
+  padding:.5rem .65rem;
+  border:0; background:transparent;
+  border-radius:8px;
+  font-size:.86rem;
+  color: var(--np-text);
+  text-decoration:none;
+  cursor:pointer;
+  text-align:left;
+}
+.np-overflow-item:hover{ background:#F1F6FB; color: var(--np-primary-600); }
+.np-overflow-item.is-danger{ color:#B91C1C; }
+.np-overflow-item.is-danger:hover{ background:#FEF2F2; color:#991B1B; }
+.np-overflow-icon{ width:16px; height:16px; flex-shrink:0; }
+
+/* Cancellation reason on completed/cancelled cards */
+.np-appt__cancel-reason{
+  margin-top:.4rem;
+  font-size:.82rem;
+  color:#991B1B;
+  background:#FEF2F2;
+  border:1px solid #FECACA;
+  border-radius:8px;
+  padding:.4rem .55rem;
+}
+
+/* Action stack on appointment cards — make sure overflow doesn't wrap weirdly */
+.np-appt__actions{
+  align-items:center;
+}
+
+/* Consultation workspace tweaks */
+#consultWorkspace .np-panel__head{
+  padding-bottom: 1rem;
+}
+#consultWorkspace .np-pm-tab{
+  background:transparent;
+  border:0;
+  border-bottom: 2px solid transparent;
+  padding:.6rem .85rem;
+  font-size:.92rem;
+  font-weight:500;
+  color: var(--np-muted);
+  cursor:pointer;
+}
+#consultWorkspace .np-pm-tab.active{
+  color: var(--np-primary-600);
+  border-bottom-color: var(--np-primary);
+}
+#consultWorkspace .np-pm-tab:hover{ color: var(--np-primary-600); }
+
+/* Disabled link button visual */
+.np-btn--disabled{
+  opacity:.4 !important;
+  pointer-events:none !important;
+}
+
+/* code blocks inside tips */
+.np-content code{
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .82rem;
+  background:#EEF4FB;
+  padding:1px 6px;
+  border-radius:6px;
+  color: var(--np-primary-600);
+}

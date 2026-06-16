@@ -1,9 +1,12 @@
 /* =====================================================================
-   NeoKidsPro EMR — Doctor App (Bug 2/3/5 hardened)
-   - Bug 3: prescription success card with View/Download/Resend buttons
-   - Bug 5: patient history panel inside the patient modal (visits,
-            prescriptions, diagnoses, notes, follow-ups)
-   - Bug 2: patient search bar (siblings supported)
+   NeoKidsPro EMR — Doctor App v2.0
+   - FIX 1: Appointment card action hierarchy
+            Primary: Open Consultation · Secondary: Join Meeting · Overflow: ⋮
+   - FIX 2: Route-based consultation workspace (#consult/:id)
+            Patient modal kept for "peek" use; primary work happens in workspace.
+            All form IDs & names preserved → existing submit handler keeps working.
+   - FIX 3: Prescription Archive tab (client-side filter over /doctor/appointments)
+   - Backwards-compatible with Bug 2/3/4/5 backend.
    ===================================================================== */
 
 const API = '/api';
@@ -11,6 +14,7 @@ let TOKEN = localStorage.getItem('np_doctor_token');
 let currentAppointment = null;
 let allAppointmentsCache = [];
 let doctorCache = null;
+let activeConsultId = null;            // FIX 2 — currently routed consultation
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -110,7 +114,9 @@ function paymentBadge(p){
     PAID:           {cls:'np-badge--green', txt:'Paid'},
     UNPAID:         {cls:'np-badge--amber', txt:'Unpaid'},
     REFUNDED:       {cls:'np-badge--slate', txt:'Refunded'},
-    CASH_COLLECTED: {cls:'np-badge--green', txt:'Cash collected'}
+    CASH_COLLECTED: {cls:'np-badge--green', txt:'Cash collected'},
+    CASH_PENDING:   {cls:'np-badge--amber', txt:'Cash at clinic'},
+    FAILED:         {cls:'np-badge--red',   txt:'Payment failed'}
   };
   const m = map[p]; if (!m) return '';
   return `<span class="np-badge ${m.cls}"><span class="np-badge__dot"></span>${m.txt}</span>`;
@@ -168,9 +174,6 @@ async function init(){
     if (ex.status === 401){ logout(); return; }
     console.warn('doctor/me failed', ex);
   }
-  setActiveTab('dashboardTab');
-  loadStats();
-  loadDashSnapshot();
   setupSidebar();
   setupProfileMenu();
   setupTabs();
@@ -178,7 +181,39 @@ async function init(){
   setupForms();
   setupRescheduleModal();
   setupCancelModal();
-  setupPatientModalTabs();   // Bug 5
+  setupPatientModalTabs();
+
+  // Modal -> open workspace bridge
+  const bridgeBtn = $('#modalOpenWorkspaceBtn');
+  if (bridgeBtn) bridgeBtn.addEventListener('click', () => {
+    if (!currentAppointment) return;
+    const id = currentAppointment.id;
+    closePatientModal();
+    location.hash = '#consult/' + id;
+  });
+
+  // FIX 3 — Archive filter listeners
+  ['rxSearch','rxFromDate','rxToDate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el){
+      const ev = (el.tagName === 'INPUT' && el.type !== 'date') ? 'input' : 'change';
+      el.addEventListener(ev, renderRxArchive);
+    }
+  });
+  const clr = $('#rxClearFilters');
+  if (clr) clr.addEventListener('click', () => {
+    $('#rxSearch').value = ''; $('#rxFromDate').value = ''; $('#rxToDate').value = '';
+    renderRxArchive();
+  });
+
+  // FIX 2 — Hash router
+  window.addEventListener('hashchange', handleHashRoute);
+  handleHashRoute(); // boot route
+  if (!location.hash){
+    setActiveTab('dashboardTab');
+  }
+  loadStats();
+  loadDashSnapshot();
 }
 function renderDoctorHeader(d){
   const name = d.name ? ('Dr. ' + d.name) : 'Doctor';
@@ -245,10 +280,12 @@ function setupProfileMenu(){
    TABS
    ===================================================================== */
 const TAB_META = {
-  dashboardTab: { title:'Dashboard',     sub:"Welcome back — here's what's happening today." },
-  waitingTab:   { title:'Waiting Room',  sub:'Patients currently waiting to be seen' },
-  allTab:       { title:'Appointments',  sub:'Search and manage all your appointments' },
-  settingsTab:  { title:'Settings',      sub:'Manage your profile, availability, and clinic' }
+  dashboardTab:  { title:'Dashboard',           sub:"Welcome back — here's what's happening today." },
+  waitingTab:    { title:'Waiting Room',        sub:'Patients currently waiting to be seen' },
+  allTab:        { title:'Appointments',        sub:'Search and manage all your appointments' },
+  consultTab:    { title:'Consultation',        sub:'Active patient consultation workspace' },
+  rxArchiveTab:  { title:'Prescription Archive',sub:'All prescriptions you have issued' },
+  settingsTab:   { title:'Settings',            sub:'Manage your profile, availability, and clinic' }
 };
 function setActiveTab(tabId){
   $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
@@ -262,11 +299,36 @@ function setActiveTab(tabId){
   else if (tabId === 'allTab') loadAll();
   else if (tabId === 'settingsTab') loadSettings();
   else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); }
+  else if (tabId === 'rxArchiveTab') loadRxArchive();
+  // consultTab is rendered by openConsultation
 }
 function setupTabs(){
-  $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+  $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    // Clear consult hash if leaving consult tab
+    if (tab !== 'consultTab' && location.hash.startsWith('#consult/')){
+      activeConsultId = null;
+      $('#navConsult').style.display = 'none';
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+    setActiveTab(tab);
+  }));
   const refresh = $('#refreshWaiting');
   if (refresh) refresh.addEventListener('click', () => loadWaiting());
+}
+
+/* =====================================================================
+   HASH ROUTER — FIX 2
+   ===================================================================== */
+function handleHashRoute(){
+  const m = (location.hash || '').match(/^#consult\/([A-Za-z0-9-]+)/);
+  if (m){
+    openConsultation(m[1]);
+  } else {
+    // No consult route — hide nav badge entry
+    const navC = $('#navConsult');
+    if (navC) navC.style.display = 'none';
+  }
 }
 
 /* =====================================================================
@@ -310,20 +372,27 @@ async function loadDashSnapshot(){
   if (!el) return;
   try {
     const list = await api('/doctor/waiting-room');
+    // Update sidebar badge
+    const badge = $('#navBadgeWaiting');
+    if (badge){
+      if (list && list.length){ badge.textContent = list.length; badge.classList.remove('hidden'); }
+      else { badge.classList.add('hidden'); }
+    }
     if (!list || !list.length){
-      el.innerHTML = emptyState('No patients waiting', 'Your waiting room is empty right now.');
+      el.innerHTML = emptyState('No patients waiting', 'Your waiting room is empty right now.', null);
       return;
     }
     const first5 = list.slice(0,5);
     el.innerHTML = `<div class="np-appt-list">${first5.map(apptCard).join('')}</div>`;
   } catch (ex){
-    el.innerHTML = emptyState('Could not load appointments', ex.message || 'Try refreshing.');
+    el.innerHTML = emptyState('Could not load appointments', ex.message || 'Try refreshing.', null);
   }
 }
-function emptyState(title, sub){
+function emptyState(title, sub, ctaHtml){
   return `<div class="np-empty">
       <div class="np-empty__title">${escapeHtml(title)}</div>
       <div class="np-empty__sub">${escapeHtml(sub||'')}</div>
+      ${ctaHtml || ''}
     </div>`;
 }
 
@@ -336,12 +405,16 @@ async function loadWaiting(){
   try {
     const data = await api('/doctor/waiting-room');
     if (!data || !data.length){
-      list.innerHTML = emptyState('All clear', 'No patients are waiting right now.');
+      list.innerHTML = emptyState('All clear', 'No patients are waiting right now.',
+        `<button class="np-btn np-btn--ghost np-btn--sm" type="button" style="margin-top:.85rem;"
+                 onclick="document.querySelector('[data-tab=allTab]').click()">
+           View all appointments
+         </button>`);
       return;
     }
     list.innerHTML = data.map(apptCard).join('');
   } catch (ex){
-    list.innerHTML = emptyState('Could not load waiting room', ex.message || 'Try again later.');
+    list.innerHTML = emptyState('Could not load waiting room', ex.message || 'Try again later.', null);
   }
 }
 async function loadAll(){
@@ -352,7 +425,7 @@ async function loadAll(){
     allAppointmentsCache = Array.isArray(data) ? data : [];
     renderAllAppointments();
   } catch (ex){
-    list.innerHTML = emptyState('Could not load appointments', ex.message || 'Try again later.');
+    list.innerHTML = emptyState('Could not load appointments', ex.message || 'Try again later.', null);
   }
 }
 function renderAllAppointments(){
@@ -377,7 +450,7 @@ function renderAllAppointments(){
   });
   const list = $('#allList');
   if (!arr.length){
-    list.innerHTML = emptyState('No matches', 'Try clearing filters or changing the search term.');
+    list.innerHTML = emptyState('No matches', 'Try clearing filters or changing the search term.', null);
     return;
   }
   list.innerHTML = arr.map(apptCard).join('');
@@ -392,16 +465,54 @@ function setupSearchFilters(){
 }
 
 /* =====================================================================
-   APPOINTMENT CARD
+   APPOINTMENT CARD — FIX 1
+   Action hierarchy:
+     Primary:   "Open Consultation"  (always shown unless cancelled)
+     Secondary: "Join Meeting"       (only ONLINE && meetLink && not cancelled/completed)
+     Overflow:  "Mark Complete", "Reschedule", "Cancel"
    ===================================================================== */
 function apptCard(a){
   const p = a.patient || {};
   const timeMain = fmtTime(a.startTime) || '—';
   const dt = fmtDate(a.date);
-  const meet = (a.consultationType === 'ONLINE' && a.meetLink)
-    ? `<a class="np-btn np-btn--success np-btn--sm" href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener">Join</a>`
-    : '';
-  const canCancel = !['CANCELLED','COMPLETED'].includes(a.status);
+  const isLive = !['CANCELLED','COMPLETED'].includes(a.status);
+  const canJoin = (a.consultationType === 'ONLINE' && a.meetLink && isLive);
+  const canCancel = isLive;
+  const canComplete = a.status !== 'COMPLETED' && a.status !== 'CANCELLED';
+
+  // Overflow menu items
+  const overflowItems = [];
+  if (canComplete) {
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); toggleComplete('${escapeHtml(a.id)}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Mark complete
+    </button>`);
+  }
+  if (canCancel) {
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); openReschedule('${escapeHtml(a.id)}','${escapeHtml(a.consultationType||'OFFLINE')}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Reschedule
+    </button>`);
+    overflowItems.push(`<button class="np-overflow-item is-danger" type="button" onclick="event.stopPropagation(); cancelAppt('${escapeHtml(a.id)}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      Cancel
+    </button>`);
+  }
+  if (a.prescriptionUrl) {
+    overflowItems.push(`<a class="np-overflow-item" href="${escapeHtml(a.prescriptionUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      View prescription
+    </a>`);
+  }
+
+  const overflow = overflowItems.length ? `
+    <div class="np-overflow">
+      <button type="button" class="np-overflow-trigger" aria-label="More actions" onclick="event.stopPropagation(); toggleOverflow(this)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </button>
+      <div class="np-overflow-menu">${overflowItems.join('')}</div>
+    </div>` : '';
+
   return `
   <article class="np-appt" data-id="${escapeHtml(a.id)}">
     <div class="np-appt__time">
@@ -424,91 +535,230 @@ function apptCard(a){
         ${a.feeAtBooking != null ? `<span>${fmtCurrency(a.feeAtBooking)}</span>` : ''}
       </div>
       ${a.primaryProblem ? `<div class="np-appt__problem">${escapeHtml(a.primaryProblem)}</div>` : ''}
+      ${a.status === 'CANCELLED' && a.notes ? `<div class="np-appt__cancel-reason"><b>Cancelled:</b> ${escapeHtml(a.notes)}</div>` : ''}
     </div>
     <div class="np-appt__actions">
-      ${meet}
-      <button class="np-btn np-btn--sm" type="button" onclick="openPatient('${escapeHtml(a.id)}')">Open</button>
-      ${a.status !== 'COMPLETED' ? `<button class="np-btn np-btn--sm" type="button" onclick="toggleComplete('${escapeHtml(a.id)}')">Complete</button>` : ''}
-      ${canCancel ? `
-        <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openReschedule('${escapeHtml(a.id)}','${escapeHtml(a.consultationType||'OFFLINE')}')">Reschedule</button>
-        <button class="np-btn np-btn--danger np-btn--sm" type="button" onclick="cancelAppt('${escapeHtml(a.id)}')">Cancel</button>` : ''}
+      ${isLive ? `<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="goToConsult('${escapeHtml(a.id)}')">Open Consultation</button>` : ''}
+      ${!isLive ? `<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="goToConsult('${escapeHtml(a.id)}')">View</button>` : ''}
+      ${canJoin ? `<a class="np-btn np-btn--success np-btn--sm" href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener">Join Meeting</a>` : ''}
+      ${overflow}
     </div>
   </article>`;
 }
 
+function goToConsult(id){
+  location.hash = '#consult/' + id;
+}
+
+/* Overflow menu open/close + click-outside */
+function toggleOverflow(btn){
+  const menu = btn.nextElementSibling;
+  const isOpen = menu.classList.contains('is-open');
+  // close any other open menus
+  document.querySelectorAll('.np-overflow-menu.is-open').forEach(m => m.classList.remove('is-open'));
+  if (!isOpen) menu.classList.add('is-open');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.np-overflow')){
+    document.querySelectorAll('.np-overflow-menu.is-open').forEach(m => m.classList.remove('is-open'));
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') document.querySelectorAll('.np-overflow-menu.is-open').forEach(m => m.classList.remove('is-open'));
+});
+
 /* =====================================================================
-   PATIENT MODAL — with Bug 5 history tabs and Bug 3 prescription card
+   PATIENT MODAL — kept for "peek" use from dashboard snapshot
    ===================================================================== */
 function setupPatientModalTabs(){
-  // Delegated click — tabs are rendered dynamically inside the modal.
   document.addEventListener('click', (e) => {
     const t = e.target.closest('.np-pm-tab');
     if (!t || !t.dataset.pmTab) return;
     const target = t.dataset.pmTab;
-    $$('.np-pm-tab').forEach(x => x.classList.toggle('active', x.dataset.pmTab === target));
-    $$('.np-pm-pane').forEach(x => x.classList.toggle('hidden', x.id !== 'pm-' + target));
+    // Scope to whatever container the tab lives in (modal OR workspace)
+    const root = t.closest('.np-pm-scope') || document;
+    root.querySelectorAll('.np-pm-tab').forEach(x => x.classList.toggle('active', x.dataset.pmTab === target));
+    root.querySelectorAll('.np-pm-pane').forEach(x => x.classList.toggle('hidden', x.id !== 'pm-' + target && x.dataset.pmPaneId !== target));
     if (target === 'history' && currentAppointment){
-      loadPatientHistoryInModal(currentAppointment.patientId || (currentAppointment.patient && currentAppointment.patient.id));
+      const patientId = currentAppointment.patientId || (currentAppointment.patient && currentAppointment.patient.id);
+      const slot = root.querySelector('[data-history-body], #patientHistoryBody');
+      if (slot) loadPatientHistoryInto(slot, patientId);
     }
   });
 }
 
 async function openPatient(id){
+  // Used by modal-style "peek" — same body content the workspace renders.
+  try {
+    const data = await api('/doctor/appointments/' + encodeURIComponent(id));
+    const a = data.appointment || data;
+    currentAppointment = a;
+    renderConsultBody($('#patientDetail'), a, /*compact*/true);
+    moveRxFormInto($('#patientDetail').querySelector('#rxFormSlot'), a, data);
+    $('#patientModal').classList.remove('hidden');
+  } catch (ex){
+    alert(ex.message || 'Could not open patient');
+  }
+}
+
+function closePatientModal(){
+  $('#patientModal').classList.add('hidden');
+}
+
+/* =====================================================================
+   CONSULTATION WORKSPACE — FIX 2
+   Renders the same content the modal used, but full-page, deep-linkable.
+   ===================================================================== */
+async function openConsultation(id){
+  activeConsultId = id;
+  const navC = $('#navConsult'); if (navC) navC.style.display = '';
+  setActiveTab('consultTab');
+
+  const container = $('#consultContainer');
+  container.innerHTML = `
+    <div class="np-panel">
+      <div class="np-panel__body" style="padding:1.5rem;">
+        <div class="np-empty">
+          <div class="np-empty__title">Loading consultation…</div>
+          <div class="np-empty__sub">Fetching patient data</div>
+        </div>
+      </div>
+    </div>`;
+
   try {
     const data = await api('/doctor/appointments/' + encodeURIComponent(id));
     const a = data.appointment || data;
     currentAppointment = a;
     const p = a.patient || {};
+    const isLive = !['CANCELLED','COMPLETED'].includes(a.status);
+    const canJoin = (a.consultationType === 'ONLINE' && a.meetLink && isLive);
 
-    $('#patientDetail').innerHTML = `
+    container.innerHTML = `
+      <div class="np-panel np-pm-scope" id="consultWorkspace">
+        <div class="np-panel__head" style="flex-wrap:wrap;">
+          <div style="flex:1; min-width:240px;">
+            <div class="np-row" style="gap:.5rem; flex-wrap:wrap; margin-bottom:.25rem;">
+              ${statusBadge(a.status)} ${typeBadge(a.consultationType)} ${paymentBadge(a.paymentStatus)}
+            </div>
+            <div class="np-panel__title" style="font-size:1.25rem;">${escapeHtml(p.name || 'Patient')}
+              ${p.dateOfBirth ? `<span class="np-mut" style="font-size:.85rem; margin-left:.5rem; font-weight:500;">${escapeHtml(calcAgeLong(p.dateOfBirth))}</span>` : ''}
+            </div>
+            <div class="np-panel__subtitle">${fmtDate(a.date)} · ${fmtTime(a.startTime)}${a.endTime ? ' – ' + fmtTime(a.endTime) : ''} · ${fmtCurrency(a.feeAtBooking)}</div>
+          </div>
+          <div class="np-row" style="gap:.5rem;">
+            ${canJoin ? `<a class="np-btn np-btn--success np-btn--sm" href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener">Join Meeting</a>` : ''}
+            ${isLive ? `<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openReschedule('${escapeHtml(a.id)}','${escapeHtml(a.consultationType||'OFFLINE')}')">Reschedule</button>` : ''}
+            ${isLive ? `<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="cancelAppt('${escapeHtml(a.id)}')" style="color:#B91C1C;">Cancel</button>` : ''}
+            ${a.status !== 'COMPLETED' && a.status !== 'CANCELLED' ? `<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="toggleComplete('${escapeHtml(a.id)}')">Mark Complete</button>` : ''}
+          </div>
+        </div>
+        <div class="np-panel__body">
+
+          <div class="np-pm-tabs np-row" style="gap:.25rem; border-bottom:1px solid var(--np-border); margin-bottom:1rem;">
+            <button type="button" class="np-pm-tab active" data-pm-tab="summary">Summary</button>
+            <button type="button" class="np-pm-tab" data-pm-tab="prescription">Prescription</button>
+            <button type="button" class="np-pm-tab" data-pm-tab="history">Patient History</button>
+          </div>
+
+          <div id="pm-summary" class="np-pm-pane" data-pm-pane-id="summary">
+            <div class="np-grid-2" style="margin-bottom:1rem;">
+              ${p.phone ? `<div class="np-field"><div class="np-field__label">Phone</div><div>${escapeHtml(p.phone)}</div></div>` : ''}
+              ${p.email ? `<div class="np-field"><div class="np-field__label">Email</div><div>${escapeHtml(p.email)}</div></div>` : ''}
+              ${p.parentName ? `<div class="np-field"><div class="np-field__label">Parent / Guardian</div><div>${escapeHtml(p.parentName)}</div></div>` : ''}
+              ${p.gender ? `<div class="np-field"><div class="np-field__label">Gender</div><div>${escapeHtml(p.gender)}</div></div>` : ''}
+              ${p.dateOfBirth ? `<div class="np-field"><div class="np-field__label">Date of Birth</div><div>${escapeHtml(fmtDate(p.dateOfBirth))}</div></div>` : ''}
+              ${a.meetLink ? `<div class="np-field"><div class="np-field__label">Meet Link</div><div><a href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener" style="color:var(--np-primary);">Join consultation</a></div></div>` : ''}
+            </div>
+            ${a.primaryProblem ? `
+              <div class="np-field">
+                <div class="np-field__label">Primary problem</div>
+                <div style="background:var(--np-surface); padding:.7rem .85rem; border-radius:10px; border:1px solid var(--np-border); font-size:.9rem;">
+                  ${escapeHtml(a.primaryProblem)}
+                </div>
+              </div>` : ''}
+            ${a.notes ? `
+              <div class="np-field" style="margin-top:.85rem;">
+                <div class="np-field__label">Notes</div>
+                <div style="background:#FFF7ED; padding:.7rem .85rem; border-radius:10px; border:1px solid #FED7AA; font-size:.9rem;">
+                  ${escapeHtml(a.notes)}
+                </div>
+              </div>` : ''}
+            ${a.rescheduledAt ? `
+              <div class="np-mut" style="font-size:.82rem; margin-top:.75rem;">
+                ⓘ Rescheduled on ${escapeHtml(fmtDate(a.rescheduledAt))}${a.rescheduleReason ? ` — "${escapeHtml(a.rescheduleReason)}"` : ''}
+              </div>` : ''}
+          </div>
+
+          <div id="pm-prescription" class="np-pm-pane hidden" data-pm-pane-id="prescription">
+            <div id="rxSuccessCard" class="hidden" style="background:#ecfdf5; border:1px solid #10b981; padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
+              <div style="font-weight:700; color:#065f46; margin-bottom:.25rem;">✓ Prescription saved</div>
+              <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">PDF generated and emailed to patient.</div>
+              <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
+                <a id="rxViewBtn" class="np-btn np-btn--sm" href="#" target="_blank" rel="noopener">View PDF</a>
+                <a id="rxDownloadBtn" class="np-btn np-btn--sm" href="#" download>Download PDF</a>
+                <button id="rxResendBtn" type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="resendPrescription()">Resend to patient</button>
+              </div>
+            </div>
+            <div id="rxFormSlot"></div>
+          </div>
+
+          <div id="pm-history" class="np-pm-pane hidden" data-pm-pane-id="history">
+            <div data-history-body class="np-mut" style="font-size:.9rem;">Loading patient history…</div>
+          </div>
+
+        </div>
+      </div>`;
+
+    moveRxFormInto($('#rxFormSlot'), a, data);
+  } catch (ex){
+    container.innerHTML = `<div class="np-panel"><div class="np-panel__body">
+      <div class="np-empty">
+        <div class="np-empty__title">Could not open consultation</div>
+        <div class="np-empty__sub">${escapeHtml(ex.message || 'Unknown error')}</div>
+        <button class="np-btn np-btn--ghost np-btn--sm" style="margin-top:.85rem;" onclick="document.querySelector('[data-tab=waitingTab]').click()">Back to Waiting Room</button>
+      </div>
+    </div></div>`;
+  }
+}
+
+/* Render compact body for modal-peek mode (same content, light header) */
+function renderConsultBody(root, a, compact){
+  const p = a.patient || {};
+  root.innerHTML = `
+    <div class="np-pm-scope">
       <div class="np-row" style="gap:.6rem; margin-bottom:.5rem;">
         ${statusBadge(a.status)} ${typeBadge(a.consultationType)} ${paymentBadge(a.paymentStatus)}
       </div>
       <div style="font-size:1.15rem; font-weight:700; color:var(--np-ink);">${escapeHtml(p.name || 'Patient')}</div>
       <div class="np-mut" style="font-size:.85rem; margin-bottom:.75rem;">
         ${p.dateOfBirth
-            ? `<b style="color:var(--np-ink);">${escapeHtml(calcAgeLong(p.dateOfBirth))}</b>
-               <span class="np-mut"> · DOB ${escapeHtml(fmtDate(p.dateOfBirth))}</span>`
+            ? `<b style="color:var(--np-ink);">${escapeHtml(calcAgeLong(p.dateOfBirth))}</b><span class="np-mut"> · DOB ${escapeHtml(fmtDate(p.dateOfBirth))}</span>`
             : '<span class="np-mut">DOB not recorded</span>'}
         ${p.gender ? ' · ' + escapeHtml(p.gender) : ''}
       </div>
 
-      <!-- Bug 5 — patient modal tabs -->
       <div class="np-pm-tabs np-row" style="gap:.25rem; border-bottom:1px solid var(--np-border); margin-bottom:.75rem;">
         <button type="button" class="np-pm-tab active" data-pm-tab="current">Current Visit</button>
         <button type="button" class="np-pm-tab" data-pm-tab="prescription">Prescription</button>
         <button type="button" class="np-pm-tab" data-pm-tab="history">Patient History</button>
       </div>
 
-      <!-- Current visit pane -->
-      <div id="pm-current" class="np-pm-pane">
+      <div id="pm-current" class="np-pm-pane" data-pm-pane-id="current">
         <div class="np-grid-2" style="margin-bottom:1rem;">
-          <div class="np-field">
-            <div class="np-field__label">Date &amp; Time</div>
-            <div>${fmtDate(a.date)} · ${fmtTime(a.startTime)}${a.endTime ? ' – ' + fmtTime(a.endTime) : ''}</div>
-          </div>
-          <div class="np-field">
-            <div class="np-field__label">Fee</div>
-            <div>${fmtCurrency(a.feeAtBooking)}</div>
-          </div>
+          <div class="np-field"><div class="np-field__label">Date &amp; Time</div><div>${fmtDate(a.date)} · ${fmtTime(a.startTime)}${a.endTime ? ' – ' + fmtTime(a.endTime) : ''}</div></div>
+          <div class="np-field"><div class="np-field__label">Fee</div><div>${fmtCurrency(a.feeAtBooking)}</div></div>
           ${p.phone ? `<div class="np-field"><div class="np-field__label">Phone</div><div>${escapeHtml(p.phone)}</div></div>` : ''}
           ${p.email ? `<div class="np-field"><div class="np-field__label">Email</div><div>${escapeHtml(p.email)}</div></div>` : ''}
-          ${p.parentName ? `<div class="np-field"><div class="np-field__label">Parent / Guardian</div><div>${escapeHtml(p.parentName)}</div></div>` : ''}
-          ${a.meetLink ? `<div class="np-field"><div class="np-field__label">Meet Link</div>
-              <div><a href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener" style="color:var(--np-primary);">Join consultation</a></div>
-            </div>` : ''}
         </div>
         ${a.primaryProblem ? `
-          <div class="np-field">
-            <div class="np-field__label">Primary problem</div>
+          <div class="np-field"><div class="np-field__label">Primary problem</div>
             <div style="background:var(--np-surface); padding:.7rem .85rem; border-radius:10px; border:1px solid var(--np-border); font-size:.9rem;">
               ${escapeHtml(a.primaryProblem)}
             </div>
           </div>` : ''}
       </div>
 
-      <!-- Prescription pane — Bug 3 success card lives here -->
-      <div id="pm-prescription" class="np-pm-pane hidden">
+      <div id="pm-prescription" class="np-pm-pane hidden" data-pm-pane-id="prescription">
         <div id="rxSuccessCard" class="hidden" style="background:#ecfdf5; border:1px solid #10b981; padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
           <div style="font-weight:700; color:#065f46; margin-bottom:.25rem;">✓ Prescription saved</div>
           <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">PDF generated and emailed to patient.</div>
@@ -521,63 +771,58 @@ async function openPatient(id){
         <div id="rxFormSlot"></div>
       </div>
 
-      <!-- History pane -->
-      <div id="pm-history" class="np-pm-pane hidden">
-        <div id="patientHistoryBody" class="np-mut" style="font-size:.9rem;">Loading patient history…</div>
+      <div id="pm-history" class="np-pm-pane hidden" data-pm-pane-id="history">
+        <div data-history-body class="np-mut" style="font-size:.9rem;">Loading patient history…</div>
       </div>
-    `;
+    </div>
+  `;
+}
 
-    // Move the existing rxForm into the Prescription pane.
-    const rxForm = $('#rxForm');
-    const slot = $('#rxFormSlot');
-    if (rxForm && slot) slot.appendChild(rxForm);
+/* Physically move the existing #rxForm element into the requested slot,
+   so its IDs/names stay unique and existing submit handler keeps working. */
+function moveRxFormInto(slot, a, data){
+  const rxForm = $('#rxForm');
+  if (!rxForm || !slot) return;
+  slot.appendChild(rxForm);
 
-    // Show Rx form for active appts
-    if (['CONFIRMED','PENDING','COMPLETED'].includes(a.status)){
-      rxForm.classList.remove('hidden');
-      const tbody = $('#medsList');
-      tbody.innerHTML = '';
-      addMedRow();
-      if (data.appointment && data.appointment.prescription){
-        const r = data.appointment.prescription;
-        rxForm.diagnosis.value      = r.diagnosis || '';
-        rxForm.chiefComplaint.value = r.chiefComplaint || '';
-        rxForm.advice.value         = r.advice || '';
-        if (rxForm.vitalsWeight)    rxForm.vitalsWeight.value    = r.weight || '';
-        if (rxForm.vitalsHeight)    rxForm.vitalsHeight.value    = r.height || '';
-        if (rxForm.allergies)       rxForm.allergies.value       = r.allergies || '';
-        if (rxForm.pastHistory)     rxForm.pastHistory.value     = r.pastHistory || '';
-        if (rxForm.investigations)  rxForm.investigations.value  = r.investigations || '';
-        if (rxForm.followUpDate)    rxForm.followUpDate.value    = r.followUpDate ? r.followUpDate.slice(0,10) : '';
-        if (Array.isArray(r.medications) && r.medications.length){
-          tbody.innerHTML = '';
-          r.medications.forEach(m => addMedRow(m));
-        }
-        // Bug 3 — if an Rx already exists, show the success card with View/Download/Resend.
-        showRxSuccessCard({
-          pdfUrl: a.prescriptionUrl,
-          emailRecipient: p.email,
-          subtitle: 'Existing prescription on file. You can edit and re-save, or re-send to the patient.'
-        });
+  if (['CONFIRMED','PENDING','COMPLETED'].includes(a.status)){
+    rxForm.classList.remove('hidden');
+    const tbody = $('#medsList');
+    tbody.innerHTML = '';
+    addMedRow();
+    const p = a.patient || {};
+    if (data && data.appointment && data.appointment.prescription){
+      const r = data.appointment.prescription;
+      rxForm.diagnosis.value      = r.diagnosis || '';
+      rxForm.chiefComplaint.value = r.chiefComplaint || '';
+      rxForm.advice.value         = r.advice || '';
+      if (rxForm.vitalsWeight)    rxForm.vitalsWeight.value    = r.weight || '';
+      if (rxForm.vitalsHeight)    rxForm.vitalsHeight.value    = r.height || '';
+      if (rxForm.allergies)       rxForm.allergies.value       = r.allergies || '';
+      if (rxForm.pastHistory)     rxForm.pastHistory.value     = r.pastHistory || '';
+      if (rxForm.investigations)  rxForm.investigations.value  = r.investigations || '';
+      if (rxForm.followUpDate)    rxForm.followUpDate.value    = r.followUpDate ? r.followUpDate.slice(0,10) : '';
+      if (Array.isArray(r.medications) && r.medications.length){
+        tbody.innerHTML = '';
+        r.medications.forEach(m => addMedRow(m));
       }
+      showRxSuccessCard({
+        pdfUrl: a.prescriptionUrl,
+        emailRecipient: p.email,
+        subtitle: 'Existing prescription on file. You can edit and re-save, or re-send to the patient.'
+      });
     } else {
-      rxForm.classList.add('hidden');
+      // hide success card if it's a fresh form
+      const card = document.querySelector('#rxSuccessCard');
+      if (card) card.classList.add('hidden');
     }
-
-    $('#patientModal').classList.remove('hidden');
-  } catch (ex){
-    alert(ex.message || 'Could not open patient');
+  } else {
+    rxForm.classList.add('hidden');
   }
 }
 
-function closePatientModal(){
-  $('#patientModal').classList.add('hidden');
-  currentAppointment = null;
-}
-
-/* ---------- Bug 5 — Patient history panel ---------- */
-async function loadPatientHistoryInModal(patientId){
-  const slot = $('#patientHistoryBody');
+/* ---------- Patient history loader ---------- */
+async function loadPatientHistoryInto(slot, patientId){
   if (!slot) return;
   if (!patientId){ slot.innerHTML = 'No patient id available.'; return; }
   slot.innerHTML = 'Loading patient history…';
@@ -629,22 +874,18 @@ async function loadPatientHistoryInModal(patientId){
         <div class="np-field"><div class="np-field__label">Last visit</div><div>${sum.lastVisitAt ? escapeHtml(fmtDate(sum.lastVisitAt)) : '—'}</div></div>
         <div class="np-field"><div class="np-field__label">Open follow-ups</div><div>${escapeHtml(String(sum.openFollowUps||0))}</div></div>
       </div>
-
       ${siblings ? `<div class="np-field" style="margin-bottom:.85rem;">
         <div class="np-field__label">Siblings on same parent phone</div>
         <div class="np-row" style="gap:.35rem; flex-wrap:wrap;">${siblings}</div>
       </div>` : ''}
-
       ${(h.diagnoses||[]).length ? `<div class="np-field" style="margin-bottom:.85rem;">
         <div class="np-field__label">Past diagnoses</div>
         <div>${h.diagnoses.map(d => `<span class="np-badge np-badge--mint" style="margin-right:.25rem; margin-bottom:.25rem;">${escapeHtml(d)}</span>`).join(' ')}</div>
       </div>` : ''}
-
       <div class="np-field" style="margin-bottom:.5rem;">
         <div class="np-field__label">Visits (${(h.visits||[]).length})</div>
       </div>
       ${visitsHtml || '<div class="np-mut">No previous visits with this doctor.</div>'}
-
       ${(h.prescriptions||[]).length ? `
         <div class="np-field" style="margin:.85rem 0 .5rem;">
           <div class="np-field__label">Prescriptions (${h.prescriptions.length})</div>
@@ -670,14 +911,15 @@ function addMedRow(prefill){
   $('#medsList').appendChild(tr);
 }
 
-/* ---------- Bug 3 — Prescription success card helpers ---------- */
+/* ---------- Prescription success card helpers ---------- */
 function showRxSuccessCard({ pdfUrl, emailRecipient, subtitle }){
-  const card = $('#rxSuccessCard');
+  const card = document.querySelector('#rxSuccessCard');
   if (!card) return;
-  $('#rxSuccessSub').textContent = subtitle ||
+  const sub = card.querySelector('#rxSuccessSub');
+  if (sub) sub.textContent = subtitle ||
     (emailRecipient ? `PDF generated and emailed to ${emailRecipient}.` : 'PDF generated. No patient email on file — use Resend after adding one.');
-  const view = $('#rxViewBtn');
-  const dl   = $('#rxDownloadBtn');
+  const view = card.querySelector('#rxViewBtn');
+  const dl   = card.querySelector('#rxDownloadBtn');
   if (pdfUrl){
     view.href = pdfUrl;
     dl.href   = pdfUrl;
@@ -689,13 +931,14 @@ function showRxSuccessCard({ pdfUrl, emailRecipient, subtitle }){
     view.classList.add('np-btn--disabled');
     dl.classList.add('np-btn--disabled');
   }
-  $('#rxResendBtn').disabled = !emailRecipient;
+  const resend = card.querySelector('#rxResendBtn');
+  if (resend) resend.disabled = !emailRecipient;
   card.classList.remove('hidden');
 }
 
 async function resendPrescription(){
   if (!currentAppointment){ alert('No appointment selected'); return; }
-  const btn = $('#rxResendBtn'); if (btn) btn.disabled = true;
+  const btn = document.querySelector('#rxResendBtn'); if (btn) btn.disabled = true;
   try {
     const r = await api('/doctor/appointments/' + encodeURIComponent(currentAppointment.id) + '/prescription/resend',
       { method:'POST' });
@@ -707,7 +950,7 @@ async function resendPrescription(){
   }
 }
 
-/* Prescription submit — Bug 3: show real success card with View/Download/Resend */
+/* Prescription submit handler (global — works regardless of which container holds the form) */
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'rxForm') return;
   e.preventDefault();
@@ -746,7 +989,6 @@ document.addEventListener('submit', async (e) => {
       '/doctor/appointments/' + encodeURIComponent(currentAppointment.id) + '/prescription',
       { method:'POST', body }
     );
-    // Bug 3 — render the rich success card.
     showRxSuccessCard({
       pdfUrl: (r.delivery && r.delivery.pdfUrl) || (r.appointment && r.appointment.prescriptionUrl),
       emailRecipient: r.delivery && r.delivery.emailRecipient,
@@ -754,9 +996,12 @@ document.addEventListener('submit', async (e) => {
         ? `PDF generated and emailed to ${r.delivery.emailRecipient}.`
         : 'PDF generated. Patient has no email — use Resend after adding one.'
     });
-    // Switch to the Prescription tab so the doctor sees the result.
-    const tab = document.querySelector('.np-pm-tab[data-pm-tab="prescription"]');
-    if (tab) tab.click();
+    // Switch to the Prescription tab inside whichever scope holds it.
+    const scope = e.target.closest('.np-pm-scope');
+    if (scope){
+      const tab = scope.querySelector('.np-pm-tab[data-pm-tab="prescription"]');
+      if (tab) tab.click();
+    }
     loadStats(); loadDashSnapshot(); loadWaiting();
   } catch (ex){
     alert(ex.message || 'Could not save prescription');
@@ -766,6 +1011,74 @@ document.addEventListener('submit', async (e) => {
 });
 
 /* =====================================================================
+   FIX 3 — PRESCRIPTION ARCHIVE
+   ===================================================================== */
+let rxArchiveCache = [];
+async function loadRxArchive(){
+  const list = $('#rxArchiveList');
+  list.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
+  try {
+    const data = await api('/doctor/appointments');
+    rxArchiveCache = (Array.isArray(data) ? data : [])
+      .filter(a => a.prescription || a.prescriptionUrl);
+    renderRxArchive();
+  } catch (ex){
+    list.innerHTML = emptyState('Could not load archive', ex.message || 'Try again later.', null);
+  }
+}
+function renderRxArchive(){
+  const list = $('#rxArchiveList'); if (!list) return;
+  const search = ($('#rxSearch').value || '').trim().toLowerCase();
+  const from = $('#rxFromDate').value;
+  const to   = $('#rxToDate').value;
+  let arr = rxArchiveCache.slice();
+  if (from) arr = arr.filter(a => (a.date || '').slice(0,10) >= from);
+  if (to)   arr = arr.filter(a => (a.date || '').slice(0,10) <= to);
+  if (search){
+    arr = arr.filter(a => {
+      const p = a.patient || {};
+      const dx = (a.prescription && a.prescription.diagnosis) || '';
+      return [p.name, p.phone, p.email, a.primaryProblem, dx]
+        .some(v => v && String(v).toLowerCase().includes(search));
+    });
+  }
+  arr.sort((a,b) => new Date(b.date+'T'+(b.startTime||'00:00')) - new Date(a.date+'T'+(a.startTime||'00:00')));
+  if (!arr.length){
+    list.innerHTML = emptyState('No prescriptions found',
+      'Try clearing filters or expanding the date range.',
+      `<button class="np-btn np-btn--ghost np-btn--sm" style="margin-top:.85rem;" type="button" onclick="document.getElementById('rxClearFilters').click()">Clear filters</button>`);
+    return;
+  }
+  list.innerHTML = arr.map(a => {
+    const p = a.patient || {};
+    const dx = (a.prescription && a.prescription.diagnosis) || '—';
+    return `
+    <article class="np-appt" data-id="${escapeHtml(a.id)}">
+      <div class="np-appt__time">
+        <div class="np-appt__time-h">${escapeHtml(fmtTime(a.startTime))}</div>
+        <div class="np-appt__time-d">${escapeHtml(fmtDate(a.date))}</div>
+      </div>
+      <div class="np-appt__body">
+        <div class="np-appt__namerow">
+          <span class="np-appt__name">${escapeHtml(p.name || 'Patient')}</span>
+          ${p.dateOfBirth ? `<span class="np-appt__age">${escapeHtml(calcAge(p.dateOfBirth))}</span>` : ''}
+        </div>
+        <div class="np-appt__meta">
+          ${p.phone ? `<span>📞 ${escapeHtml(p.phone)}</span>` : ''}
+          <span><b>Dx:</b> ${escapeHtml(dx)}</span>
+        </div>
+        ${a.primaryProblem ? `<div class="np-appt__problem">${escapeHtml(a.primaryProblem)}</div>` : ''}
+      </div>
+      <div class="np-appt__actions">
+        ${a.prescriptionUrl ? `<a class="np-btn np-btn--primary np-btn--sm" href="${escapeHtml(a.prescriptionUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
+        ${a.prescriptionUrl ? `<a class="np-btn np-btn--ghost np-btn--sm" href="${escapeHtml(a.prescriptionUrl)}" download>Download</a>` : ''}
+        <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="goToConsult('${escapeHtml(a.id)}')">Open visit</button>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+/* =====================================================================
    APPOINTMENT ACTIONS
    ===================================================================== */
 async function toggleComplete(id){
@@ -773,6 +1086,8 @@ async function toggleComplete(id){
   try {
     await api('/doctor/appointments/' + encodeURIComponent(id) + '/complete', { method:'POST' });
     loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
+    // If we're in the workspace for this id, refresh it
+    if (activeConsultId === id) openConsultation(id);
   } catch (ex){ alert(ex.message || 'Could not complete'); }
 }
 function cancelAppt(id){
@@ -846,6 +1161,7 @@ function setupRescheduleModal(){
       });
       closeRescheduleModal();
       loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
+      if (activeConsultId === id) openConsultation(id);
       alert('Appointment rescheduled. Patient and doctor have been notified by email and WhatsApp.');
     } catch (ex){ alert(ex.message || 'Could not reschedule'); }
   });
@@ -862,6 +1178,7 @@ function setupCancelModal(){
         { method:'POST', body:{ reason } });
       closeCancelModal();
       loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
+      if (activeConsultId === id) openConsultation(id);
     } catch(ex){
       alert(ex.message || 'Could not cancel');
       $('#cancelSubmitBtn').disabled = false;

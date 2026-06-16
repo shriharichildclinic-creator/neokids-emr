@@ -128,42 +128,252 @@ exports.hardDeleteDoctor = asyncHandler(async (req, res) => {
 });
 
 exports.listAppointments = asyncHandler(async (req, res) => {
-  const { status, doctorId, date, from, to } = req.query;
+  // FIX 5 — broader admin filters: status, doctorId, date/from/to, consultationType,
+  // paymentStatus, q (search patient name/phone/email/problem), limit.
+  const { status, doctorId, date, from, to, type, payment, q } = req.query;
   const where = {};
-  if (status) where.status = status;
-  if (doctorId) where.doctorId = doctorId;
-  if (date) where.date = parseDateOnly(date);
+  if (status)    where.status = status;
+  if (doctorId)  where.doctorId = doctorId;
+  if (type)      where.consultationType = type;
+  if (payment)   where.paymentStatus = payment;
+  if (date)      where.date = parseDateOnly(date);
   if (from || to) {
     where.date = {};
     if (from) where.date.gte = parseDateOnly(from);
     if (to)   where.date.lte = parseDateOnly(to);
   }
+  if (q && String(q).trim().length >= 2) {
+    const term = String(q).trim();
+    const digits = term.replace(/\D/g, '');
+    where.OR = [
+      { primaryProblem: { contains: term } },
+      { patient: { is: { name:  { contains: term } } } },
+      ...(digits.length >= 4 ? [{ patient: { is: { phone: { contains: digits } } } }] : []),
+      { patient: { is: { email: { contains: term } } } }
+    ];
+  }
+  const take = Math.min(Math.max(parseInt(req.query.limit || '200', 10) || 200, 1), 500);
   const appointments = await prisma.appointment.findMany({
     where,
     include: { doctor: { select: { name: true, specialization: true } }, patient: true },
     orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
-    take: 200
+    take
   });
   res.json(appointments);
 });
 
-exports.analytics = asyncHandler(async (req, res) => {
+// ────────────────────────────────────────────────────────────────────
+// FIX 6 — Per-doctor performance insights (drill-down from Doctors view)
+// GET /api/admin/doctors/:id/insights
+// ────────────────────────────────────────────────────────────────────
+exports.doctorInsights = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const doctor = await prisma.doctor.findFirst({
+    where: { id, deletedAt: null }
+  });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+
   const today = getTodayDateOnly();
-  const [totalDoctors, totalPatients, totalAppointments, completed, revenueAgg, todayCount] = await Promise.all([
+  const last30 = new Date(today); last30.setDate(last30.getDate() - 30);
+
+  const [
+    total, completed, cancelled, pending, confirmed,
+    online, offline,
+    revAll, rev30, today30,
+    upcoming
+  ] = await Promise.all([
+    prisma.appointment.count({ where: { doctorId: id } }),
+    prisma.appointment.count({ where: { doctorId: id, status: 'COMPLETED' } }),
+    prisma.appointment.count({ where: { doctorId: id, status: 'CANCELLED' } }),
+    prisma.appointment.count({ where: { doctorId: id, status: 'PENDING'   } }),
+    prisma.appointment.count({ where: { doctorId: id, status: 'CONFIRMED' } }),
+    prisma.appointment.count({ where: { doctorId: id, consultationType: 'ONLINE'  } }),
+    prisma.appointment.count({ where: { doctorId: id, consultationType: 'OFFLINE' } }),
+    prisma.appointment.aggregate({
+      _sum: { feeAtBooking: true },
+      where: { doctorId: id, status: 'COMPLETED', paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+    }),
+    prisma.appointment.aggregate({
+      _sum: { feeAtBooking: true },
+      where: { doctorId: id, status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+    }),
+    prisma.appointment.count({ where: { doctorId: id, date: { gte: last30 } } }),
+    prisma.appointment.findMany({
+      where: { doctorId: id, date: { gte: today }, status: { in: ['CONFIRMED','PENDING'] } },
+      include: { patient: { select: { name: true, phone: true } } },
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      take: 10
+    })
+  ]);
+
+  // 14-day daily series
+  const last14 = new Date(today); last14.setDate(last14.getDate() - 13);
+  const raw = await prisma.appointment.findMany({
+    where: { doctorId: id, date: { gte: last14 } },
+    select: { date: true, status: true }
+  });
+  const daily = {};
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - (13 - i));
+    daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0 };
+  }
+  raw.forEach(r => {
+    const k = new Date(r.date).toISOString().slice(0,10);
+    if (!daily[k]) return;
+    daily[k].total++;
+    if (r.status === 'COMPLETED') daily[k].completed++;
+  });
+
+  res.json({
+    doctor: {
+      id: doctor.id, name: doctor.name, email: doctor.email, phone: doctor.phone,
+      specialization: doctor.specialization, qualification: doctor.qualification,
+      experience: doctor.experience, clinicName: doctor.clinicName,
+      isAvailable: doctor.isAvailable,
+      onlineConsultFee: doctor.onlineConsultFee, physicalConsultFee: doctor.physicalConsultFee,
+      photoUrl: doctor.photoUrl, workingDays: doctor.workingDays, slotDuration: doctor.slotDuration,
+      consults: doctor.consults
+    },
+    summary: {
+      total, completed, cancelled, pending, confirmed,
+      online, offline,
+      completionRate:    total > 0 ? Math.round((completed / total) * 100) : 0,
+      cancellationRate:  total > 0 ? Math.round((cancelled / total) * 100) : 0,
+      revenueLifetime:   Number(revAll._sum.feeAtBooking || 0),
+      revenueLast30:     Number(rev30._sum.feeAtBooking || 0),
+      apptsLast30:       today30
+    },
+    daily: Object.values(daily),
+    upcoming
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────
+// FIX 7 — Notification Logs dashboard
+// ────────────────────────────────────────────────────────────────────
+exports.listNotifications = asyncHandler(async (req, res) => {
+  const { template, status, channel, direction, from, to, q, appointmentId } = req.query;
+  const where = {};
+  if (template)      where.template      = template;
+  if (status)        where.status        = status;
+  if (channel)       where.channel       = channel;
+  if (direction)     where.direction     = direction;
+  if (appointmentId) where.appointmentId = appointmentId;
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from);
+    if (to)   { const end = new Date(to); end.setHours(23,59,59,999); where.createdAt.lte = end; }
+  }
+  if (q && String(q).trim().length >= 2) {
+    const term = String(q).trim();
+    where.OR = [
+      { recipient:    { contains: term } },
+      { errorMessage: { contains: term } },
+      { template:     { contains: term } }
+    ];
+  }
+  const take = Math.min(Math.max(parseInt(req.query.limit || '200', 10) || 200, 1), 500);
+  const [rows, totals] = await Promise.all([
+    prisma.notificationLog.findMany({ where, orderBy: { createdAt: 'desc' }, take }),
+    prisma.notificationLog.groupBy({ by: ['status'], where, _count: { _all: true } }).catch(() => [])
+  ]);
+  res.json({
+    rows,
+    counts: totals.reduce((acc, t) => { acc[t.status] = t._count._all; return acc; }, {})
+  });
+});
+
+exports.listNotificationTemplates = asyncHandler(async (req, res) => {
+  const rows = await prisma.notificationLog.findMany({
+    select: { template: true, channel: true },
+    distinct: ['template'],
+    take: 100
+  });
+  res.json(rows);
+});
+
+exports.analytics = asyncHandler(async (req, res) => {
+  // FIX 4 — richer analytics for the modernized admin dashboard
+  const today = getTodayDateOnly();
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  const last7  = new Date(today); last7.setDate(last7.getDate()  - 7);
+  const last30 = new Date(today); last30.setDate(last30.getDate() - 30);
+
+  const [
+    totalDoctors, totalPatients, totalAppointments,
+    completed, cancelled, pending, confirmed,
+    revenueAgg, todayCount, yesterdayCount,
+    last7Count, last30Count,
+    onlineCount, offlineCount,
+    revenueLast30Agg,
+    notifTotal, notifFailed
+  ] = await Promise.all([
     prisma.doctor.count({ where: { deletedAt: null } }),
     prisma.patient.count(),
     prisma.appointment.count(),
     prisma.appointment.count({ where: { status: 'COMPLETED' } }),
+    prisma.appointment.count({ where: { status: 'CANCELLED' } }),
+    prisma.appointment.count({ where: { status: 'PENDING'   } }),
+    prisma.appointment.count({ where: { status: 'CONFIRMED' } }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
       where: { status: 'COMPLETED', paymentStatus: { in: ['PAID', 'CASH_COLLECTED', 'CASH_PENDING'] } }
     }),
-    prisma.appointment.count({ where: { date: today } })
+    prisma.appointment.count({ where: { date: today } }),
+    prisma.appointment.count({ where: { date: yesterday } }),
+    prisma.appointment.count({ where: { date: { gte: last7 } } }),
+    prisma.appointment.count({ where: { date: { gte: last30 } } }),
+    prisma.appointment.count({ where: { consultationType: 'ONLINE'  } }),
+    prisma.appointment.count({ where: { consultationType: 'OFFLINE' } }),
+    prisma.appointment.aggregate({
+      _sum: { feeAtBooking: true },
+      where: { status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+    }),
+    prisma.notificationLog.count().catch(() => 0),
+    prisma.notificationLog.count({ where: { status: 'FAILED' } }).catch(() => 0)
   ]);
+
+  const last14 = new Date(today); last14.setDate(last14.getDate() - 13);
+  const raw = await prisma.appointment.findMany({
+    where: { date: { gte: last14 } },
+    select: { date: true, status: true, feeAtBooking: true, paymentStatus: true }
+  });
+  const daily = {};
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - (13 - i));
+    daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0, revenue: 0 };
+  }
+  raw.forEach(r => {
+    const k = new Date(r.date).toISOString().slice(0,10);
+    if (!daily[k]) return;
+    daily[k].total++;
+    if (r.status === 'COMPLETED') {
+      daily[k].completed++;
+      if (['PAID','CASH_COLLECTED','CASH_PENDING'].includes(r.paymentStatus)) {
+        daily[k].revenue += Number(r.feeAtBooking || 0);
+      }
+    }
+  });
+
   res.json({
     totalDoctors, totalPatients, totalAppointments,
     completedAppointments: completed,
-    totalRevenue: Number(revenueAgg._sum.feeAtBooking || 0),
-    todayAppointments: todayCount
+    cancelledAppointments: cancelled,
+    pendingAppointments:   pending,
+    confirmedAppointments: confirmed,
+    onlineAppointments:    onlineCount,
+    offlineAppointments:   offlineCount,
+    totalRevenue:    Number(revenueAgg._sum.feeAtBooking || 0),
+    revenueLast30:   Number(revenueLast30Agg._sum.feeAtBooking || 0),
+    todayAppointments:     todayCount,
+    yesterdayAppointments: yesterdayCount,
+    last7Appointments:     last7Count,
+    last30Appointments:    last30Count,
+    completionRate:   totalAppointments > 0 ? Math.round((completed / totalAppointments) * 100) : 0,
+    cancellationRate: totalAppointments > 0 ? Math.round((cancelled / totalAppointments) * 100) : 0,
+    todayDelta:       todayCount - yesterdayCount,
+    notificationsTotal:  notifTotal,
+    notificationsFailed: notifFailed,
+    daily: Object.values(daily)
   });
 });
