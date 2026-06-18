@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const c      = require('../controllers/doctor.controller');
+const earn   = require('../controllers/earnings.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { uploadProfileImage } = require('../middleware/upload');
 
@@ -33,6 +34,12 @@ router.get('/patients/search',                              c.searchPatients);
 router.get('/patients/:patientId/history',                  c.patientHistory);
 
 // ─── Follow-ups inbox ───
-router.get('/follow-ups/pending',                           c.pendingFollowUps);
+router.get('/follow-ups/pending', c.pendingFollowUps);
+
+// ─── My Earnings (Revenue Management — doctor view) ───
+router.get('/earnings/my-dashboard',            earn.myDashboard);
+router.get('/earnings/breakdown',               earn.breakdown);
+router.get('/earnings/settlements',             earn.mySettlements);
+router.get('/earnings/settlements/:id/invoice', earn.downloadMyInvoice);
 
 module.exports = router;

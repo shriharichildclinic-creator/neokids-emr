@@ -14,7 +14,9 @@ const loginSchema = z.object({
   password: z.string().min(6)
 });
 
-const createDoctorSchema = z.object({
+
+// Base shape (no cross-field refinement) so `.partial()` stays composable.
+const doctorShape = {
   name: z.string().trim().min(2),
   email: z.string().trim().toLowerCase().email(),
   password: z.preprocess(
@@ -40,18 +42,54 @@ const createDoctorSchema = z.object({
   physicalConsultFee: z.preprocess(
     v => (v === '' || v === null || v === undefined ? 0 : Number(v)),
     z.number().nonnegative()
+  ).optional(),
+
+  // Revenue Management
+  clinicSharePercent: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(0).max(100)
+  ).optional(),
+
+  doctorSharePercent: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(0).max(100)
+  ).optional(),
+
+  tdsPercent: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(0).max(100)
   ).optional()
-});
+};
+
+// Shared cross-field rule
+const shareSumRule = (d) => {
+  if (d.clinicSharePercent == null && d.doctorSharePercent == null) {
+    return true;
+  }
+
+  const c = Number(d.clinicSharePercent ?? 0);
+  const x = Number(d.doctorSharePercent ?? 0);
+
+  return Math.abs((c + x) - 100) < 0.01;
+};
+
+const shareSumErr = {
+  message: 'clinicSharePercent + doctorSharePercent must equal 100',
+  path: ['doctorSharePercent']
+};
+
+const createDoctorSchema =
+  z.object(doctorShape).refine(shareSumRule, shareSumErr);
 
 // Bug 2 — Admin Update Doctor uses .partial(), so omitting email entirely
-// is valid. The frontend was sending `email: ''` because the disabled input
-// is excluded from FormData, then the `email: (raw.email || '').trim()...`
-// substituted empty string, which fails .email(). The fix is on the
-// frontend: do not include `email` in the payload when editing.
-const updateDoctorByAdminSchema = createDoctorSchema.partial().extend({
-  isAvailable: z.boolean().optional()
-});
-
+// is valid. The share-sum rule is re-applied separately.
+const updateDoctorByAdminSchema = z
+  .object(doctorShape)
+  .partial()
+  .extend({
+    isAvailable: z.boolean().optional()
+  })
+  .refine(shareSumRule, shareSumErr);
 const updateDoctorAvailabilitySchema = z.object({
   availableFromOnline: timeSchema.optional().or(z.literal('')),
   availableToOnline: timeSchema.optional().or(z.literal('')),

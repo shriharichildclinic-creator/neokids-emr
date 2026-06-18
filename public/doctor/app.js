@@ -285,6 +285,7 @@ const TAB_META = {
   allTab:        { title:'Appointments',        sub:'Search and manage all your appointments' },
   consultTab:    { title:'Consultation',        sub:'Active patient consultation workspace' },
   rxArchiveTab:  { title:'Prescription Archive',sub:'All prescriptions you have issued' },
+  earningsTab:   { title:'My Earnings',         sub:'Monthly revenue split, TDS, and settlement status' },
   settingsTab:   { title:'Settings',            sub:'Manage your profile, availability, and clinic' }
 };
 function setActiveTab(tabId){
@@ -300,6 +301,7 @@ function setActiveTab(tabId){
   else if (tabId === 'settingsTab') loadSettings();
   else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); }
   else if (tabId === 'rxArchiveTab') loadRxArchive();
+  else if (tabId === 'earningsTab' && window.Earnings) Earnings.load();
   // consultTab is rendered by openConsultation
 }
 function setupTabs(){

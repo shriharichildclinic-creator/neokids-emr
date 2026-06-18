@@ -76,8 +76,15 @@ exports.listDoctors = asyncHandler(async (req, res) => {
       specialization: true, qualification: true, experience: true, bio: true,
       consultationModes: true, onlineConsultFee: true, physicalConsultFee: true,
       clinicName: true, clinicAddress: true, clinicMapUrl: true,
-      isAvailable: true, mustChangePassword: true, consults: true, revenue: true,
-      photoUrl: true, createdAt: true
+     isAvailable: true, mustChangePassword: true, consults: true, revenue: true,
+
+// Revenue Management
+clinicSharePercent: true,
+doctorSharePercent: true,
+tdsPercent: true,
+
+photoUrl: true,
+createdAt: true
     }
   });
   res.json(doctors);

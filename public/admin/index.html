@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/admin/styles.css?v=2.0.0"/>
+<link rel="stylesheet" href="/admin/styles.css?v=2.1.0"/>
 </head>
 <body>
 
@@ -70,6 +70,21 @@
         <button class="np-nav-item" data-view="apptsView" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           Appointments
+        </button>
+
+        <div class="np-sidebar__section">Finance</div>
+        <button class="np-nav-item" data-view="revenueView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Revenue Reports
+        </button>
+        <button class="np-nav-item" data-view="settlementsView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          Doctor Settlements
+          <span id="navBadgePendingSettlements" class="np-nav-badge hidden">0</span>
+        </button>
+        <button class="np-nav-item" data-view="invoicesView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Invoices
         </button>
 
         <div class="np-sidebar__section">Monitor</div>
@@ -249,6 +264,144 @@
           </div>
         </section>
 
+        <!-- ============ REVENUE REPORTS VIEW ============ -->
+        <section id="revenueView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1">
+                <div class="np-panel__title">Revenue Reports</div>
+                <div class="np-panel__subtitle">Monthly aggregation · Cashfree-processed payments only (cash excluded)</div>
+              </div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshRevenue">Refresh</button>
+            </div>
+            <div class="np-panel__body">
+              <div class="np-filterbar">
+                <select id="revMonth" class="np-select" style="width:auto;" aria-label="Month"></select>
+                <select id="revYear"  class="np-select" style="width:auto;" aria-label="Year"></select>
+                <select id="revDoctor" class="np-select" style="width:auto;" aria-label="Doctor">
+                  <option value="">All doctors</option>
+                </select>
+                <select id="revPaymentType" class="np-select" style="width:auto;" aria-label="Payment type">
+                  <option value="">All payment types</option>
+                  <option value="ONLINE">Online</option>
+                  <option value="OFFLINE">In-person</option>
+                </select>
+                <button id="applyRevenue" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+              </div>
+
+              <div id="revKpiGrid" class="np-kpi-grid" style="margin-bottom:1rem;"></div>
+
+              <div class="np-table-wrap">
+                <table class="np-table">
+                  <thead>
+                    <tr>
+                      <th>Doctor</th>
+                      <th style="text-align:right;">Consults</th>
+                      <th style="text-align:right;">Total Revenue</th>
+                      <th style="text-align:right;">Clinic Share</th>
+                      <th style="text-align:right;">Doctor Gross</th>
+                      <th style="text-align:right;">TDS</th>
+                      <th style="text-align:right;">Doctor Net</th>
+                      <th>Status</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="revenueTbody"></tbody>
+                </table>
+              </div>
+              <div class="np-help" style="font-size:.75rem; color:var(--np-muted); margin-top:.75rem;">
+                <strong>Note:</strong> Cash consultations and any non-Cashfree payments are excluded by design.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ DOCTOR SETTLEMENTS VIEW ============ -->
+        <section id="settlementsView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1">
+                <div class="np-panel__title">Doctor Settlements</div>
+                <div class="np-panel__subtitle">Frozen monthly totals · record payouts · generate invoices</div>
+              </div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshSettlements">Refresh</button>
+            </div>
+            <div class="np-panel__body">
+              <div class="np-filterbar">
+                <select id="stlMonth" class="np-select" style="width:auto;"></select>
+                <select id="stlYear"  class="np-select" style="width:auto;"></select>
+                <select id="stlDoctor" class="np-select" style="width:auto;">
+                  <option value="">All doctors</option>
+                </select>
+                <select id="stlStatus" class="np-select" style="width:auto;">
+                  <option value="">All statuses</option>
+                  <option value="GENERATED">Generated (awaiting payment)</option>
+                  <option value="PAID">Paid</option>
+                </select>
+                <button id="applySettlements" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                <button id="clearSettlements" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+              </div>
+              <div class="np-table-wrap">
+                <table class="np-table">
+                  <thead>
+                    <tr>
+                      <th>Period</th>
+                      <th>Doctor</th>
+                      <th style="text-align:right;">Consults</th>
+                      <th style="text-align:right;">Total Revenue</th>
+                      <th style="text-align:right;">Doctor Net</th>
+                      <th>Status</th>
+                      <th>Paid On</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="settlementsTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ INVOICES VIEW ============ -->
+        <section id="invoicesView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1">
+                <div class="np-panel__title">Settlement Invoices</div>
+                <div class="np-panel__subtitle">PDF invoices issued for paid doctor settlements</div>
+              </div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshInvoices">Refresh</button>
+            </div>
+            <div class="np-panel__body">
+              <div class="np-filterbar">
+                <select id="invMonth" class="np-select" style="width:auto;"></select>
+                <select id="invYear"  class="np-select" style="width:auto;"></select>
+                <select id="invDoctor" class="np-select" style="width:auto;">
+                  <option value="">All doctors</option>
+                </select>
+                <button id="applyInvoices" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                <button id="clearInvoices" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+              </div>
+              <div class="np-table-wrap">
+                <table class="np-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice #</th>
+                      <th>Period</th>
+                      <th>Doctor</th>
+                      <th style="text-align:right;">Net Paid</th>
+                      <th>Reference</th>
+                      <th>Paid On</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="invoicesTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- ============ NOTIFICATION LOGS VIEW ============ -->
         <section id="notifView" class="tab-pane hidden">
           <div class="np-panel">
@@ -397,7 +550,29 @@
             <input name="physicalConsultFee" type="number" min="0" step="0.01" class="np-input" placeholder="750"/>
           </div>
         </div>
-        <div class="np-field">
+        <div style="margin-top:.75rem; padding:.75rem; border:1px solid #E5E7EB; border-radius:8px; background:#F9FAFB;">
+          <div style="font-weight:600; font-size:.85rem; color:#0F2A47; margin-bottom:.4rem;">
+            Revenue split (per-doctor)
+          </div>
+          <div style="font-size:.7rem; color:#6B7280; margin-bottom:.5rem;">
+            Clinic + Doctor must sum to 100%. TDS applies to the doctor's gross share.
+          </div>
+          <div class="np-grid-2">
+            <div class="np-field">
+              <label class="np-field__label">Clinic share (%)</label>
+              <input id="docClinicPct" name="clinicSharePercent" type="number" min="0" max="100" step="0.01" class="np-input" placeholder="25"/>
+            </div>
+            <div class="np-field">
+              <label class="np-field__label">Doctor share (%)</label>
+              <input id="docDoctorPct" name="doctorSharePercent" type="number" min="0" max="100" step="0.01" class="np-input" placeholder="75"/>
+            </div>
+            <div class="np-field">
+              <label class="np-field__label">TDS on doctor share (%)</label>
+              <input name="tdsPercent" type="number" min="0" max="100" step="0.01" class="np-input" placeholder="10"/>
+            </div>
+          </div>
+        </div>
+        <div class="np-field" style="margin-top:.75rem;">
           <label class="np-field__label">Bio</label>
           <textarea name="bio" class="np-textarea" placeholder="Short biography"></textarea>
         </div>
@@ -415,7 +590,7 @@
 </div>
 
 <!-- =====================================================================
-     DOCTOR INSIGHTS DRAWER (FIX 6)
+     DOCTOR INSIGHTS DRAWER
      ===================================================================== -->
 <div id="doctorDrawer" class="np-drawer hidden" role="dialog" aria-modal="true">
   <div class="np-drawer__backdrop" onclick="closeDoctorDrawer()"></div>
@@ -429,7 +604,7 @@
 </div>
 
 <!-- =====================================================================
-     NOTIFICATION DETAIL MODAL (FIX 7)
+     NOTIFICATION DETAIL MODAL
      ===================================================================== -->
 <div id="notifModal" class="np-modal hidden" role="dialog" aria-modal="true">
   <div class="np-modal__panel">
@@ -441,6 +616,62 @@
   </div>
 </div>
 
-<script src="app.js?v=2.0.0"></script>
+<!-- =====================================================================
+     SETTLEMENT DETAIL MODAL
+     ===================================================================== -->
+<div id="settlementModal" class="np-modal hidden" role="dialog" aria-modal="true">
+  <div class="np-modal__panel" style="max-width:880px;">
+    <header class="np-modal__head">
+      <div class="np-modal__title" id="settlementModalTitle">Settlement Details</div>
+      <button type="button" class="np-modal__close" onclick="closeSettlementModal()" aria-label="Close">×</button>
+    </header>
+    <div id="settlementModalBody" class="np-modal__body"></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     MARK-AS-PAID MODAL
+     ===================================================================== -->
+<div id="markPaidModal" class="np-modal hidden" role="dialog" aria-modal="true">
+  <div class="np-modal__panel" style="max-width:520px;">
+    <header class="np-modal__head">
+      <div class="np-modal__title">Mark Settlement as Paid</div>
+      <button type="button" class="np-modal__close" onclick="closeMarkPaidModal()" aria-label="Close">×</button>
+    </header>
+    <div class="np-modal__body">
+      <div id="markPaidSummary" style="background:#F4F8FB; border-radius:8px; padding:.75rem; margin-bottom:.75rem; font-size:.85rem;"></div>
+      <form id="markPaidForm">
+        <input type="hidden" name="settlementId"/>
+        <div class="np-field">
+          <label class="np-field__label">Payment mode *</label>
+          <select name="paymentMode" required class="np-select">
+            <option value="">Select mode</option>
+            <option value="BANK_TRANSFER">Bank Transfer (NEFT/RTGS/IMPS)</option>
+            <option value="UPI">UPI</option>
+            <option value="CHEQUE">Cheque</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Reference / UTR *</label>
+          <input name="paymentReference" required class="np-input" placeholder="e.g. UTR2401XXXXXXXX"/>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Notes (optional)</label>
+          <textarea name="paymentNotes" class="np-textarea" placeholder="Any internal notes"></textarea>
+        </div>
+        <div id="markPaidError" class="np-error hidden"></div>
+        <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">
+          <button type="button" class="np-btn" onclick="closeMarkPaidModal()">Cancel</button>
+          <button type="submit" class="np-btn np-btn--primary">Mark Paid &amp; Generate Invoice</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="app.js?v=2.1.0"></script>
+<script src="finance.js?v=2.1.0"></script>
+
 </body>
 </html>

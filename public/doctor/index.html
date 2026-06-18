@@ -26,8 +26,7 @@
     }
   }
 </script>
-<link rel="stylesheet" href="/doctor/styles.css?v=2.0.0"/>
-</head>
+<link rel="stylesheet" href="/doctor/styles.css?v=2.1.0"/></head>
 <body class="bg-brand-surface text-slate-800">
 
 <!-- =====================================================================
@@ -110,8 +109,13 @@
           Prescription Archive
         </button>
 
-        <div class="np-sidebar__section">Account</div>
+        <div class="np-sidebar__section">Finance</div>
+        <button class="np-nav-item tab-btn" data-tab="earningsTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          My Earnings
+        </button>
 
+        <div class="np-sidebar__section">Account</div>
         <button class="np-nav-item tab-btn" data-tab="settingsTab" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.1a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.1a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.1a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
@@ -311,7 +315,67 @@
                 <input id="rxToDate"   type="date" class="np-select" aria-label="To date">
                 <button id="rxClearFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
               </div>
-              <div id="rxArchiveList" class="np-appt-list"></div>
+          <div id="rxArchiveList" class="np-appt-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ MY EARNINGS TAB ============ -->
+        <section id="earningsTab" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1">
+                <div class="np-panel__title">My Earnings</div>
+                <div class="np-panel__subtitle">Cashfree-processed payments only. Cash consultations are excluded.</div>
+              </div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshEarnings">Refresh</button>
+            </div>
+            <div class="np-panel__body">
+              <div class="np-filterbar">
+                <select id="earnMonth" class="np-select" style="width:auto;" aria-label="Month"></select>
+                <select id="earnYear"  class="np-select" style="width:auto;" aria-label="Year"></select>
+                <button id="applyEarnings" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+              </div>
+
+              <div id="earnKpiGrid" class="np-kpi-grid" style="margin-bottom:1rem;"></div>
+
+              <div id="earnSettlementCard" style="display:none; padding:.75rem 1rem; border-radius:10px; margin-bottom:1rem;"></div>
+
+              <div class="np-panel__title" style="font-size:1rem; margin-bottom:.5rem;">Appointment Breakdown</div>
+              <div class="np-table-wrap">
+                <table class="np-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Patient</th>
+                      <th>Type</th>
+                      <th style="text-align:right;">Fee (₹)</th>
+                      <th style="text-align:right;">My Gross</th>
+                      <th style="text-align:right;">TDS</th>
+                      <th style="text-align:right;">My Net</th>
+                    </tr>
+                  </thead>
+                  <tbody id="earnTbody"></tbody>
+                </table>
+              </div>
+
+              <div class="np-panel__title" style="font-size:1rem; margin:1.25rem 0 .5rem;">Past Settlements</div>
+              <div class="np-table-wrap">
+                <table class="np-table">
+                  <thead>
+                    <tr>
+                      <th>Period</th>
+                      <th style="text-align:right;">Consults</th>
+                      <th style="text-align:right;">Total Revenue</th>
+                      <th style="text-align:right;">My Net</th>
+                      <th>Status</th>
+                      <th>Paid On</th>
+                      <th style="text-align:right;">Invoice</th>
+                    </tr>
+                  </thead>
+                  <tbody id="earnSettlementsTbody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
@@ -701,6 +765,7 @@
   </div>
 </div>
 
-<script src="app.js?v=2.0.0"></script>
+<script src="app.js?v=2.1.0"></script>
+<script src="earnings.js?v=2.1.0"></script>
 </body>
 </html>

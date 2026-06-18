@@ -147,11 +147,14 @@ function logout() {
    SHELL
    ===================================================================== */
 const VIEW_META = {
-  dashboardView: { title:'Dashboard',        sub:'Overview of your clinic' },
-  doctorsView:   { title:'Doctors',          sub:'Manage clinic doctors and their performance' },
-  apptsView:     { title:'Appointments',     sub:'All bookings across the clinic' },
-  notifView:     { title:'Notification Logs',sub:'Audit WhatsApp & email deliveries' },
-  settingsView:  { title:'Settings',         sub:'Account management' }
+  dashboardView:   { title:'Dashboard',          sub:'Overview of your clinic' },
+  doctorsView:     { title:'Doctors',            sub:'Manage clinic doctors and their performance' },
+  apptsView:       { title:'Appointments',       sub:'All bookings across the clinic' },
+  revenueView:     { title:'Revenue Reports',    sub:'Monthly clinic revenue — Cashfree only' },
+  settlementsView: { title:'Doctor Settlements', sub:'Generate, review, and pay monthly doctor settlements' },
+  invoicesView:    { title:'Invoices',           sub:'Settlement invoices issued to doctors' },
+  notifView:       { title:'Notification Logs',  sub:'Audit WhatsApp & email deliveries' },
+  settingsView:    { title:'Settings',           sub:'Account management' }
 };
 function setView(view) {
   $$('.tab-pane').forEach(v => v.classList.add('hidden'));
@@ -165,6 +168,10 @@ function setView(view) {
   if (view === 'doctorsView')   loadDoctors();
   if (view === 'apptsView')     { loadDoctorsForFilter(); loadAppointments(); }
   if (view === 'notifView')     { loadNotifTemplates(); loadNotifications(); }
+  // ─ Revenue Management views (handlers live in finance.js) ─
+  if (view === 'revenueView'     && window.Finance) Finance.loadRevenue();
+  if (view === 'settlementsView' && window.Finance) Finance.loadSettlements();
+  if (view === 'invoicesView'    && window.Finance) Finance.loadInvoices();
 }
 
 function setupSidebar(){
@@ -370,8 +377,27 @@ function openEditDoctor(id) {
   f.consultationModes.value = d.consultationModes || 'BOTH';
   f.onlineConsultFee.value   = d.onlineConsultFee   ?? '';
   f.physicalConsultFee.value = d.physicalConsultFee ?? '';
+  // Revenue Management — per-doctor split
+  if (f.clinicSharePercent) f.clinicSharePercent.value = d.clinicSharePercent ?? 25;
+  if (f.doctorSharePercent) f.doctorSharePercent.value = d.doctorSharePercent ?? 75;
+  if (f.tdsPercent)         f.tdsPercent.value         = d.tdsPercent ?? 10;
   $('#doctorModal').classList.remove('hidden');
 }
+
+// Auto-keep the clinic + doctor share fields balanced to 100. The user can
+// edit either side; we update the other to (100 - this).
+document.addEventListener('input', (e) => {
+  if (e.target && (e.target.id === 'docClinicPct' || e.target.id === 'docDoctorPct')) {
+    const clinic = $('#docClinicPct'); const doc = $('#docDoctorPct');
+    if (!clinic || !doc) return;
+    const v = Number(e.target.value);
+    if (Number.isFinite(v) && v >= 0 && v <= 100) {
+      const other = Math.round((100 - v) * 100) / 100;
+      (e.target === clinic ? doc : clinic).value = other;
+    }
+  }
+});
+
 $('#doctorForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const errEl = $('#doctorFormError'); errEl.textContent = ''; errEl.classList.add('hidden');
@@ -390,6 +416,16 @@ $('#doctorForm').addEventListener('submit', async (e) => {
     onlineConsultFee: raw.onlineConsultFee === '' ? 0 : Number(raw.onlineConsultFee),
     physicalConsultFee: raw.physicalConsultFee === '' ? 0 : Number(raw.physicalConsultFee)
   };
+  // Revenue Management — only send share fields when the user actually filled them.
+  if (raw.clinicSharePercent !== undefined && raw.clinicSharePercent !== '') {
+    payload.clinicSharePercent = Number(raw.clinicSharePercent);
+  }
+  if (raw.doctorSharePercent !== undefined && raw.doctorSharePercent !== '') {
+    payload.doctorSharePercent = Number(raw.doctorSharePercent);
+  }
+  if (raw.tdsPercent !== undefined && raw.tdsPercent !== '') {
+    payload.tdsPercent = Number(raw.tdsPercent);
+  }
   if (!isEdit) payload.email = (raw.email || '').trim().toLowerCase();
   if (raw.password && raw.password.trim()) payload.password = raw.password;
   try {

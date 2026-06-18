@@ -201,4 +201,178 @@ async function generatePrescription(appointment, prescription) {
   });
 }
 
-module.exports = { generateInvoice, generatePrescription };
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+];
+
+
+
+
+async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumber }) {
+  ensureDir(path.join(STORAGE, 'invoices'));
+
+  const filename = `settlement_${settlement.id}.pdf`;
+  const filepath = path.join(STORAGE, 'invoices', filename);
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const stream = fs.createWriteStream(filepath);
+
+    doc.pipe(stream);
+
+    drawHeader(doc, 'SETTLEMENT INVOICE');
+
+    const monthLabel =
+      `${MONTH_NAMES[settlement.periodMonth - 1]} ${settlement.periodYear}`;
+
+    doc.fontSize(11).font('Helvetica').fillColor('#333');
+    doc.text(`Invoice No: ${invoiceNumber}`, 50, 110);
+    doc.text(`Period: ${monthLabel}`, 50, 125);
+    doc.text(`Generated: ${dayjs().format('DD MMM YYYY, HH:mm')}`, 50, 140);
+
+    doc.text(
+      `Status: ${settlement.status}` +
+      (settlement.paidAt
+        ? ` · Paid ${dayjs(settlement.paidAt).format('DD MMM YYYY')}`
+        : ''),
+      50,
+      155
+    );
+
+    doc.fontSize(12).font('Helvetica-Bold')
+       .text('Payee (Doctor):', 50, 190);
+
+    doc.fontSize(11).font('Helvetica');
+    doc.text(`Dr. ${doctor.name}`, 50, 207);
+    doc.text(doctor.specialization || 'Pediatrician', 50, 222);
+
+    if (doctor.email) {
+      doc.text(doctor.email, 50, 237);
+    }
+
+    doc.fontSize(12).font('Helvetica-Bold')
+       .text('Payer (Clinic):', 320, 190);
+
+    doc.fontSize(11).font('Helvetica');
+    doc.text('NeoKidsPro Pediatric Clinic', 320, 207);
+    doc.text('neokidspro.in', 320, 222);
+
+    const sumTop = 275;
+
+    doc.rect(50, sumTop, doc.page.width - 100, 25)
+       .fill(BRAND_MINT);
+
+    doc.fillColor('#000')
+       .fontSize(11)
+       .font('Helvetica-Bold');
+
+    doc.text('Description', 60, sumTop + 8);
+    doc.text('Basis', 300, sumTop + 8);
+    doc.text('Amount (₹)', 460, sumTop + 8, {
+      width: 80,
+      align: 'right'
+    });
+
+    const num = (v) => Number(v || 0).toFixed(2);
+
+    const lines = [
+      [
+        'Total Consultations',
+        `${settlement.totalConsultations} appt(s)`,
+        settlement.totalConsultations,
+        false
+      ],
+      [
+        'Total Revenue Collected',
+        'Cashfree only',
+        settlement.totalRevenue,
+        true
+      ],
+      [
+        `Clinic Share (${Number(settlement.clinicSharePercent)}%)`,
+        'of total',
+        settlement.clinicShareAmount,
+        true
+      ],
+      [
+        `Doctor Gross Share (${Number(settlement.doctorSharePercent)}%)`,
+        'of total',
+        settlement.doctorGrossAmount,
+        true
+      ],
+      [
+        `TDS Deducted (${Number(settlement.tdsPercent)}%)`,
+        'of doctor gross',
+        settlement.tdsAmount,
+        true
+      ]
+    ];
+
+    let y = sumTop + 35;
+
+    doc.font('Helvetica')
+       .fontSize(11)
+       .fillColor('#222');
+
+    lines.forEach((row, i) => {
+      if (i % 2 === 0) {
+        doc.rect(50, y - 3, doc.page.width - 100, 20)
+           .fill('#F8FAFB')
+           .fillColor('#222');
+      }
+
+      doc.text(String(row[0]), 60, y);
+      doc.text(String(row[1]), 300, y);
+
+      doc.text(
+        row[3] ? num(row[2]) : String(row[2]),
+        460,
+        y,
+        {
+          width: 80,
+          align: 'right'
+        }
+      );
+
+      y += 22;
+    });
+
+    y += 8;
+
+    doc.rect(50, y, doc.page.width - 100, 32)
+       .fill(BRAND_BLUE);
+
+    doc.fillColor('white')
+       .font('Helvetica-Bold')
+       .fontSize(13);
+
+    doc.text('Net Payable to Doctor', 60, y + 10);
+
+    doc.text(`₹ ${num(settlement.doctorNetAmount)}`, 460, y + 10, {
+      width: 80,
+      align: 'right'
+    });
+
+    doc.fillColor('#000');
+
+    doc.end();
+
+    stream.on('finish', () =>
+      resolve({
+        filepath,
+        filename,
+        url: `${process.env.PUBLIC_STORAGE_URL || '/files'}/invoices/${filename}`
+      })
+    );
+
+    stream.on('error', reject);
+  });
+}
+
+
+module.exports = {
+  generateInvoice,
+  generatePrescription,
+  generateSettlementInvoice
+};
