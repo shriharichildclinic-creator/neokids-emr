@@ -35,6 +35,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 
 ## POST `/public/book`
 
+> **Field names matter.** The validator uses the EXACT keys below.
+> `problem` is **not** accepted — use `primaryProblem`.
+> `type` is **not** accepted — use `consultationType`.
+> `tncAccepted: true` is **required** (T&C consent, server-enforced).
+
 ```json
 {
   "doctorId": "uuid",
@@ -47,9 +52,25 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
   "primaryProblem": "High fever for 2 days",
   "date": "2026-05-25",
   "startTime": "10:30",
-  "consultationType": "ONLINE"
+  "consultationType": "ONLINE",
+  "tncAccepted": true
 }
 ```
+
+| Field | Type | Notes |
+|---|---|---|
+| `doctorId` | UUID | required |
+| `patientName` | string ≥ 2 | required |
+| `phone` | string `^[6-9]\d{9}$` | Indian 10-digit, no +91 |
+| `email` | string | optional |
+| `parentName` | string ≥ 2 | required |
+| `dateOfBirth` | `YYYY-MM-DD` | must be under 18 |
+| `gender` | `MALE` \| `FEMALE` \| `OTHER` | required |
+| `primaryProblem` | string ≥ 3 | **NOT** `problem` |
+| `date` | `YYYY-MM-DD` | not in the past |
+| `startTime` | `HH:MM` | must be on the slot grid |
+| `consultationType` | `ONLINE` \| `OFFLINE` | **NOT** `type` |
+| `tncAccepted` | `true` | must be exactly `true` |
 
 **Response 201 — Online (requires payment)**
 ```json
@@ -75,9 +96,15 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 ```
 
 **Errors**
-- `409 Conflict` — slot already booked
-- `400 Bad Request` — invalid input / consultation mode mismatch
-- `404 Not Found` — doctor not found
+
+| HTTP | `code` | When |
+|---|---|---|
+| 400 | `VALIDATION_FAILED` | missing / wrong-type field, or `tncAccepted` not `true` |
+| 400 | `OUTSIDE_WORKING_HOURS` | `startTime` is before/after the doctor's hours for that mode |
+| 400 | `OFF_GRID_TIME` | `startTime` is not on the slot grid (e.g. `16:07`) |
+| 400 | `NO_WORKING_HOURS` | doctor has no hours for the requested mode |
+| 404 | — | doctor not found |
+| 409 | `SLOT_TAKEN` | slot already booked / locked |
 
 ---
 
@@ -99,6 +126,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 
 ## POST `/doctor/appointments/:id/prescription`
 
+> **Field names matter.** The validator uses `medications` (not
+> `medicines`). Inside each item, the keys are
+> `name`, `dose`, `frequency`, `duration`, `instructions`
+> — **not** `dosage` / `notes`.
+
 ```json
 {
   "chiefComplaint": "Fever, cough",
@@ -118,6 +150,17 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
   "followUpDate": "2026-05-30"
 }
 ```
+
+| Field | Type | Notes |
+|---|---|---|
+| `chiefComplaint` | string ≥ 2 | required |
+| `diagnosis` | string ≥ 2 | required |
+| `medications` | array ≥ 1 | **NOT** `medicines` |
+| `medications[].name` | string | required |
+| `medications[].dose` | string | **NOT** `dosage` |
+| `medications[].frequency` | string | required |
+| `medications[].duration` | string | required |
+| `medications[].instructions` | string | optional, **NOT** `notes` |
 
 Triggers:
 1. PDF generated → `/files/prescriptions/prescription_<id>.pdf`

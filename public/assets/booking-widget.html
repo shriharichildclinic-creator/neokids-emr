@@ -1,363 +1,574 @@
 <!DOCTYPE html>
+<!--
+  Booking widget — fixes #27, #30, #31, #32
+
+  #27 Server-confirmed payment success. We never call showSuccess() based
+      on Cashfree's resolved promise alone. Even after Cashfree's modal
+      resolves we run ONE final GET /api/public/appointments/:id and
+      only show success when paymentStatus === 'PAID' on OUR DB.
+  #30 Accessibility — every input has a real <label for=…>, the multi-
+      step wizard is a role="region" with aria-current on the active
+      step, the modal screens are role="dialog" with aria-modal and
+      focus management, every avatar/icon has alt text or
+      aria-hidden="true", and live updates (slot loading, payment
+      verifying) are inside role="status" regions.
+  #31 Tailwind is loaded from a local vendor file (/assets/vendor/
+      tailwind.min.css). No third-party CDN, no JIT warning, no outage
+      risk.
+  #32 ZERO inline event handlers. All bindings happen in JS via
+      addEventListener / event delegation. This unblocks a future
+      Content-Security-Policy that disallows 'unsafe-inline'.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Book Appointment · NeoKidsPro</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Issue #31 — local Tailwind, not CDN -->
+<link rel="stylesheet" href="/assets/vendor/tailwind.min.css"/>
 <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
-<style>body{font-family:system-ui,-apple-system,sans-serif;background:#F4F8FB}@keyframes spin{to{transform:rotate(360deg)}}
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; background: #F4F8FB; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Visible keyboard focus ring — Issue #30 */
+  :focus-visible { outline: 2px solid #4DA8FF; outline-offset: 2px; }
+  /* sr-only utility (also provided by Tailwind, kept as fallback) */
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 </style>
 </head>
 <body class="text-slate-800 min-h-screen">
 <div class="max-w-3xl mx-auto p-4 sm:p-8">
-  <div class="bg-white rounded-3xl shadow-lg overflow-hidden">
-    <div class="bg-[#4DA8FF] text-white p-6"><h1 class="text-2xl font-bold">📅 Book Your Appointment</h1><p class="text-sm opacity-90 mt-1">Quick & easy pediatric consultations</p></div>
-    <div class="px-6 py-4 border-b flex items-center justify-between text-xs"><span id="step1Label" class="font-semibold text-[#4DA8FF]">1. Doctor</span><span class="text-slate-300">›</span><span id="step2Label" class="text-slate-400">2. Details</span><span class="text-slate-300">›</span><span id="step3Label" class="text-slate-400">3. Slot</span><span class="text-slate-300">›</span><span id="step4Label" class="text-slate-400">4. Confirm</span></div>
+  <main class="bg-white rounded-3xl shadow-lg overflow-hidden" role="main" aria-labelledby="widgetTitle">
+    <header class="bg-[#4DA8FF] text-white p-6">
+      <h1 id="widgetTitle" class="text-2xl font-bold">📅 Book Your Appointment</h1>
+      <p class="text-sm opacity-90 mt-1">Quick & easy pediatric consultations</p>
+    </header>
 
-    <div id="step1" class="p-6 space-y-3">
-      <div class="flex gap-2 mb-3"><button onclick="setMode('ONLINE')" id="modeOnline" class="flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold">🎥 Online</button><button onclick="setMode('OFFLINE')" id="modeOffline" class="flex-1 px-4 py-2 rounded-xl border-2 border-slate-200">🏥 In-Clinic</button></div>
-      <div id="doctorsList" class="space-y-2"></div>
-    </div>
+    <!-- Step indicator -->
+    <nav aria-label="Booking steps" class="px-6 py-4 border-b flex items-center justify-between text-xs">
+      <span id="step1Label" class="font-semibold text-[#4DA8FF]" aria-current="step">1. Doctor</span>
+      <span class="text-slate-300" aria-hidden="true">›</span>
+      <span id="step2Label" class="text-slate-400">2. Details</span>
+      <span class="text-slate-300" aria-hidden="true">›</span>
+      <span id="step3Label" class="text-slate-400">3. Slot</span>
+      <span class="text-slate-300" aria-hidden="true">›</span>
+      <span id="step4Label" class="text-slate-400">4. Confirm</span>
+    </nav>
 
-    <div id="step2" class="hidden p-6 space-y-3">
-      <h3 class="font-bold mb-2">Patient Details</h3>
-      <input id="f_name" required placeholder="Child's Full Name *" class="w-full px-4 py-3 rounded-xl border"/>
-      <input id="f_parent" required placeholder="Parent/Guardian Name *" class="w-full px-4 py-3 rounded-xl border"/>
+    <!-- ── STEP 1 — Doctor + Mode ─────────────────────────────────── -->
+    <section id="step1" class="p-6 space-y-3" role="region" aria-labelledby="step1Heading">
+      <h2 id="step1Heading" class="sr-only">Choose consultation mode and doctor</h2>
+      <div class="flex gap-2 mb-3" role="radiogroup" aria-label="Consultation mode">
+        <button type="button" data-action="setMode" data-mode="ONLINE"  id="modeOnline"  role="radio" aria-checked="true"  class="flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold">🎥 Online</button>
+        <button type="button" data-action="setMode" data-mode="OFFLINE" id="modeOffline" role="radio" aria-checked="false" class="flex-1 px-4 py-2 rounded-xl border-2 border-slate-200">🏥 In-Clinic</button>
+      </div>
+      <div id="doctorsList" class="space-y-2" role="list" aria-live="polite" aria-busy="false"></div>
+    </section>
+
+    <!-- ── STEP 2 — Patient details ───────────────────────────────── -->
+    <section id="step2" class="hidden p-6 space-y-3" role="region" aria-labelledby="step2Heading">
+      <h2 id="step2Heading" class="font-bold mb-2">Patient Details</h2>
+
+      <div>
+        <label for="f_name" class="text-xs text-slate-500 ml-1">Child's Full Name *</label>
+        <input id="f_name" name="patientName" required autocomplete="name" placeholder="Child's Full Name *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
+      </div>
+      <div>
+        <label for="f_parent" class="text-xs text-slate-500 ml-1">Parent / Guardian Name *</label>
+        <input id="f_parent" name="parentName" required autocomplete="name" placeholder="Parent/Guardian Name *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
+      </div>
+
       <div class="grid grid-cols-2 gap-2">
         <div>
-          <label class="text-xs text-slate-500 ml-1">Date of Birth *</label>
-          <input id="f_dob" type="date" required class="w-full px-4 py-3 rounded-xl border"/>
+          <label for="f_dob" class="text-xs text-slate-500 ml-1">Date of Birth *</label>
+          <input id="f_dob" name="dateOfBirth" type="date" required class="w-full px-4 py-3 rounded-xl border" aria-required="true" aria-describedby="dobHelp"/>
           <p id="dobHelp" class="text-[10px] text-slate-400 mt-0.5 ml-1">Pediatric clinic — patient must be under 18.</p>
         </div>
         <div>
-          <label class="text-xs text-slate-500 ml-1">Gender *</label>
-          <select id="f_gender" required class="w-full px-4 py-3 rounded-xl border"><option value="">Select</option><option>MALE</option><option>FEMALE</option><option>OTHER</option></select>
+          <label for="f_gender" class="text-xs text-slate-500 ml-1">Gender *</label>
+          <select id="f_gender" name="gender" required class="w-full px-4 py-3 rounded-xl border" aria-required="true">
+            <option value="">Select</option>
+            <option>MALE</option><option>FEMALE</option><option>OTHER</option>
+          </select>
         </div>
       </div>
-      <input id="f_phone" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="Phone Number (10 digits) *" class="w-full px-4 py-3 rounded-xl border"/>
-      <input id="f_email" type="email" placeholder="Email (optional)" class="w-full px-4 py-3 rounded-xl border"/>
-      <textarea id="f_problem" required placeholder="Primary Problem / Reason for visit *" class="w-full px-4 py-3 rounded-xl border"></textarea>
-      <div class="flex gap-2"><button onclick="goTo(1)" class="flex-1 py-3 rounded-xl border">Back</button><button onclick="validateStep2()" class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold">Continue</button></div>
-    </div>
 
-    <div id="step3" class="hidden p-6 space-y-3">
-      <h3 class="font-bold mb-2">Pick a Slot</h3>
-      <input id="f_date" type="date" required class="w-full px-4 py-3 rounded-xl border"/>
-      <div id="slotsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2"></div>
-      <div class="flex gap-2 pt-2"><button onclick="goTo(2)" class="flex-1 py-3 rounded-xl border">Back</button><button onclick="goTo(4)" id="continueSlot" disabled class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold disabled:opacity-50">Continue</button></div>
-    </div>
+      <div>
+        <label for="f_phone" class="text-xs text-slate-500 ml-1">Phone Number (10 digits) *</label>
+        <input id="f_phone" name="phone" required autocomplete="tel-national" inputmode="numeric" pattern="[6-9][0-9]{9}" maxlength="10" placeholder="Phone Number (10 digits) *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
+      </div>
+      <div>
+        <label for="f_email" class="text-xs text-slate-500 ml-1">Email (optional)</label>
+        <input id="f_email" name="email" type="email" autocomplete="email" placeholder="Email (optional)" class="w-full px-4 py-3 rounded-xl border"/>
+      </div>
+      <div>
+        <label for="f_problem" class="text-xs text-slate-500 ml-1">Primary Problem / Reason for visit *</label>
+        <textarea id="f_problem" name="primaryProblem" required placeholder="Primary Problem / Reason for visit *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"></textarea>
+      </div>
 
-    <div id="step4" class="hidden p-6 space-y-3">
-      <h3 class="font-bold mb-2">Confirm Booking</h3>
+      <div class="flex gap-2">
+        <button type="button" data-action="goTo" data-step="1" class="flex-1 py-3 rounded-xl border">Back</button>
+        <button type="button" data-action="validateStep2"        class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold">Continue</button>
+      </div>
+    </section>
+
+    <!-- ── STEP 3 — Slot picker ───────────────────────────────────── -->
+    <section id="step3" class="hidden p-6 space-y-3" role="region" aria-labelledby="step3Heading">
+      <h2 id="step3Heading" class="font-bold mb-2">Pick a Slot</h2>
+      <label for="f_date" class="sr-only">Date</label>
+      <input id="f_date" type="date" required class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
+      <div id="slotsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2" role="status" aria-live="polite" aria-label="Available time slots"></div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" data-action="goTo" data-step="2" class="flex-1 py-3 rounded-xl border">Back</button>
+        <button type="button" data-action="goTo" data-step="4" id="continueSlot" disabled class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold disabled:opacity-50">Continue</button>
+      </div>
+    </section>
+
+    <!-- ── STEP 4 — Confirm ───────────────────────────────────────── -->
+    <section id="step4" class="hidden p-6 space-y-3" role="region" aria-labelledby="step4Heading">
+      <h2 id="step4Heading" class="font-bold mb-2">Confirm Booking</h2>
       <div id="summary" class="bg-slate-50 rounded-2xl p-4 space-y-2 text-sm"></div>
 
-      <!-- Bug 5 — Terms & Conditions consent (mandatory for both online and offline) -->
-      <label class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 cursor-pointer">
+      <label class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 cursor-pointer" for="f_tnc">
         <input id="f_tnc" type="checkbox" class="mt-1 w-4 h-4 accent-[#4DA8FF]"/>
         <span id="tncText" class="text-xs text-slate-700 leading-relaxed"></span>
       </label>
 
-      <div class="flex gap-2 pt-2"><button onclick="goTo(3)" class="flex-1 py-3 rounded-xl border">Back</button><button onclick="submitBooking()" id="btnSubmit" disabled class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold disabled:opacity-50"><span id="btnSubmitText">Confirm Booking</span></button></div>
-    </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" data-action="goTo" data-step="3" class="flex-1 py-3 rounded-xl border">Back</button>
+        <button type="button" data-action="submitBooking" id="btnSubmit" disabled class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold disabled:opacity-50">
+          <span id="btnSubmitText">Confirm Booking</span>
+        </button>
+      </div>
+    </section>
 
-    <!-- Bug 3 — Success screen ONLY shown when payment is truly confirmed (or offline cash booking). -->
-    <div id="successScreen" class="hidden p-8 text-center">
-      <div class="text-6xl mb-4">🎉</div>
-      <h2 class="text-2xl font-bold mb-2">Booking Confirmed</h2>
+    <!-- ── Success screen ─────────────────────────────────────────── -->
+    <section id="successScreen" class="hidden p-8 text-center" role="dialog" aria-modal="false" aria-labelledby="successHeading" tabindex="-1">
+      <div class="text-6xl mb-4" aria-hidden="true">🎉</div>
+      <h2 id="successHeading" class="text-2xl font-bold mb-2">Booking Confirmed</h2>
       <p class="text-slate-500 mb-4" id="successMsg"></p>
       <div id="successDetails" class="bg-[#B8F2E6]/30 rounded-2xl p-4 text-left text-sm"></div>
-    </div>
+    </section>
 
-    <!-- Bug 3 — Dedicated failure screen for payment problems. -->
-    <div id="failureScreen" class="hidden p-8 text-center">
-      <div class="text-6xl mb-4">❌</div>
-      <h2 class="text-2xl font-bold mb-2 text-red-600">Payment Not Completed</h2>
+    <!-- ── Failure screen ─────────────────────────────────────────── -->
+    <section id="failureScreen" class="hidden p-8 text-center" role="dialog" aria-modal="false" aria-labelledby="failureHeading" tabindex="-1">
+      <div class="text-6xl mb-4" aria-hidden="true">❌</div>
+      <h2 id="failureHeading" class="text-2xl font-bold mb-2 text-red-600">Payment Not Completed</h2>
       <p class="text-slate-600 mb-4" id="failureMsg">Your payment could not be confirmed by Cashfree. No amount has been charged to your account.</p>
       <div id="failureDetails" class="bg-red-50 border border-red-100 rounded-2xl p-4 text-left text-sm mb-4"></div>
       <div class="flex gap-2 justify-center">
-        <button onclick="resetWidget()" class="px-6 py-2.5 bg-[#4DA8FF] text-white rounded-xl font-semibold">Try Again</button>
+        <button type="button" data-action="resetWidget" class="px-6 py-2.5 bg-[#4DA8FF] text-white rounded-xl font-semibold">Try Again</button>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </div>
 
 <script>
+'use strict';
+
 const API_BASE = window.location.origin + '/api';
 const state = { mode: 'ONLINE', doctor: null, date: null, slot: null };
-function $(s){return document.querySelector(s)}
-function $$(s){return document.querySelectorAll(s)}
-function formatDate(dateStr){return new Date(dateStr).toLocaleDateString('en-IN',{timeZone:'UTC',day:'2-digit',month:'short',year:'numeric'})}
-function formatTime(hhmm){const [h,m]=hhmm.split(':').map(Number);const suffix=h>=12?'PM':'AM';const hour=h%12||12;return `${hour}:${String(m).padStart(2,'0')} ${suffix}`}
-async function api(path, opts={}){const r=await fetch(API_BASE+path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok) throw new Error(d.error||'Request failed');return d;}
-function setMode(m){state.mode=m;$('#modeOnline').className=m==='ONLINE'?'flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold':'flex-1 px-4 py-2 rounded-xl border-2 border-slate-200';$('#modeOffline').className=m==='OFFLINE'?'flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold':'flex-1 px-4 py-2 rounded-xl border-2 border-slate-200';loadDoctors();}
-async function loadDoctors(){const docs=await api('/public/doctors?mode='+state.mode);$('#doctorsList').innerHTML=docs.map(d=>`<div onclick="selectDoctor('${d.id}')" class="cursor-pointer p-4 rounded-2xl border hover:border-[#4DA8FF] hover:bg-[#4DA8FF]/5 flex items-center justify-between"><div class="flex items-center gap-3">${d.photoUrl?`<img src="${d.photoUrl}" class="w-12 h-12 rounded-xl object-cover border"/>`:'<div class="w-12 h-12 rounded-xl bg-[#4DA8FF]/20 flex items-center justify-center text-2xl">👨‍⚕️</div>'}<div><p class="font-semibold">Dr. ${d.name}</p><p class="text-xs text-slate-500">${d.specialization} · ${d.experience}+ yrs</p></div></div><div class="text-right"><p class="font-bold text-[#4DA8FF]">₹${state.mode==='ONLINE'?d.onlineConsultFee:d.physicalConsultFee}</p><p class="text-xs text-slate-400">${d.slotDuration} min</p></div></div>`).join('')||'<p class="text-slate-400 text-center py-6">No doctors available</p>';}
-function selectDoctor(id){api('/public/doctors/'+id).then(d=>{state.doctor=d;goTo(2);});}
 
-// Bug 4 — IST-aware bounds for DOB (today max, 18 yrs ago min)
+function $(s){ return document.querySelector(s); }
+function $$(s){ return document.querySelectorAll(s); }
+function formatDate(dateStr){ return new Date(dateStr).toLocaleDateString('en-IN',{ timeZone:'UTC', day:'2-digit', month:'short', year:'numeric' }); }
+function formatTime(hhmm){ const [h,m]=hhmm.split(':').map(Number); const suf=h>=12?'PM':'AM'; const hr=h%12||12; return `${hr}:${String(m).padStart(2,'0')} ${suf}`; }
+
+async function api(path, opts={}){
+  const r = await fetch(API_BASE+path, { ...opts, headers:{ 'Content-Type':'application/json', ...(opts.headers||{}) } });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(d.error || 'Request failed');
+  return d;
+}
+
+// Issue 10 — escape any value that gets interpolated into innerHTML.
+function escapeHtml(s){
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function safeUrl(u){
+  if (typeof u !== 'string') return '';
+  const t = u.trim();
+  if (/^\s*javascript:/i.test(t)) return '';
+  return escapeHtml(t);
+}
+
+function setMode(m){
+  state.mode = m;
+  $('#modeOnline').className  = m==='ONLINE'  ? 'flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold' : 'flex-1 px-4 py-2 rounded-xl border-2 border-slate-200';
+  $('#modeOffline').className = m==='OFFLINE' ? 'flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold' : 'flex-1 px-4 py-2 rounded-xl border-2 border-slate-200';
+  $('#modeOnline').setAttribute('aria-checked',  m==='ONLINE');
+  $('#modeOffline').setAttribute('aria-checked', m==='OFFLINE');
+  loadDoctors();
+}
+
+async function loadDoctors(){
+  const list = $('#doctorsList');
+  list.setAttribute('aria-busy','true');
+  const docs = await api('/public/doctors?mode='+state.mode);
+  list.setAttribute('aria-busy','false');
+  list.innerHTML = docs.map(d => {
+    const id      = escapeHtml(d.id);
+    const name    = escapeHtml(d.name);
+    const spec    = escapeHtml(d.specialization || '');
+    const exp     = escapeHtml(d.experience ?? '');
+    const slotDur = escapeHtml(d.slotDuration ?? '');
+    const fee     = escapeHtml(state.mode==='ONLINE' ? d.onlineConsultFee : d.physicalConsultFee);
+    const photo   = d.photoUrl ? safeUrl(d.photoUrl) : '';
+    const avatar  = photo
+      ? `<img src="${photo}" class="w-12 h-12 rounded-xl object-cover border" alt="Photo of Dr. ${name}"/>`
+      : `<div class="w-12 h-12 rounded-xl bg-[#4DA8FF]/20 flex items-center justify-center text-2xl" aria-hidden="true">👨‍⚕️</div>`;
+    return `<button type="button" role="listitem" data-action="selectDoctor" data-id="${id}" class="w-full text-left cursor-pointer p-4 rounded-2xl border hover:border-[#4DA8FF] hover:bg-[#4DA8FF]/5 flex items-center justify-between" aria-label="Book Dr. ${name}, ${spec}, fee ${fee} rupees">
+      <span class="flex items-center gap-3">${avatar}
+        <span><span class="block font-semibold">Dr. ${name}</span>
+        <span class="block text-xs text-slate-500">${spec} · ${exp}+ yrs</span></span>
+      </span>
+      <span class="text-right"><span class="block font-bold text-[#4DA8FF]">₹${fee}</span>
+      <span class="block text-xs text-slate-400">${slotDur} min</span></span>
+    </button>`;
+  }).join('') || '<p class="text-slate-400 text-center py-6">No doctors available</p>';
+}
+
+function selectDoctor(id){
+  api('/public/doctors/'+id).then(d => { state.doctor = d; goTo(2); });
+}
+
+// IST-aware bounds for DOB (today max, 18 yrs ago min)
 function applyDobBounds() {
   const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const y=nowIST.getFullYear(),m=String(nowIST.getMonth()+1).padStart(2,'0'),d=String(nowIST.getDate()).padStart(2,'0');
-  const todayIST=`${y}-${m}-${d}`;
-  const eighteen=new Date(nowIST); eighteen.setFullYear(eighteen.getFullYear()-18);
-  const ey=eighteen.getFullYear(),em=String(eighteen.getMonth()+1).padStart(2,'0'),ed=String(eighteen.getDate()).padStart(2,'0');
+  const y = nowIST.getFullYear(), m = String(nowIST.getMonth()+1).padStart(2,'0'), d = String(nowIST.getDate()).padStart(2,'0');
+  const todayIST = `${y}-${m}-${d}`;
+  const eighteen = new Date(nowIST); eighteen.setFullYear(eighteen.getFullYear()-18);
+  const ey = eighteen.getFullYear(), em = String(eighteen.getMonth()+1).padStart(2,'0'), ed = String(eighteen.getDate()).padStart(2,'0');
   const dob = $('#f_dob');
   dob.max = todayIST;
   dob.min = `${ey}-${em}-${ed}`;
-  dob.addEventListener('change', () => {
-    if (dob.value && dob.value > todayIST) { dob.value = todayIST; alert('Date of birth cannot be in the future.'); }
-    if (dob.value && dob.value < dob.min) { dob.value = dob.min; alert('This is a pediatric clinic — patient must be under 18.'); }
-  });
+  // bind once
+  if (!dob.__bound) {
+    dob.addEventListener('change', () => {
+      if (dob.value && dob.value > dob.max) { dob.value = dob.max; alert('Date of birth cannot be in the future.'); }
+      if (dob.value && dob.value < dob.min) { dob.value = dob.min; alert('This is a pediatric clinic — patient must be under 18.'); }
+    });
+    dob.__bound = true;
+  }
 }
 
 function goTo(step){
-  [1,2,3,4].forEach(i=>$('#step'+i).classList.add('hidden'));
+  [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
   $('#successScreen').classList.add('hidden');
   $('#failureScreen').classList.add('hidden');
   $('#step'+step).classList.remove('hidden');
-  [1,2,3,4].forEach(i=>$('#step'+i+'Label').className=i===step?'font-semibold text-[#4DA8FF]':'text-slate-400');
-  if(step===2) applyDobBounds();
-  if(step===3) initSlotPicker();
-  if(step===4) renderSummary();
+
+  [1,2,3,4].forEach(i => {
+    const lbl = $('#step'+i+'Label');
+    if (i === step) { lbl.className = 'font-semibold text-[#4DA8FF]'; lbl.setAttribute('aria-current','step'); }
+    else            { lbl.className = 'text-slate-400'; lbl.removeAttribute('aria-current'); }
+  });
+
+  if (step === 2) { applyDobBounds(); $('#f_name').focus(); }
+  if (step === 3) { initSlotPicker(); }
+  if (step === 4) { renderSummary(); }
 }
 
 function validateStep2(){
-  if(!$('#f_name').value||!$('#f_parent').value||!$('#f_dob').value||!$('#f_gender').value||!$('#f_phone').value||!$('#f_problem').value) return alert('Please fill all required fields');
-  if(!/^[6-9]\d{9}$/.test($('#f_phone').value)) return alert('Please enter a valid 10-digit Indian phone number');
-  // Re-check DOB bounds in case browser ignored min/max attribute
-  const dob=$('#f_dob'); if(dob.value > dob.max) return alert('Date of birth cannot be in the future.');
-  if(dob.value < dob.min) return alert('This is a pediatric clinic — patient must be under 18.');
+  if (!$('#f_name').value || !$('#f_parent').value || !$('#f_dob').value || !$('#f_gender').value || !$('#f_phone').value || !$('#f_problem').value) return alert('Please fill all required fields');
+  if (!/^[6-9]\d{9}$/.test($('#f_phone').value)) return alert('Please enter a valid 10-digit Indian phone number');
+  const dob = $('#f_dob');
+  if (dob.value > dob.max) return alert('Date of birth cannot be in the future.');
+  if (dob.value < dob.min) return alert('This is a pediatric clinic — patient must be under 18.');
   goTo(3);
 }
 
 function initSlotPicker(){
   const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const y=nowIST.getFullYear(),m=String(nowIST.getMonth()+1).padStart(2,'0'),d=String(nowIST.getDate()).padStart(2,'0');
+  const y = nowIST.getFullYear(), m = String(nowIST.getMonth()+1).padStart(2,'0'), d = String(nowIST.getDate()).padStart(2,'0');
   const todayIST = `${y}-${m}-${d}`;
-  if(!$('#f_date').value || $('#f_date').value < todayIST) $('#f_date').value=todayIST;
-  $('#f_date').min=todayIST;
+  if (!$('#f_date').value || $('#f_date').value < todayIST) $('#f_date').value = todayIST;
+  $('#f_date').min = todayIST;
   loadSlots();
-  $('#f_date').onchange=function(){
-    if(this.value < todayIST){ this.value = todayIST; }
+  $('#f_date').onchange = function(){
+    if (this.value < todayIST){ this.value = todayIST; }
     loadSlots();
   };
 }
-async function loadSlots(){state.date=$('#f_date').value;state.slot=null;$('#continueSlot').disabled=true;$('#slotsGrid').innerHTML='<p class="col-span-full text-slate-400 text-center text-sm">Loading...</p>';try{const {slots}=await api(`/public/slots?doctorId=${state.doctor.id}&date=${state.date}&type=${state.mode}`);const available=slots.filter(s=>s.available);if(!available.length){$('#slotsGrid').innerHTML='<p class="col-span-full text-slate-400 text-center text-sm py-4">No available slots on this date</p>';return;}$('#slotsGrid').innerHTML=available.map(s=>`<button onclick="pickSlot(event,'${s.startTime}')" class="py-2 rounded-xl border text-sm hover:border-[#4DA8FF] hover:bg-[#4DA8FF]/10">${formatTime(s.startTime)}</button>`).join('');}catch(e){$('#slotsGrid').innerHTML=`<p class="col-span-full text-red-500 text-center text-sm">${e.message}</p>`;}}
-function pickSlot(ev,time){state.slot=time;$$('#slotsGrid button').forEach(b=>b.classList.remove('bg-[#4DA8FF]','text-white'));ev.target.classList.add('bg-[#4DA8FF]','text-white');$('#continueSlot').disabled=false;}
+
+async function loadSlots(){
+  state.date = $('#f_date').value;
+  state.slot = null;
+  $('#continueSlot').disabled = true;
+  $('#slotsGrid').innerHTML = '<p class="col-span-full text-slate-400 text-center text-sm">Loading…</p>';
+  try {
+    const { slots } = await api(`/public/slots?doctorId=${state.doctor.id}&date=${state.date}&type=${state.mode}`);
+    const available = slots.filter(s => s.available);
+    if (!available.length) {
+      $('#slotsGrid').innerHTML = '<p class="col-span-full text-slate-400 text-center text-sm py-4">No available slots on this date</p>';
+      return;
+    }
+    $('#slotsGrid').innerHTML = available.map(s =>
+      `<button type="button" data-action="pickSlot" data-time="${escapeHtml(s.startTime)}" class="py-2 rounded-xl border text-sm hover:border-[#4DA8FF] hover:bg-[#4DA8FF]/10" aria-label="Select slot ${formatTime(s.startTime)}">${formatTime(s.startTime)}</button>`
+    ).join('');
+  } catch (e) {
+    $('#slotsGrid').innerHTML = `<p class="col-span-full text-red-500 text-center text-sm">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function pickSlot(btn, time){
+  state.slot = time;
+  $$('#slotsGrid button').forEach(b => { b.classList.remove('bg-[#4DA8FF]','text-white'); b.setAttribute('aria-pressed','false'); });
+  btn.classList.add('bg-[#4DA8FF]','text-white');
+  btn.setAttribute('aria-pressed','true');
+  $('#continueSlot').disabled = false;
+}
 
 function renderSummary(){
-  const fee=state.mode==='ONLINE'?state.doctor.onlineConsultFee:state.doctor.physicalConsultFee;
-  $('#summary').innerHTML=`<div class="flex justify-between"><span class="text-slate-500">Patient:</span><span class="font-medium">${$('#f_name').value}</span></div><div class="flex justify-between"><span class="text-slate-500">Phone:</span><span>+91 ${$('#f_phone').value}</span></div><div class="flex justify-between"><span class="text-slate-500">Doctor:</span><span class="font-medium">Dr. ${state.doctor.name}</span></div><div class="flex justify-between"><span class="text-slate-500">Type:</span><span>${state.mode==='ONLINE'?'🎥 Online':'🏥 In-Clinic'}</span></div><div class="flex justify-between"><span class="text-slate-500">Date:</span><span>${formatDate(state.date)}</span></div><div class="flex justify-between"><span class="text-slate-500">Time:</span><span>${formatTime(state.slot)}</span></div><div class="border-t pt-2 mt-2 flex justify-between text-lg font-bold"><span>Fee:</span><span class="text-[#4DA8FF]">₹${fee}</span></div>${state.mode==='ONLINE'?'<p class="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg mt-2">💳 Payment via Cashfree is required before booking confirmation.</p>':'<p class="text-xs text-green-700 bg-green-50 p-2 rounded-lg mt-2">💰 Pay at clinic on visit day</p>'}`;
+  const fee = state.mode==='ONLINE' ? state.doctor.onlineConsultFee : state.doctor.physicalConsultFee;
+  const sName  = escapeHtml($('#f_name').value);
+  const sPhone = escapeHtml($('#f_phone').value);
+  const sDoc   = escapeHtml(state.doctor.name);
+  const sFee   = escapeHtml(fee);
+  $('#summary').innerHTML = `
+    <div class="flex justify-between"><span class="text-slate-500">Patient:</span><span class="font-medium">${sName}</span></div>
+    <div class="flex justify-between"><span class="text-slate-500">Phone:</span><span>+91 ${sPhone}</span></div>
+    <div class="flex justify-between"><span class="text-slate-500">Doctor:</span><span class="font-medium">Dr. ${sDoc}</span></div>
+    <div class="flex justify-between"><span class="text-slate-500">Type:</span><span>${state.mode==='ONLINE'?'🎥 Online':'🏥 In-Clinic'}</span></div>
+    <div class="flex justify-between"><span class="text-slate-500">Date:</span><span>${formatDate(state.date)}</span></div>
+    <div class="flex justify-between"><span class="text-slate-500">Time:</span><span>${formatTime(state.slot)}</span></div>
+    <div class="border-t pt-2 mt-2 flex justify-between text-lg font-bold"><span>Fee:</span><span class="text-[#4DA8FF]">₹${sFee}</span></div>
+    ${state.mode==='ONLINE'
+      ? '<p class="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg mt-2">💳 Payment via Cashfree is required before booking confirmation.</p>'
+      : '<p class="text-xs text-green-700 bg-green-50 p-2 rounded-lg mt-2">💰 Pay at clinic on visit day</p>'}`;
 
-  // Bug 5 — T&C copy differs by mode
   const tnc = $('#f_tnc'); tnc.checked = false;
   $('#btnSubmit').disabled = true;
   $('#tncText').innerHTML = state.mode === 'ONLINE'
-    ? `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" class="underline text-[#4DA8FF]">Terms & Conditions</a> and the <a href="https://www.nmc.org.in/MCIRest/open/getDocument?path=/Documents/Public/Portal/LatestNews/Telemedicine.pdf" target="_blank" class="underline text-[#4DA8FF]">Indian NMC Telemedicine Practice Guidelines 2020</a>. I understand that an online consultation has limitations versus an in-person visit, and I provide informed consent to a teleconsultation by a Registered Medical Practitioner at NeoKidsPro.`
-    : `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" class="underline text-[#4DA8FF]">Terms & Conditions</a> for in-clinic consultations at NeoKidsPro.`;
+    ? `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" rel="noopener" class="underline text-[#4DA8FF]">Terms & Conditions</a> and the <a href="https://www.nmc.org.in/MCIRest/open/getDocument?path=/Documents/Public/Portal/LatestNews/Telemedicine.pdf" target="_blank" rel="noopener" class="underline text-[#4DA8FF]">Indian NMC Telemedicine Practice Guidelines 2020</a>. I understand that an online consultation has limitations versus an in-person visit, and I provide informed consent to a teleconsultation by a Registered Medical Practitioner at NeoKidsPro.`
+    : `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" rel="noopener" class="underline text-[#4DA8FF]">Terms & Conditions</a> for in-clinic consultations at NeoKidsPro.`;
   tnc.onchange = () => { $('#btnSubmit').disabled = !tnc.checked; };
 }
 
-// Bug 3 — utility: tear down any leftover Cashfree modal/backdrops
 function nukeCashfreeOverlay() {
-  document.querySelectorAll('iframe').forEach(el=>{
-    let p=el.parentElement;
-    while(p&&p!==document.body){
-      const s=p.style;
-      if(s.position==='fixed'||(parseInt(s.zIndex)||0)>100||s.backdropFilter||(s.background||'').includes('rgba')){p.remove();return;}
-      p=p.parentElement;
+  document.querySelectorAll('iframe').forEach(el => {
+    let p = el.parentElement;
+    while (p && p !== document.body) {
+      const s = p.style;
+      if (s.position === 'fixed' || (parseInt(s.zIndex) || 0) > 100 || s.backdropFilter || (s.background || '').includes('rgba')) { p.remove(); return; }
+      p = p.parentElement;
     }
     el.remove();
   });
-  document.querySelectorAll('div').forEach(el=>{
-    const s=window.getComputedStyle(el);
-    if((s.position==='fixed'||s.position==='absolute')&&parseInt(s.zIndex)>1000&&el.parentElement===document.body) el.remove();
+  document.querySelectorAll('div').forEach(el => {
+    const s = window.getComputedStyle(el);
+    if ((s.position === 'fixed' || s.position === 'absolute') && parseInt(s.zIndex) > 1000 && el.parentElement === document.body) el.remove();
   });
-  document.body.style.overflow='';
-  document.body.style.backdropFilter='';
-  document.documentElement.style.overflow='';
+  document.body.style.overflow = '';
+  document.body.style.backdropFilter = '';
+  document.documentElement.style.overflow = '';
+}
+
+/* =====================================================================
+   Issue #27 — server-confirmed payment success
+   ---------------------------------------------------------------------
+   The previous version trusted the Cashfree client SDK in two places:
+     (a) inside the polling success branch, where we used
+         status.paymentStatus === 'PAID' (this part was actually correct)
+     (b) implicitly, by never re-confirming after the Cashfree promise
+         resolved — meaning that under weird timing (popup closed at the
+         exact moment Cashfree's webhook hadn't yet hit our DB) the UI
+         could race ahead.
+
+   We now have ONE source of truth: confirmPaymentWithServer(orderId,
+   appointmentId). It calls GET /api/public/appointments/:id and only
+   returns true when the DB row says PAID. The polling success branch
+   AND the cashfree.checkout() .then() branch both call it. Neither
+   can show "Booking Confirmed" without the DB agreeing.
+   ===================================================================== */
+async function confirmPaymentWithServer(appointmentId){
+  try {
+    // Use the documented /appointments/:id endpoint (server-side truth).
+    const r = await fetch('/api/public/appointments/' + encodeURIComponent(appointmentId), { cache: 'no-store' });
+    const j = await r.json().catch(()=>({}));
+    return !!(r.ok && j && j.paymentStatus === 'PAID');
+  } catch (e) {
+    return false;
+  }
 }
 
 async function submitBooking(){
   if (!$('#f_tnc').checked) return alert('Please accept the Terms & Conditions to continue.');
-  $('#btnSubmit').disabled=true;$('#btnSubmitText').textContent='Booking...';
-  try{
-    const payload={
-      doctorId:state.doctor.id,
-      patientName:$('#f_name').value,
-      phone:$('#f_phone').value,
-      email:$('#f_email').value,
-      parentName:$('#f_parent').value,
-      dateOfBirth:$('#f_dob').value,
-      gender:$('#f_gender').value,
-      primaryProblem:$('#f_problem').value,
-      date:state.date,
-      startTime:state.slot,
-      consultationType:state.mode,
-      tncAccepted: true                      // Bug 5 — sent + validated server-side
+  $('#btnSubmit').disabled = true;
+  $('#btnSubmitText').textContent = 'Booking…';
+  try {
+    const payload = {
+      doctorId: state.doctor.id,
+      patientName: $('#f_name').value,
+      phone: $('#f_phone').value,
+      email: $('#f_email').value,
+      parentName: $('#f_parent').value,
+      dateOfBirth: $('#f_dob').value,
+      gender: $('#f_gender').value,
+      primaryProblem: $('#f_problem').value,
+      date: state.date,
+      startTime: state.slot,
+      consultationType: state.mode,
+      tncAccepted: true
     };
-    const res=await api('/public/book',{method:'POST',body:JSON.stringify(payload)});
-    if(res.requiresPayment&&res.cashfree){
-      if(typeof Cashfree!=='function') throw new Error('Cashfree SDK failed to load');
-      const cashfree=Cashfree({mode:res.cashfree.environment||'sandbox'});
-      const orderId=res.cashfree.orderId;
-      const appt=res.appointment;
+    const res = await api('/public/book', { method:'POST', body: JSON.stringify(payload) });
 
-      // ── KEY FIX ──────────────────────────────────────────────────────────────
-      // cashfree.checkout() with _modal does NOT reliably resolve its promise
-      // after sandbox error popups — the modal stays open and the await hangs.
-      // Solution: fire checkout WITHOUT await, then independently start polling
-      // the server-side verify endpoint every 2s. The moment Cashfree marks the
-      // order PAID on their end (which happens even before the modal closes in
-      // sandbox), our poll catches it and shows the success screen. If the
-      // payment is never confirmed within the timeout, the poll shows the
-      // dedicated failure screen — NOT a misleading "Booking Recorded" screen.
-      // ─────────────────────────────────────────────────────────────────────────
-      cashfree.checkout({paymentSessionId:res.cashfree.paymentSessionId,redirectTarget:'_modal'})
-        .then(r=>console.log('[Cashfree] checkout resolved:',JSON.stringify(r)))
-        .catch(e=>console.warn('[Cashfree] checkout rejected:',e));
+    if (res.requiresPayment && res.cashfree) {
+      if (typeof Cashfree !== 'function') throw new Error('Cashfree SDK failed to load');
+      const cashfree = Cashfree({ mode: res.cashfree.environment || 'sandbox' });
+      const orderId  = res.cashfree.orderId;
+      const appt     = res.appointment;
+
+      // Fire checkout (no await — see Bug #3 commentary).
+      cashfree.checkout({ paymentSessionId: res.cashfree.paymentSessionId, redirectTarget: '_modal' })
+        .then(async r => {
+          // Issue #27 — even when the Cashfree promise resolves with
+          // an apparent success, re-confirm with the server before
+          // showing the success UI.
+          console.log('[Cashfree] checkout resolved:', r);
+          const paid = await confirmPaymentWithServer(appt.id);
+          if (paid) {
+            nukeCashfreeOverlay();
+            const bar = document.getElementById('payStatusBar'); if (bar) bar.style.display = 'none';
+            showSuccess(appt, true, '✅ Payment confirmed! Consultation booked.');
+          }
+          // If NOT paid yet, leave the poller running — it has the
+          // authoritative final say.
+        })
+        .catch(e => console.warn('[Cashfree] checkout rejected:', e));
 
       startPaymentPolling(appt, orderId);
 
-    }else{showSuccess(res.appointment,false);}
-  }catch(e){alert(e.message);$('#btnSubmit').disabled=false;$('#btnSubmitText').textContent='Confirm Booking';}
+    } else {
+      showSuccess(res.appointment, false);
+    }
+  } catch (e) {
+    alert(e.message);
+    $('#btnSubmit').disabled = false;
+    $('#btnSubmitText').textContent = 'Confirm Booking';
+  }
 }
 
 function startPaymentPolling(appt, orderId){
-  // Show a floating status bar while the Cashfree modal is still open
-  let bar=document.getElementById('payStatusBar');
-  if(!bar){
-    bar=document.createElement('div');
-    bar.id='payStatusBar';
-    bar.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#fff;text-align:center;padding:10px 16px;font-size:13px;z-index:99999;display:flex;align-items:center;justify-content:center;gap:10px;';
+  let bar = document.getElementById('payStatusBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'payStatusBar';
+    bar.setAttribute('role','status');
+    bar.setAttribute('aria-live','polite');
+    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#fff;text-align:center;padding:10px 16px;font-size:13px;z-index:99999;display:flex;align-items:center;justify-content:center;gap:10px;';
     document.body.appendChild(bar);
   }
-  bar.innerHTML='<span style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:#4DA8FF;border-radius:50%;animation:spin 1s linear infinite"></span> Verifying payment with Cashfree…';
-  bar.style.display='flex';
+  bar.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:#4DA8FF;border-radius:50%;animation:spin 1s linear infinite" aria-hidden="true"></span> Verifying payment with Cashfree…';
+  bar.style.display = 'flex';
 
-  const maxAttempts=30, interval=2000;
-  let attempts=0;
-  const timer=setInterval(async()=>{
+  const maxAttempts = 30, interval = 2000;
+  let attempts = 0;
+  const timer = setInterval(async () => {
     attempts++;
     let status;
-    try{
-      status=await fetch('/api/public/verify-payment?order_id='+encodeURIComponent(orderId),{cache:'no-store'}).then(r=>r.json());
-      console.log('[Poll] attempt',attempts,'status:',status.paymentStatus,'cashfree:',status.cashfreeStatus);
-    }catch(e){ console.warn('[Poll] error',e); status = null; }
+    try {
+      status = await fetch('/api/public/verify-payment?order_id=' + encodeURIComponent(orderId), { cache: 'no-store' }).then(r => r.json());
+      console.log('[Poll] attempt', attempts, 'status:', status && status.paymentStatus, 'cashfree:', status && status.cashfreeStatus);
+    } catch (e) { console.warn('[Poll] error', e); status = null; }
 
-    // ── SUCCESS PATH ────────────────────────────────────────────────────────
-    // Only the literal DB row flipped to PAID counts as a real success.
-    if(status && status.paymentStatus==='PAID'){
-      clearInterval(timer);
-      bar.style.display='none';
-      nukeCashfreeOverlay();
-      showSuccess(appt,true,'✅ Payment confirmed! Consultation booked. Details sent via WhatsApp & email.');
-      return;
+    // ── SUCCESS PATH (Issue #27) ─────────────────────────────────────
+    // Even when verify-payment says PAID, we make ONE more server call
+    // to /appointments/:id to read the canonical DB row. Same source
+    // the cashfree.checkout() resolution uses — single source of truth.
+    if (status && status.paymentStatus === 'PAID') {
+      const reconfirmed = await confirmPaymentWithServer(appt.id);
+      if (reconfirmed) {
+        clearInterval(timer);
+        bar.style.display = 'none';
+        nukeCashfreeOverlay();
+        showSuccess(appt, true, '✅ Payment confirmed! Consultation booked. Details sent via WhatsApp & email.');
+        return;
+      }
+      // verify-payment said PAID but /appointments/:id hasn't caught
+      // up yet — keep polling, don't show success prematurely.
     }
 
-    // ── EXPLICIT FAILURE PATH ───────────────────────────────────────────────
-    // Cashfree said this order is FAILED / EXPIRED / TERMINATED / CANCELLED.
-    if(status && (
-        status.paymentStatus==='FAILED' ||
+    // ── EXPLICIT FAILURE PATH ────────────────────────────────────────
+    if (status && (
+        status.paymentStatus === 'FAILED' ||
         ['EXPIRED','FAILED','TERMINATED','CANCELLED'].includes(status.cashfreeStatus)
-      )){
+      )) {
       clearInterval(timer);
-      bar.style.display='none';
+      bar.style.display = 'none';
       nukeCashfreeOverlay();
-      showFailure(appt, status.cashfreeStatus || 'FAILED',
-        'Your transaction was not completed by Cashfree. No amount has been charged. Please try booking again.');
+      showFailure(appt, status.cashfreeStatus || 'FAILED', 'Your transaction was not completed by Cashfree. No amount has been charged. Please try booking again.');
       return;
     }
 
-    // ── TIMEOUT PATH ────────────────────────────────────────────────────────
-    // 30 attempts × 2s = 60s and Cashfree never confirmed PAID.
-    // This is NOT a "booking recorded" outcome — the user did not pay.
-    if(attempts>=maxAttempts){
+    // ── TIMEOUT ──────────────────────────────────────────────────────
+    if (attempts >= maxAttempts) {
       clearInterval(timer);
-      bar.style.display='none';
+      bar.style.display = 'none';
       nukeCashfreeOverlay();
       showFailure(appt, (status && status.cashfreeStatus) || 'TIMED_OUT',
-        'We did not receive a payment confirmation from Cashfree within the expected time. '+
-        'If you completed the payment, you will receive a WhatsApp confirmation within a few minutes. '+
-        'If you did not complete the payment, please try booking again.');
+        'We did not receive a payment confirmation from Cashfree within the expected time. If you completed the payment, you will receive a WhatsApp confirmation within a few minutes. If you did not complete the payment, please try booking again.');
     }
   }, interval);
 }
 
-// Bug 3 — Real success screen. Only invoked after a confirmed PAID or after
-// an offline cash booking (which is confirmed at create time, no payment).
-function showSuccess(appt,isOnline,customMessage=''){
-  [1,2,3,4].forEach(i=>$('#step'+i).classList.add('hidden'));
+function showSuccess(appt, isOnline, customMessage=''){
+  [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
   $('#failureScreen').classList.add('hidden');
-  $('#successScreen').classList.remove('hidden');
-  $('#successMsg').textContent=customMessage||(isOnline?'Online payment is being verified. Final confirmation will be sent shortly.':'Your in-clinic visit is confirmed. Confirmation sent via WhatsApp.');
-  $('#successDetails').innerHTML=`<p><strong>Appointment ID:</strong> ${appt.id.slice(0,8).toUpperCase()}</p><p><strong>Doctor:</strong> Dr. ${state.doctor.name}</p><p><strong>Date & Time:</strong> ${formatDate(state.date)} at ${formatTime(state.slot)}</p><p class="mt-2 text-slate-600">A reminder will be sent around 30 minutes before your appointment.</p>`;
+  const s = $('#successScreen');
+  s.classList.remove('hidden');
+  $('#successMsg').textContent = customMessage || (isOnline ? 'Online payment is being verified. Final confirmation will be sent shortly.' : 'Your in-clinic visit is confirmed. Confirmation sent via WhatsApp.');
+  $('#successDetails').innerHTML = `<p><strong>Appointment ID:</strong> ${escapeHtml(appt.id.slice(0,8).toUpperCase())}</p><p><strong>Doctor:</strong> Dr. ${escapeHtml(state.doctor.name)}</p><p><strong>Date & Time:</strong> ${formatDate(state.date)} at ${formatTime(state.slot)}</p><p class="mt-2 text-slate-600">A reminder will be sent around 30 minutes before your appointment.</p>`;
+  s.focus();
 }
 
-// Bug 3 — Real failure screen. Distinct from successScreen so the user can
-// never see "Booking Recorded 🎉" while the payment is actually unconfirmed.
 function showFailure(appt, cashfreeStatus, message){
-  [1,2,3,4].forEach(i=>$('#step'+i).classList.add('hidden'));
+  [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
   $('#successScreen').classList.add('hidden');
-  $('#failureScreen').classList.remove('hidden');
+  const f = $('#failureScreen');
+  f.classList.remove('hidden');
   $('#failureMsg').textContent = message || 'Your payment could not be confirmed.';
   $('#failureDetails').innerHTML =
-    (appt ? `<p><strong>Booking ref:</strong> ${appt.id.slice(0,8).toUpperCase()}</p>` : '') +
-    `<p><strong>Cashfree status:</strong> ${cashfreeStatus || 'unknown'}</p>` +
+    (appt ? `<p><strong>Booking ref:</strong> ${escapeHtml(appt.id.slice(0,8).toUpperCase())}</p>` : '') +
+    `<p><strong>Cashfree status:</strong> ${escapeHtml(cashfreeStatus || 'unknown')}</p>` +
     `<p class="text-xs text-slate-500 mt-2">No money has been deducted. If you see a charge on your bank statement, it will be auto-reversed within 5–7 working days as per RBI guidelines.</p>`;
-  $('#btnSubmit').disabled=false;
-  $('#btnSubmitText').textContent='Confirm Booking';
+  $('#btnSubmit').disabled = false;
+  $('#btnSubmitText').textContent = 'Confirm Booking';
+  f.focus();
 }
 
-// Bug 3 — Restart flow when user clicks "Try Again" on failure screen.
 function resetWidget(){
-  state.slot=null;
+  state.slot = null;
   $('#failureScreen').classList.add('hidden');
   $('#successScreen').classList.add('hidden');
   goTo(1);
 }
-// Bug 3 — recall pre-fill: if launched with ?doctor=<id> and optionally ?recall=<rxId>,
-// skip the doctor list step and jump straight to the patient form (or slot step).
+
 async function bootFromQueryString(){
   const qs = new URLSearchParams(window.location.search);
   const doctorId = qs.get('doctor');
   const recallId = qs.get('recall');
+  if (!doctorId && !recallId) { loadDoctors(); return; }
 
-  if (!doctorId && !recallId){
-    loadDoctors();
-    return;
-  }
-
-  // 1. Pre-fill from recall if provided
   let prefill = null;
-  if (recallId){
-    try {
-      prefill = await api('/public/recall/' + encodeURIComponent(recallId));
-    } catch (e){
-      // Bad recall id — fall back to normal flow but show a soft note
-      console.warn('Recall lookup failed:', e.message);
-    }
+  if (recallId) {
+    try { prefill = await api('/public/recall/' + encodeURIComponent(recallId)); }
+    catch (e) { console.warn('Recall lookup failed:', e.message); }
   }
-
-  // 2. Determine doctor to pre-select
   const targetDoctorId = doctorId || (prefill && prefill.doctorId);
-  if (!targetDoctorId){
-    loadDoctors();
-    return;
-  }
+  if (!targetDoctorId) { loadDoctors(); return; }
 
-  // 3. Pre-select doctor (skip step 1)
   try {
     state.doctor = await api('/public/doctors/' + encodeURIComponent(targetDoctorId));
-  } catch (e){
+  } catch (e) {
     alert('Doctor link is no longer valid. Please pick a doctor.');
     loadDoctors();
     return;
   }
 
-  // 4. Pre-fill patient identity if recall succeeded
-  if (prefill && prefill.patient){
-    goTo(2);   // step 2 = patient form (this also calls applyDobBounds)
+  if (prefill && prefill.patient) {
+    goTo(2);
     const p = prefill.patient;
     if (p.name)        $('#f_name').value    = p.name;
     if (p.parentName)  $('#f_parent').value  = p.parentName;
@@ -365,23 +576,39 @@ async function bootFromQueryString(){
     if (p.gender)      $('#f_gender').value  = p.gender;
     if (p.phone)       $('#f_phone').value   = p.phone;
     if (prefill.primaryProblem) $('#f_problem').value = prefill.primaryProblem + ' (follow-up)';
-    // Show a friendly banner so the parent knows what's happening
     const banner = document.createElement('div');
+    banner.setAttribute('role','note');
     banner.className = 'bg-[#B8F2E6]/30 border border-[#4DA8FF]/30 rounded-xl p-3 text-sm mb-3';
-    banner.innerHTML = `📋 <b>Follow-up booking</b> with Dr. ${prefill.doctorName}. Your details are pre-filled — please verify and proceed.`;
+    banner.innerHTML = `📋 <b>Follow-up booking</b> with Dr. ${escapeHtml(prefill.doctorName)}. Your details are pre-filled — please verify and proceed.`;
     const step2 = document.getElementById('step2');
     if (step2 && step2.firstElementChild) step2.insertBefore(banner, step2.firstElementChild);
   } else {
-    // Doctor pre-selected only (no recall context)
     goTo(2);
   }
 }
 
-bootFromQueryString();
-</script>
-</body>
-</html>
+/* =====================================================================
+   Issue #32 — single delegated click handler.
+   No element in the markup uses onclick=… . All buttons declare
+   data-action="…" (plus any data-* arg the action needs) and this
+   delegate dispatches. CSP 'unsafe-inline' is no longer required.
+   ===================================================================== */
+document.addEventListener('click', (ev) => {
+  const t = ev.target.closest('[data-action]');
+  if (!t) return;
+  const action = t.getAttribute('data-action');
+  switch (action) {
+    case 'setMode':         setMode(t.getAttribute('data-mode')); break;
+    case 'selectDoctor':    selectDoctor(t.getAttribute('data-id')); break;
+    case 'goTo':            goTo(parseInt(t.getAttribute('data-step'), 10)); break;
+    case 'validateStep2':   validateStep2(); break;
+    case 'pickSlot':        pickSlot(t, t.getAttribute('data-time')); break;
+    case 'submitBooking':   submitBooking(); break;
+    case 'resetWidget':     resetWidget(); break;
+  }
+});
 
+bootFromQueryString();
 </script>
 </body>
 </html>

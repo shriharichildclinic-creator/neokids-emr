@@ -1,9 +1,26 @@
 /* =====================================================================
-   NeoKidsPro Admin Panel — Revenue Management module
+   NeoKidsPro Admin Panel — Revenue Management module v2.1
    ---------------------------------------------------------------------
    Loads Revenue Reports, Doctor Settlements, Invoices views.
    Depends on app.js for: api(), $, $$, escapeHtml(), fmtDate(),
                           fmtDateTime(), __doctorsCache, statusBadge-ish helpers.
+
+   v2.1 (FIX 8 — login regression):
+     The previous version scheduled a setTimeout(refreshPendingBadge, 1500)
+     on every DOMContentLoaded — including the login screen. With no token
+     in localStorage, that 1.5-second timer fired a call against the
+     protected `/admin/finance/settlements?status=GENERATED` endpoint,
+     got 401, and the old api() helper reacted by reloading the page,
+     which re-fired DOMContentLoaded, which re-armed the timer — an
+     infinite reload loop that effectively prevented admin login.
+
+     This version:
+       1. Removes the global setTimeout from init().
+       2. Adds a hardened refreshPendingBadge() that bails out cleanly
+          when no token is present (defence in depth).
+       3. The badge refresh is now driven from app.js → showDashboard()
+          AFTER successful login, which is the only correct moment to
+          poll a protected endpoint.
    ===================================================================== */
 (function () {
   'use strict';
@@ -76,7 +93,7 @@
       if (head) sel.appendChild(head);
       doctors.forEach(d => {
         const o = document.createElement('option');
-        o.value = d.id; o.textContent = 'Dr. ' + d.name;
+        o.value = d.id; o.textContent = drName(d.name);
         sel.appendChild(o);
       });
     });
@@ -153,7 +170,7 @@
       return `
         <tr>
           <td>
-            <div style="font-weight:600;">Dr. ${escapeHtml(r.doctor.name)}</div>
+            <div style="font-weight:600;">${drNameHtml(r.doctor.name)}</div>
             <div style="font-size:.7rem; color:var(--np-muted);">
               ${escapeHtml(r.doctor.specialization || 'Pediatrician')}
               · ${r.doctor.clinicSharePercent}/${r.doctor.doctorSharePercent} split · TDS ${r.doctor.tdsPercent}%
@@ -246,7 +263,7 @@
         <tr>
           <td>${period}</td>
           <td>
-            <div style="font-weight:600;">Dr. ${escapeHtml(s.doctor?.name || '—')}</div>
+            <div style="font-weight:600;">${drNameHtml(s.doctor?.name || '—')}</div>
             <div style="font-size:.7rem; color:var(--np-muted);">${escapeHtml(s.doctor?.specialization || 'Pediatrician')}</div>
           </td>
           <td style="text-align:right;">${s.totalConsultations}</td>
@@ -275,7 +292,7 @@
     }
     const s = data.settlement; const rows = data.rows || [];
     const period = `${MONTH_NAMES[s.periodMonth - 1]} ${s.periodYear}`;
-    $('#settlementModalTitle').textContent = `Settlement · Dr. ${s.doctor.name} · ${period}`;
+    $('#settlementModalTitle').textContent = `Settlement · ${drName(s.doctor.name)} · ${period}`;
 
     const summary = `
       <div class="np-kpi-grid" style="margin-bottom:1rem;">
@@ -351,7 +368,7 @@
       const s = data.settlement;
       const period = `${MONTH_NAMES[s.periodMonth - 1]} ${s.periodYear}`;
       $('#markPaidSummary').innerHTML = `
-        <div><strong>Doctor:</strong> Dr. ${escapeHtml(s.doctor.name)}</div>
+        <div><strong>Doctor:</strong> ${drNameHtml(s.doctor.name)}</div>
         <div><strong>Period:</strong> ${period}</div>
         <div><strong>Net Payable:</strong> <span style="color:#15803D; font-weight:700;">${inr(s.doctorNetAmount)}</span></div>
         <div style="font-size:.7rem; color:var(--np-muted); margin-top:.35rem;">
@@ -433,7 +450,7 @@
         <tr>
           <td style="font-family:'Courier New', monospace; font-size:.8rem;">${escapeHtml(s.invoiceNumber || '—')}</td>
           <td>${period}</td>
-          <td>Dr. ${escapeHtml(s.doctor?.name || '—')}</td>
+          <td>${drNameHtml(s.doctor?.name || '—')}</td>
           <td style="text-align:right; font-weight:600;">${inr(s.doctorNetAmount)}</td>
           <td>
             <div style="font-size:.78rem;">${escapeHtml(s.paymentMode || '')}</div>
@@ -452,6 +469,7 @@
   async function downloadInvoice(settlementId) {
     try {
       const token = localStorage.getItem('np_admin_token');
+      if (!token) throw new Error('Not signed in');
       const r = await fetch(`/api/admin/finance/invoices/${settlementId}/download`, {
         headers: { Authorization: 'Bearer ' + token }
       });
@@ -484,18 +502,28 @@
     safe('clearInvoices',   () => { $('#invDoctor').value = ''; loadInvoices(); });
   }
 
-  /* ---------- Boot ---------- */
+  /* ---------- Boot ----------
+   *
+   * IMPORTANT: this runs on DOMContentLoaded, which means it executes
+   * on the LOGIN screen too. It must therefore only perform safe,
+   * non-network setup. Specifically, it MUST NOT trigger any call to
+   * protected endpoints — that is what caused the post-logout 401
+   * reload loop in v2.0. The pending-settlements badge is now refreshed
+   * by app.js's showDashboard() AFTER login succeeds.
+   */
   function init() {
     populatePeriodSelects();
     bindFilters();
     bindMarkPaidForm();
-
-    // Background poll: keep the "pending settlements" sidebar badge fresh.
-    // We just do one cheap GET when the dashboard mounts.
-    setTimeout(refreshPendingBadge, 1500);
+    // NOTE: no setTimeout(refreshPendingBadge, …) here on purpose.
   }
 
+  /* refreshPendingBadge — call this ONLY after the admin is authenticated.
+   * It guards against being called without a token (defence in depth):
+   * if no token is present we silently no-op so we never accidentally
+   * trigger a 401 → reload chain. */
   async function refreshPendingBadge() {
+    if (!localStorage.getItem('np_admin_token')) return;
     try {
       const list = await api('/admin/finance/settlements?status=GENERATED');
       const badge = $('#navBadgePendingSettlements');
@@ -503,7 +531,7 @@
         badge.textContent = list.length;
         badge.classList.toggle('hidden', list.length === 0);
       }
-    } catch (_) { /* silent */ }
+    } catch (_) { /* silent — sidebar badge is non-critical */ }
   }
 
   // Expose API

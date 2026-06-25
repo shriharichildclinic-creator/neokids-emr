@@ -1,7 +1,17 @@
-// server.js — fixed version
-// - Added /payment-status route (was 404 previously)
-// - Lifecycle jobs always run by default
-// - Additional Issue 9: CORS no longer pairs '*' with credentials
+// server.js — hardened version
+//
+// Adds:
+//   #28 — Origin/Referer + Sec-Fetch-Site CSRF guard on writes
+//         (mounted before all /api/* routers; webhooks/public-book/login
+//          are explicitly bypassed inside the guard).
+//   #31 — Local Tailwind asset served at /assets/vendor/tailwind.css so
+//         the three public pages no longer load tailwind from a CDN.
+//
+// Existing fixes preserved:
+//   #15 — Per-route rate limiting (public IP-keyed, authenticated
+//         token-keyed, webhook narrow).
+//   #21 — Single source of truth for lifecycle interval (5 min).
+//   #23 — Dedicated webhook limiter + uniform webhook error.
 
 require('dotenv').config();
 const express = require('express');
@@ -12,6 +22,7 @@ const rateLimit = require('express-rate-limit');
 const path    = require('path');
 
 const { errorHandler, notFound } = require('./middleware/errorHandler');
+const { makeCsrfGuard }          = require('./middleware/csrf');
 const logger  = require('./utils/logger');
 const { runLifecycleJobs } = require('./services/lifecycle.service');
 
@@ -20,17 +31,15 @@ const adminRoutes   = require('./routes/admin.routes');
 const doctorRoutes  = require('./routes/doctor.routes');
 const publicRoutes  = require('./routes/public.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+const filesRoutes   = require('./routes/files.routes');
 const publicCtrl    = require('./controllers/public.controller');
+const { ensureStorageWritable } = require('../scripts/ensure-storage');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
-// Additional Issue 9 — `Access-Control-Allow-Origin: *` is incompatible with
-// `Access-Control-Allow-Credentials: true`. We use Bearer tokens (no
-// cookies), so credentials is unnecessary; drop it in dev. In production
-// we lock the origin list down anyway.
 if (process.env.NODE_ENV === 'production') {
   app.use(cors({
     origin: [process.env.APP_URL, 'https://neokidspro.in'].filter(Boolean),
@@ -40,22 +49,57 @@ if (process.env.NODE_ENV === 'production') {
   app.use(cors({ origin: '*' /* credentials intentionally omitted */ }));
 }
 
-const apiLimiter = rateLimit({
+// ─── Issue #15 — per-route rate limiting ──────────────────────────────
+const crypto = require('crypto');
+function tokenKey(req) {
+  const hdr = req.headers.authorization || '';
+  if (!hdr.startsWith('Bearer ')) return null;
+  const tok = hdr.slice(7).trim();
+  if (!tok) return null;
+  return 'tok:' + crypto.createHash('sha256').update(tok).digest('hex').slice(0, 24);
+}
+
+const publicLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
-  message: { error: 'Too many requests, please try again later.' }
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.', code: 'RATE_LIMIT_PUBLIC' }
 });
-app.use('/api/', apiLimiter);
+
+const authenticatedLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => tokenKey(req) || req.ip,
+  message: { error: 'Too many requests, please slow down.', code: 'RATE_LIMIT_USER' }
+});
+
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests' }
+});
+
 app.use(morgan('combined', { stream: { write: (m) => logger.info(m.trim()) } }));
 
-// Cashfree webhook needs raw body BEFORE json parser
-app.use('/api/webhooks/cashfree', express.raw({ type: 'application/json' }));
+app.use('/api/webhooks/cashfree',
+  webhookLimiter,
+  express.raw({ type: 'application/json' })
+);
+
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/files',  express.static(path.join(__dirname, '..', 'storage')));
+// ─── Static assets ────────────────────────────────────────────────────
+app.use('/files/profile-images',
+  express.static(path.join(__dirname, '..', 'storage', 'profile-images')));
+app.use('/files/kyc-documents',
+  express.static(path.join(__dirname, '..', 'storage', 'kyc-documents')));
 
-// HTML must never be cached long — JS/CSS use ?v=… for cache-busting (see index.html).
 const staticOpts = {
   maxAge: '1h',
   etag: true,
@@ -64,36 +108,52 @@ const staticOpts = {
     if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
+    // Issue 31 — vendor CSS is content-hashed at build time; aggressive cache.
+    if (filePath.includes(path.sep + 'vendor' + path.sep)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
   },
 };
 app.use('/doctor', express.static(path.join(__dirname, '..', 'public', 'doctor'), staticOpts));
 app.use('/admin',  express.static(path.join(__dirname, '..', 'public', 'admin'),  staticOpts));
-app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets')));
+app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets'), staticOpts));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'NeoKidsPro EMR', version: '1.2.2', time: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'NeoKidsPro EMR', version: '1.2.3', time: new Date().toISOString() });
 });
 
 app.get('/', (req, res) => {
   res.json({
     name: 'NeoKidsPro EMR API',
-    version: '1.2.2',
+    version: '1.2.3',
     panels: { admin: '/admin', doctor: '/doctor' }
   });
 });
 
-// ── Cashfree return URL lands here ─────────────────────────────────
-// /payment-status?order_id=appt_xxxxx
 app.get('/payment-status', publicCtrl.paymentStatusPage);
 
-app.use('/api/auth',     authRoutes);
-app.use('/api/admin',    adminRoutes);
-app.use('/api/doctor',   doctorRoutes);
-app.use('/api/public',   publicRoutes);
+// ─── Issue 28 — CSRF guard mounted BEFORE all mutating API routers ───
+// The guard itself bypasses /api/webhooks, /api/public/book, login and
+// forgot/reset-password — see middleware/csrf.js for the exhaustive list.
+app.use(makeCsrfGuard());
+
+// Mount limiters + routers
+app.use('/api/auth',     publicLimiter,        authRoutes);
+app.use('/api/public',   publicLimiter,        publicRoutes);
+app.use('/api/admin',    authenticatedLimiter, adminRoutes);
+app.use('/api/doctor',   authenticatedLimiter, doctorRoutes);
+app.use('/api/files',    authenticatedLimiter, filesRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
-app.use(notFound);
+app.use(notFound(app));
 app.use(errorHandler);
+
+try {
+  ensureStorageWritable();
+} catch (e) {
+  logger.error('Storage initialisation failed:', e.message);
+  process.exit(1);
+}
 
 app.listen(PORT, async () => {
   logger.info(`🚀 NeoKidsPro EMR running on port ${PORT}`);
@@ -107,7 +167,7 @@ app.listen(PORT, async () => {
   if (jobsEnabled) {
     await runLifecycleJobs();
     setInterval(runLifecycleJobs, intervalMs);
-    logger.info(`⏰ Lifecycle jobs running every ${intervalMs / 1000}s`);
+    logger.info(`⏰ Lifecycle jobs running every ${Math.round(intervalMs / 1000)}s (${(intervalMs / 60000).toFixed(1)} min)`);
   }
 });
 

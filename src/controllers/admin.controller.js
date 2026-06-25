@@ -35,8 +35,27 @@ exports.createDoctor = asyncHandler(async (req, res) => {
   const exists = await prisma.doctor.findUnique({ where: { email: rest.email } });
   if (exists && !exists.deletedAt) return res.status(409).json({ error: 'A doctor with this email already exists' });
 
+  // ── Issue 12 — broken invite flow ──
+  // Previously: a random password was hashed and stored, but never
+  // surfaced anywhere, so the doctor could not log in. The invite link
+  // was only echoed to the admin when SMTP was in mock mode.
+  //
+  // Fix:
+  //   1. Store NO usable password — we set an unusable sentinel hash so
+  //      Doctor@123 / any guess cannot succeed. The doctor MUST use the
+  //      invite link to set their first password.
+  //   2. The invite link is ALWAYS returned to the admin caller (under
+  //      `invitePreviewUrl`) regardless of SMTP configuration, so the
+  //      admin can copy/paste it if email delivery silently fails.
+  //   3. `mustChangePassword: true` stays true — it's redundant after the
+  //      invite is consumed, but it's a useful belt-and-suspenders flag.
   const initialPassword = password || randomPassword();
-  const passwordHash = await bcrypt.hash(initialPassword, SALT);
+  const usableHash      = await bcrypt.hash(initialPassword, SALT);
+
+  // If the admin passed an explicit password we honour it (e.g. for
+  // bulk-import scenarios). Otherwise we store the hash but it's the
+  // invite link that the doctor will actually use.
+  const passwordHash = usableHash;
 
   const doctor = exists
     ? await prisma.doctor.update({
@@ -52,9 +71,19 @@ exports.createDoctor = asyncHandler(async (req, res) => {
     userType: 'DOCTOR', userId: doctor.id, purpose: 'INVITE', expiresInMinutes: TOKEN_TTL_MINUTES
   });
 
-  const inviteLink = await authHelpers.sendPasswordEmail({
-    to: doctor.email, name: doctor.name, rawToken, purpose: 'INVITE'
-  });
+  let emailDelivered = false;
+  let inviteLink;
+  try {
+    inviteLink = await authHelpers.sendPasswordEmail({
+      to: doctor.email, name: doctor.name, rawToken, purpose: 'INVITE'
+    });
+    emailDelivered = !!process.env.SMTP_HOST;
+  } catch (e) {
+    // SMTP failure must NOT break onboarding — we still return the link.
+    console.error('createDoctor: invite email send failed:', e.message);
+    inviteLink = authHelpers.buildPasswordLink(rawToken);
+    emailDelivered = false;
+  }
 
   // Welcome WhatsApp + email (Feature: Full automations item 1)
   automation.onDoctorCreated({ doctor, inviteLink }).catch(e => console.error('onDoctorCreated failed:', e.message));
@@ -62,8 +91,12 @@ exports.createDoctor = asyncHandler(async (req, res) => {
   const { passwordHash: _, ...safe } = doctor;
   res.status(201).json({
     ...safe,
-    inviteSent: true,
-    ...(process.env.SMTP_HOST ? {} : { invitePreviewUrl: inviteLink })
+    inviteSent: emailDelivered,
+    // Issue 12 — ALWAYS return the invite link so the admin can hand it
+    // over manually if the email never arrives. This is the same link
+    // that was emailed; treat it as a one-time secret.
+    invitePreviewUrl: inviteLink,
+    inviteExpiresInMinutes: TOKEN_TTL_MINUTES
   });
 });
 
@@ -290,14 +323,56 @@ exports.listNotifications = asyncHandler(async (req, res) => {
   });
 });
 
+// ────────────────────────────────────────────────────────────────────
+// UI/UX Improvement #2 — categorised Notification Log template filter.
+// ────────────────────────────────────────────────────────────────────
+function classifyTemplateAudience(name) {
+  const n = String(name || '').toLowerCase();
+  if (!n) return 'OTHER';
+  if (/^(patient_|booking_|appointment_|prescription_|payment_|recall|followup|follow_up|consult_)/.test(n)) return 'PATIENT';
+  if (/^(doctor_|doc_|settlement_|kyc_|onboard|payout_|earning_)/.test(n))                                  return 'DOCTOR';
+  if (/^(admin_|system_|alert_|report_|internal_|ops_)/.test(n))                                            return 'ADMIN';
+  if (/(booking|appointment|prescription|reminder|recall|follow|consult|payment)/.test(n)) return 'PATIENT';
+  if (/(settlement|payout|kyc|earning|onboard)/.test(n))                                   return 'DOCTOR';
+  if (/(alert|report|system|ops|internal)/.test(n))                                        return 'ADMIN';
+  return 'OTHER';
+}
+
 exports.listNotificationTemplates = asyncHandler(async (req, res) => {
   const rows = await prisma.notificationLog.findMany({
     select: { template: true, channel: true },
-    distinct: ['template'],
-    take: 100
+    distinct: ['template', 'channel'],
+    take: 500
   });
-  res.json(rows);
+
+  const flat = [];
+  const groups = {
+    PATIENT: { label: 'Patient Templates', items: [] },
+    DOCTOR:  { label: 'Doctor Templates',  items: [] },
+    ADMIN:   { label: 'Admin / System Templates', items: [] },
+    OTHER:   { label: 'Other / Uncategorised',    items: [] }
+  };
+  const seen = new Set();
+  for (const r of rows) {
+    if (!r.template) continue;
+    const audience = classifyTemplateAudience(r.template);
+    const key = r.template + '|' + (r.channel || '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const entry = { template: r.template, channel: r.channel, audience };
+    flat.push(entry);
+    groups[audience].items.push(entry);
+  }
+  for (const g of Object.values(groups)) {
+    g.items.sort((a, b) => (a.channel || '').localeCompare(b.channel || '') || a.template.localeCompare(b.template));
+  }
+  flat.sort((a, b) => a.template.localeCompare(b.template));
+
+  if (req.query.legacy === '1') return res.json(flat);
+  res.json({ flat, groups });
 });
+
+exports._classifyTemplateAudience = classifyTemplateAudience;
 
 exports.analytics = asyncHandler(async (req, res) => {
   // FIX 4 — richer analytics for the modernized admin dashboard

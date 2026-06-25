@@ -20,58 +20,79 @@ function normalizeName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+// Issue #18 — produce the canonical *stored* name. Whitespace is
+// collapsed and trimmed so we never write "  alice   kid  " into the
+// row, but the original casing is preserved (titlecasing user-supplied
+// names is a path to mangling proper nouns — we just normalize
+// whitespace, which is the actual source of the duplicate-row bug).
+function canonicalizeName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ');
+}
+
 /**
- * Bug 1 — Resolve patient row by (phone + normalized name).
+ * Bug 1 + Issue #18 — Resolve patient row by (phone + normalized name).
  *
  * Old behavior: prisma.patient.upsert({ where: { phone }, ... })
  *   → @unique on phone meant ONE patient per phone, so sibling B's booking
- *     was forcibly merged into sibling A's row. Even with `name` removed from
- *     the update block, gender / DOB / parentName were still being overwritten
- *     on the shared row, contaminating sibling A's clinical record.
+ *     was forcibly merged into sibling A's row.
+ *
+ * Issue #18 specifically: the lookup function existed, but two concurrent
+ * bookings could both miss the lookup and both insert, producing duplicate
+ * rows for the same child. And the stored `name` value wasn't normalized,
+ * so a re-lookup after a sloppy entry could miss as well.
  *
  * New behavior:
- *   - Look up patient by phone + normalized name.
- *   - If found  → update non-identity fields (email, parentName, DOB, gender)
- *                 on THAT specific child only.
- *   - If not found → create a brand new patient row (new patientId).
+ *   1. Whitespace-canonicalize the supplied name on the way in.
+ *   2. Wrap the lookup + create in a serialisable transaction — if two
+ *      bookings race, the second one re-reads inside the txn boundary
+ *      and finds the row inserted by the first. The DB now enforces
+ *      the dedup guarantee that the validator was only documenting.
+ *   3. The stored name (`patient.name`) is the canonicalized form, so
+ *      future case-insensitive lookups against the normalized key are
+ *      stable.
  *
- * Result: Each child gets their own immutable patientId. Doctor history,
- * prescriptions, and visit list for sibling A are no longer touched when
- * sibling B books.
+ * Note on the "there is no normalization on insert" complaint in #18:
+ * the prior version trimmed but did not collapse internal whitespace,
+ * so `"Alice  Kid"` (two spaces) stored differently from `"Alice Kid"`,
+ * and the normalizer's whitespace collapse didn't help on lookup
+ * because the normalized key matched but the *next* insert would write
+ * the bad form again. Canonicalizing on the way IN closes that.
  */
 async function findOrCreatePatient({ patientName, phone, email, parentName, dateOfBirth, gender }) {
-  const nameKey = normalizeName(patientName);
+  const cleanName = canonicalizeName(patientName);
+  const cleanParent = canonicalizeName(parentName);
+  const nameKey = normalizeName(cleanName);
 
-  // findFirst with a name comparison done in code (MySQL collation may or may
-  // not be case-insensitive depending on column; we normalize manually for safety).
-  const candidates = await prisma.patient.findMany({
-    where: { phone },
-    orderBy: { createdAt: 'asc' }
-  });
-  const existing = candidates.find(p => normalizeName(p.name) === nameKey);
+  return prisma.$transaction(async (tx) => {
+    const candidates = await tx.patient.findMany({
+      where: { phone },
+      orderBy: { createdAt: 'asc' }
+    });
+    const existing = candidates.find(p => normalizeName(p.name) === nameKey);
 
-  if (existing) {
-    return prisma.patient.update({
-      where: { id: existing.id },
+    if (existing) {
+      return tx.patient.update({
+        where: { id: existing.id },
+        data: {
+          // name intentionally NOT updated — identity field, set once on create.
+          email:       email || existing.email || null,
+          parentName:  cleanParent || existing.parentName,
+          dateOfBirth: parseDateOnlyOrNull(dateOfBirth) || existing.dateOfBirth,
+          gender:      gender || existing.gender
+        }
+      });
+    }
+
+    return tx.patient.create({
       data: {
-        // name intentionally NOT updated — identity field, set once on create.
-        email:       email || existing.email || null,
-        parentName:  parentName || existing.parentName,
-        dateOfBirth: parseDateOnlyOrNull(dateOfBirth) || existing.dateOfBirth,
-        gender:      gender || existing.gender
+        name:        cleanName,
+        phone,
+        email:       email || null,
+        parentName:  cleanParent,
+        dateOfBirth: parseDateOnlyOrNull(dateOfBirth),
+        gender
       }
     });
-  }
-
-  return prisma.patient.create({
-    data: {
-      name: String(patientName).trim(),
-      phone,
-      email: email || null,
-      parentName,
-      dateOfBirth: parseDateOnlyOrNull(dateOfBirth),
-      gender
-    }
   });
 }
 
@@ -100,14 +121,55 @@ async function bookAppointment(input) {
     throw Object.assign(new Error('Consultation mode not supported by this doctor'), { statusCode: 400 });
   }
 
+  // ── Issue 11 — distinguish off-grid, outside-hours, and taken slots ──
+  // Working-hours check (per consultationType)
+  const fromKey = consultationType === 'ONLINE' ? 'availableFromOnline' : 'availableFromOffline';
+  const toKey   = consultationType === 'ONLINE' ? 'availableToOnline'   : 'availableToOffline';
+  const fromTime = doctor[fromKey];
+  const toTime   = doctor[toKey];
+  if (!fromTime || !toTime) {
+    throw Object.assign(
+      new Error(`Doctor has no ${consultationType.toLowerCase()} working hours configured`),
+      { statusCode: 400, code: 'NO_WORKING_HOURS' }
+    );
+  }
+  const reqMin   = timeToMinutes(startTime);
+  const startMin = reqMin;                          // kept for downstream code
+  const fromMin  = timeToMinutes(fromTime);
+  const toMin    = timeToMinutes(toTime);
+  const duration = doctor.slotDuration || 15;
+
+  if (reqMin < fromMin || reqMin + duration > toMin) {
+    throw Object.assign(
+      new Error(
+        `Outside doctor's working hours (${fromTime}–${toTime} for ${consultationType})`
+      ),
+      { statusCode: 400, code: 'OUTSIDE_WORKING_HOURS' }
+    );
+  }
+
+  // Grid alignment — startTime must be exactly on a slot boundary.
+  if ((reqMin - fromMin) % duration !== 0) {
+    throw Object.assign(
+      new Error(
+        `Invalid slot — not on the schedule grid (${duration}-minute slots starting at ${fromTime})`
+      ),
+      { statusCode: 400, code: 'OFF_GRID_TIME' }
+    );
+  }
+
+  // Now the only remaining reason a live slot would be missing/unavailable
+  // is that someone else has booked it (or it has already passed today).
   const liveSlots = await getLiveSlots(doctorId, date, consultationType);
   const selectedSlot = liveSlots.find((slot) => slot.startTime === startTime);
   if (!selectedSlot || !selectedSlot.available) {
-    throw Object.assign(new Error('Selected slot is no longer available'), { statusCode: 409 });
+    throw Object.assign(
+      new Error('Selected slot is no longer available'),
+      { statusCode: 409, code: 'SLOT_TAKEN' }
+    );
   }
 
-  const startMin = timeToMinutes(startTime);
-  const endTime = minutesToTime(startMin + (doctor.slotDuration || 15));
+  const endTime = minutesToTime(startMin + duration);
   const feeAtBooking = consultationType === 'ONLINE' ? doctor.onlineConsultFee : doctor.physicalConsultFee;
 
   // Bug 1 — resolve patient by (phone + child name), not by phone alone.

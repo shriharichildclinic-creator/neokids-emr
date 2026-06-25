@@ -1,6 +1,6 @@
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { bookAppointmentSchema } = require('../utils/validators');
+const { bookAppointmentSchema, slotQuerySchema } = require('../utils/validators');
 const slotService = require('../services/slot.service');
 const bookingService = require('../services/booking.service');
 const cashfreeService = require('../services/cashfree.service');
@@ -45,8 +45,18 @@ exports.doctorDetail = asyncHandler(async (req, res) => {
 });
 
 exports.getSlots = asyncHandler(async (req, res) => {
-  const { doctorId, date, type } = req.query;
-  if (!doctorId || !date || !type) return res.status(400).json({ error: 'doctorId, date, and type are required' });
+  // Issues 5 & 6 — validate every query param with Zod.
+  //   * type must be exactly 'ONLINE' or 'OFFLINE' (no silent coercion)
+  //   * date must be YYYY-MM-DD and not in the past
+  //   * doctorId must be a UUID
+  const parsed = slotQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid query parameters',
+      details: parsed.error.flatten()
+    });
+  }
+  const { doctorId, date, type } = parsed.data;
   const slots = await slotService.getLiveSlots(doctorId, date, type);
   res.json({ doctorId, date, type, slots });
 });
@@ -60,17 +70,76 @@ exports.book = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+// Issue #19 — the public appointment lookup used to return the full
+// appointment row including cashfreeOrderId, cashfreePaymentId, the
+// raw paymentStatus history, meetLink, meetEventId, and the full
+// patient phone number. Anyone who knew (or guessed, or found in a
+// leaked confirmation email) the appointment UUID could pull all of it
+// with zero authentication.
+//
+// Fix:
+//   * By default we return a *confirmation-card* projection: enough for
+//     the booking widget to render "booked / paid / your visit is on X
+//     at Y with Dr Z" and nothing else. Payment IDs, meet event IDs,
+//     and the meet link are NOT in this projection.
+//   * To fetch sensitive fields (meetLink, full patient details), the
+//     caller must prove possession of the booking phone by passing
+//     ?phone=<full 10-digit phone> in the query string. We compare it
+//     with the patient.phone we stored at booking time. This is a soft
+//     verification — the phone is part of the WhatsApp/email payload
+//     the patient already received — but it stops a stranger with just
+//     a leaked UUID dead in their tracks.
+//   * cashfreeOrderId / cashfreePaymentId / meetEventId are NEVER
+//     returned on this endpoint, even with a correct phone. They have
+//     no client-side use.
+function _maskPhone(p) {
+  const s = String(p || '');
+  if (s.length < 4) return '****';
+  return '******' + s.slice(-4);
+}
+
 exports.appointmentStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const appt = await prisma.appointment.findUnique({
     where: { id },
     include: {
-      doctor: { select: { name: true, specialization: true } },
+      doctor:  { select: { name: true, specialization: true } },
       patient: { select: { name: true, phone: true } }
     }
   });
   if (!appt) return res.status(404).json({ error: 'Not found' });
-  res.json(appt);
+
+  // Soft phone challenge: full match → unlock the meet link + full phone.
+  const provided = String(req.query.phone || '').replace(/\D/g, '');
+  const verified = provided && appt.patient && provided === appt.patient.phone;
+
+  // Minimal confirmation projection — always safe to expose.
+  const safe = {
+    id:                appt.id,
+    status:            appt.status,
+    paymentStatus:     appt.paymentStatus,
+    consultationType:  appt.consultationType,
+    date:              appt.date,
+    startTime:         appt.startTime,
+    endTime:           appt.endTime,
+    feeAtBooking:      appt.feeAtBooking,
+    primaryProblem:    appt.primaryProblem,
+    doctor:            appt.doctor,
+    patient: appt.patient ? {
+      name:  appt.patient.name,
+      phone: verified ? appt.patient.phone : _maskPhone(appt.patient.phone)
+    } : null
+  };
+
+  // Only reveal the Google Meet link if the caller knows the booking phone.
+  if (verified && appt.consultationType === 'ONLINE') {
+    safe.meetLink = appt.meetLink || null;
+  }
+
+  // cashfreeOrderId, cashfreePaymentId, meetEventId, full createdAt audit
+  // trail — intentionally absent. Doctors/admins see those via
+  // authenticated endpoints, not this public route.
+  res.json(safe);
 });
 
 /**

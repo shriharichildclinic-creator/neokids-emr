@@ -54,9 +54,9 @@ model Doctor {
   clinicSharePercent Decimal @default(25.00) @db.Decimal(5, 2)
   doctorSharePercent Decimal @default(75.00) @db.Decimal(5, 2)
   tdsPercent         Decimal @default(10.00) @db.Decimal(5, 2)
-
-  appointments Appointment[]
+appointments Appointment[]
   settlements  DoctorSettlement[]
+  kyc          DoctorKyc?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -232,4 +232,32 @@ model DoctorSettlement {
   @@index([status])
   @@index([doctorId, status])
   @@map("doctor_settlements")
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// KYC module — admin-uploaded onboarding documents.
+// One record per doctor (1-to-1). All file fields nullable so the admin
+// can upload them progressively. Status drives downstream rules
+// (e.g. settlement generation is blocked until VERIFIED).
+// ─────────────────────────────────────────────────────────────────────
+model DoctorKyc {
+  id       String @id @default(uuid())
+  doctorId String @unique
+  doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  aadhaarUrl         String?
+  panUrl             String?
+  cancelledChequeUrl String?
+  medicalRegCertUrl  String?
+
+  kycStatus       String    @default("PENDING") // PENDING | UPLOADED | VERIFIED | REJECTED
+  rejectionReason String?   @db.Text
+  verifiedAt      DateTime?
+  verifiedById    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kycStatus])
+  @@map("doctor_kyc")
 }

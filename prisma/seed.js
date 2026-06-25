@@ -3,11 +3,36 @@ const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+// Issue 8 — seed must never bake in defaults like "ChangeMe@123" /
+// "Doctor@123". Anyone running `npm run seed` against a fresh DB used to
+// get known credentials. Now both passwords are required env vars, and
+// the seed refuses to run if either is missing or too weak.
+function requirePassword(envKey) {
+  const value = process.env[envKey];
+  if (!value || value.trim().length < 8) {
+    console.error(
+      `\n✗ ${envKey} is required and must be at least 8 characters.\n` +
+      `  Set it in .env before running the seed. See .env.example.\n`
+    );
+    process.exit(1);
+  }
+  // Reject the known-leaked defaults outright.
+  const banned = new Set(['ChangeMe@123', 'Doctor@123']);
+  if (banned.has(value)) {
+    console.error(
+      `\n✗ ${envKey} is set to a known-leaked default password.\n` +
+      `  Pick a fresh password and try again.\n`
+    );
+    process.exit(1);
+  }
+  return value;
+}
+
 async function main() {
   const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@neokidspro.in';
-  const adminPwd = process.env.ADMIN_PASSWORD || 'ChangeMe@123';
+  const adminPwd = requirePassword('ADMIN_PASSWORD');
   const adminHash = await bcrypt.hash(adminPwd, SALT);
 
   await prisma.admin.upsert({
@@ -17,12 +42,13 @@ async function main() {
       email: adminEmail,
       passwordHash: adminHash,
       name: 'Super Admin',
-      mustChangePassword: false
+      // Force a password change on first login as a second layer of defence.
+      mustChangePassword: true
     }
   });
 
   const doctorEmail = 'dr.sharma@neokidspro.in';
-  const doctorPwd = 'Doctor@123';
+  const doctorPwd = requirePassword('DOCTOR_SEED_PASSWORD');
   const doctorHash = await bcrypt.hash(doctorPwd, SALT);
 
   await prisma.doctor.upsert({
@@ -47,13 +73,15 @@ async function main() {
       workingDays: 'MON,TUE,WED,THU,FRI,SAT',
       slotDuration: 15,
       isAvailable: true,
-      mustChangePassword: false
+      // Force a password change on first login.
+      mustChangePassword: true
     }
   });
 
-  console.log(`✓ Admin: ${adminEmail} / ${adminPwd}`);
-  console.log(`✓ Doctor: ${doctorEmail} / ${doctorPwd}`);
-  console.log('\nSeed complete! Login at /admin or /doctor');
+  // Print the email only — never echo the password back.
+  console.log(`✓ Admin seeded: ${adminEmail}`);
+  console.log(`✓ Doctor seeded: ${doctorEmail}`);
+  console.log('\nSeed complete. Both users must change their password on first login.');
 }
 
 main()

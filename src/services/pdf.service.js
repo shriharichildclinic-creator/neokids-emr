@@ -8,7 +8,28 @@ const STORAGE = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'st
 const BRAND_BLUE = '#4DA8FF';
 const BRAND_MINT = '#B8F2E6';
 
-function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
+// Stored URLs live in the DB — we keep the SAME canonical shape
+//   /api/files/{kind}/{appointmentId}.pdf
+// so consumers can later mint a short-lived `?t=<token>` to download.
+function publicUrlForAppointmentPdf(kind, appointmentId) {
+  const segment = kind === 'invoice' ? 'invoices' : 'prescriptions';
+  return `/api/files/${segment}/${appointmentId}.pdf`;
+}
+
+// Robust mkdir — if the directory exists but isn't writable, try to
+// chmod it. This guards against the original "storage shipped with mode
+// 0555" bug so PDF generation can't fail silently after this point.
+function ensureDir(p) {
+  if (!fs.existsSync(p)) {
+    fs.mkdirSync(p, { recursive: true, mode: 0o755 });
+    return;
+  }
+  try {
+    fs.accessSync(p, fs.constants.W_OK);
+  } catch (_) {
+    try { fs.chmodSync(p, 0o755); } catch (_) { /* surfaced later by write */ }
+  }
+}
 
 function drawHeader(doc, title) {
   doc.rect(0, 0, doc.page.width, 80).fill(BRAND_BLUE);
@@ -73,7 +94,7 @@ async function generateInvoice(appointment) {
     doc.end();
     stream.on('finish', () => resolve({
       filepath, filename,
-      url: `${process.env.PUBLIC_STORAGE_URL || '/files'}/invoices/${filename}`
+      url: publicUrlForAppointmentPdf('invoice', appointment.id)
     }));
     stream.on('error', reject);
   });
@@ -90,7 +111,6 @@ async function generatePrescription(appointment, prescription) {
     doc.pipe(stream);
     drawHeader(doc, 'PRESCRIPTION');
 
-    // Doctor info
     doc.fontSize(13).font('Helvetica-Bold').fillColor('#222')
        .text(`Dr. ${appointment.doctor.name}`, 50, 110);
     doc.fontSize(10).font('Helvetica').fillColor('#555')
@@ -99,11 +119,6 @@ async function generatePrescription(appointment, prescription) {
       doc.fontSize(9).fillColor('#777').text(`${appointment.doctor.clinicName}`);
     }
 
-     // Bug 1 — Age is ALWAYS derived from DOB at render time. DOB is the
-    // single source of truth (Patient.dateOfBirth); we never store age.
-    // Print BOTH "Age: 3 yrs 4 months  (DOB 12 Mar 2022)" so the printed
-    // record carries the immutable source-of-truth date alongside the
-    // derived value.
     const py = 160;
     const dobObj = appointment.patient.dateOfBirth;
     const ageStr = calcAge(dobObj);
@@ -121,7 +136,6 @@ async function generatePrescription(appointment, prescription) {
        .font('Helvetica').text(appointment.patient.gender || 'N/A');
     doc.font('Helvetica-Bold').text('Phone: ', 50, py + 45, { continued: true })
        .font('Helvetica').text(`+91 ${appointment.patient.phone}`);
-
 
     doc.font('Helvetica-Bold').text('Date: ', 320, py, { continued: true })
        .font('Helvetica').text(dayjs(appointment.date).format('DD MMM YYYY'));
@@ -149,7 +163,7 @@ async function generatePrescription(appointment, prescription) {
     };
 
     section('Chief Complaint', prescription.chiefComplaint);
-    section('Past History', prescription.pastHistory);     // Bug 3
+    section('Past History', prescription.pastHistory);
     section('Diagnosis', prescription.diagnosis);
     section('Allergies', prescription.allergies);
     section('Investigations', prescription.investigations);
@@ -195,7 +209,7 @@ async function generatePrescription(appointment, prescription) {
     doc.end();
     stream.on('finish', () => resolve({
       filepath, filename,
-      url: `${process.env.PUBLIC_STORAGE_URL || '/files'}/prescriptions/${filename}`
+      url: publicUrlForAppointmentPdf('prescription', appointment.id)
     }));
     stream.on('error', reject);
   });
@@ -205,9 +219,6 @@ const MONTH_NAMES = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December'
 ];
-
-
-
 
 async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumber }) {
   ensureDir(path.join(STORAGE, 'invoices'));
@@ -277,36 +288,11 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
     const num = (v) => Number(v || 0).toFixed(2);
 
     const lines = [
-      [
-        'Total Consultations',
-        `${settlement.totalConsultations} appt(s)`,
-        settlement.totalConsultations,
-        false
-      ],
-      [
-        'Total Revenue Collected',
-        'Cashfree only',
-        settlement.totalRevenue,
-        true
-      ],
-      [
-        `Clinic Share (${Number(settlement.clinicSharePercent)}%)`,
-        'of total',
-        settlement.clinicShareAmount,
-        true
-      ],
-      [
-        `Doctor Gross Share (${Number(settlement.doctorSharePercent)}%)`,
-        'of total',
-        settlement.doctorGrossAmount,
-        true
-      ],
-      [
-        `TDS Deducted (${Number(settlement.tdsPercent)}%)`,
-        'of doctor gross',
-        settlement.tdsAmount,
-        true
-      ]
+      ['Total Consultations', `${settlement.totalConsultations} appt(s)`, settlement.totalConsultations, false],
+      ['Total Revenue Collected', 'Cashfree only', settlement.totalRevenue, true],
+      [`Clinic Share (${Number(settlement.clinicSharePercent)}%)`, 'of total', settlement.clinicShareAmount, true],
+      [`Doctor Gross Share (${Number(settlement.doctorSharePercent)}%)`, 'of total', settlement.doctorGrossAmount, true],
+      [`TDS Deducted (${Number(settlement.tdsPercent)}%)`, 'of doctor gross', settlement.tdsAmount, true]
     ];
 
     let y = sumTop + 35;
@@ -324,15 +310,9 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
 
       doc.text(String(row[0]), 60, y);
       doc.text(String(row[1]), 300, y);
-
       doc.text(
         row[3] ? num(row[2]) : String(row[2]),
-        460,
-        y,
-        {
-          width: 80,
-          align: 'right'
-        }
+        460, y, { width: 80, align: 'right' }
       );
 
       y += 22;
@@ -348,28 +328,28 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
        .fontSize(13);
 
     doc.text('Net Payable to Doctor', 60, y + 10);
-
     doc.text(`₹ ${num(settlement.doctorNetAmount)}`, 460, y + 10, {
       width: 80,
       align: 'right'
     });
 
     doc.fillColor('#000');
-
     doc.end();
 
-    stream.on('finish', () =>
+ stream.on('finish', () =>
       resolve({
         filepath,
         filename,
-        url: `${process.env.PUBLIC_STORAGE_URL || '/files'}/invoices/${filename}`
+        // Settlement invoices are downloaded via the protected admin /
+        // doctor endpoints that stream `filepath` directly, so the URL
+        // we store on the settlement row points at *that* endpoint — not
+        // at any static mount, which would 404.
+        url: `/api/admin/finance/invoices/${settlement.id}/download`
       })
     );
-
     stream.on('error', reject);
   });
 }
-
 
 module.exports = {
   generateInvoice,

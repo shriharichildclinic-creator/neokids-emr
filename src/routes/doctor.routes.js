@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const c      = require('../controllers/doctor.controller');
 const earn   = require('../controllers/earnings.controller');
+const kyc    = require('../controllers/kyc.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { uploadProfileImage } = require('../middleware/upload');
 
@@ -14,6 +15,9 @@ router.put('/fees',                                         c.updateFees);
 router.put('/clinic',                                       c.updateClinic);
 router.post('/profile-image', uploadProfileImage.single('photo'), c.uploadProfileImage);
 router.delete('/profile-image',                             c.removeProfileImage);
+
+// ─── KYC (self read-only) ───
+router.get('/kyc',                                          kyc.myKycStatus);
 
 // ─── Appointments ───
 router.get('/appointments',                                 c.myAppointments);

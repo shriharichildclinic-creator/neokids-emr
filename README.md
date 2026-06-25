@@ -179,9 +179,19 @@ npm run dev
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/public/doctors` | List active doctors (optional `?mode=ONLINE`) |
+| GET | `/api/public/doctors/:id` | Get a single doctor's profile — used by `booking-widget.html` on doctor selection (Issue #26 documentation drift fix) |
 | GET | `/api/public/slots` | Live slots — `?doctorId=&date=YYYY-MM-DD&type=` |
-| POST | `/api/public/book` | Book an appointment |
-| GET | `/api/public/appointments/:id` | Check appointment status |
+| POST | `/api/public/book` | Book an appointment — see [`docs/API.md`](docs/API.md#post-publicbook) for the exact body schema |
+| GET | `/api/public/appointments/:id` | Check appointment status. **Booking widget also calls this AFTER Cashfree's modal resolves to re-confirm `paymentStatus === 'PAID'` from the server before showing the success screen (Issue #27).** |
+| GET | `/api/public/verify-payment` | Force-verify a Cashfree order — `?order_id=appt_xxx`. Used by `/payment-status` page and by the booking widget poll. |
+| GET | `/api/public/recall/:id` | Pre-fill data for a follow-up recall booking link. |
+
+> **📖 Request body schemas live in [`docs/API.md`](docs/API.md).**
+> The exact field names matter — the booking endpoint uses
+> `primaryProblem` (not `problem`), `consultationType` (not `type`), and
+> requires `tncAccepted: true`. The prescription endpoint uses
+> `medications` (not `medicines`) with `dose` / `instructions`
+> (not `dosage` / `notes`).
 
 ### Webhooks
 | Method | Path | Description |

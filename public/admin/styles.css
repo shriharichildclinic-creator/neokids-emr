@@ -33,10 +33,14 @@ html,body{
 /* ========== APP SHELL ========== */
 .np-shell{
   display:grid;
-  grid-template-columns: 264px 1fr;
+  /* min-width:0 on the main column prevents grid children from forcing
+     horizontal overflow when their content (e.g. doctor card grid) has a
+     min-content wider than the column — which was causing the sidebar
+     to visually clip the first card. */
+  grid-template-columns: 264px minmax(0, 1fr);
   min-height: 100vh;
 }
-@media (max-width: 1023px){ .np-shell{ grid-template-columns: 1fr; } }
+@media (max-width: 1023px){ .np-shell{ grid-template-columns: minmax(0, 1fr); } }
 
 .np-sidebar{
   background:#fff;
@@ -97,7 +101,7 @@ html,body{
 }
 
 /* ========== MAIN / HEADER ========== */
-.np-main{ display:flex; flex-direction:column; }
+.np-main{ display:flex; flex-direction:column; min-width:0; }
 .np-header{
   background:#fff; border-bottom:1px solid var(--np-border);
   position:sticky; top:0; z-index:30;
@@ -162,7 +166,9 @@ html,body{
   border:1px solid var(--np-border);
   border-radius: var(--np-radius-card);
   box-shadow: var(--np-card-shadow);
-  overflow:hidden;
+  /* removed overflow:hidden — it was clipping hover lifts on cards and
+     the avatar of the leftmost card in each row. Use a defensive
+     border-radius on direct descendants instead if you need rounding. */
 }
 .np-panel__head{
   display:flex; align-items:center; gap:.75rem;
@@ -367,34 +373,210 @@ html,body{
 .np-login__title{ font-size:1.35rem; font-weight:700; color: var(--np-ink); text-align:center; }
 .np-login__subtitle{ font-size:.85rem; color: var(--np-muted); text-align:center; margin-bottom:1.25rem; }
 
-/* Doctor card (admin Doctors view) */
+/* ── Doctors grid container ────────────────────────────────
+   Use min(280px, 100%) so the grid can collapse below 280px on
+   narrow viewports instead of forcing horizontal overflow that pushes
+   the first card under the sidebar. Keeps box-sizing predictable. */
+.np-doc-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 1rem;
+  align-items: stretch;
+  min-width:0;
+}
+
+/* ── Doctor cards ─────────────────────────────────────────── */
 .np-doc-card{
-  background:#fff; border:1px solid var(--np-border);
-  border-radius: var(--np-radius-card);
-  box-shadow: var(--np-card-shadow);
-  padding:1rem;
-  display:flex; flex-direction:column; gap:.75rem;
-  transition: box-shadow .15s ease, transform .05s ease;
+  position:relative;
+  background:#fff;
+  border:1.5px solid var(--np-border);
+  border-radius:16px;
+  box-shadow: 0 1px 3px rgba(15,42,71,.04), 0 4px 16px -4px rgba(15,42,71,.07);
+  padding:1.1rem 1.1rem 0.9rem;
+  display:grid;
+  /* Five fixed rows guarantee identical vertical rhythm across cards:
+     1) head   2) badges   3) stats (flex-grows)   4) meta   5) actions
+     This is the single biggest fix for unequal card heights. */
+  grid-template-rows: auto auto 1fr auto auto;
+  row-gap:.75rem;
+  height:100%;
+  min-width:0;          /* allow text inside to truncate, never push width */
+  box-sizing:border-box;
+  transition: box-shadow .2s ease, transform .18s ease, border-color .2s ease;
 }
-.np-doc-card:hover{ box-shadow: var(--np-card-shadow-hover); }
-.np-doc-card__head{ display:flex; gap:.75rem; align-items:flex-start; }
+.np-doc-card:hover{
+  box-shadow: 0 6px 24px -6px rgba(42,122,217,.16), 0 2px 6px rgba(15,42,71,.05);
+  transform: translateY(-2px);
+  border-color: rgba(42,122,217,.3);
+  z-index:1; /* lift above neighbours so the shadow isn't clipped */
+}
+
+/* ── Card header: avatar + identity ─────────────────────── */
+.np-doc-card__head{
+  display:flex; gap:.8rem; align-items:center;
+  min-width:0;
+}
 .np-doc-card__avatar{
-  width:52px; height:52px; border-radius:14px; overflow:hidden;
-  background: linear-gradient(135deg, rgba(42,122,217,.18), rgba(77,168,255,.12));
-  color: var(--np-primary); display:flex; align-items:center; justify-content:center;
-  font-weight:700;
+  flex:0 0 44px;            /* fixed basis, never shrink, never grow */
+  width:44px; height:44px; border-radius:50%;
+  background: linear-gradient(135deg, var(--np-primary), var(--np-blue));
+  color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:.95rem; letter-spacing:-.3px;
+  border:2px solid #fff;
+  box-shadow: 0 0 0 1.5px rgba(42,122,217,.18), 0 2px 6px -2px rgba(42,122,217,.25);
+  overflow:hidden;
 }
-.np-doc-card__avatar img{ width:100%; height:100%; object-fit:cover; }
-.np-doc-card__name{ font-weight:700; color: var(--np-ink); }
-.np-doc-card__role{ font-size:.78rem; color: var(--np-muted); }
+.np-doc-card__avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+.np-doc-card__head-meta{ min-width:0; flex:1 1 auto; }
+
+/* Strong visual hierarchy — name is the anchor */
+.np-doc-card__name{
+  font-weight:700; color:var(--np-ink); font-size:.98rem; line-height:1.2;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  margin:0 0 .15rem;
+}
+/* Secondary line — specialization only, muted */
+.np-doc-card__role{
+  font-size:.76rem; color:var(--np-muted); line-height:1.3;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  margin:0;
+}
+/* Tertiary line — qualification, even more muted */
+.np-doc-card__qual{
+  font-size:.7rem; color:#94A3B8; line-height:1.3;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  margin:.1rem 0 0;
+}
+
+/* ── Contact strip (email + phone) — compact, scannable ── */
+.np-doc-card__contact{
+  display:flex; flex-direction:column; gap:.2rem;
+  font-size:.74rem; color:var(--np-muted);
+  min-width:0;
+}
+.np-doc-card__contact-item{
+  display:flex; align-items:center; gap:.4rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  min-width:0;
+}
+.np-doc-card__contact-item svg{
+  width:12px; height:12px; flex:0 0 12px; color:#94A3B8;
+}
+.np-doc-card__contact-item span{
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
+}
+
+/* ── Status badge row (active/inactive + clinic chip) ── */
+.np-doc-card__badge-row{
+  display:flex; align-items:center; gap:.4rem; flex-wrap:wrap;
+  min-width:0;
+}
+.np-doc-card__clinic{
+  font-size:.7rem; color:var(--np-muted);
+  display:inline-flex; align-items:center; gap:.25rem;
+  max-width:100%; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  padding:.15rem .45rem; border-radius:6px;
+  background:#F1F6FB;
+}
+
+/* ── Stats grid — locked 2×2 regardless of card width ── */
 .np-doc-card__stats{
-  display:grid; grid-template-columns: repeat(2, 1fr);
-  gap:.4rem .75rem;
-  background:#FAFCFE; border-radius:10px; padding:.55rem .75rem;
-  font-size:.82rem;
+  display:grid; grid-template-columns: 1fr 1fr;
+  gap:.5rem;
+  background:#F7FAFD;
+  border:1px solid var(--np-border);
+  border-radius:10px;
+  padding:.6rem .7rem;
+  min-width:0;
 }
-.np-doc-card__stats b{ color: var(--np-ink); }
-.np-doc-card__actions{ display:flex; gap:.4rem; align-items:center; }
+.np-doc-card__stat{ min-width:0; }
+.np-doc-card__stat-label{
+  font-size:.66rem; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--np-muted); font-weight:500;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.np-doc-card__stat-value{
+  font-size:.88rem; font-weight:700; color:var(--np-ink);
+  line-height:1.2; margin-top:.1rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* ── Meta strip (password warn + KYC) — compact pills, no wrap ── */
+.np-doc-card__meta{
+  display:flex; flex-wrap:wrap; gap:.35rem;
+  align-items:center;
+  min-width:0;
+}
+.np-doc-card__pill{
+  display:inline-flex; align-items:center; gap:.3rem;
+  padding:.2rem .5rem; border-radius:999px;
+  font-size:.7rem; font-weight:500;
+  white-space:nowrap;
+  max-width:100%; overflow:hidden; text-overflow:ellipsis;
+}
+.np-doc-card__pill--warn{ background:#FEF3C7; color:#92400E; }
+.np-doc-card__pill--ok  { background:#DCFCE7; color:#15803D; }
+.np-doc-card__pill--kyc { background:#EEF2FF; color:#3730A3; }
+
+/* ── Action row — equal-width primary actions + trash on the end ── */
+.np-doc-card__actions{
+  display:grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap:.4rem;
+  align-items:stretch;
+  padding-top:.7rem;
+  border-top:1px solid var(--np-border);
+}
+.np-doc-card__actions .np-btn{
+  padding:.4rem .25rem;
+  font-size:.76rem;
+  white-space:nowrap;
+  min-width:0;
+  text-overflow:ellipsis; overflow:hidden;
+  justify-content:center;
+}
+
+/* ── Trash (icon-only) button — pinned to end of grid ── */
+.np-btn--icon{
+  width:32px; height:32px; padding:0; flex-shrink:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  border-radius:8px; font-size:.95rem;
+}
+.np-btn--ghost.np-btn--icon.np-btn--danger{
+  color:#DC2626;
+  border-color:rgba(220,38,38,.25);
+  background:transparent;
+}
+.np-btn--ghost.np-btn--icon.np-btn--danger:hover{
+  background:#FEF2F2; border-color:#DC2626;
+}
+
+/* Add Doctor button — prominent CTA */
+.np-btn--add-doctor{
+  display:inline-flex; align-items:center; gap:.5rem;
+  padding:.6rem 1.1rem;
+  font-size:.875rem; font-weight:600;
+  border-radius:12px;
+  box-shadow: 0 4px 14px -4px rgba(42,122,217,.5);
+  transition: background .18s ease, box-shadow .18s ease, transform .12s ease;
+}
+.np-btn--add-doctor:hover{
+  box-shadow: 0 6px 20px -4px rgba(42,122,217,.6);
+  transform: translateY(-1px);
+}
+.np-btn--add-doctor:active{ transform: translateY(1px); box-shadow: none; }
+.np-btn--add-doctor svg{
+  transition: transform .2s ease;
+}
+.np-btn--add-doctor:hover svg{
+  transform: rotate(90deg);
+}
+
+/* Doctors grid — legacy id selector kept for backward compat;
+   prefer the .np-doc-grid class which has the full ruleset. */
+#doctorsGrid{ align-items: stretch; min-width:0; }
 
 /* Drawer (used by Doctor insights) */
 .np-drawer{

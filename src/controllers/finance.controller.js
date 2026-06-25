@@ -9,6 +9,18 @@
      POST   /settlements/:id/mark-paid       — record payout + invoice
      GET    /invoices                        — list settlement invoices
      GET    /invoices/:settlementId/download — stream PDF
+
+   Issue 29 — parsePeriod is now:
+     • Forgiving:  GET /revenue-report with NO params defaults to the
+                   *current* UTC year+month, matching how the admin UI
+                   actually uses the endpoint on first paint.
+     • Helpful:    when params ARE supplied and ARE invalid, the error
+                   payload tells the caller EXACTLY what to send,
+                   with a concrete example. No more bare "Invalid year".
+     • Strict for writes: state-changing endpoints (POST /generate, etc.)
+                   still require an explicit period — defaulting would
+                   silently settle the wrong month. They opt-in with
+                   { requireExplicit: true }.
    ===================================================================== */
 
 const fs = require('fs');
@@ -24,35 +36,125 @@ const STORAGE = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'st
 
 /* ---------- Validation helpers ---------- */
 
-function parsePeriod(req) {
-  const year  = parseInt(req.query.year  || req.body.year,  10);
-  const month = parseInt(req.query.month || req.body.month, 10);
-  if (!year || year < 2000 || year > 2100) {
-    const e = new Error('Invalid year'); e.statusCode = 400; throw e;
+// Build a friendly, actionable error.
+function periodHelpError(message) {
+  const now = new Date();
+  const exampleYear  = now.getUTCFullYear();
+  const exampleMonth = now.getUTCMonth() + 1;
+  const e = new Error(message);
+  e.statusCode = 400;
+  e.code = 'INVALID_PERIOD';
+  // The errorHandler will pass `message` through verbatim for status<500.
+  // The example/usage hints are stamped onto the error for controllers
+  // that prefer to return them inline (see below).
+  e.details = {
+    expected: 'year (2000-2100) and month (1-12) as query params',
+    example:  `?year=${exampleYear}&month=${exampleMonth}`,
+    receivedYear:  null,
+    receivedMonth: null
+  };
+  return e;
+}
+
+/**
+ * parsePeriod
+ * @param {express.Request} req
+ * @param {Object} [opts]
+ * @param {boolean} [opts.requireExplicit=false] When true, no defaulting
+ *        — both year and month MUST be present in the request. Used for
+ *        write endpoints like POST /settlements/generate where silently
+ *        defaulting could settle the wrong month.
+ * @returns {{year:number, month:number, defaulted:boolean}}
+ */
+function parsePeriod(req, opts = {}) {
+  const requireExplicit = !!opts.requireExplicit;
+  const rawYear  = req.query.year  != null ? req.query.year  : (req.body ? req.body.year  : undefined);
+  const rawMonth = req.query.month != null ? req.query.month : (req.body ? req.body.month : undefined);
+
+  const yearProvided  = rawYear  !== undefined && rawYear  !== '' && rawYear  !== null;
+  const monthProvided = rawMonth !== undefined && rawMonth !== '' && rawMonth !== null;
+
+  // Issue 29 — for the READ endpoint (revenue-report), no params at all
+  // is a sensible "what does this month look like so far?" question.
+  // Default to the current UTC year+month and tell the caller via the
+  // response payload (`defaulted: true`).
+  if (!yearProvided && !monthProvided && !requireExplicit) {
+    const now = new Date();
+    return {
+      year:  now.getUTCFullYear(),
+      month: now.getUTCMonth() + 1,
+      defaulted: true
+    };
   }
-  if (!month || month < 1 || month > 12) {
-    const e = new Error('Invalid month (1-12)'); e.statusCode = 400; throw e;
+
+  // From here on, validate whatever the caller sent.
+  const year  = parseInt(rawYear,  10);
+  const month = parseInt(rawMonth, 10);
+
+  if (!yearProvided) {
+    const e = periodHelpError('Missing query param "year". Provide year and month, e.g. ' + _example());
+    e.details.receivedMonth = monthProvided ? rawMonth : null;
+    throw e;
   }
-  return { year, month };
+  if (!monthProvided) {
+    const e = periodHelpError('Missing query param "month". Provide year and month, e.g. ' + _example());
+    e.details.receivedYear = rawYear;
+    throw e;
+  }
+  if (!Number.isFinite(year) || year < 2000 || year > 2100) {
+    const e = periodHelpError(`Invalid "year" (got "${rawYear}"). Expected an integer 2000-2100, e.g. ${_example()}`);
+    e.details.receivedYear  = rawYear;
+    e.details.receivedMonth = rawMonth;
+    throw e;
+  }
+  if (!Number.isFinite(month) || month < 1 || month > 12) {
+    const e = periodHelpError(`Invalid "month" (got "${rawMonth}"). Expected an integer 1-12, e.g. ${_example()}`);
+    e.details.receivedYear  = rawYear;
+    e.details.receivedMonth = rawMonth;
+    throw e;
+  }
+
+  return { year, month, defaulted: false };
+}
+
+function _example() {
+  const now = new Date();
+  return `?year=${now.getUTCFullYear()}&month=${now.getUTCMonth() + 1}`;
 }
 
 function buildInvoiceNumber(settlement) {
-  // INV-YYYYMM-<8 chars of doctorId>
   const mm = String(settlement.periodMonth).padStart(2, '0');
   return `STL-${settlement.periodYear}${mm}-${settlement.doctorId.slice(0, 8).toUpperCase()}`;
 }
 
 /* ---------- GET /revenue-report ---------- */
-// Query: year, month, doctorId?, paymentType?  (ONLINE | OFFLINE)
-exports.revenueReport = asyncHandler(async (req, res) => {
-  const { year, month } = parsePeriod(req);
+// Query: year?, month?, doctorId?, paymentType?  (ONLINE | OFFLINE)
+// If year+month are omitted, defaults to the current UTC period and sets
+// `period.defaulted = true` in the response so the UI can render a hint.
+exports.revenueReport = asyncHandler(async (req, res, next) => {
+  let period;
+  try {
+    period = parsePeriod(req, { requireExplicit: false });
+  } catch (e) {
+    // Surface the rich, friendly error body inline so the admin UI can
+    // show the suggested example URL without having to know our
+    // INVALID_PERIOD code.
+    if (e && e.code === 'INVALID_PERIOD') {
+      return res.status(400).json({
+        error:   e.message,
+        code:    e.code,
+        details: e.details
+      });
+    }
+    return next(e);
+  }
+  const { year, month, defaulted } = period;
   const { doctorId, paymentType } = req.query;
 
   const rows = await revenueSvc.getMonthlyRevenueReport({
     year, month, doctorId, paymentType
   });
 
-  // Compute clinic-wide grand totals across all returned doctors
   const grand = rows.reduce((g, r) => {
     g.consultations += r.totals.consultations;
     g.totalRevenue  += r.totals.totalRevenue;
@@ -65,7 +167,7 @@ exports.revenueReport = asyncHandler(async (req, res) => {
   Object.keys(grand).forEach(k => { if (k !== 'consultations') grand[k] = revenueSvc.round2(grand[k]); });
 
   res.json({
-    period: { year, month },
+    period: { year, month, defaulted },
     filters: { doctorId: doctorId || null, paymentType: paymentType || null },
     rows,
     grandTotals: grand
@@ -74,16 +176,23 @@ exports.revenueReport = asyncHandler(async (req, res) => {
 
 /* ---------- POST /settlements/generate ---------- */
 // Body: { doctorId, year, month }
-exports.generateSettlement = asyncHandler(async (req, res) => {
-  const { year, month } = parsePeriod(req);
+exports.generateSettlement = asyncHandler(async (req, res, next) => {
+  let period;
+  try {
+    // Writes MUST be explicit — refuse to silently settle the current month.
+    period = parsePeriod(req, { requireExplicit: true });
+  } catch (e) {
+    if (e && e.code === 'INVALID_PERIOD') {
+      return res.status(400).json({ error: e.message, code: e.code, details: e.details });
+    }
+    return next(e);
+  }
+  const { year, month } = period;
   const { doctorId } = req.body;
   if (!doctorId) {
     return res.status(400).json({ error: 'doctorId is required' });
   }
 
-  // Refuse to settle a month that hasn't ended yet — common admin mistake.
-  // (We allow settling the current month but warn; we BLOCK settling a
-  // future month outright.)
   const now = new Date();
   if (year > now.getUTCFullYear() ||
       (year === now.getUTCFullYear() && month > (now.getUTCMonth() + 1))) {
@@ -95,7 +204,6 @@ exports.generateSettlement = asyncHandler(async (req, res) => {
 });
 
 /* ---------- GET /settlements ---------- */
-// Query: year?, month?, doctorId?, status?
 exports.listSettlements = asyncHandler(async (req, res) => {
   const where = {};
   if (req.query.year)     where.periodYear  = parseInt(req.query.year, 10);
@@ -128,7 +236,6 @@ exports.settlementDetail = asyncHandler(async (req, res) => {
   });
   if (!s) return res.status(404).json({ error: 'Settlement not found' });
 
-  // Re-compute appointment-level breakdown for the modal table
   const breakdown = await revenueSvc.getDoctorBreakdown({
     doctorId: s.doctorId, year: s.periodYear, month: s.periodMonth
   });
@@ -137,7 +244,6 @@ exports.settlementDetail = asyncHandler(async (req, res) => {
 });
 
 /* ---------- POST /settlements/:id/mark-paid ---------- */
-// Body: { paymentMode, paymentReference, paymentNotes? }
 exports.markSettlementPaid = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { paymentMode, paymentReference, paymentNotes } = req.body || {};
@@ -160,17 +266,14 @@ exports.markSettlementPaid = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Cannot pay a settlement with zero consultations' });
   }
 
-  // 1. Build invoice number
   const invoiceNumber = buildInvoiceNumber(existing);
 
-  // 2. Compute per-appointment breakdown for the PDF
   const { rows } = await revenueSvc.getDoctorBreakdown({
     doctorId: existing.doctorId,
     year:     existing.periodYear,
     month:    existing.periodMonth
   });
 
-  // 3. Stamp settlement with payment info FIRST (so PDF reflects PAID state)
   const stamped = {
     ...existing,
     status: 'PAID',
@@ -178,7 +281,6 @@ exports.markSettlementPaid = asyncHandler(async (req, res) => {
     paymentMode, paymentReference, paymentNotes: paymentNotes || null
   };
 
-  // 4. Render PDF
   let pdf;
   try {
     pdf = await pdfSvc.generateSettlementInvoice({
@@ -192,7 +294,6 @@ exports.markSettlementPaid = asyncHandler(async (req, res) => {
     return res.status(500).json({ error: 'Failed to generate settlement invoice PDF' });
   }
 
-  // 5. Persist
   const updated = await prisma.doctorSettlement.update({
     where: { id },
     data: {
@@ -213,7 +314,6 @@ exports.markSettlementPaid = asyncHandler(async (req, res) => {
 });
 
 /* ---------- GET /invoices ---------- */
-// All settlements that have an invoice generated (i.e. PAID).
 exports.listInvoices = asyncHandler(async (req, res) => {
   const where = { status: 'PAID', invoiceNumber: { not: null } };
   if (req.query.year)     where.periodYear  = parseInt(req.query.year, 10);
@@ -242,7 +342,6 @@ exports.downloadInvoice = asyncHandler(async (req, res) => {
   const filename = `settlement_${s.id}.pdf`;
   const filepath = path.join(STORAGE, 'invoices', filename);
 
-  // Lazy regenerate if the file was lost (e.g. ephemeral disk on redeploy).
   if (!fs.existsSync(filepath)) {
     const { rows } = await revenueSvc.getDoctorBreakdown({
       doctorId: s.doctorId, year: s.periodYear, month: s.periodMonth
@@ -254,3 +353,6 @@ exports.downloadInvoice = asyncHandler(async (req, res) => {
 
   res.download(filepath, `${s.invoiceNumber}.pdf`);
 });
+
+/* Exported for unit tests of the new parsing logic. */
+exports._internals = { parsePeriod };

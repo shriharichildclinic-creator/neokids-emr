@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/admin/styles.css?v=2.1.0"/>
+<link rel="stylesheet" href="/admin/styles.css?v=2.1.2"/>
 </head>
 <body>
 
@@ -181,7 +181,10 @@
                 <div class="np-panel__title">Doctors</div>
                 <div class="np-panel__subtitle">Manage clinic doctors, fees, and availability</div>
               </div>
-              <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="openDoctorModal()">+ Add Doctor</button>
+              <button class="np-btn np-btn--primary np-btn--add-doctor" type="button" onclick="openDoctorModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Doctor
+              </button>
             </div>
             <div class="np-panel__body">
               <div class="np-filterbar">
@@ -195,7 +198,10 @@
                   <option value="inactive">Inactive only</option>
                 </select>
               </div>
-              <div id="doctorsGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;"></div>
+              <!-- Doctors grid: layout is fully defined in styles.css as .np-doc-grid.
+                   Using a class (not inline styles) lets the responsive
+                   minmax(min(280px,100%), 1fr) rule kick in correctly. -->
+              <div id="doctorsGrid" class="np-doc-grid"></div>
             </div>
           </div>
         </section>
@@ -425,12 +431,20 @@
                   <option value="FAILED">Failed</option>
                   <option value="QUEUED">Queued</option>
                 </select>
-                <select id="notifChannel" class="np-select" style="width:auto;">
+                <select id="notifChannel" class="np-select" style="width:auto;" aria-label="Filter by channel">
                   <option value="">All channels</option>
                   <option value="WHATSAPP">WhatsApp</option>
                   <option value="EMAIL">Email</option>
                 </select>
-                <select id="notifTemplate" class="np-select" style="width:auto;">
+                <!-- UI/UX Improvement #2 — recipient/audience grouping -->
+                <select id="notifAudience" class="np-select" style="width:auto;" aria-label="Filter by recipient type">
+                  <option value="">All recipient types</option>
+                  <option value="PATIENT">Patient Templates</option>
+                  <option value="DOCTOR">Doctor Templates</option>
+                  <option value="ADMIN">Admin / System Templates</option>
+                  <option value="OTHER">Other</option>
+                </select>
+                <select id="notifTemplate" class="np-select" style="width:auto;" aria-label="Filter by template">
                   <option value="">All templates</option>
                 </select>
                 <input id="notifFrom" type="date" class="np-select" aria-label="From" style="width:auto;">
@@ -576,6 +590,68 @@
           <label class="np-field__label">Bio</label>
           <textarea name="bio" class="np-textarea" placeholder="Short biography"></textarea>
         </div>
+
+        <!-- ───── KYC documents ───── -->
+        <!-- Visible only after the doctor exists (edit mode). On create we
+             show a hint asking the admin to save first, then upload KYC. -->
+        <div id="doctorKycPanel" style="margin-top:1rem; padding:.85rem; border:1px solid #E5E7EB; border-radius:8px; background:#FAFBFC;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.5rem;">
+            <div>
+              <div style="font-weight:600; font-size:.9rem; color:#0F2A47;">KYC Documents</div>
+              <div style="font-size:.72rem; color:#6B7280;">Admin uploads onboarding documents on behalf of the doctor.</div>
+            </div>
+            <span id="kycStatusBadge" class="np-badge np-badge--slate"><span class="np-badge__dot"></span>PENDING</span>
+          </div>
+
+          <div id="kycCreateHint" class="hidden" style="font-size:.78rem; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; padding:.5rem .65rem; border-radius:6px; margin-bottom:.5rem;">
+            Save the doctor first, then re-open this form to upload KYC documents.
+          </div>
+
+          <div id="kycRejectionBox" class="hidden" style="font-size:.78rem; color:#B91C1C; background:#FEF2F2; border:1px solid #FECACA; padding:.5rem .65rem; border-radius:6px; margin-bottom:.5rem;">
+            <b>Rejection reason:</b> <span id="kycRejectionText"></span>
+          </div>
+
+          <div id="kycUploadBlock">
+            <div class="np-grid-2" style="gap:.5rem;">
+              <div class="np-field">
+                <label class="np-field__label">Aadhaar Card <span id="kycAadhaarStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
+                <input type="file" name="aadhaar" accept="image/*,application/pdf" class="np-input"/>
+                <a id="kycAadhaarView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+              </div>
+              <div class="np-field">
+                <label class="np-field__label">PAN Card <span id="kycPanStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
+                <input type="file" name="pan" accept="image/*,application/pdf" class="np-input"/>
+                <a id="kycPanView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+              </div>
+              <div class="np-field">
+                <label class="np-field__label">Cancelled Cheque <span id="kycChequeStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
+                <input type="file" name="cancelledCheque" accept="image/*,application/pdf" class="np-input"/>
+                <a id="kycChequeView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+              </div>
+              <div class="np-field">
+                <label class="np-field__label">Medical Registration Cert. <span id="kycMedCertStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
+                <input type="file" name="medicalRegCert" accept="image/*,application/pdf" class="np-input"/>
+                <a id="kycMedCertView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+              </div>
+            </div>
+
+            <div id="kycUploadError" class="np-error hidden" style="margin-top:.4rem;"></div>
+
+            <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">
+              <button type="button" class="np-btn np-btn--sm" onclick="uploadKycDocs()">Upload selected files</button>
+            </div>
+          </div>
+
+          <div id="kycVerifyBlock" class="hidden" style="margin-top:.5rem; padding-top:.5rem; border-top:1px dashed #E5E7EB;">
+            <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
+              <button type="button" class="np-btn np-btn--primary np-btn--sm" onclick="verifyKyc('VERIFIED')">✓ Verify KYC</button>
+              <button type="button" class="np-btn np-btn--sm" style="color:#B91C1C;" onclick="verifyKyc('REJECTED')">✕ Reject KYC</button>
+              <span id="kycVerifiedAt" class="np-mut" style="font-size:.72rem; align-self:center;"></span>
+            </div>
+          </div>
+        </div>
+        <!-- ───── /KYC documents ───── -->
+
         <div id="doctorFormError" class="np-error hidden"></div>
         <div class="np-field" style="font-size:.75rem; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; padding:.55rem .75rem; border-radius:8px;">
           Best practice: leave the temporary password blank and let the doctor set their own via the email invite.
@@ -670,8 +746,9 @@
   </div>
 </div>
 
-<script src="app.js?v=2.1.0"></script>
+<script src="app.js?v=2.1.2"></script>
 <script src="finance.js?v=2.1.0"></script>
 
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>

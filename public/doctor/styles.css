@@ -946,3 +946,65 @@ html,body{
   border-radius:6px;
   color: var(--np-primary-600);
 }
+
+/* ==========================================================
+   Tables (Earnings, Past Settlements, generic data tables)
+   Added during UX/UI fix pass — these classes were referenced
+   in markup (Earnings tab) but had no CSS in this stylesheet,
+   which caused columns to collapse with no padding.
+   ========================================================== */
+.np-table-wrap{
+  border: 1px solid var(--np-border, #E5E7EB);
+  border-radius: 14px;
+  overflow: auto;
+  max-height: 70vh;
+  background: #fff;
+}
+.np-table{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+  table-layout: auto;
+}
+.np-table th{
+  text-align: left;
+  font-weight: 600;
+  color: var(--np-muted, #64748B);
+  font-size: .72rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: .65rem .9rem;
+  border-bottom: 1px solid var(--np-border, #E5E7EB);
+  background: #FAFCFE;
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+  z-index: 1;
+}
+.np-table td{
+  padding: .7rem .9rem;
+  border-bottom: 1px solid var(--np-border, #E5E7EB);
+  vertical-align: middle;
+  color: var(--np-ink, #0F172A);
+}
+.np-table tr:last-child td{ border-bottom: none; }
+.np-table tbody tr:hover td{ background: #F8FBFE; }
+.np-table tbody tr.is-empty:hover td{ background: transparent; }
+
+/* Numeric / currency columns */
+.np-table td.np-num,
+.np-table th.np-num{ text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Empty state row inside a table */
+.np-table .np-empty{
+  text-align: center;
+  padding: 1.5rem .9rem;
+  color: var(--np-muted, #64748B);
+  background: #FAFCFE;
+}
+
+/* Mobile: keep horizontal scroll instead of collapse */
+@media (max-width: 720px){
+  .np-table{ font-size: .82rem; }
+  .np-table th, .np-table td{ padding: .55rem .65rem; }
+}

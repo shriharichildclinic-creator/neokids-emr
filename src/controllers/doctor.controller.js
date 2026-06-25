@@ -1,15 +1,6 @@
 // =====================================================================
 // doctor.controller.js — Bug 2/3/4/5 hardened version
 // =====================================================================
-// Bug 2: Patient identity is per (phone + name). Added patientHistory and
-//        searchPatients endpoints exposing siblings + full history.
-// Bug 3: Prescription create endpoint now returns the saved Rx + PDF URL
-//        + delivery status; added appointmentPrescription (read) and
-//        resendPrescription (manual delivery).
-// Bug 4: Reschedule still routed to automation.onAppointmentRescheduled;
-//        actual WhatsApp fix lives in automation.service.js.
-// Bug 5: patientHistory returns visits + prescriptions + diagnoses + notes.
-// =====================================================================
 const { clinicSettingsSchema } = require('../utils/validators');
 const fs   = require('fs');
 const path = require('path');
@@ -28,6 +19,33 @@ const { parseDateOnly, parseDateOnlyOrNull, getTodayDateOnly, getTodayDateString
 const { incrementDoctorRevenue, decrementDoctorRevenue } = require('../services/lifecycle.service');
 const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
+const { buildSignedFileUrl } = require('../utils/fileTokens');
+
+/* ────────────────────────────────────────────────────────────────────
+   Helper: rewrite a stored `prescriptionUrl` / `invoiceUrl` into a
+   short-lived signed URL the doctor's browser can fetch via plain
+   `<a href>` (no Authorization header needed for the link itself).
+   ──────────────────────────────────────────────────────────────────── */
+function signApptFileUrl(appt, kind, userId) {
+  if (!appt) return null;
+  const stored = kind === 'invoice' ? appt.invoiceUrl : appt.prescriptionUrl;
+  if (!stored) return null;
+  return buildSignedFileUrl({
+    kind,
+    appointmentId: appt.id,
+    userId,
+    role: 'DOCTOR'
+  });
+}
+
+function withSignedUrls(appt, userId) {
+  if (!appt) return appt;
+  return {
+    ...appt,
+    prescriptionUrl: signApptFileUrl(appt, 'prescription', userId),
+    invoiceUrl:      signApptFileUrl(appt, 'invoice',      userId)
+  };
+}
 
 // ────────────────────────────────────────────────────────────────────
 // PROFILE
@@ -106,7 +124,8 @@ exports.myAppointments = asyncHandler(async (req, res) => {
     include: { patient: true, prescription: true },
     orderBy: [{ date: 'asc' }, { startTime: 'asc' }]
   });
-  res.json(appts);
+  // Replace raw DB URLs with short-lived signed download URLs.
+  res.json(appts.map(a => withSignedUrls(a, req.user.id)));
 });
 
 exports.todayWaitingRoom = asyncHandler(async (req, res) => {
@@ -126,6 +145,7 @@ exports.appointmentDetail = asyncHandler(async (req, res) => {
     include: { patient: true, doctor: true, prescription: true }
   });
   if (!appt) return res.status(404).json({ error: 'Appointment not found' });
+  const apptSigned = withSignedUrls(appt, req.user.id);
 
   // Bug 2/5 — past visits for THIS child only (siblings are separate rows).
   const history = await prisma.appointment.findMany({
@@ -142,23 +162,19 @@ exports.appointmentDetail = asyncHandler(async (req, res) => {
     take: 50
   });
 
-  res.json({ appointment: appt, history });
+  res.json({
+    appointment: apptSigned,
+    history: history.map(h => withSignedUrls(h, req.user.id))
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────
 // Bug 2/5 — Patient Identity: search + dedicated history endpoint
 // ────────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/doctor/patients/search?q=<phone or name fragment>
- * Returns up to 20 patient rows seen by this doctor.
- * Supports the "same parent phone, multiple children" case.
- */
 exports.searchPatients = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json([]);
 
-  // Distinct patientIds this doctor has seen (so doctors don't see other clinics' patients).
   const seen = await prisma.appointment.findMany({
     where: { doctorId: req.user.id },
     select: { patientId: true },
@@ -168,9 +184,7 @@ exports.searchPatients = asyncHandler(async (req, res) => {
   if (!patientIds.length) return res.json([]);
 
   const digitsOnly = q.replace(/\D/g, '');
-  const orClauses = [
-    { name: { contains: q } }
-  ];
+  const orClauses = [{ name: { contains: q } }];
   if (digitsOnly.length >= 4) orClauses.push({ phone: { contains: digitsOnly } });
 
   const rows = await prisma.patient.findMany({
@@ -179,11 +193,16 @@ exports.searchPatients = asyncHandler(async (req, res) => {
     take: 20
   });
 
-  // Augment with last visit date so the UI can show "Last seen 12 Jun 2026".
+  const todayBoundary = getTodayDateOnly();
   const enriched = await Promise.all(rows.map(async (p) => {
     const last = await prisma.appointment.findFirst({
-      where: { patientId: p.id, doctorId: req.user.id },
-      orderBy: { date: 'desc' },
+      where: {
+        patientId: p.id,
+        doctorId:  req.user.id,
+        status:    'COMPLETED',
+        date:      { lte: todayBoundary }
+      },
+      orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
       select: { date: true, status: true }
     });
     return {
@@ -202,24 +221,11 @@ exports.searchPatients = asyncHandler(async (req, res) => {
   res.json(enriched);
 });
 
-/**
- * GET /api/doctor/patients/:patientId/history
- * Bug 5 — Patient profile aggregating ALL clinical data:
- *   - visits[] (every appointment with this doctor)
- *   - prescriptions[] (each prescription with meds + diagnosis + follow-up)
- *   - notes[] (consultation notes from appointment.notes)
- *   - diagnoses[] (deduped list)
- *   - lastVisitAt, totalVisits, openFollowUps
- *
- * Doctor scoping: a doctor only sees their OWN consultation history with the
- * patient — they can never read another clinic's appointments.
- */
 exports.patientHistory = asyncHandler(async (req, res) => {
   const { patientId } = req.params;
   const patient = await prisma.patient.findUnique({ where: { id: patientId } });
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-  // Scope to THIS doctor only (privacy / RBAC).
   const visits = await prisma.appointment.findMany({
     where: { patientId, doctorId: req.user.id },
     include: {
@@ -229,7 +235,6 @@ exports.patientHistory = asyncHandler(async (req, res) => {
     orderBy: [{ date: 'desc' }, { startTime: 'desc' }]
   });
 
-  // Sibling list (same parent phone, different child) — handy for the UI.
   const siblings = await prisma.patient.findMany({
     where: { phone: patient.phone, id: { not: patient.id } },
     select: { id: true, name: true, dateOfBirth: true, gender: true }
@@ -250,7 +255,7 @@ exports.patientHistory = asyncHandler(async (req, res) => {
       advice: v.prescription.advice,
       investigations: v.prescription.investigations,
       followUpDate: v.prescription.followUpDate,
-      pdfUrl: v.prescriptionUrl
+      pdfUrl: signApptFileUrl(v, 'prescription', req.user.id)   // ← signed
     }));
 
   const diagnoses = Array.from(new Set(
@@ -268,7 +273,11 @@ exports.patientHistory = asyncHandler(async (req, res) => {
     .filter(p => p.followUpDate && new Date(p.followUpDate) >= new Date(todayStr + 'T00:00:00.000Z'))
     .map(p => ({ prescriptionId: p.id, dueDate: p.followUpDate, doctorName: p.doctorName }));
 
-  const lastVisitAt = visits.length ? visits[0].date : null;
+  const todayBoundaryDate = new Date(todayStr + 'T23:59:59.999Z');
+  const completedPastVisits = visits.filter(v =>
+    v.status === 'COMPLETED' && new Date(v.date) <= todayBoundaryDate
+  );
+  const lastVisitAt = completedPastVisits.length ? completedPastVisits[0].date : null;
 
   res.json({
     patient: {
@@ -299,7 +308,7 @@ exports.patientHistory = asyncHandler(async (req, res) => {
       primaryProblem: v.primaryProblem,
       notes: v.notes,
       meetLink: v.meetLink,
-      prescriptionUrl: v.prescriptionUrl,
+      prescriptionUrl: signApptFileUrl(v, 'prescription', req.user.id),  // ← signed
       hasPrescription: !!v.prescription,
       doctorName: v.doctor.name
     })),
@@ -313,7 +322,6 @@ exports.patientHistory = asyncHandler(async (req, res) => {
 // ────────────────────────────────────────────────────────────────────
 // Bug 3 — Prescription
 // ────────────────────────────────────────────────────────────────────
-
 exports.createPrescription = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const parsed = prescriptionSchema.safeParse(req.body);
@@ -340,32 +348,26 @@ exports.createPrescription = asyncHandler(async (req, res) => {
     create: { appointmentId: id, ...data }
   });
 
-  // automation.onPrescriptionCreated:
-  //   - generates the PDF
-  //   - sets appointment.prescriptionUrl
-  //   - flips status to COMPLETED + credits revenue (only the FIRST time)
-  //   - emails the patient with the PDF attached
-  // It does its own internal try/catch; failures are logged but do NOT throw.
   const delivery = await automation.onPrescriptionCreated(appt, rx);
 
-  // Re-read so the client gets the canonical row (status=COMPLETED, prescriptionUrl set).
   const refreshed = await prisma.appointment.findUnique({
     where: { id },
     include: { prescription: true, patient: true, doctor: true }
   });
 
   // Bug 3 — return rich payload so the frontend can render a real success card.
+  const signedPrescriptionUrl = signApptFileUrl(refreshed, 'prescription', req.user.id);
   res.json({
     success: true,
     prescription: refreshed.prescription,
     appointment: {
       id: refreshed.id,
       status: refreshed.status,
-      prescriptionUrl: refreshed.prescriptionUrl,
+      prescriptionUrl: signedPrescriptionUrl,
       completedAt: refreshed.completedAt
     },
     delivery: {
-      pdfUrl: refreshed.prescriptionUrl || (delivery && delivery.url) || null,
+      pdfUrl: signedPrescriptionUrl,
       pdfFilename: (delivery && delivery.filename) || null,
       emailQueued: !!refreshed.patient.email,
       emailRecipient: refreshed.patient.email || null
@@ -373,10 +375,6 @@ exports.createPrescription = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * GET /api/doctor/appointments/:id/prescription
- * Bug 3 — Doctor reads the saved prescription + PDF URL for view/download.
- */
 exports.appointmentPrescription = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const appt = await prisma.appointment.findFirst({
@@ -386,7 +384,6 @@ exports.appointmentPrescription = asyncHandler(async (req, res) => {
   if (!appt) return res.status(404).json({ error: 'Appointment not found' });
   if (!appt.prescription) return res.status(404).json({ error: 'No prescription on this appointment yet' });
 
-  // Ensure the PDF actually exists on disk; regenerate if missing (e.g. storage wiped in dev).
   const storagePath = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage');
   const fileName = `prescription_${appt.id}.pdf`;
   const filePath = path.join(storagePath, 'prescriptions', fileName);
@@ -401,20 +398,19 @@ exports.appointmentPrescription = asyncHandler(async (req, res) => {
     }
   }
 
+  const signedUrl = buildSignedFileUrl({
+    kind: 'prescription',
+    appointmentId: appt.id,
+    userId: req.user.id,
+    role: 'DOCTOR'
+  });
   res.json({
     prescription: appt.prescription,
-    pdfUrl: appt.prescriptionUrl
-      || `${process.env.PUBLIC_STORAGE_URL || '/files'}/prescriptions/${fileName}`,
+    pdfUrl: signedUrl,
     patient: { id: appt.patient.id, name: appt.patient.name, phone: appt.patient.phone, email: appt.patient.email }
   });
 });
 
-/**
- * POST /api/doctor/appointments/:id/prescription/resend
- * Bug 3 — Re-send prescription to the patient (email).
- * Idempotent: doesn't change status or revenue. Logs delivery in
- * notification_logs so doctor can see whether it succeeded.
- */
 exports.resendPrescription = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const appt = await prisma.appointment.findFirst({
@@ -437,7 +433,6 @@ exports.resendPrescription = asyncHandler(async (req, res) => {
 // ────────────────────────────────────────────────────────────────────
 // RESCHEDULE / CANCEL / COMPLETE
 // ────────────────────────────────────────────────────────────────────
-
 exports.reschedule = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const parsed = rescheduleSchema.safeParse(req.body);
@@ -478,8 +473,6 @@ exports.reschedule = asyncHandler(async (req, res) => {
     include: { doctor: true, patient: true }
   });
 
-  // Bug 4 — automation now sends BOTH patient & doctor WhatsApp via env-configurable
-  // templates, with structured failure logging so the doctor can see delivery status.
   await automation.onAppointmentRescheduled(updated);
   res.json(updated);
 });
@@ -499,7 +492,21 @@ exports.cancelAppointment = asyncHandler(async (req, res) => {
   if (appt.status === 'COMPLETED') {
     return res.status(400).json({ error: 'Cannot cancel a completed appointment' });
   }
-  if (appt.status === 'CANCELLED') return res.json(appt); // idempotent
+  // ── Issue 13 — cancelling a CANCELLED appointment is a conflict, not a no-op.
+  // The UI needs to distinguish "I just cancelled this" from
+  // "this was already cancelled in another tab / by someone else".
+  if (appt.status === 'CANCELLED') {
+    return res.status(409).json({
+      error: 'Appointment is already cancelled',
+      code: 'ALREADY_CANCELLED',
+      appointment: {
+        id: appt.id,
+        status: appt.status,
+        cancelledAt: appt.cancelledAt,
+        cancellationReason: appt.notes
+      }
+    });
+  }
 
   const updated = await prisma.appointment.update({
     where: { id },

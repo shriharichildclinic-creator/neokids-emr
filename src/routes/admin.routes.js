@@ -1,7 +1,9 @@
 const router = require('express').Router();
-const c = require('../controllers/admin.controller');
+const c   = require('../controllers/admin.controller');
 const fin = require('../controllers/finance.controller');
+const kyc = require('../controllers/kyc.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { uploadKycDocuments, KYC_FIELDS } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('ADMIN'));
 
@@ -14,6 +16,11 @@ router.get('/doctors/:id/insights', c.doctorInsights);
 router.put('/doctors/:id', c.updateDoctor);
 router.delete('/doctors/:id', c.deleteDoctor);
 router.delete('/doctors/:id/hard', c.hardDeleteDoctor);
+
+// KYC (Know Your Customer) — admin-managed onboarding documents
+router.post('/doctors/:id/kyc',         uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);
+router.get('/doctors/:id/kyc',          kyc.getKyc);
+router.patch('/doctors/:id/kyc/status', kyc.updateKycStatus);
 
 // Appointments
 router.get('/appointments', c.listAppointments);

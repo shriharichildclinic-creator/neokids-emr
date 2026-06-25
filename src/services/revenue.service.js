@@ -284,10 +284,21 @@ async function generateSettlement({ doctorId, year, month }) {
   const { start, end, last } = monthRange(year, month);
 
   const doctor = await prisma.doctor.findFirst({
-    where: { id: doctorId, deletedAt: null }
+    where: { id: doctorId, deletedAt: null },
+    include: { kyc: true }
   });
   if (!doctor) {
     throw Object.assign(new Error('Doctor not found'), { statusCode: 404 });
+  }
+
+  // KYC gate — clinic should not pay out to a doctor whose KYC isn't verified.
+  // Bank details (cancelled cheque) + identity (Aadhaar/PAN) + MCI cert
+  // must all be on file and admin-approved before settlement is materialised.
+  if (!doctor.kyc || doctor.kyc.kycStatus !== 'VERIFIED') {
+    throw Object.assign(
+      new Error('Doctor KYC is not VERIFIED. Complete KYC verification before generating a settlement.'),
+      { statusCode: 409, code: 'KYC_NOT_VERIFIED' }
+    );
   }
 
   // Block re-generation of PAID settlements (immutable audit record).

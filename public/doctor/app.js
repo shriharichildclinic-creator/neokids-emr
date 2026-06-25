@@ -1,12 +1,31 @@
 /* =====================================================================
-   NeoKidsPro EMR — Doctor App v2.0
+   NeoKidsPro EMR — Doctor App v2.1 (Prescription Builder forensic fix)
    - FIX 1: Appointment card action hierarchy
             Primary: Open Consultation · Secondary: Join Meeting · Overflow: ⋮
    - FIX 2: Route-based consultation workspace (#consult/:id)
             Patient modal kept for "peek" use; primary work happens in workspace.
-            All form IDs & names preserved → existing submit handler keeps working.
    - FIX 3: Prescription Archive tab (client-side filter over /doctor/appointments)
-   - Backwards-compatible with Bug 2/3/4/5 backend.
+
+   - FIX 4 (Critical, prescription builder doesn't load):
+     Root cause: the previous build had ONE static <form id="rxForm">
+     element in the patient-modal HTML and used appendChild() to MOVE
+     that single element into either the modal's slot or the workspace's
+     slot. As soon as openConsultation() ran a second time (e.g. user
+     opens consult A → goes back → opens consult B, or rescheduled the
+     same consult), the workspace container.innerHTML was rewritten,
+     destroying the live #rxForm node. The next call to $('#rxForm')
+     returned null, moveRxFormInto() early-returned, and the user saw
+     the Prescription tab go silent.
+     The fix:
+       • Hold the form HTML as a string template (RX_FORM_TEMPLATE)
+         captured ONCE on first init from the static markup.
+       • renderRxFormInto() now writes that template into the slot via
+         innerHTML each time (every workspace gets its own DOM nodes).
+       • The static #rxForm in patient-modal is left alone — its inputs
+         are never re-used cross-context.
+       • The document-level submit delegate still works because it keys
+         on e.target.id === 'rxForm', and we keep that id on the cloned
+         form.
    ===================================================================== */
 
 const API = '/api';
@@ -182,6 +201,9 @@ async function init(){
   setupRescheduleModal();
   setupCancelModal();
   setupPatientModalTabs();
+  // FIX 4 — capture the prescription form HTML template ONCE, before any
+  // workspace render could destroy the static node.
+  captureRxFormTemplate();
 
   // Modal -> open workspace bridge
   const bridgeBtn = $('#modalOpenWorkspaceBtn');
@@ -215,11 +237,13 @@ async function init(){
   loadStats();
   loadDashSnapshot();
 }
+function _stripDrPrefix(n){ return String(n == null ? '' : n).replace(/^\s*(dr\.?\s+)+/i, '').trim(); }
 function renderDoctorHeader(d){
-  const name = d.name ? ('Dr. ' + d.name) : 'Doctor';
+  const clean = _stripDrPrefix(d.name);
+  const name = clean ? ('Dr. ' + clean) : 'Doctor';
   $('#docName').textContent = name;
   $('#docSpec').textContent = d.specialization || 'Pediatrician';
-  const initials = (d.name || 'D').split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
+  const initials = (clean || 'D').split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
   if (d.photoUrl){
     $('#docPhotoTop').innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
     const large = $('#docPhotoLarge');
@@ -780,48 +804,88 @@ function renderConsultBody(root, a, compact){
   `;
 }
 
-/* Physically move the existing #rxForm element into the requested slot,
-   so its IDs/names stay unique and existing submit handler keeps working. */
-function moveRxFormInto(slot, a, data){
-  const rxForm = $('#rxForm');
-  if (!rxForm || !slot) return;
-  slot.appendChild(rxForm);
+/* =====================================================================
+   FIX 4 — Prescription form renderer (root-cause fix)
+   Instead of physically MOVING the single #rxForm element (which gets
+   destroyed when consultContainer.innerHTML is rewritten), we keep an
+   HTML TEMPLATE STRING captured once from the static markup, and render
+   a fresh copy into whichever slot needs it.
+   ===================================================================== */
+let RX_FORM_TEMPLATE = null;          // captured on first call, never null again
 
-  if (['CONFIRMED','PENDING','COMPLETED'].includes(a.status)){
-    rxForm.classList.remove('hidden');
-    const tbody = $('#medsList');
-    tbody.innerHTML = '';
-    addMedRow();
-    const p = a.patient || {};
-    if (data && data.appointment && data.appointment.prescription){
-      const r = data.appointment.prescription;
-      rxForm.diagnosis.value      = r.diagnosis || '';
-      rxForm.chiefComplaint.value = r.chiefComplaint || '';
-      rxForm.advice.value         = r.advice || '';
-      if (rxForm.vitalsWeight)    rxForm.vitalsWeight.value    = r.weight || '';
-      if (rxForm.vitalsHeight)    rxForm.vitalsHeight.value    = r.height || '';
-      if (rxForm.allergies)       rxForm.allergies.value       = r.allergies || '';
-      if (rxForm.pastHistory)     rxForm.pastHistory.value     = r.pastHistory || '';
-      if (rxForm.investigations)  rxForm.investigations.value  = r.investigations || '';
-      if (rxForm.followUpDate)    rxForm.followUpDate.value    = r.followUpDate ? r.followUpDate.slice(0,10) : '';
-      if (Array.isArray(r.medications) && r.medications.length){
-        tbody.innerHTML = '';
-        r.medications.forEach(m => addMedRow(m));
-      }
-      showRxSuccessCard({
-        pdfUrl: a.prescriptionUrl,
-        emailRecipient: p.email,
-        subtitle: 'Existing prescription on file. You can edit and re-save, or re-send to the patient.'
-      });
-    } else {
-      // hide success card if it's a fresh form
-      const card = document.querySelector('#rxSuccessCard');
-      if (card) card.classList.add('hidden');
+function captureRxFormTemplate(){
+  if (RX_FORM_TEMPLATE) return;
+  const existing = document.getElementById('rxForm');
+  if (!existing) return;              // index.html guarantees this exists at load
+  // Make sure the captured template starts hidden-class-free; we control
+  // visibility from the renderer based on appointment.status.
+  const clone = existing.cloneNode(true);
+  clone.classList.remove('hidden');
+  RX_FORM_TEMPLATE = clone.outerHTML;
+  // Remove the static copy from the DOM so we never have duplicate IDs.
+  existing.parentNode && existing.parentNode.removeChild(existing);
+}
+
+function renderRxFormInto(slot, a, data){
+  if (!slot) return;
+  captureRxFormTemplate();
+  if (!RX_FORM_TEMPLATE){
+    slot.innerHTML = '<div class="np-empty"><div class="np-empty__title">Prescription builder unavailable</div><div class="np-empty__sub">Form template was not captured at boot. Please refresh the page.</div></div>';
+    return;
+  }
+
+  // Only show the prescription builder for actionable statuses.
+  // For CANCELLED, hide the form entirely and show a hint.
+  if (!['CONFIRMED','PENDING','COMPLETED'].includes(a.status)){
+    slot.innerHTML = '<div class="np-empty"><div class="np-empty__title">Prescription is read-only</div><div class="np-empty__sub">This appointment is ' + escapeHtml(a.status||'—') + '. You can no longer write a prescription.</div></div>';
+    return;
+  }
+
+  // Inject a fresh copy of the form template.
+  slot.innerHTML = RX_FORM_TEMPLATE;
+
+  const rxForm = slot.querySelector('#rxForm');
+  if (!rxForm) return;
+  rxForm.classList.remove('hidden');
+
+  const tbody = rxForm.querySelector('#medsList');
+  if (tbody) tbody.innerHTML = '';
+  addMedRow();
+
+  const p = a.patient || {};
+  const rx = (data && data.appointment && data.appointment.prescription)
+              || a.prescription
+              || null;
+
+  if (rx){
+    rxForm.diagnosis.value      = rx.diagnosis || '';
+    rxForm.chiefComplaint.value = rx.chiefComplaint || '';
+    rxForm.advice.value         = rx.advice || '';
+    if (rxForm.vitalsWeight)    rxForm.vitalsWeight.value    = rx.weight || '';
+    if (rxForm.vitalsHeight)    rxForm.vitalsHeight.value    = rx.height || '';
+    if (rxForm.allergies)       rxForm.allergies.value       = rx.allergies || '';
+    if (rxForm.pastHistory)     rxForm.pastHistory.value     = rx.pastHistory || '';
+    if (rxForm.investigations)  rxForm.investigations.value  = rx.investigations || '';
+    if (rxForm.followUpDate)    rxForm.followUpDate.value    = rx.followUpDate ? String(rx.followUpDate).slice(0,10) : '';
+    if (tbody && Array.isArray(rx.medications) && rx.medications.length){
+      tbody.innerHTML = '';
+      rx.medications.forEach(m => addMedRow(m));
     }
+    showRxSuccessCard({
+      pdfUrl: a.prescriptionUrl,
+      emailRecipient: p.email,
+      subtitle: 'Existing prescription on file. You can edit and re-save, or re-send to the patient.'
+    });
   } else {
-    rxForm.classList.add('hidden');
+    // Fresh form — hide success card if present.
+    const card = document.querySelector('#rxSuccessCard');
+    if (card) card.classList.add('hidden');
   }
 }
+
+// Backwards-compatibility shim. Some older call-sites may still call
+// moveRxFormInto(); route them to the new renderer.
+function moveRxFormInto(slot, a, data){ return renderRxFormInto(slot, a, data); }
 
 /* ---------- Patient history loader ---------- */
 async function loadPatientHistoryInto(slot, patientId){

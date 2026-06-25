@@ -27,6 +27,22 @@ function minutesToTime(min) {
 }
 
 async function getLiveSlots(doctorId, dateStr, consultationType) {
+  // Issue 6 — defense in depth: never trust the caller. If the controller
+  // forgets to validate, refuse anything that isn't a recognised mode
+  // instead of silently mapping it to OFFLINE.
+  if (consultationType !== 'ONLINE' && consultationType !== 'OFFLINE') {
+    throw Object.assign(
+      new Error("consultationType must be 'ONLINE' or 'OFFLINE'"),
+      { statusCode: 400 }
+    );
+  }
+
+  // Issue 5 — defense in depth: reject past dates at the service layer
+  // so the slot listing can never disagree with the booking validator.
+  if (dateStr < getTodayDateString()) {
+    return [];
+  }
+
   // Always expire pending unpaid bookings before returning slots
   // so abandoned payment sessions free their slots automatically
   await expirePendingAppointments();
