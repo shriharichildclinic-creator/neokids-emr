@@ -1,7 +1,7 @@
 {
   "name": "neokidspro-emr",
-  "version": "1.1.0",
-  "description": "NeoKidsPro EMR + Booking System - Pediatric Clinic Management",
+  "version": "3.1.0",
+  "description": "NeoKidsPro EMR + Booking System - Pediatric Clinic Management (Blue-Green rebrand + premium UI/UX v3.1)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

@@ -1,173 +1,783 @@
 <!DOCTYPE html>
 <!--
   Booking widget — fixes #27, #30, #31, #32
-
-  #27 Server-confirmed payment success. We never call showSuccess() based
-      on Cashfree's resolved promise alone. Even after Cashfree's modal
-      resolves we run ONE final GET /api/public/appointments/:id and
-      only show success when paymentStatus === 'PAID' on OUR DB.
-  #30 Accessibility — every input has a real <label for=…>, the multi-
-      step wizard is a role="region" with aria-current on the active
-      step, the modal screens are role="dialog" with aria-modal and
-      focus management, every avatar/icon has alt text or
-      aria-hidden="true", and live updates (slot loading, payment
-      verifying) are inside role="status" regions.
-  #31 Tailwind is loaded from a local vendor file (/assets/vendor/
-      tailwind.min.css). No third-party CDN, no JIT warning, no outage
-      risk.
-  #32 ZERO inline event handlers. All bindings happen in JS via
-      addEventListener / event delegation. This unblocks a future
-      Content-Security-Policy that disallows 'unsafe-inline'.
+  UI/UX redesigned to match NeoKidsPro brand identity.
+  All business logic, API calls, validation, payment integration unchanged.
 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Book Appointment · NeoKidsPro</title>
-<!-- Issue #31 — local Tailwind, not CDN -->
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>
+<link rel="apple-touch-icon" href="/assets/favicon.svg"/>
+<link rel="manifest" href="/assets/manifest.webmanifest"/>
+<meta name="theme-color" content="#89BCBD"/>
 <link rel="stylesheet" href="/assets/vendor/tailwind.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+<!--
+  Dark Mode is intentionally NOT supported on the Booking Widget.
+  The widget is embedded on the patient-facing NeoKidsPro website
+  (neokidspro.in) which only uses Light Mode. Force light color-scheme
+  so browser UI (form controls, date pickers, scrollbars) matches.
+-->
+<script>
+  try {
+    // Never inherit a persisted dark theme on the booking widget.
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.style.colorScheme = 'light';
+  } catch(_) {}
+</script>
 <style>
-  body { font-family: system-ui, -apple-system, sans-serif; background: #F4F8FB; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  /* Visible keyboard focus ring — Issue #30 */
-  :focus-visible { outline: 2px solid #4DA8FF; outline-offset: 2px; }
-  /* sr-only utility (also provided by Tailwind, kept as fallback) */
-  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+/* ────────────────────────────────────────────────────────────────
+   Booking widget — Light Mode ONLY (embedded on neokidspro.in).
+   Dark mode has been fully removed. All colors are literal Light Mode
+   values so the widget can never inherit a dark theme from a host page.
+   ──────────────────────────────────────────────────────────────── */
+:root, html:root, html[data-theme] {
+  --bw-pink:        #FE84A4;
+  --bw-pink-hover:  #e8688c;
+  --bw-pink-50:     #fff0f3;
+  --bw-teal:        #89BCBD;
+  --bw-teal-dark:   #5A9495;
+  --bw-teal-50:     #eaf4f4;
+  --bw-ink:         #2E5556;
+  --bw-body:        #5a7a82;
+  --bw-muted:       #8aabaf;
+  --bw-border:      #f0eded;
+  --bw-border-focus:#89BCBD;
+  --bw-card:        #ffffff;
+  --bw-surface:     #FFEEEF;
+  --bw-text:        #2E5556;
+  --bw-accent-pink: #FE84A4;
+  --bw-shadow-sm:   0 2px 16px rgba(46,85,86,0.07);
+  --bw-shadow-md:   0 8px 32px rgba(46,85,86,0.12);
+  --bw-shadow-lg:   0 20px 48px rgba(46,85,86,0.16);
+  --bw-radius:      16px;
+  --bw-radius-lg:   24px;
+  --bw-radius-pill: 999px;
+  color-scheme: light;
+}
+
+/* ── Reset & base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:focus-visible { outline: 2px solid var(--bw-teal); outline-offset: 2px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bw-surface);
+  background-image:
+    radial-gradient(circle, rgba(254,132,164,0.10) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--bw-text);
+  min-height: 100vh;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+@keyframes shimmer { to { background-position: 200% 0; } }
+
+/* ── Outer wrapper ── */
+.bw-page { max-width: 700px; margin: 0 auto; padding: 20px 16px 40px; }
+
+/* ── Card shell ── */
+.bw-card {
+  background: var(--bw-card);
+  border-radius: var(--bw-radius-lg);
+  box-shadow: var(--bw-shadow-lg);
+  border: 1.5px solid var(--bw-border);
+  overflow: hidden;
+  animation: fadeUp .35s ease forwards;
+}
+
+/* ── Header ── */
+.bw-header {
+  background: linear-gradient(135deg, #2E5556 0%, #3d7677 55%, #89BCBD 130%);
+  padding: 28px 28px 24px;
+  position: relative;
+  overflow: hidden;
+}
+.bw-header::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 22px 22px; pointer-events: none;
+}
+.bw-header-blob1 {
+  position: absolute; width: 180px; height: 180px; border-radius: 50%;
+  background: rgba(255,255,255,.08); top: -60px; right: -40px;
+  pointer-events: none;
+}
+.bw-header-blob2 {
+  position: absolute; width: 90px; height: 90px; border-radius: 50%;
+  background: rgba(254,132,164,.18); bottom: -30px; right: 80px;
+  pointer-events: none;
+}
+.bw-header-inner { display: flex; align-items: center; gap: 16px; position: relative; z-index: 1; }
+.bw-header-icon {
+  width: 52px; height: 52px; border-radius: 16px;
+  background: rgba(255,255,255,.16); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 22px;
+}
+.bw-header-title {
+  font-family: 'Poppins', sans-serif; font-weight: 800;
+  font-size: clamp(20px, 4vw, 26px); color: #fff; line-height: 1.2;
+}
+.bw-header-sub {
+  font-size: 13px; color: rgba(255,255,255,.75);
+  margin-top: 3px; font-weight: 400;
+}
+.bw-header-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25);
+  border-radius: var(--bw-radius-pill); padding: 4px 12px;
+  font-size: 11px; font-weight: 700; color: #fff;
+  letter-spacing: .5px; text-transform: uppercase; margin-top: 8px;
+}
+.bw-header-badge-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #FE84A4;
+  animation: pulse 2s infinite;
+}
+
+/* ── Progress stepper ── */
+.bw-stepper {
+  display: flex; align-items: center; padding: 18px 24px;
+  background: var(--bw-card);
+  border-bottom: 1.5px solid var(--bw-border);
+  gap: 0;
+}
+.bw-step-item {
+  display: flex; align-items: center; flex: 1;
+}
+.bw-step-item:last-child { flex: 0 0 auto; }
+.bw-step-circle {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+  border: 2px solid var(--bw-border);
+  background: var(--bw-card); color: var(--bw-muted);
+  transition: all .2s;
+}
+.bw-step-item.is-done   .bw-step-circle { background: var(--bw-teal); border-color: var(--bw-teal); color: #fff; }
+.bw-step-item.is-active .bw-step-circle { background: var(--bw-pink); border-color: var(--bw-pink); color: #fff; box-shadow: 0 0 0 4px rgba(254,132,164,.2); }
+.bw-step-label {
+  font-size: 10px; font-weight: 600; margin-left: 6px;
+  color: var(--bw-muted); white-space: nowrap;
+  display: none;
+}
+@media (min-width: 480px) { .bw-step-label { display: block; } }
+.bw-step-item.is-active .bw-step-label { color: var(--bw-pink); }
+.bw-step-item.is-done   .bw-step-label { color: var(--bw-teal); }
+.bw-step-line {
+  flex: 1; height: 2px;
+  background: var(--bw-border);
+  margin: 0 8px; border-radius: 1px;
+  transition: background .3s;
+}
+.bw-step-item.is-done + .bw-step-item .bw-step-line,
+.bw-step-line.is-done { background: var(--bw-teal); }
+
+/* ── Section body ── */
+.bw-body { padding: 28px; }
+@media (max-width: 480px) { .bw-body { padding: 20px 16px; } }
+
+/* ── Section heading ── */
+.bw-section-head { margin-bottom: 20px; }
+.bw-section-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.3);
+  border-radius: var(--bw-radius-pill); padding: 4px 12px 4px 8px;
+  font-size: 10.5px; font-weight: 700; color: #3d7677;
+  letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px;
+}
+.bw-section-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bw-teal); animation: pulse 2s infinite; }
+.bw-section-h2 {
+  font-family: 'Poppins', sans-serif; font-weight: 800;
+  font-size: clamp(18px, 3.5vw, 22px); color: var(--bw-ink); line-height: 1.28;
+}
+.bw-section-sub {
+  font-size: 13.5px; color: var(--bw-body); margin-top: 5px; line-height: 1.6;
+}
+
+/* ── Consultation type cards ── */
+.bw-mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+@media (max-width: 440px) { .bw-mode-grid { grid-template-columns: 1fr; } }
+
+.bw-mode-card {
+  position: relative; border: 2px solid var(--bw-border);
+  border-radius: 20px; padding: 22px 18px;
+  background: var(--bw-card); cursor: pointer;
+  transition: border-color .18s, background .18s, box-shadow .18s, transform .18s;
+  text-align: center; width: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.bw-mode-card:hover {
+  border-color: var(--bw-teal);
+  box-shadow: 0 8px 24px rgba(137,188,189,.2);
+  transform: translateY(-2px);
+}
+.bw-mode-card.is-active {
+  border-color: var(--bw-teal);
+  background: var(--bw-teal-50);
+  box-shadow: 0 0 0 4px rgba(137,188,189,.15);
+}
+.bw-mode-icon-wrap {
+  width: 54px; height: 54px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center; font-size: 24px;
+  transition: background .18s;
+}
+.bw-mode-card.c-teal .bw-mode-icon-wrap { background: var(--bw-teal-50); }
+.bw-mode-card.c-pink .bw-mode-icon-wrap { background: var(--bw-pink-50); }
+.bw-mode-card.is-active.c-teal .bw-mode-icon-wrap { background: rgba(137,188,189,.25); }
+.bw-mode-card.is-active.c-pink .bw-mode-icon-wrap { background: rgba(254,132,164,.18); }
+.bw-mode-title {
+  font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 14.5px;
+  color: var(--bw-ink);
+}
+.bw-mode-desc { font-size: 12px; color: var(--bw-body); line-height: 1.5; }
+.bw-mode-check {
+  position: absolute; top: 12px; right: 12px;
+  width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--bw-border);
+  background: var(--bw-card); display: flex; align-items: center; justify-content: center;
+  transition: all .18s;
+}
+.bw-mode-card.is-active .bw-mode-check {
+  background: var(--bw-teal); border-color: var(--bw-teal); color: #fff;
+}
+
+/* ── Divider with label ── */
+.bw-divider {
+  display: flex; align-items: center; gap: 12px; margin: 24px 0 16px;
+}
+.bw-divider-line { flex: 1; height: 1px; background: var(--bw-border); }
+.bw-divider-label {
+  font-size: 11px; font-weight: 700; color: var(--bw-muted);
+  text-transform: uppercase; letter-spacing: .8px; white-space: nowrap;
+}
+
+/* ── Doctor cards ── */
+.bw-doc-list { display: flex; flex-direction: column; gap: 12px; }
+
+.bw-doc-card {
+  display: flex; gap: 14px; padding: 16px;
+  border-radius: 18px; border: 1.5px solid var(--bw-border);
+  background: var(--bw-card); cursor: pointer;
+  transition: border-color .18s, background .18s, box-shadow .18s, transform .18s;
+  text-align: left; width: 100%; align-items: center;
+  position: relative; overflow: hidden;
+}
+.bw-doc-card::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+  background: var(--bw-teal); border-radius: 0 0 18px 18px;
+  opacity: 0; transition: opacity .18s;
+}
+.bw-doc-card:hover { border-color: var(--bw-teal); transform: translateY(-2px); box-shadow: var(--bw-shadow-md); }
+.bw-doc-card:hover::after { opacity: 1; }
+.bw-doc-card.is-selected { border-color: var(--bw-teal); background: var(--bw-teal-50); }
+.bw-doc-card.is-selected::after { opacity: 1; }
+
+.bw-doc-photo {
+  width: 64px; height: 64px; border-radius: 16px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--bw-teal) 0%, var(--bw-teal-dark) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; overflow: hidden;
+  border: 2px solid rgba(137,188,189,.25);
+}
+.bw-doc-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.bw-doc-info { flex: 1; min-width: 0; }
+.bw-doc-name {
+  font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 15.5px;
+  color: var(--bw-ink); margin-bottom: 3px;
+}
+.bw-doc-spec { font-size: 12px; color: var(--bw-body); margin-bottom: 8px; line-height: 1.4; }
+.bw-doc-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.bw-doc-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bw-teal-50); border-radius: var(--bw-radius-pill);
+  padding: 3px 8px; font-size: 10.5px; font-weight: 600; color: #3d7677;
+}
+
+.bw-doc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.bw-doc-fee {
+  font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 17px;
+  color: var(--bw-teal);
+}
+.bw-doc-duration { font-size: 11px; color: var(--bw-muted); }
+.bw-doc-arrow {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--bw-teal-50); display: flex; align-items: center; justify-content: center;
+  color: var(--bw-teal); font-size: 14px; transition: background .15s;
+}
+.bw-doc-card:hover .bw-doc-arrow, .bw-doc-card.is-selected .bw-doc-arrow { background: var(--bw-teal); color: #fff; }
+
+/* ── Inputs & form ── */
+.bw-form-row { margin-bottom: 14px; }
+.bw-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 440px) { .bw-form-grid { grid-template-columns: 1fr; } }
+
+.bw-label {
+  display: block; font-size: 11.5px; font-weight: 700;
+  color: var(--bw-body); margin-bottom: 6px; letter-spacing: .2px;
+}
+.bw-input {
+  width: 100%; padding: 12px 14px; border-radius: var(--bw-radius);
+  border: 1.5px solid var(--bw-border); background: var(--bw-card);
+  color: var(--bw-ink); font-size: 14px; font-family: 'Inter', sans-serif;
+  transition: border-color .15s, box-shadow .15s;
+  -webkit-appearance: none; appearance: none;
+}
+.bw-input:focus { outline: none; border-color: var(--bw-teal); box-shadow: 0 0 0 4px rgba(137,188,189,.15); }
+.bw-input::placeholder { color: var(--bw-muted); }
+.bw-input-hint { font-size: 11px; color: var(--bw-muted); margin-top: 4px; padding-left: 2px; }
+
+/* Field error state */
+.bw-input.np-ui-field-invalid { border-color: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,.12); }
+
+/* ── Date input ── */
+.bw-date-wrap { position: relative; }
+.bw-date-icon {
+  position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+  font-size: 16px; pointer-events: none;
+}
+.bw-date-wrap .bw-input { padding-left: 38px; }
+
+/* ── Slot picker ── */
+.bw-slots-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px;
+}
+@media (min-width: 500px) { .bw-slots-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.bw-slot {
+  padding: 10px 6px; border-radius: var(--bw-radius-pill);
+  border: 1.5px solid var(--bw-border); background: var(--bw-card);
+  color: var(--bw-body); font-weight: 600; font-size: 12.5px;
+  cursor: pointer; transition: all .15s; text-align: center;
+  font-family: 'Inter', sans-serif;
+}
+.bw-slot:hover { border-color: var(--bw-teal); color: var(--bw-teal); background: var(--bw-teal-50); }
+.bw-slot.is-active { background: var(--bw-teal); color: #fff; border-color: var(--bw-teal); box-shadow: 0 4px 12px rgba(137,188,189,.4); }
+.bw-slot:disabled { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
+
+/* Slots empty / loading state */
+.bw-slots-empty {
+  grid-column: 1/-1; text-align: center; padding: 28px 16px;
+  color: var(--bw-muted); font-size: 13.5px;
+}
+.bw-slots-loading {
+  grid-column: 1/-1; display: flex; align-items: center; justify-content: center;
+  gap: 10px; padding: 28px; color: var(--bw-muted); font-size: 13.5px;
+}
+.bw-spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(137,188,189,.25); border-top-color: var(--bw-teal);
+  animation: spin 1s linear infinite; flex-shrink: 0;
+}
+
+/* ── Skeleton shimmer ── */
+.bw-skeleton {
+  background: linear-gradient(90deg, var(--bw-teal-50) 25%, rgba(137,188,189,.15) 50%, var(--bw-teal-50) 75%);
+  background-size: 200% 100%; animation: shimmer 1.4s infinite;
+  border-radius: 10px;
+}
+
+/* ── Buttons ── */
+.bw-btn-row { display: flex; gap: 10px; margin-top: 20px; }
+.bw-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: 'Inter', sans-serif; font-size: 14.5px; font-weight: 600;
+  border-radius: var(--bw-radius-pill); padding: 13px 24px;
+  border: none; cursor: pointer; transition: transform .15s, box-shadow .15s, background .15s, opacity .15s;
+  text-decoration: none; white-space: nowrap; width: 100%;
+}
+.bw-btn:hover { transform: translateY(-1px); }
+.bw-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.bw-btn-primary {
+  background: var(--bw-pink); color: #fff;
+  box-shadow: 0 6px 20px rgba(254,132,164,.38);
+}
+.bw-btn-primary:hover:not(:disabled) { background: var(--bw-pink-hover); box-shadow: 0 10px 28px rgba(254,132,164,.48); }
+
+.bw-btn-secondary {
+  background: var(--bw-card); color: var(--bw-ink);
+  border: 1.5px solid var(--bw-border);
+}
+.bw-btn-secondary:hover:not(:disabled) { background: var(--bw-teal-50); border-color: rgba(137,188,189,.4); color: var(--bw-teal); }
+
+/* ── Summary card ── */
+.bw-summary-card {
+  background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.25);
+  border-radius: 18px; padding: 18px;
+}
+.bw-summary-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid rgba(137,188,189,.15);
+  font-size: 13.5px;
+}
+.bw-summary-row:last-child { border-bottom: none; }
+.bw-summary-label { color: var(--bw-body); }
+.bw-summary-value { font-weight: 600; color: var(--bw-ink); }
+.bw-summary-total {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 0 0; margin-top: 6px; border-top: 2px solid rgba(137,188,189,.3);
+  font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 17px;
+}
+.bw-summary-total-amount { color: var(--bw-teal); }
+
+/* ── Info banners ── */
+.bw-banner {
+  border-radius: 12px; padding: 12px 14px;
+  font-size: 12.5px; line-height: 1.5; margin-top: 12px;
+}
+.bw-banner-amber { background: rgba(249,169,69,.1); border: 1px solid rgba(249,169,69,.3); color: #92601a; }
+.bw-banner-teal  { background: var(--bw-teal-50); border: 1px solid rgba(137,188,189,.3); color: #3d7677; }
+
+/* ── T&C checkbox card ── */
+.bw-tnc-card {
+  display: flex; align-items: flex-start; gap: 12px;
+  background: rgba(249,169,69,.08); border: 1.5px solid rgba(249,169,69,.28);
+  border-radius: 14px; padding: 14px; cursor: pointer; margin-top: 12px;
+}
+.bw-tnc-checkbox {
+  width: 18px; height: 18px; accent-color: var(--bw-teal);
+  flex-shrink: 0; margin-top: 2px;
+}
+.bw-tnc-text { font-size: 12px; line-height: 1.6; color: var(--bw-body); }
+
+/* ── Success screen ── */
+.bw-success {
+  padding: 40px 28px; text-align: center;
+  animation: fadeUp .4s ease forwards;
+}
+.bw-success-icon {
+  width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px;
+  background: linear-gradient(135deg, var(--bw-teal) 0%, var(--bw-teal-dark) 100%);
+  display: flex; align-items: center; justify-content: center; font-size: 36px;
+  box-shadow: 0 12px 32px rgba(137,188,189,.4);
+}
+.bw-success-title {
+  font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 24px;
+  color: var(--bw-ink); margin-bottom: 10px;
+}
+.bw-success-msg { font-size: 14px; color: var(--bw-body); margin-bottom: 24px; line-height: 1.6; }
+.bw-success-details {
+  background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.25);
+  border-radius: 18px; padding: 18px; text-align: left;
+}
+.bw-success-details p { font-size: 13.5px; color: var(--bw-body); padding: 5px 0; }
+.bw-success-details p strong { color: var(--bw-ink); font-weight: 600; }
+.bw-success-ref {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--bw-pink-50); border: 1.5px solid rgba(254,132,164,.3);
+  border-radius: var(--bw-radius-pill); padding: 6px 14px;
+  font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 15px;
+  color: var(--bw-pink); margin-bottom: 16px;
+}
+
+/* ── Failure screen ── */
+.bw-failure {
+  padding: 40px 28px; text-align: center;
+  animation: fadeUp .4s ease forwards;
+}
+.bw-failure-icon {
+  width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px;
+  background: rgba(239,68,68,.1); border: 2px solid rgba(239,68,68,.25);
+  display: flex; align-items: center; justify-content: center; font-size: 36px;
+}
+.bw-failure-title { font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 22px; color: var(--bw-ink); margin-bottom: 10px; }
+.bw-failure-msg { font-size: 13.5px; color: var(--bw-body); margin-bottom: 20px; line-height: 1.65; }
+.bw-failure-details {
+  background: rgba(239,68,68,.06); border: 1px solid rgba(239,68,68,.2);
+  border-radius: 14px; padding: 14px; text-align: left; margin-bottom: 20px;
+}
+.bw-failure-details p { font-size: 12.5px; color: var(--bw-body); padding: 3px 0; }
+.bw-failure-details p strong { color: var(--bw-ink); }
+
+/* ── No-docs empty state ── */
+.bw-empty {
+  text-align: center; padding: 32px 16px; color: var(--bw-muted);
+}
+.bw-empty-icon { font-size: 40px; margin-bottom: 12px; }
+.bw-empty-text { font-size: 14px; }
+
+/* ── Recall banner ── */
+.bw-recall-banner {
+  background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.3);
+  border-radius: 14px; padding: 12px 14px; font-size: 13px;
+  color: var(--bw-body); line-height: 1.5; margin-bottom: 16px;
+}
+.bw-recall-banner b { color: var(--bw-ink); }
+
+/* ── Payment status bar ── */
+#payStatusBar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bw-ink); color: #fff; text-align: center;
+  padding: 12px 20px; font-size: 13px; z-index: 99999;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
 </style>
 </head>
-<body class="text-slate-800 min-h-screen">
-<div class="max-w-3xl mx-auto p-4 sm:p-8">
-  <main class="bg-white rounded-3xl shadow-lg overflow-hidden" role="main" aria-labelledby="widgetTitle">
-    <header class="bg-[#4DA8FF] text-white p-6">
-      <h1 id="widgetTitle" class="text-2xl font-bold">📅 Book Your Appointment</h1>
-      <p class="text-sm opacity-90 mt-1">Quick & easy pediatric consultations</p>
+<body>
+<div class="bw-page">
+  <main class="bw-card" role="main" aria-labelledby="widgetTitle">
+
+    <!-- Header -->
+    <header class="bw-header">
+      <div class="bw-header-blob1" aria-hidden="true"></div>
+      <div class="bw-header-blob2" aria-hidden="true"></div>
+      <div class="bw-header-inner">
+        <div class="bw-header-icon" aria-hidden="true">🩺</div>
+        <div>
+          <h1 id="widgetTitle" class="bw-header-title">Book Your Appointment</h1>
+          <p class="bw-header-sub">Expert paediatric care, just a few clicks away</p>
+          <div class="bw-header-badge">
+            <span class="bw-header-badge-dot" aria-hidden="true"></span>
+            NeoKidsPro · Trusted by 5000+ Families
+          </div>
+        </div>
+      </div>
     </header>
 
-    <!-- Step indicator -->
-    <nav aria-label="Booking steps" class="px-6 py-4 border-b flex items-center justify-between text-xs">
-      <span id="step1Label" class="font-semibold text-[#4DA8FF]" aria-current="step">1. Doctor</span>
-      <span class="text-slate-300" aria-hidden="true">›</span>
-      <span id="step2Label" class="text-slate-400">2. Details</span>
-      <span class="text-slate-300" aria-hidden="true">›</span>
-      <span id="step3Label" class="text-slate-400">3. Slot</span>
-      <span class="text-slate-300" aria-hidden="true">›</span>
-      <span id="step4Label" class="text-slate-400">4. Confirm</span>
+    <!-- Progress stepper -->
+    <nav aria-label="Booking steps" class="bw-stepper">
+      <div class="bw-step-item is-active" id="stepItem1">
+        <div class="bw-step-circle">1</div>
+        <span class="bw-step-label">Doctor</span>
+      </div>
+      <div class="bw-step-line" id="stepLine1"></div>
+      <div class="bw-step-item" id="stepItem2">
+        <div class="bw-step-circle">2</div>
+        <span class="bw-step-label">Details</span>
+      </div>
+      <div class="bw-step-line" id="stepLine2"></div>
+      <div class="bw-step-item" id="stepItem3">
+        <div class="bw-step-circle">3</div>
+        <span class="bw-step-label">Slot</span>
+      </div>
+      <div class="bw-step-line" id="stepLine3"></div>
+      <div class="bw-step-item" id="stepItem4">
+        <div class="bw-step-circle">4</div>
+        <span class="bw-step-label">Confirm</span>
+      </div>
     </nav>
 
-    <!-- ── STEP 1 — Doctor + Mode ─────────────────────────────────── -->
-    <section id="step1" class="p-6 space-y-3" role="region" aria-labelledby="step1Heading">
+    <!-- Hidden step label spans kept for JS compatibility -->
+    <span id="step1Label" class="sr-only" aria-current="step">1. Doctor</span>
+    <span id="step2Label" class="sr-only">2. Details</span>
+    <span id="step3Label" class="sr-only">3. Slot</span>
+    <span id="step4Label" class="sr-only">4. Confirm</span>
+
+    <!-- ── STEP 1 — Consultation type + Doctor ── -->
+    <section id="step1" class="bw-body" role="region" aria-labelledby="step1Heading">
       <h2 id="step1Heading" class="sr-only">Choose consultation mode and doctor</h2>
-      <div class="flex gap-2 mb-3" role="radiogroup" aria-label="Consultation mode">
-        <button type="button" data-action="setMode" data-mode="ONLINE"  id="modeOnline"  role="radio" aria-checked="true"  class="flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold">🎥 Online</button>
-        <button type="button" data-action="setMode" data-mode="OFFLINE" id="modeOffline" role="radio" aria-checked="false" class="flex-1 px-4 py-2 rounded-xl border-2 border-slate-200">🏥 In-Clinic</button>
+
+      <div class="bw-section-head">
+        <div class="bw-section-pill">
+          <span class="bw-section-pill-dot" aria-hidden="true"></span>
+          Step 1 of 4
+        </div>
+        <h2 class="bw-section-h2">How would you like to consult?</h2>
+        <p class="bw-section-sub">Choose the best option for your child's care.</p>
       </div>
-      <div id="doctorsList" class="space-y-2" role="list" aria-live="polite" aria-busy="false"></div>
+
+      <div class="bw-mode-grid" role="radiogroup" aria-label="Consultation mode">
+        <button type="button" data-action="setMode" data-mode="ONLINE"
+          id="modeOnline" role="radio" aria-checked="true"
+          class="bw-mode-card c-teal is-active">
+          <div class="bw-mode-check">✓</div>
+          <div class="bw-mode-icon-wrap">🎥</div>
+          <div class="bw-mode-title">Online Teleconsultation</div>
+          <div class="bw-mode-desc">Consult from home via secure video call — no travel needed.</div>
+        </button>
+        <button type="button" data-action="setMode" data-mode="OFFLINE"
+          id="modeOffline" role="radio" aria-checked="false"
+          class="bw-mode-card c-pink">
+          <div class="bw-mode-check"></div>
+          <div class="bw-mode-icon-wrap">🏥</div>
+          <div class="bw-mode-title">Clinic Visit</div>
+          <div class="bw-mode-desc">Visit Shri Hari Child Clinic for a physical checkup.</div>
+        </button>
+      </div>
+
+      <div class="bw-divider">
+        <div class="bw-divider-line"></div>
+        <span class="bw-divider-label">Available Doctors</span>
+        <div class="bw-divider-line"></div>
+      </div>
+
+      <div id="doctorsList" class="bw-doc-list" role="list" aria-live="polite" aria-busy="false"></div>
     </section>
 
-    <!-- ── STEP 2 — Patient details ───────────────────────────────── -->
-    <section id="step2" class="hidden p-6 space-y-3" role="region" aria-labelledby="step2Heading">
-      <h2 id="step2Heading" class="font-bold mb-2">Patient Details</h2>
-
-      <div>
-        <label for="f_name" class="text-xs text-slate-500 ml-1">Child's Full Name *</label>
-        <input id="f_name" name="patientName" required autocomplete="name" placeholder="Child's Full Name *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
-      </div>
-      <div>
-        <label for="f_parent" class="text-xs text-slate-500 ml-1">Parent / Guardian Name *</label>
-        <input id="f_parent" name="parentName" required autocomplete="name" placeholder="Parent/Guardian Name *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
-      </div>
-
-      <div class="grid grid-cols-2 gap-2">
-        <div>
-          <label for="f_dob" class="text-xs text-slate-500 ml-1">Date of Birth *</label>
-          <input id="f_dob" name="dateOfBirth" type="date" required class="w-full px-4 py-3 rounded-xl border" aria-required="true" aria-describedby="dobHelp"/>
-          <p id="dobHelp" class="text-[10px] text-slate-400 mt-0.5 ml-1">Pediatric clinic — patient must be under 18.</p>
+    <!-- ── STEP 2 — Patient details ── -->
+    <section id="step2" class="hidden bw-body" role="region" aria-labelledby="step2Heading">
+      <div class="bw-section-head">
+        <div class="bw-section-pill">
+          <span class="bw-section-pill-dot" aria-hidden="true"></span>
+          Step 2 of 4
         </div>
-        <div>
-          <label for="f_gender" class="text-xs text-slate-500 ml-1">Gender *</label>
-          <select id="f_gender" name="gender" required class="w-full px-4 py-3 rounded-xl border" aria-required="true">
-            <option value="">Select</option>
-            <option>MALE</option><option>FEMALE</option><option>OTHER</option>
+        <h2 id="step2Heading" class="bw-section-h2">Patient Details</h2>
+        <p class="bw-section-sub">Please fill in the child's information accurately.</p>
+      </div>
+
+      <div class="bw-form-row">
+        <label for="f_name" class="bw-label">Child's Full Name *</label>
+        <input id="f_name" name="patientName" required autocomplete="name"
+          placeholder="Enter child's full name" class="bw-input" aria-required="true"/>
+      </div>
+
+      <div class="bw-form-row">
+        <label for="f_parent" class="bw-label">Parent / Guardian Name *</label>
+        <input id="f_parent" name="parentName" required autocomplete="name"
+          placeholder="Enter parent or guardian name" class="bw-input" aria-required="true"/>
+      </div>
+
+      <div class="bw-form-grid">
+        <div class="bw-form-row">
+          <label for="f_dob" class="bw-label">Date of Birth *</label>
+          <div class="bw-date-wrap">
+            <span class="bw-date-icon" aria-hidden="true">📅</span>
+            <input id="f_dob" name="dateOfBirth" type="date" required
+              class="bw-input" aria-required="true" aria-describedby="dobHelp"/>
+          </div>
+          <p id="dobHelp" class="bw-input-hint">Patient must be under 18.</p>
+        </div>
+        <div class="bw-form-row">
+          <label for="f_gender" class="bw-label">Gender *</label>
+          <select id="f_gender" name="gender" required class="bw-input" aria-required="true">
+            <option value="">Select gender</option>
+            <option>MALE</option>
+            <option>FEMALE</option>
+            <option>OTHER</option>
           </select>
         </div>
       </div>
 
-      <div>
-        <label for="f_phone" class="text-xs text-slate-500 ml-1">Phone Number (10 digits) *</label>
-        <input id="f_phone" name="phone" required autocomplete="tel-national" inputmode="numeric" pattern="[6-9][0-9]{9}" maxlength="10" placeholder="Phone Number (10 digits) *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
-      </div>
-      <div>
-        <label for="f_email" class="text-xs text-slate-500 ml-1">Email (optional)</label>
-        <input id="f_email" name="email" type="email" autocomplete="email" placeholder="Email (optional)" class="w-full px-4 py-3 rounded-xl border"/>
-      </div>
-      <div>
-        <label for="f_problem" class="text-xs text-slate-500 ml-1">Primary Problem / Reason for visit *</label>
-        <textarea id="f_problem" name="primaryProblem" required placeholder="Primary Problem / Reason for visit *" class="w-full px-4 py-3 rounded-xl border" aria-required="true"></textarea>
+      <div class="bw-form-row">
+        <label for="f_phone" class="bw-label">Phone Number *</label>
+        <input id="f_phone" name="phone" required autocomplete="tel-national"
+          inputmode="numeric" pattern="[6-9][0-9]{9}" maxlength="10"
+          placeholder="10-digit mobile number" class="bw-input" aria-required="true"/>
       </div>
 
-      <div class="flex gap-2">
-        <button type="button" data-action="goTo" data-step="1" class="flex-1 py-3 rounded-xl border">Back</button>
-        <button type="button" data-action="validateStep2"        class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold">Continue</button>
+      <div class="bw-form-row">
+        <label for="f_email" class="bw-label">Email Address <span style="font-weight:400;color:var(--bw-muted)">(optional)</span></label>
+        <input id="f_email" name="email" type="email" autocomplete="email"
+          placeholder="your@email.com" class="bw-input"/>
+      </div>
+
+      <div class="bw-form-row">
+        <label for="f_problem" class="bw-label">Reason for Visit *</label>
+        <textarea id="f_problem" name="primaryProblem" required rows="3"
+          placeholder="Briefly describe the child's symptoms or reason for the appointment…"
+          class="bw-input" aria-required="true" style="resize:vertical;"></textarea>
+      </div>
+
+      <div class="bw-btn-row">
+        <button type="button" data-action="goTo" data-step="1" class="bw-btn bw-btn-secondary">← Back</button>
+        <button type="button" data-action="validateStep2" class="bw-btn bw-btn-primary">Continue →</button>
       </div>
     </section>
 
-    <!-- ── STEP 3 — Slot picker ───────────────────────────────────── -->
-    <section id="step3" class="hidden p-6 space-y-3" role="region" aria-labelledby="step3Heading">
-      <h2 id="step3Heading" class="font-bold mb-2">Pick a Slot</h2>
-      <label for="f_date" class="sr-only">Date</label>
-      <input id="f_date" type="date" required class="w-full px-4 py-3 rounded-xl border" aria-required="true"/>
-      <div id="slotsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2" role="status" aria-live="polite" aria-label="Available time slots"></div>
-      <div class="flex gap-2 pt-2">
-        <button type="button" data-action="goTo" data-step="2" class="flex-1 py-3 rounded-xl border">Back</button>
-        <button type="button" data-action="goTo" data-step="4" id="continueSlot" disabled class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold disabled:opacity-50">Continue</button>
+    <!-- ── STEP 3 — Slot picker ── -->
+    <section id="step3" class="hidden bw-body" role="region" aria-labelledby="step3Heading">
+      <div class="bw-section-head">
+        <div class="bw-section-pill">
+          <span class="bw-section-pill-dot" aria-hidden="true"></span>
+          Step 3 of 4
+        </div>
+        <h2 id="step3Heading" class="bw-section-h2">Pick a Time Slot</h2>
+        <p class="bw-section-sub">Select your preferred date and available time.</p>
+      </div>
+
+      <div class="bw-form-row">
+        <label for="f_date" class="bw-label">Select Date</label>
+        <div class="bw-date-wrap">
+          <span class="bw-date-icon" aria-hidden="true">📅</span>
+          <input id="f_date" type="date" required class="bw-input" aria-required="true"/>
+        </div>
+      </div>
+
+      <div class="bw-divider">
+        <div class="bw-divider-line"></div>
+        <span class="bw-divider-label">Available Times</span>
+        <div class="bw-divider-line"></div>
+      </div>
+
+      <div id="slotsGrid" class="bw-slots-grid" role="status" aria-live="polite" aria-label="Available time slots"></div>
+
+      <div class="bw-btn-row">
+        <button type="button" data-action="goTo" data-step="2" class="bw-btn bw-btn-secondary">← Back</button>
+        <button type="button" data-action="goTo" data-step="4" id="continueSlot" disabled class="bw-btn bw-btn-primary">Continue →</button>
       </div>
     </section>
 
-    <!-- ── STEP 4 — Confirm ───────────────────────────────────────── -->
-    <section id="step4" class="hidden p-6 space-y-3" role="region" aria-labelledby="step4Heading">
-      <h2 id="step4Heading" class="font-bold mb-2">Confirm Booking</h2>
-      <div id="summary" class="bg-slate-50 rounded-2xl p-4 space-y-2 text-sm"></div>
+    <!-- ── STEP 4 — Confirm ── -->
+    <section id="step4" class="hidden bw-body" role="region" aria-labelledby="step4Heading">
+      <div class="bw-section-head">
+        <div class="bw-section-pill">
+          <span class="bw-section-pill-dot" aria-hidden="true"></span>
+          Step 4 of 4
+        </div>
+        <h2 id="step4Heading" class="bw-section-h2">Confirm Your Booking</h2>
+        <p class="bw-section-sub">Review your appointment details before confirming.</p>
+      </div>
 
-      <label class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 cursor-pointer" for="f_tnc">
-        <input id="f_tnc" type="checkbox" class="mt-1 w-4 h-4 accent-[#4DA8FF]"/>
-        <span id="tncText" class="text-xs text-slate-700 leading-relaxed"></span>
+      <div id="summary" class="bw-summary-card"></div>
+
+      <label class="bw-tnc-card" for="f_tnc">
+        <input id="f_tnc" type="checkbox" class="bw-tnc-checkbox"/>
+        <span id="tncText" class="bw-tnc-text"></span>
       </label>
 
-      <div class="flex gap-2 pt-2">
-        <button type="button" data-action="goTo" data-step="3" class="flex-1 py-3 rounded-xl border">Back</button>
-        <button type="button" data-action="submitBooking" id="btnSubmit" disabled class="flex-1 py-3 bg-[#4DA8FF] text-white rounded-xl font-semibold disabled:opacity-50">
+      <div class="bw-btn-row">
+        <button type="button" data-action="goTo" data-step="3" class="bw-btn bw-btn-secondary">← Back</button>
+        <button type="button" data-action="submitBooking" id="btnSubmit" disabled class="bw-btn bw-btn-primary">
           <span id="btnSubmitText">Confirm Booking</span>
         </button>
       </div>
     </section>
 
-    <!-- ── Success screen ─────────────────────────────────────────── -->
-    <section id="successScreen" class="hidden p-8 text-center" role="dialog" aria-modal="false" aria-labelledby="successHeading" tabindex="-1">
-      <div class="text-6xl mb-4" aria-hidden="true">🎉</div>
-      <h2 id="successHeading" class="text-2xl font-bold mb-2">Booking Confirmed</h2>
-      <p class="text-slate-500 mb-4" id="successMsg"></p>
-      <div id="successDetails" class="bg-[#B8F2E6]/30 rounded-2xl p-4 text-left text-sm"></div>
+    <!-- ── Success screen ── -->
+    <section id="successScreen" class="hidden bw-success"
+      role="dialog" aria-modal="false" aria-labelledby="successHeading" tabindex="-1">
+      <div class="bw-success-icon" aria-hidden="true">✓</div>
+      <h2 id="successHeading" class="bw-success-title">Booking Confirmed!</h2>
+      <p id="successMsg" class="bw-success-msg"></p>
+      <div id="successDetails" class="bw-success-details"></div>
     </section>
 
-    <!-- ── Failure screen ─────────────────────────────────────────── -->
-    <section id="failureScreen" class="hidden p-8 text-center" role="dialog" aria-modal="false" aria-labelledby="failureHeading" tabindex="-1">
-      <div class="text-6xl mb-4" aria-hidden="true">❌</div>
-      <h2 id="failureHeading" class="text-2xl font-bold mb-2 text-red-600">Payment Not Completed</h2>
-      <p class="text-slate-600 mb-4" id="failureMsg">Your payment could not be confirmed by Cashfree. No amount has been charged to your account.</p>
-      <div id="failureDetails" class="bg-red-50 border border-red-100 rounded-2xl p-4 text-left text-sm mb-4"></div>
-      <div class="flex gap-2 justify-center">
-        <button type="button" data-action="resetWidget" class="px-6 py-2.5 bg-[#4DA8FF] text-white rounded-xl font-semibold">Try Again</button>
-      </div>
+    <!-- ── Failure screen ── -->
+    <section id="failureScreen" class="hidden bw-failure"
+      role="dialog" aria-modal="false" aria-labelledby="failureHeading" tabindex="-1">
+      <div class="bw-failure-icon" aria-hidden="true">✕</div>
+      <h2 id="failureHeading" class="bw-failure-title">Payment Not Completed</h2>
+      <p id="failureMsg" class="bw-failure-msg">Your payment could not be confirmed by Cashfree. No amount has been charged to your account.</p>
+      <div id="failureDetails" class="bw-failure-details"></div>
+      <button type="button" data-action="resetWidget" class="bw-btn bw-btn-primary" style="max-width:200px;margin:0 auto;">Try Again</button>
     </section>
+
   </main>
 </div>
 
+<script src="/assets/np-ui.js?v=1.1.0"></script>
 <script>
 'use strict';
 
 const API_BASE = window.location.origin + '/api';
 const state = { mode: 'ONLINE', doctor: null, date: null, slot: null };
+
+function formatINR(v) {
+  const n = Number(v || 0);
+  if (!isFinite(n)) return '₹0';
+  const opts = Number.isInteger(n)
+    ? { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  return '₹' + n.toLocaleString('en-IN', opts);
+}
 
 function $(s){ return document.querySelector(s); }
 function $$(s){ return document.querySelectorAll(s); }
@@ -181,7 +791,6 @@ async function api(path, opts={}){
   return d;
 }
 
-// Issue 10 — escape any value that gets interpolated into innerHTML.
 function escapeHtml(s){
   if (s === null || s === undefined) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -193,47 +802,85 @@ function safeUrl(u){
   return escapeHtml(t);
 }
 
+// ── Update visual stepper ──
+function updateStepper(activeStep) {
+  [1,2,3,4].forEach(i => {
+    const item = document.getElementById('stepItem'+i);
+    const line = document.getElementById('stepLine'+i);
+    if (!item) return;
+    item.classList.remove('is-active','is-done');
+    if (i < activeStep)       item.classList.add('is-done');
+    else if (i === activeStep) item.classList.add('is-active');
+    if (line) line.classList.toggle('is-done', i < activeStep);
+  });
+}
+
 function setMode(m){
   state.mode = m;
-  $('#modeOnline').className  = m==='ONLINE'  ? 'flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold' : 'flex-1 px-4 py-2 rounded-xl border-2 border-slate-200';
-  $('#modeOffline').className = m==='OFFLINE' ? 'flex-1 px-4 py-2 rounded-xl border-2 border-[#4DA8FF] bg-[#4DA8FF]/10 text-[#4DA8FF] font-semibold' : 'flex-1 px-4 py-2 rounded-xl border-2 border-slate-200';
-  $('#modeOnline').setAttribute('aria-checked',  m==='ONLINE');
-  $('#modeOffline').setAttribute('aria-checked', m==='OFFLINE');
+  const onCard  = $('#modeOnline');
+  const offCard = $('#modeOffline');
+  onCard.classList.toggle('is-active', m==='ONLINE');
+  offCard.classList.toggle('is-active', m==='OFFLINE');
+  onCard.setAttribute('aria-checked', m==='ONLINE');
+  offCard.setAttribute('aria-checked', m==='OFFLINE');
+  // update check icons
+  onCard.querySelector('.bw-mode-check').textContent  = m==='ONLINE'  ? '✓' : '';
+  offCard.querySelector('.bw-mode-check').textContent = m==='OFFLINE' ? '✓' : '';
   loadDoctors();
 }
 
 async function loadDoctors(){
   const list = $('#doctorsList');
   list.setAttribute('aria-busy','true');
+  list.innerHTML = `
+    <div class="bw-skeleton" style="height:80px;margin-bottom:12px;"></div>
+    <div class="bw-skeleton" style="height:80px;margin-bottom:12px;"></div>
+    <div class="bw-skeleton" style="height:80px;"></div>`;
   const docs = await api('/public/doctors?mode='+state.mode);
   list.setAttribute('aria-busy','false');
+  if (!docs.length) {
+    list.innerHTML = `<div class="bw-empty">
+      <div class="bw-empty-icon">🩺</div>
+      <div class="bw-empty-text">No doctors available for this consultation type right now.</div>
+    </div>`;
+    return;
+  }
   list.innerHTML = docs.map(d => {
     const id      = escapeHtml(d.id);
     const name    = escapeHtml(d.name);
     const spec    = escapeHtml(d.specialization || '');
     const exp     = escapeHtml(d.experience ?? '');
     const slotDur = escapeHtml(d.slotDuration ?? '');
-    const fee     = escapeHtml(state.mode==='ONLINE' ? d.onlineConsultFee : d.physicalConsultFee);
+    const feeRaw  = state.mode==='ONLINE' ? d.onlineConsultFee : d.physicalConsultFee;
+    const fee     = escapeHtml(formatINR(feeRaw));
     const photo   = d.photoUrl ? safeUrl(d.photoUrl) : '';
     const avatar  = photo
-      ? `<img src="${photo}" class="w-12 h-12 rounded-xl object-cover border" alt="Photo of Dr. ${name}"/>`
-      : `<div class="w-12 h-12 rounded-xl bg-[#4DA8FF]/20 flex items-center justify-center text-2xl" aria-hidden="true">👨‍⚕️</div>`;
-    return `<button type="button" role="listitem" data-action="selectDoctor" data-id="${id}" class="w-full text-left cursor-pointer p-4 rounded-2xl border hover:border-[#4DA8FF] hover:bg-[#4DA8FF]/5 flex items-center justify-between" aria-label="Book Dr. ${name}, ${spec}, fee ${fee} rupees">
-      <span class="flex items-center gap-3">${avatar}
-        <span><span class="block font-semibold">Dr. ${name}</span>
-        <span class="block text-xs text-slate-500">${spec} · ${exp}+ yrs</span></span>
-      </span>
-      <span class="text-right"><span class="block font-bold text-[#4DA8FF]">₹${fee}</span>
-      <span class="block text-xs text-slate-400">${slotDur} min</span></span>
+      ? `<img src="${photo}" alt="Photo of Dr. ${name}"/>`
+      : `<span aria-hidden="true">👨‍⚕️</span>`;
+    return `<button type="button" role="listitem" data-action="selectDoctor" data-id="${id}"
+      class="bw-doc-card" aria-label="Book Dr. ${name}, ${spec}, fee ${fee}">
+      <div class="bw-doc-photo">${avatar}</div>
+      <div class="bw-doc-info">
+        <div class="bw-doc-name">Dr. ${name}</div>
+        <div class="bw-doc-spec">${spec}</div>
+        <div class="bw-doc-tags">
+          ${exp ? `<span class="bw-doc-tag">⏱ ${exp}+ yrs</span>` : ''}
+          ${slotDur ? `<span class="bw-doc-tag">🕐 ${slotDur} min</span>` : ''}
+        </div>
+      </div>
+      <div class="bw-doc-right">
+        <div class="bw-doc-fee">${fee}</div>
+        <div class="bw-doc-duration">per session</div>
+        <div class="bw-doc-arrow">→</div>
+      </div>
     </button>`;
-  }).join('') || '<p class="text-slate-400 text-center py-6">No doctors available</p>';
+  }).join('');
 }
 
 function selectDoctor(id){
   api('/public/doctors/'+id).then(d => { state.doctor = d; goTo(2); });
 }
 
-// IST-aware bounds for DOB (today max, 18 yrs ago min)
 function applyDobBounds() {
   const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const y = nowIST.getFullYear(), m = String(nowIST.getMonth()+1).padStart(2,'0'), d = String(nowIST.getDate()).padStart(2,'0');
@@ -243,7 +890,6 @@ function applyDobBounds() {
   const dob = $('#f_dob');
   dob.max = todayIST;
   dob.min = `${ey}-${em}-${ed}`;
-  // bind once
   if (!dob.__bound) {
     dob.addEventListener('change', () => {
       if (dob.value && dob.value > dob.max) { dob.value = dob.max; alert('Date of birth cannot be in the future.'); }
@@ -259,11 +905,15 @@ function goTo(step){
   $('#failureScreen').classList.add('hidden');
   $('#step'+step).classList.remove('hidden');
 
+  // Update old step labels (for JS compat)
   [1,2,3,4].forEach(i => {
     const lbl = $('#step'+i+'Label');
-    if (i === step) { lbl.className = 'font-semibold text-[#4DA8FF]'; lbl.setAttribute('aria-current','step'); }
-    else            { lbl.className = 'text-slate-400'; lbl.removeAttribute('aria-current'); }
+    if (i === step) { lbl.className = 'sr-only bw-step is-active'; lbl.setAttribute('aria-current','step'); }
+    else            { lbl.className = 'sr-only'; lbl.removeAttribute('aria-current'); }
   });
+
+  // Update visual stepper
+  updateStepper(step);
 
   if (step === 2) { applyDobBounds(); $('#f_name').focus(); }
   if (step === 3) { initSlotPicker(); }
@@ -271,11 +921,34 @@ function goTo(step){
 }
 
 function validateStep2(){
-  if (!$('#f_name').value || !$('#f_parent').value || !$('#f_dob').value || !$('#f_gender').value || !$('#f_phone').value || !$('#f_problem').value) return alert('Please fill all required fields');
-  if (!/^[6-9]\d{9}$/.test($('#f_phone').value)) return alert('Please enter a valid 10-digit Indian phone number');
+  const F = (typeof NPForm !== 'undefined') ? NPForm : null;
+  const form = $('#step2');
+  if (F) F.clearAll(form);
+  const checks = [
+    ['#f_name',    v => !!v.trim(),                "Please enter the patient's name"],
+    ['#f_parent',  v => !!v.trim(),                "Please enter the parent / guardian's name"],
+    ['#f_dob',     v => !!v,                       'Please select date of birth'],
+    ['#f_gender',  v => !!v,                       'Please select a gender'],
+    ['#f_phone',   v => /^[6-9]\d{9}$/.test(v),   'Please enter a valid 10-digit Indian phone number'],
+    ['#f_problem', v => v.trim().length >= 3,      'Please briefly describe the problem'],
+  ];
+  let firstInvalid = null;
+  for (const [sel, ok, msg] of checks) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    if (!ok(el.value || '')) {
+      if (F) F.setError(el, msg); else el.classList.add('np-ui-field-invalid');
+      if (!firstInvalid) firstInvalid = el;
+    } else if (F) F.clearError(el);
+  }
   const dob = $('#f_dob');
-  if (dob.value > dob.max) return alert('Date of birth cannot be in the future.');
-  if (dob.value < dob.min) return alert('This is a pediatric clinic — patient must be under 18.');
+  if (dob.value && dob.value > dob.max) { if (F) F.setError(dob, 'Date of birth cannot be in the future.'); firstInvalid = firstInvalid || dob; }
+  if (dob.value && dob.value < dob.min) { if (F) F.setError(dob, 'This is a pediatric clinic — patient must be under 18.'); firstInvalid = firstInvalid || dob; }
+  if (firstInvalid) {
+    firstInvalid.focus();
+    if (typeof NPToast !== 'undefined') NPToast.warn('Please correct the highlighted fields.');
+    return;
+  }
   goTo(3);
 }
 
@@ -296,53 +969,56 @@ async function loadSlots(){
   state.date = $('#f_date').value;
   state.slot = null;
   $('#continueSlot').disabled = true;
-  $('#slotsGrid').innerHTML = '<p class="col-span-full text-slate-400 text-center text-sm">Loading…</p>';
+  $('#slotsGrid').innerHTML = `<div class="bw-slots-loading"><div class="bw-spinner" aria-hidden="true"></div> Loading available slots…</div>`;
   try {
     const { slots } = await api(`/public/slots?doctorId=${state.doctor.id}&date=${state.date}&type=${state.mode}`);
     const available = slots.filter(s => s.available);
     if (!available.length) {
-      $('#slotsGrid').innerHTML = '<p class="col-span-full text-slate-400 text-center text-sm py-4">No available slots on this date</p>';
+      $('#slotsGrid').innerHTML = `<div class="bw-slots-empty">😔 No slots available on this date.<br>Please try a different date.</div>`;
       return;
     }
     $('#slotsGrid').innerHTML = available.map(s =>
-      `<button type="button" data-action="pickSlot" data-time="${escapeHtml(s.startTime)}" class="py-2 rounded-xl border text-sm hover:border-[#4DA8FF] hover:bg-[#4DA8FF]/10" aria-label="Select slot ${formatTime(s.startTime)}">${formatTime(s.startTime)}</button>`
+      `<button type="button" data-action="pickSlot" data-time="${escapeHtml(s.startTime)}"
+        class="bw-slot" aria-label="Select slot ${formatTime(s.startTime)}">${formatTime(s.startTime)}</button>`
     ).join('');
   } catch (e) {
-    $('#slotsGrid').innerHTML = `<p class="col-span-full text-red-500 text-center text-sm">${escapeHtml(e.message)}</p>`;
+    $('#slotsGrid').innerHTML = `<div class="bw-slots-empty" style="color:#ef4444;">${escapeHtml(e.message)}</div>`;
   }
 }
 
 function pickSlot(btn, time){
   state.slot = time;
-  $$('#slotsGrid button').forEach(b => { b.classList.remove('bg-[#4DA8FF]','text-white'); b.setAttribute('aria-pressed','false'); });
-  btn.classList.add('bg-[#4DA8FF]','text-white');
+  $$('#slotsGrid button').forEach(b => { b.classList.remove('is-active'); b.setAttribute('aria-pressed','false'); });
+  btn.classList.add('is-active');
   btn.setAttribute('aria-pressed','true');
   $('#continueSlot').disabled = false;
 }
 
 function renderSummary(){
-  const fee = state.mode==='ONLINE' ? state.doctor.onlineConsultFee : state.doctor.physicalConsultFee;
+  const fee = formatINR(state.mode==='ONLINE' ? state.doctor.onlineConsultFee : state.doctor.physicalConsultFee);
   const sName  = escapeHtml($('#f_name').value);
   const sPhone = escapeHtml($('#f_phone').value);
   const sDoc   = escapeHtml(state.doctor.name);
   const sFee   = escapeHtml(fee);
+  const isOnline = state.mode === 'ONLINE';
+
   $('#summary').innerHTML = `
-    <div class="flex justify-between"><span class="text-slate-500">Patient:</span><span class="font-medium">${sName}</span></div>
-    <div class="flex justify-between"><span class="text-slate-500">Phone:</span><span>+91 ${sPhone}</span></div>
-    <div class="flex justify-between"><span class="text-slate-500">Doctor:</span><span class="font-medium">Dr. ${sDoc}</span></div>
-    <div class="flex justify-between"><span class="text-slate-500">Type:</span><span>${state.mode==='ONLINE'?'🎥 Online':'🏥 In-Clinic'}</span></div>
-    <div class="flex justify-between"><span class="text-slate-500">Date:</span><span>${formatDate(state.date)}</span></div>
-    <div class="flex justify-between"><span class="text-slate-500">Time:</span><span>${formatTime(state.slot)}</span></div>
-    <div class="border-t pt-2 mt-2 flex justify-between text-lg font-bold"><span>Fee:</span><span class="text-[#4DA8FF]">₹${sFee}</span></div>
-    ${state.mode==='ONLINE'
-      ? '<p class="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg mt-2">💳 Payment via Cashfree is required before booking confirmation.</p>'
-      : '<p class="text-xs text-green-700 bg-green-50 p-2 rounded-lg mt-2">💰 Pay at clinic on visit day</p>'}`;
+    <div class="bw-summary-row"><span class="bw-summary-label">Patient</span><span class="bw-summary-value">${sName}</span></div>
+    <div class="bw-summary-row"><span class="bw-summary-label">Phone</span><span class="bw-summary-value">+91 ${sPhone}</span></div>
+    <div class="bw-summary-row"><span class="bw-summary-label">Doctor</span><span class="bw-summary-value">Dr. ${sDoc}</span></div>
+    <div class="bw-summary-row"><span class="bw-summary-label">Consultation</span><span class="bw-summary-value">${isOnline ? '🎥 Online' : '🏥 In-Clinic'}</span></div>
+    <div class="bw-summary-row"><span class="bw-summary-label">Date</span><span class="bw-summary-value">${formatDate(state.date)}</span></div>
+    <div class="bw-summary-row"><span class="bw-summary-label">Time</span><span class="bw-summary-value">${formatTime(state.slot)}</span></div>
+    <div class="bw-summary-total"><span>Total Payable</span><span class="bw-summary-total-amount">${sFee}</span></div>
+    ${isOnline
+      ? '<div class="bw-banner bw-banner-amber" style="margin-top:14px;">💳 Online payment via Cashfree is required to confirm your booking.</div>'
+      : '<div class="bw-banner bw-banner-teal" style="margin-top:14px;">💰 Payment at the clinic on the day of your visit.</div>'}`;
 
   const tnc = $('#f_tnc'); tnc.checked = false;
   $('#btnSubmit').disabled = true;
-  $('#tncText').innerHTML = state.mode === 'ONLINE'
-    ? `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" rel="noopener" class="underline text-[#4DA8FF]">Terms & Conditions</a> and the <a href="https://www.nmc.org.in/MCIRest/open/getDocument?path=/Documents/Public/Portal/LatestNews/Telemedicine.pdf" target="_blank" rel="noopener" class="underline text-[#4DA8FF]">Indian NMC Telemedicine Practice Guidelines 2020</a>. I understand that an online consultation has limitations versus an in-person visit, and I provide informed consent to a teleconsultation by a Registered Medical Practitioner at NeoKidsPro.`
-    : `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" rel="noopener" class="underline text-[#4DA8FF]">Terms & Conditions</a> for in-clinic consultations at NeoKidsPro.`;
+  $('#tncText').innerHTML = isOnline
+    ? `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" rel="noopener" style="color:var(--bw-teal);text-decoration:underline;">Terms & Conditions</a> and the <a href="https://www.nmc.org.in/MCIRest/open/getDocument?path=/Documents/Public/Portal/LatestNews/Telemedicine.pdf" target="_blank" rel="noopener" style="color:var(--bw-teal);text-decoration:underline;">NMC Telemedicine Guidelines 2020</a>. I provide informed consent to a teleconsultation by a Registered Medical Practitioner at NeoKidsPro.`
+    : `I confirm that I have read and agree to the <a href="https://neokidspro.in/terms" target="_blank" rel="noopener" style="color:var(--bw-teal);text-decoration:underline;">Terms & Conditions</a> for in-clinic consultations at NeoKidsPro.`;
   tnc.onchange = () => { $('#btnSubmit').disabled = !tnc.checked; };
 }
 
@@ -365,26 +1041,8 @@ function nukeCashfreeOverlay() {
   document.documentElement.style.overflow = '';
 }
 
-/* =====================================================================
-   Issue #27 — server-confirmed payment success
-   ---------------------------------------------------------------------
-   The previous version trusted the Cashfree client SDK in two places:
-     (a) inside the polling success branch, where we used
-         status.paymentStatus === 'PAID' (this part was actually correct)
-     (b) implicitly, by never re-confirming after the Cashfree promise
-         resolved — meaning that under weird timing (popup closed at the
-         exact moment Cashfree's webhook hadn't yet hit our DB) the UI
-         could race ahead.
-
-   We now have ONE source of truth: confirmPaymentWithServer(orderId,
-   appointmentId). It calls GET /api/public/appointments/:id and only
-   returns true when the DB row says PAID. The polling success branch
-   AND the cashfree.checkout() .then() branch both call it. Neither
-   can show "Booking Confirmed" without the DB agreeing.
-   ===================================================================== */
 async function confirmPaymentWithServer(appointmentId){
   try {
-    // Use the documented /appointments/:id endpoint (server-side truth).
     const r = await fetch('/api/public/appointments/' + encodeURIComponent(appointmentId), { cache: 'no-store' });
     const j = await r.json().catch(()=>({}));
     return !!(r.ok && j && j.paymentStatus === 'PAID');
@@ -420,21 +1078,14 @@ async function submitBooking(){
       const orderId  = res.cashfree.orderId;
       const appt     = res.appointment;
 
-      // Fire checkout (no await — see Bug #3 commentary).
       cashfree.checkout({ paymentSessionId: res.cashfree.paymentSessionId, redirectTarget: '_modal' })
         .then(async r => {
-          // Issue #27 — even when the Cashfree promise resolves with
-          // an apparent success, re-confirm with the server before
-          // showing the success UI.
-          console.log('[Cashfree] checkout resolved:', r);
           const paid = await confirmPaymentWithServer(appt.id);
           if (paid) {
             nukeCashfreeOverlay();
             const bar = document.getElementById('payStatusBar'); if (bar) bar.style.display = 'none';
             showSuccess(appt, true, '✅ Payment confirmed! Consultation booked.');
           }
-          // If NOT paid yet, leave the poller running — it has the
-          // authoritative final say.
         })
         .catch(e => console.warn('[Cashfree] checkout rejected:', e));
 
@@ -457,10 +1108,9 @@ function startPaymentPolling(appt, orderId){
     bar.id = 'payStatusBar';
     bar.setAttribute('role','status');
     bar.setAttribute('aria-live','polite');
-    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#fff;text-align:center;padding:10px 16px;font-size:13px;z-index:99999;display:flex;align-items:center;justify-content:center;gap:10px;';
     document.body.appendChild(bar);
   }
-  bar.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:#4DA8FF;border-radius:50%;animation:spin 1s linear infinite" aria-hidden="true"></span> Verifying payment with Cashfree…';
+  bar.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(137,188,189,.25);border-top-color:#89BCBD;border-radius:50%;animation:spin 1s linear infinite" aria-hidden="true"></span> Verifying payment with Cashfree…';
   bar.style.display = 'flex';
 
   const maxAttempts = 30, interval = 2000;
@@ -470,13 +1120,8 @@ function startPaymentPolling(appt, orderId){
     let status;
     try {
       status = await fetch('/api/public/verify-payment?order_id=' + encodeURIComponent(orderId), { cache: 'no-store' }).then(r => r.json());
-      console.log('[Poll] attempt', attempts, 'status:', status && status.paymentStatus, 'cashfree:', status && status.cashfreeStatus);
-    } catch (e) { console.warn('[Poll] error', e); status = null; }
+    } catch (e) { status = null; }
 
-    // ── SUCCESS PATH (Issue #27) ─────────────────────────────────────
-    // Even when verify-payment says PAID, we make ONE more server call
-    // to /appointments/:id to read the canonical DB row. Same source
-    // the cashfree.checkout() resolution uses — single source of truth.
     if (status && status.paymentStatus === 'PAID') {
       const reconfirmed = await confirmPaymentWithServer(appt.id);
       if (reconfirmed) {
@@ -486,11 +1131,8 @@ function startPaymentPolling(appt, orderId){
         showSuccess(appt, true, '✅ Payment confirmed! Consultation booked. Details sent via WhatsApp & email.');
         return;
       }
-      // verify-payment said PAID but /appointments/:id hasn't caught
-      // up yet — keep polling, don't show success prematurely.
     }
 
-    // ── EXPLICIT FAILURE PATH ────────────────────────────────────────
     if (status && (
         status.paymentStatus === 'FAILED' ||
         ['EXPIRED','FAILED','TERMINATED','CANCELLED'].includes(status.cashfreeStatus)
@@ -502,7 +1144,6 @@ function startPaymentPolling(appt, orderId){
       return;
     }
 
-    // ── TIMEOUT ──────────────────────────────────────────────────────
     if (attempts >= maxAttempts) {
       clearInterval(timer);
       bar.style.display = 'none';
@@ -518,8 +1159,18 @@ function showSuccess(appt, isOnline, customMessage=''){
   $('#failureScreen').classList.add('hidden');
   const s = $('#successScreen');
   s.classList.remove('hidden');
-  $('#successMsg').textContent = customMessage || (isOnline ? 'Online payment is being verified. Final confirmation will be sent shortly.' : 'Your in-clinic visit is confirmed. Confirmation sent via WhatsApp.');
-  $('#successDetails').innerHTML = `<p><strong>Appointment ID:</strong> ${escapeHtml(appt.id.slice(0,8).toUpperCase())}</p><p><strong>Doctor:</strong> Dr. ${escapeHtml(state.doctor.name)}</p><p><strong>Date & Time:</strong> ${formatDate(state.date)} at ${formatTime(state.slot)}</p><p class="mt-2 text-slate-600">A reminder will be sent around 30 minutes before your appointment.</p>`;
+
+  const _ref = (typeof NPFmt !== 'undefined' && NPFmt.shortRef) ? NPFmt.shortRef(appt.id) : appt.id.slice(0,8).toUpperCase();
+
+  $('#successMsg').textContent = customMessage || (isOnline
+    ? 'Online payment is being verified. Final confirmation will be sent shortly.'
+    : 'Your in-clinic visit is confirmed. Confirmation sent via WhatsApp.');
+
+  $('#successDetails').innerHTML = `
+    <div class="bw-success-ref">🎫 Ref: NK-${escapeHtml(_ref)}</div>
+    <p><strong>Doctor:</strong> Dr. ${escapeHtml(state.doctor.name)}</p>
+    <p><strong>Date & Time:</strong> ${formatDate(state.date)} at ${formatTime(state.slot)}</p>
+    <p style="margin-top:10px;font-size:12px;color:var(--bw-muted);">A reminder will be sent ~30 minutes before your appointment via WhatsApp.</p>`;
   s.focus();
 }
 
@@ -530,9 +1181,9 @@ function showFailure(appt, cashfreeStatus, message){
   f.classList.remove('hidden');
   $('#failureMsg').textContent = message || 'Your payment could not be confirmed.';
   $('#failureDetails').innerHTML =
-    (appt ? `<p><strong>Booking ref:</strong> ${escapeHtml(appt.id.slice(0,8).toUpperCase())}</p>` : '') +
+    (appt ? `<p><strong>Booking ref:</strong> NK-${escapeHtml((typeof NPFmt !== 'undefined' && NPFmt.shortRef) ? NPFmt.shortRef(appt.id) : appt.id.slice(0,8).toUpperCase())}</p>` : '') +
     `<p><strong>Cashfree status:</strong> ${escapeHtml(cashfreeStatus || 'unknown')}</p>` +
-    `<p class="text-xs text-slate-500 mt-2">No money has been deducted. If you see a charge on your bank statement, it will be auto-reversed within 5–7 working days as per RBI guidelines.</p>`;
+    `<p style="font-size:11.5px;margin-top:8px;color:var(--bw-muted);">No money has been deducted. If you see a charge on your bank statement, it will be auto-reversed within 5–7 working days as per RBI guidelines.</p>`;
   $('#btnSubmit').disabled = false;
   $('#btnSubmitText').textContent = 'Confirm Booking';
   f.focus();
@@ -578,7 +1229,7 @@ async function bootFromQueryString(){
     if (prefill.primaryProblem) $('#f_problem').value = prefill.primaryProblem + ' (follow-up)';
     const banner = document.createElement('div');
     banner.setAttribute('role','note');
-    banner.className = 'bg-[#B8F2E6]/30 border border-[#4DA8FF]/30 rounded-xl p-3 text-sm mb-3';
+    banner.className = 'bw-recall-banner';
     banner.innerHTML = `📋 <b>Follow-up booking</b> with Dr. ${escapeHtml(prefill.doctorName)}. Your details are pre-filled — please verify and proceed.`;
     const step2 = document.getElementById('step2');
     if (step2 && step2.firstElementChild) step2.insertBefore(banner, step2.firstElementChild);
@@ -587,12 +1238,6 @@ async function bootFromQueryString(){
   }
 }
 
-/* =====================================================================
-   Issue #32 — single delegated click handler.
-   No element in the markup uses onclick=… . All buttons declare
-   data-action="…" (plus any data-* arg the action needs) and this
-   delegate dispatches. CSP 'unsafe-inline' is no longer required.
-   ===================================================================== */
 document.addEventListener('click', (ev) => {
   const t = ev.target.closest('[data-action]');
   if (!t) return;

@@ -4,12 +4,12 @@
    ===================================================================== */
 
 :root{
-  --np-primary:#2A7AD9;
-  --np-primary-600:#1E5FB5;
-  --np-blue:#4DA8FF;
-  --np-mint:#B8F2E6;
+  --np-primary:#89BCBD;
+  --np-primary-600:#5A9495;
+  --np-blue:#6FAAAB;
+  --np-mint:#DCEBEB;
   --np-cream:#FFF8E7;
-  --np-coral:#FFB5A7;
+  --np-coral:#FE84A4;
   --np-ink:#0F2A47;
   --np-surface:#F4F8FB;
   --np-border:#E3ECF5;
@@ -67,7 +67,7 @@ html,body{
   width:40px; height:40px; border-radius:12px;
   background: linear-gradient(135deg, var(--np-primary), var(--np-blue));
   color:white; display:flex; align-items:center; justify-content:center;
-  box-shadow: 0 6px 14px -4px rgba(42,122,217,.5);
+  box-shadow: 0 6px 14px -4px rgba(137,188,189,.5);
 }
 .np-sidebar__title{ font-weight:700; color:var(--np-ink); line-height:1.1; }
 .np-sidebar__subtitle{ font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--np-muted); }
@@ -85,9 +85,9 @@ html,body{
 .np-nav-item:hover{ background:#EEF4FB; color:var(--np-primary-600); }
 .np-nav-item__icon{ width:20px; height:20px; flex-shrink:0; color:currentColor; }
 .np-nav-item.active{
-  background: linear-gradient(135deg, rgba(42,122,217,.10), rgba(77,168,255,.08));
+  background: linear-gradient(135deg, rgba(137,188,189,.10), rgba(77,168,255,.08));
   color: var(--np-primary-600);
-  border-color: rgba(42,122,217,.18);
+  border-color: rgba(137,188,189,.18);
 }
 .np-nav-item.active .np-nav-item__icon{ color:var(--np-primary); }
 .np-nav-badge{
@@ -201,8 +201,8 @@ html,body{
   width:4px; background: var(--np-primary);
 }
 .np-kpi--blue::before{ background: var(--np-primary); }
-.np-kpi--mint::before{ background:#2BB39F; }
-.np-kpi--coral::before{ background:#FF8A75; }
+.np-kpi--mint::before{ background:#6FAAAB; }
+.np-kpi--coral::before{ background:#F46A8E; }
 .np-kpi--cream::before{ background:#E5A93A; }
 .np-kpi--violet::before{ background:#7A4FE0; }
 .np-kpi--rose::before{ background:#E11D48; }
@@ -248,7 +248,7 @@ html,body{
   text-decoration:none;
   transition: background .15s ease, color .15s ease, border-color .15s ease, transform .05s ease;
 }
-.np-btn:hover{ background:#F1F6FB; color: var(--np-primary-600); border-color: rgba(42,122,217,.25); }
+.np-btn:hover{ background:#F1F6FB; color: var(--np-primary-600); border-color: rgba(137,188,189,.25); }
 .np-btn:active{ transform: translateY(1px); }
 .np-btn--primary{
   background: var(--np-primary); color:white; border-color: var(--np-primary);
@@ -280,7 +280,7 @@ html,body{
 .np-input:focus, .np-select:focus, .np-textarea:focus{
   outline:none;
   border-color: var(--np-primary);
-  box-shadow: 0 0 0 3px rgba(42,122,217,.15);
+  box-shadow: 0 0 0 3px rgba(137,188,189,.15);
 }
 .np-error{
   background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
@@ -304,7 +304,7 @@ html,body{
   border:1px solid var(--np-border); border-radius:10px;
   font-size:.85rem; background:#fff; font-family: inherit;
 }
-.np-search input:focus{ outline:none; border-color: var(--np-primary); box-shadow:0 0 0 3px rgba(42,122,217,.15); }
+.np-search input:focus{ outline:none; border-color: var(--np-primary); box-shadow:0 0 0 3px rgba(137,188,189,.15); }
 
 /* ========== Tables ========== */
 .np-table{
@@ -345,7 +345,7 @@ html,body{
 }
 .np-empty__icon{
   width:42px; height:42px; border-radius:14px;
-  background: linear-gradient(135deg, rgba(42,122,217,.15), rgba(77,168,255,.1));
+  background: linear-gradient(135deg, rgba(137,188,189,.15), rgba(77,168,255,.1));
   color: var(--np-primary);
   display:inline-flex; align-items:center; justify-content:center;
   margin-bottom: .65rem;
@@ -368,7 +368,7 @@ html,body{
   width:56px; height:56px; border-radius:18px;
   background: linear-gradient(135deg, var(--np-primary), var(--np-blue));
   color:#fff; display:flex; align-items:center; justify-content:center; margin: 0 auto .85rem;
-  box-shadow: 0 10px 22px -6px rgba(42,122,217,.45);
+  box-shadow: 0 10px 22px -6px rgba(137,188,189,.45);
 }
 .np-login__title{ font-size:1.35rem; font-weight:700; color: var(--np-ink); text-align:center; }
 .np-login__subtitle{ font-size:.85rem; color: var(--np-muted); text-align:center; margin-bottom:1.25rem; }
@@ -405,9 +405,9 @@ html,body{
   transition: box-shadow .2s ease, transform .18s ease, border-color .2s ease;
 }
 .np-doc-card:hover{
-  box-shadow: 0 6px 24px -6px rgba(42,122,217,.16), 0 2px 6px rgba(15,42,71,.05);
+  box-shadow: 0 6px 24px -6px rgba(137,188,189,.16), 0 2px 6px rgba(15,42,71,.05);
   transform: translateY(-2px);
-  border-color: rgba(42,122,217,.3);
+  border-color: rgba(137,188,189,.3);
   z-index:1; /* lift above neighbours so the shadow isn't clipped */
 }
 
@@ -424,7 +424,7 @@ html,body{
   display:flex; align-items:center; justify-content:center;
   font-weight:700; font-size:.95rem; letter-spacing:-.3px;
   border:2px solid #fff;
-  box-shadow: 0 0 0 1.5px rgba(42,122,217,.18), 0 2px 6px -2px rgba(42,122,217,.25);
+  box-shadow: 0 0 0 1.5px rgba(137,188,189,.18), 0 2px 6px -2px rgba(137,188,189,.25);
   overflow:hidden;
 }
 .np-doc-card__avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
@@ -559,11 +559,11 @@ html,body{
   padding:.6rem 1.1rem;
   font-size:.875rem; font-weight:600;
   border-radius:12px;
-  box-shadow: 0 4px 14px -4px rgba(42,122,217,.5);
+  box-shadow: 0 4px 14px -4px rgba(137,188,189,.5);
   transition: background .18s ease, box-shadow .18s ease, transform .12s ease;
 }
 .np-btn--add-doctor:hover{
-  box-shadow: 0 6px 20px -4px rgba(42,122,217,.6);
+  box-shadow: 0 6px 20px -4px rgba(137,188,189,.6);
   transform: translateY(-1px);
 }
 .np-btn--add-doctor:active{ transform: translateY(1px); box-shadow: none; }
@@ -668,3 +668,474 @@ html,body{
 
 /* Utility */
 .hidden{ display:none !important; }
+/* =========================================================================
+ * Dark-mode overrides for data-theme="dark" on <html>.
+ * Only the surfaces, tables and inputs need explicit overrides; the rest
+ * inherits from the existing palette via CSS custom properties.
+ * ======================================================================= */
+html[data-theme="dark"]{
+  --np-bg:#0b1220; --np-surface:#0f172a; --np-text:#e2e8f0; --np-muted:#94a3b8;
+  --np-border:#1f2937; --np-ink:#f1f5f9; color-scheme: dark;
+}
+html[data-theme="dark"] body{ background:#0b1220; color:#e2e8f0; }
+html[data-theme="dark"] .np-panel,
+html[data-theme="dark"] .np-card,
+html[data-theme="dark"] .np-kpi,
+html[data-theme="dark"] .np-table-wrap,
+html[data-theme="dark"] .np-modal__panel{
+  background:#0f172a !important; color:#e2e8f0 !important; border-color:#1f2937 !important;
+}
+html[data-theme="dark"] .np-sidebar{ background:#070d19 !important; border-color:#1f2937 !important; }
+html[data-theme="dark"] .np-topbar{ background:#0f172a !important; border-color:#1f2937 !important; }
+html[data-theme="dark"] .np-table th{ background:#0b1220 !important; color:#cbd5e1 !important; }
+html[data-theme="dark"] .np-table td{ border-bottom-color:#1f2937 !important; }
+html[data-theme="dark"] .np-table tr:hover td{ background:#172033 !important; }
+html[data-theme="dark"] .np-input,
+html[data-theme="dark"] .np-select,
+html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea{
+  background:#0b1220 !important; color:#e2e8f0 !important; border-color:#1f2937 !important;
+}
+html[data-theme="dark"] .np-search{ background:#0b1220 !important; border-color:#1f2937 !important; }
+html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
+
+/* Empty-state polish (icons + spacing). */
+.np-empty{ text-align:center; padding:1.5rem .5rem; color:var(--np-muted); }
+.np-empty__title{ color: var(--np-ink); font-weight:700; margin-bottom:.25rem; }
+.np-empty__sub{ color: var(--np-muted); font-size:.85rem; }
+
+
+/* =====================================================================
+   ADMIN QA — structured responsive filter and list layouts
+   These rules pair with the labelled filter controls in index.html.
+   ===================================================================== */
+.np-filterbar--appointments,
+.np-filterbar--notifications{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  align-items:end;
+  gap:.75rem;
+  width:100%;
+  max-width:100%;
+}
+.np-filterbar--appointments .np-filter-control,
+.np-filterbar--notifications .np-filter-control{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+  min-width:0;
+  max-width:100%;
+}
+.np-filterbar--appointments .np-filter-control--search,
+.np-filterbar--notifications .np-filter-control--search{ grid-column:span 2; }
+.np-filter-control__label{
+  display:block;
+  color:var(--np-muted);
+  font-size:.72rem;
+  font-weight:700;
+  letter-spacing:.035em;
+  line-height:1.2;
+}
+.np-filterbar--appointments .np-search,
+.np-filterbar--notifications .np-search{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+.np-filterbar--appointments .np-select,
+.np-filterbar--notifications .np-select,
+.np-filterbar--appointments input[type="date"],
+.np-filterbar--notifications input[type="date"]{
+  box-sizing:border-box;
+  display:block;
+  inline-size:100% !important;
+  min-inline-size:0 !important;
+  max-inline-size:100% !important;
+  min-height:42px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.np-filterbar--appointments select,
+.np-filterbar--notifications select{ appearance:auto; }
+.np-filter-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:.5rem;
+  grid-column:1 / -1;
+  min-width:0;
+}
+.np-filter-actions .np-btn{ min-height:42px; }
+
+/* Active controls and status totals are content-safe: never create a page-wide scroll. */
+#apptFilterChips,
+#notifCounts{ max-width:100%; overflow:hidden; }
+#apptFilterChips .np-chips,
+#notifCounts{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.5rem;
+}
+#apptFilterChips .np-chip{
+  max-width:100%;
+  min-width:0;
+}
+#apptFilterChips .np-chip > span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#notifCounts .np-badge{ max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+
+/* Mobile appointments are a purpose-built card list; desktop/tablet stays a table. */
+@media (max-width:720px){
+  .np-content{ padding:1rem .75rem 1.5rem; }
+  .np-panel__head{ padding:1rem 1rem .5rem; }
+  .np-panel__body{ padding:.5rem 1rem 1rem; }
+  .np-filterbar--appointments,
+  .np-filterbar--notifications{ grid-template-columns:1fr; gap:.65rem; }
+  .np-filterbar--appointments .np-filter-control--search,
+  .np-filterbar--notifications .np-filter-control--search,
+  .np-filter-actions{ grid-column:auto; }
+  .np-filter-actions{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .np-filter-actions .np-btn{ width:100%; min-width:0; }
+
+  #apptsView .np-table-wrap{
+    overflow:visible;
+    max-height:none;
+    border:0;
+    border-radius:0;
+    background:transparent;
+  }
+  #apptsView .np-table,
+  #apptsView .np-table tbody{ display:block; width:100%; min-width:0; }
+  #apptsView .np-table thead{
+    position:absolute;
+    width:1px;height:1px;
+    margin:-1px;padding:0;
+    overflow:hidden;clip:rect(0 0 0 0);
+    white-space:nowrap;border:0;
+  }
+  #apptsView .np-table tr{
+    display:block;
+    width:100%;
+    box-sizing:border-box;
+    margin:0 0 .75rem;
+    padding:.9rem 1rem;
+    background:var(--nk-card,#fff);
+    border:1px solid var(--np-border);
+    border-left-width:3px;
+    border-radius:14px;
+    box-shadow:var(--np-card-shadow);
+  }
+  #apptsView .np-table td[data-label]{
+    display:grid;
+    grid-template-columns:minmax(76px,.55fr) minmax(0,1.45fr);
+    gap:.7rem;
+    align-items:start;
+    width:100%;
+    min-width:0;
+    padding:.52rem 0;
+    text-align:left !important;
+    border-bottom:1px dashed var(--np-border);
+  }
+  #apptsView .np-table td[data-label]::before{
+    content:attr(data-label);
+    color:var(--np-muted);
+    font-size:.68rem;
+    font-weight:700;
+    letter-spacing:.045em;
+    line-height:1.35;
+    text-transform:uppercase;
+  }
+  #apptsView .np-table td[data-label] > *{
+    min-width:0;
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+  #apptsView .np-table td[data-label]:last-child{ border-bottom:0; }
+  #apptsView .np-table td[data-label="Patient"],
+  #apptsView .np-table td[data-label="Doctor"]{ grid-template-columns:1fr; gap:.2rem; }
+  #apptsView .np-table td[data-label="Fee"] > b{ justify-self:end; font-size:1rem; }
+  #apptsView .np-table td[colspan]{ display:block; padding:.5rem 0; text-align:center; border:0; }
+  #apptsView .np-table tr:hover td{ background:transparent; }
+  html[data-theme="dark"] #apptsView .np-table tr{ background:var(--nk-card) !important; border-color:var(--nk-border) !important; }
+
+  #notifView .np-table-wrap{ overflow:visible; max-height:none; border:0; background:transparent; }
+  #notifView .np-table, #notifView .np-table tbody{ display:block; width:100%; min-width:0; }
+  #notifView .np-table thead{ position:absolute; width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0; }
+  #notifView .np-table tr.np-notif-row{ display:block; width:100%; box-sizing:border-box; margin:0 0 .75rem; padding:.9rem 1rem; }
+  #notifView .np-table tr.np-notif-row td{
+    display:grid;
+    grid-template-columns:minmax(78px,.55fr) minmax(0,1.45fr);
+    gap:.7rem;
+    align-items:start;
+    width:100%;
+    min-width:0;
+    padding:.48rem 0 !important;
+    border:0 !important;
+    text-align:left;
+    overflow-wrap:anywhere;
+  }
+  #notifView .np-table tr.np-notif-row td::before{ min-width:0; content:attr(data-label); }
+  #notifView .np-table tr.np-notif-row td.np-notif-error{ white-space:normal !important; overflow:visible !important; text-overflow:clip !important; }
+}
+@media (min-width:721px) and (max-width:1023px){
+  .np-filterbar--appointments,
+  .np-filterbar--notifications{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .np-filterbar--appointments .np-filter-control--search,
+  .np-filterbar--notifications .np-filter-control--search{ grid-column:1 / -1; }
+}
+@media (max-width:380px){
+  .np-filter-actions{ grid-template-columns:1fr; }
+}
+
+
+/* =====================================================================
+   STABILIZATION PASS — consolidated responsive fixes
+   ===================================================================== */
+.np-shell,
+.np-main{ overflow:visible; }
+.np-main{ min-height:100vh; }
+.np-sidebar{
+  position:sticky;
+  top:0;
+  height:100vh;
+  overflow:visible;
+}
+.np-sidebar__nav{
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.np-header{
+  position:sticky;
+  top:0;
+  z-index:42;
+  background:#fff;
+}
+.np-header__inner{
+  min-height:68px;
+  align-items:center;
+}
+.np-header__title{ min-width:0; overflow:hidden; }
+.np-header__page-title,
+.np-header__page-subtitle{
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+#notifCounts,
+#apptFilterChips{
+  max-width:100%;
+  min-width:0;
+}
+#notifCounts{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.5rem;
+  overflow:hidden;
+}
+#apptFilterChips .np-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.5rem;
+  max-width:100%;
+}
+#apptFilterChips .np-chip,
+#notifCounts .np-badge{
+  max-width:100%;
+  min-width:0;
+}
+#apptFilterChips .np-chip > span{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.np-filterbar--toolbar{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+  gap:.75rem;
+  align-items:end;
+  width:100%;
+}
+.np-filterbar--toolbar > .np-select,
+.np-filterbar--toolbar > input[type="date"],
+.np-filterbar--toolbar > .np-btn,
+.np-filterbar--toolbar > .np-search{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+.np-filterbar--toolbar > .np-btn{ min-height:42px; }
+.np-filterbar--appointments,
+.np-filterbar--notifications{
+  width:100%;
+  max-width:100%;
+}
+.np-filterbar--appointments .np-search,
+.np-filterbar--notifications .np-search,
+.np-filterbar--appointments .np-select,
+.np-filterbar--notifications .np-select,
+.np-filterbar--appointments input[type="date"],
+.np-filterbar--notifications input[type="date"]{
+  width:100%;
+  min-width:0;
+}
+.np-filterbar--appointments .np-filter-control,
+.np-filterbar--notifications .np-filter-control{
+  min-width:0;
+}
+.np-filter-actions{ align-items:stretch; }
+.np-filter-actions .np-btn{ min-width:0; }
+.np-table-wrap--responsive{
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+@media (max-width:1023px){
+  body.np-drawer-open{ overflow:hidden; }
+  .np-sidebar{
+    position:fixed;
+    left:0;
+    top:0;
+    bottom:0;
+    width:min(280px, 82vw);
+    max-width:82vw;
+    z-index:48;
+  }
+  .np-backdrop{ z-index:44; }
+}
+@media (max-width:720px){
+  .np-content{ padding:1rem .85rem 1.5rem; }
+  .np-panel__head{ padding:1rem; }
+  .np-panel__body{ padding:.85rem 1rem 1rem; }
+  .np-header__inner{
+    gap:.75rem;
+    padding:.75rem max(.9rem, env(safe-area-inset-right)) .75rem max(.9rem, env(safe-area-inset-left));
+  }
+  .np-header__page-title{
+    font-size:1rem;
+    line-height:1.15;
+    white-space:nowrap;
+  }
+  .np-header__page-subtitle{
+    font-size:.74rem;
+    line-height:1.2;
+    white-space:nowrap;
+  }
+  .np-profile{
+    margin-left:auto;
+    padding-right:max(0px, env(safe-area-inset-right));
+  }
+  .np-profile__trigger{
+    padding:.35rem .45rem .35rem .35rem;
+    border-radius:12px;
+  }
+  .np-profile__menu{
+    right:0;
+    max-width:min(280px, calc(100vw - 24px));
+  }
+  .np-filterbar--toolbar{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .np-filterbar--toolbar > .np-btn{ min-height:40px; }
+  #settlementsView .np-table-wrap,
+  #invoicesView .np-table-wrap,
+  #revenueView .np-table-wrap,
+  #notifView .np-table-wrap,
+  #apptsView .np-table-wrap{
+    overflow:visible;
+    max-height:none;
+    border:0;
+    background:transparent;
+  }
+  #settlementsView .np-table,
+  #settlementsView .np-table tbody,
+  #invoicesView .np-table,
+  #invoicesView .np-table tbody,
+  #revenueView .np-table,
+  #revenueView .np-table tbody{
+    display:block;
+    width:100%;
+    min-width:0;
+  }
+  #settlementsView .np-table thead,
+  #invoicesView .np-table thead,
+  #revenueView .np-table thead{
+    position:absolute;
+    width:1px;
+    height:1px;
+    margin:-1px;
+    overflow:hidden;
+    clip:rect(0 0 0 0);
+    white-space:nowrap;
+    border:0;
+  }
+  #settlementsView .np-table tr,
+  #invoicesView .np-table tr,
+  #revenueView .np-table tr{
+    display:block;
+    width:100%;
+    margin:0 0 .75rem;
+    padding:.9rem 1rem;
+    background:#fff;
+    border:1px solid var(--np-border);
+    border-radius:14px;
+    box-shadow:var(--np-card-shadow);
+  }
+  #settlementsView .np-table td[data-label],
+  #invoicesView .np-table td[data-label],
+  #revenueView .np-table td[data-label]{
+    display:grid;
+    grid-template-columns:minmax(84px,.6fr) minmax(0,1.4fr);
+    gap:.7rem;
+    align-items:start;
+    width:100%;
+    min-width:0;
+    padding:.55rem 0;
+    border-bottom:1px dashed var(--np-border);
+    text-align:left !important;
+    overflow-wrap:anywhere;
+  }
+  #settlementsView .np-table td[data-label]::before,
+  #invoicesView .np-table td[data-label]::before,
+  #revenueView .np-table td[data-label]::before{
+    content:attr(data-label);
+    color:var(--np-muted);
+    font-size:.68rem;
+    font-weight:700;
+    letter-spacing:.045em;
+    text-transform:uppercase;
+    line-height:1.35;
+  }
+  #settlementsView .np-table td[data-label]:last-child,
+  #invoicesView .np-table td[data-label]:last-child,
+  #revenueView .np-table td[data-label]:last-child{ border-bottom:0; }
+  #settlementsView .np-table td[data-label="Doctor"],
+  #invoicesView .np-table td[data-label="Doctor"]{ grid-template-columns:1fr; gap:.25rem; }
+  #settlementsView .np-table td[data-label="Actions"],
+  #invoicesView .np-table td[data-label="Actions"],
+  #revenueView .np-table td[data-label="Actions"]{ grid-template-columns:1fr; }
+  #settlementsView .np-table td[colspan],
+  #invoicesView .np-table td[colspan],
+  #revenueView .np-table td[colspan]{
+    display:block;
+    padding:.25rem 0;
+    border:0;
+    text-align:center;
+  }
+  #settlementsView .np-empty,
+  #invoicesView .np-empty,
+  #revenueView .np-empty{ padding:1.25rem .75rem; }
+}
+@media (max-width:520px){
+  .np-filterbar--toolbar,
+  .np-filterbar--appointments,
+  .np-filterbar--notifications{ grid-template-columns:1fr; }
+  .np-filter-actions{ grid-template-columns:1fr 1fr; }
+}
+@media (max-width:420px){
+  .np-header__inner{ min-height:60px; }
+  .np-header__page-subtitle{ display:none; }
+  .np-profile__trigger{ padding:.32rem; }
+  .np-filter-actions{ grid-template-columns:1fr; }
+}

@@ -4,6 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>NeoKidsPro EMR — Doctor</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>
+<link rel="apple-touch-icon" href="/assets/favicon.svg"/>
+<link rel="manifest" href="/assets/manifest.webmanifest"/>
+<meta name="theme-color" content="#89BCBD"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,20 +17,41 @@
     theme: {
       extend: {
         colors: {
-          'brand-primary': '#2A7AD9',
-          'brand-blue':    '#4DA8FF',
-          'brand-mint':    '#B8F2E6',
-          'brand-cream':   '#FFF8E7',
-          'brand-coral':   '#FFB5A7',
-          'brand-ink':     '#0F2A47',
-          'brand-surface': '#F4F8FB'
+          'brand-primary': '#89BCBD',
+          'brand-blue':    '#6FAAAB',
+          'brand-teal':    '#89BCBD',
+          'brand-mint':    '#DCEBEB',
+          'brand-cream':   '#FFEEEF',
+          'brand-coral':   '#FE84A4',
+          'brand-pink':    '#FE84A4',
+          'brand-orange':  '#F9A945',
+          'brand-yellow':  '#FED960',
+          'brand-purple':  '#CE7ED4',
+          'brand-lime':    '#C0CF56',
+          'brand-ink':     '#0F2E3A',
+          'brand-surface': '#F7FAFA'
         },
-        fontFamily: { sans: ['Inter','system-ui','sans-serif'] }
+        fontFamily: {
+          sans:    ['Inter','system-ui','sans-serif'],
+          display: ['Poppins','Inter','system-ui','sans-serif']
+        }
       }
     }
   }
 </script>
-<link rel="stylesheet" href="/doctor/styles.css?v=2.1.0"/></head>
+<link rel="stylesheet" href="/doctor/styles.css"/>
+<!-- NeoKidsPro brand theme (light + dark) — v3.1 Blue-Green rebrand -->
+<link rel="stylesheet" href="/assets/neokids-theme.css"/>
+<script>
+  // Apply persisted theme as early as possible to avoid FOUC
+  try {
+    var t = localStorage.getItem('np-theme');
+    if (t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.setAttribute('data-theme','dark');
+    }
+  } catch(_) {}
+</script>
+</head>
 <body class="bg-brand-surface text-slate-800">
 
 <!-- =====================================================================
@@ -35,7 +60,7 @@
 <div id="loginScreen" class="np-login">
   <div class="np-login__card">
     <div class="np-login__logo" aria-hidden="true">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
     </div>
     <h1 class="np-login__title">NeoKidsPro Doctor</h1>
     <p class="np-login__subtitle">Sign in to your pediatric EMR</p>
@@ -73,7 +98,7 @@
     <aside id="sidebar" class="np-sidebar" aria-label="Primary navigation">
       <div class="np-sidebar__brand">
         <div class="np-sidebar__logo" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         </div>
         <div>
           <div class="np-sidebar__title">NeoKidsPro</div>
@@ -184,7 +209,7 @@
         <section id="dashboardTab" class="tab-pane">
           <div id="statsBar" class="np-kpi-grid"></div>
           <div class="np-divider"></div>
-          <div style="display:grid; grid-template-columns: 2fr 1fr; gap:1rem;" class="np-dash-grid">
+          <div class="np-dash-grid np-dash-grid--2-1">
             <div class="np-panel">
               <div class="np-panel__head">
                 <div style="flex:1">
@@ -259,7 +284,7 @@
               </div>
             </div>
             <div class="np-panel__body">
-              <div class="np-filterbar">
+              <div class="np-filterbar np-filterbar--doctor">
                 <div class="np-search">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input id="apptSearch" type="search" placeholder="Search by patient name, phone, or problem…" autocomplete="off"/>
@@ -306,7 +331,7 @@
               </div>
             </div>
             <div class="np-panel__body">
-              <div class="np-filterbar">
+              <div class="np-filterbar np-filterbar--doctor">
                 <div class="np-search">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input id="rxSearch" type="search" placeholder="Search by patient name, phone, diagnosis…" autocomplete="off"/>
@@ -331,9 +356,9 @@
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshEarnings">Refresh</button>
             </div>
             <div class="np-panel__body">
-              <div class="np-filterbar">
-                <select id="earnMonth" class="np-select" style="width:auto;" aria-label="Month"></select>
-                <select id="earnYear"  class="np-select" style="width:auto;" aria-label="Year"></select>
+              <div class="np-filterbar np-filterbar--doctor">
+                <select id="earnMonth" class="np-select" aria-label="Month"></select>
+                <select id="earnYear"  class="np-select" aria-label="Year"></select>
                 <button id="applyEarnings" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
               </div>
 
@@ -342,7 +367,7 @@
               <div id="earnSettlementCard" style="display:none; padding:.75rem 1rem; border-radius:10px; margin-bottom:1rem;"></div>
 
               <div class="np-panel__title" style="font-size:1rem; margin-bottom:.5rem;">Appointment Breakdown</div>
-              <div class="np-table-wrap">
+              <div class="np-table-wrap np-table-wrap--responsive">
                 <table class="np-table">
                   <thead>
                     <tr>
@@ -360,7 +385,7 @@
               </div>
 
               <div class="np-panel__title" style="font-size:1rem; margin:1.25rem 0 .5rem;">Past Settlements</div>
-              <div class="np-table-wrap">
+              <div class="np-table-wrap np-table-wrap--responsive">
                 <table class="np-table">
                   <thead>
                     <tr>
@@ -415,7 +440,7 @@
             <!-- Availability -->
             <div class="np-setting-card">
               <div class="np-setting-card__head">
-                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#2BB39F,#4CD0BC);">
+                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#89BCBD,#A4CDCE);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 </div>
                 <div>
@@ -502,7 +527,7 @@
             <!-- Clinic Details -->
             <div class="np-setting-card">
               <div class="np-setting-card__head">
-                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#FF8A75,#FFB5A7);">
+                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#F46A8E,#FE84A4);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                 </div>
                 <div>
@@ -765,7 +790,9 @@
   </div>
 </div>
 
-<script src="app.js?v=2.1.0"></script>
-<script src="earnings.js?v=2.1.0"></script>
+<script src="/assets/np-ui.js"></script>
+<script src="app.js"></script>
+<script src="earnings.js"></script>
+
 </body>
 </html>

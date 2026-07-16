@@ -1,31 +1,7 @@
 /* =====================================================================
-   NeoKidsPro EMR — Doctor App v2.1 (Prescription Builder forensic fix)
-   - FIX 1: Appointment card action hierarchy
-            Primary: Open Consultation · Secondary: Join Meeting · Overflow: ⋮
-   - FIX 2: Route-based consultation workspace (#consult/:id)
-            Patient modal kept for "peek" use; primary work happens in workspace.
-   - FIX 3: Prescription Archive tab (client-side filter over /doctor/appointments)
-
-   - FIX 4 (Critical, prescription builder doesn't load):
-     Root cause: the previous build had ONE static <form id="rxForm">
-     element in the patient-modal HTML and used appendChild() to MOVE
-     that single element into either the modal's slot or the workspace's
-     slot. As soon as openConsultation() ran a second time (e.g. user
-     opens consult A → goes back → opens consult B, or rescheduled the
-     same consult), the workspace container.innerHTML was rewritten,
-     destroying the live #rxForm node. The next call to $('#rxForm')
-     returned null, moveRxFormInto() early-returned, and the user saw
-     the Prescription tab go silent.
-     The fix:
-       • Hold the form HTML as a string template (RX_FORM_TEMPLATE)
-         captured ONCE on first init from the static markup.
-       • renderRxFormInto() now writes that template into the slot via
-         innerHTML each time (every workspace gets its own DOM nodes).
-       • The static #rxForm in patient-modal is left alone — its inputs
-         are never re-used cross-context.
-       • The document-level submit delegate still works because it keys
-         on e.target.id === 'rxForm', and we keep that id on the cloned
-         form.
+   NeoKidsPro EMR — Doctor App
+   Preserves the consultation workspace, patient modal, and prescription flow
+   while keeping appointment, archive, and waiting-room behavior unchanged.
    ===================================================================== */
 
 const API = '/api';
@@ -33,7 +9,7 @@ let TOKEN = localStorage.getItem('np_doctor_token');
 let currentAppointment = null;
 let allAppointmentsCache = [];
 let doctorCache = null;
-let activeConsultId = null;            // FIX 2 — currently routed consultation
+let activeConsultId = null;
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -61,6 +37,11 @@ function fmtCurrency(n){
   const v = Number(n||0);
   if (v >= 100000) return '₹' + (v/100000).toFixed(v%100000===0?0:1) + 'L';
   if (v >= 1000)   return '₹' + (v/1000).toFixed(v%1000===0?0:1) + 'k';
+  return '₹' + v.toLocaleString('en-IN');
+}
+function fmtCurrencyFull(n){
+  if (typeof NPFmt !== 'undefined' && NPFmt.inr) return NPFmt.inr(n);
+  const v = Number(n||0);
   return '₹' + v.toLocaleString('en-IN');
 }
 function fmtDate(d){
@@ -157,6 +138,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
     if (data.role && data.role !== 'DOCTOR') throw new Error('Not a doctor account');
     TOKEN = data.token;
     localStorage.setItem('np_doctor_token', TOKEN);
+    if (typeof NPSession !== 'undefined') NPSession.start(TOKEN);
     init();
   } catch (ex){
     err.textContent = ex.message || 'Login failed';
@@ -173,6 +155,7 @@ function forgotPassword(){
 function logout(){
   localStorage.removeItem('np_doctor_token');
   TOKEN = null;
+  if (typeof NPSession !== 'undefined') NPSession.stop();
   location.reload();
 }
 
@@ -196,12 +179,27 @@ async function init(){
   setupSidebar();
   setupProfileMenu();
   setupTabs();
+  if (typeof NPSession !== 'undefined' && TOKEN) NPSession.start(TOKEN);
+  // Register command-palette entries (idempotent).
+  if (typeof NPPalette !== 'undefined' && !window.__npPaletteWired) {
+    window.__npPaletteWired = true;
+    [
+      ['Go to Dashboard',           '🏠', () => setActiveTab('dashboardTab')],
+      ['Go to Waiting Room',        '⏳', () => setActiveTab('waitingTab')],
+      ['Go to Appointments',        '📅', () => setActiveTab('allTab')],
+      ['Go to Prescription Archive','📜', () => setActiveTab('rxArchiveTab')],
+      ['Go to My Earnings',         '💰', () => setActiveTab('earningsTab')],
+      ['Go to Settings',            '⚙️', () => setActiveTab('settingsTab')],
+      ['Toggle dark mode',          '🌙', () => NPTheme && NPTheme.toggle()],
+      ['Sign out',                  '⏻', () => logout()],
+    ].forEach(([label, icon, run]) => NPPalette.register({ label, icon, run, keywords: label }));
+  }
   setupSearchFilters();
   setupForms();
   setupRescheduleModal();
   setupCancelModal();
   setupPatientModalTabs();
-  // FIX 4 — capture the prescription form HTML template ONCE, before any
+  // Capture the prescription form HTML template once before any
   // workspace render could destroy the static node.
   captureRxFormTemplate();
 
@@ -214,7 +212,7 @@ async function init(){
     location.hash = '#consult/' + id;
   });
 
-  // FIX 3 — Archive filter listeners
+  // Archive filter listeners
   ['rxSearch','rxFromDate','rxToDate'].forEach(id => {
     const el = document.getElementById(id);
     if (el){
@@ -228,7 +226,7 @@ async function init(){
     renderRxArchive();
   });
 
-  // FIX 2 — Hash router
+  // Hash router
   window.addEventListener('hashchange', handleHashRoute);
   handleHashRoute(); // boot route
   if (!location.hash){
@@ -262,8 +260,10 @@ function setupSidebar(){
   const sidebar = $('#sidebar');
   const backdrop = $('#sidebarBackdrop');
   const toggle = $('#sidebarToggle');
-  function open(){ sidebar.classList.add('is-open'); backdrop.classList.add('is-open'); }
-  function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); }
+  if (!sidebar || !backdrop || !toggle || toggle.__bound) return;
+  toggle.__bound = true;
+  function open(){ sidebar.classList.add('is-open'); backdrop.classList.add('is-open'); document.body.classList.add('np-drawer-open'); }
+  function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); document.body.classList.remove('np-drawer-open'); }
   toggle.addEventListener('click', () => sidebar.classList.contains('is-open') ? close() : open());
   backdrop.addEventListener('click', close);
   $$('.np-nav-item').forEach(b => b.addEventListener('click', () => {
@@ -344,7 +344,7 @@ function setupTabs(){
 }
 
 /* =====================================================================
-   HASH ROUTER — FIX 2
+   Hash router
    ===================================================================== */
 function handleHashRoute(){
   const m = (location.hash || '').match(/^#consult\/([A-Za-z0-9-]+)/);
@@ -361,6 +361,10 @@ function handleHashRoute(){
    STATS / DASHBOARD
    ===================================================================== */
 async function loadStats(){
+  // Loading skeleton while stats fetch is in flight.
+  try {
+    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsBar'), 4);
+  } catch (_) {}
   try {
     const s = await api('/doctor/stats');
     const today = Number(s.todayAppointments || 0);
@@ -368,24 +372,24 @@ async function loadStats(){
     const total = Number(s.totalConsults || 0);
     const rev   = Number(s.totalRevenue || 0);
     $('#statsBar').innerHTML = `
-      <div class="np-kpi np-kpi--blue">
+      <div class="np-kpi np-kpi--blue" title="Total appointments scheduled for today (across all statuses).">
         <div class="np-kpi__label">Today's Patients</div>
         <div class="np-kpi__value">${today}</div>
         <div class="np-kpi__sub">${done} completed so far</div>
       </div>
-      <div class="np-kpi np-kpi--mint">
+      <div class="np-kpi np-kpi--mint" title="All-time consultations you've completed since joining.">
         <div class="np-kpi__label">Total Consults</div>
         <div class="np-kpi__value">${total}</div>
         <div class="np-kpi__sub">All-time consultations</div>
       </div>
-      <div class="np-kpi np-kpi--coral">
+      <div class="np-kpi np-kpi--coral" title="Patients marked as COMPLETED today.">
         <div class="np-kpi__label">Completed Today</div>
         <div class="np-kpi__value">${done}</div>
         <div class="np-kpi__sub">Out of ${today} scheduled</div>
       </div>
-      <div class="np-kpi np-kpi--cream">
+      <div class="np-kpi np-kpi--cream" title="Gross fee revenue billed to your patients (before clinic split).">
         <div class="np-kpi__label">Revenue</div>
-        <div class="np-kpi__value">${fmtCurrency(rev)}</div>
+        <div class="np-kpi__value">${fmtCurrencyFull(rev)}</div>
         <div class="np-kpi__sub">Lifetime</div>
       </div>`;
   } catch (ex){
@@ -423,7 +427,7 @@ function emptyState(title, sub, ctaHtml){
 }
 
 /* =====================================================================
-   WAITING ROOM / ALL APPTS
+   Waiting room and appointments
    ===================================================================== */
 async function loadWaiting(){
   const list = $('#waitingList');
@@ -491,11 +495,7 @@ function setupSearchFilters(){
 }
 
 /* =====================================================================
-   APPOINTMENT CARD — FIX 1
-   Action hierarchy:
-     Primary:   "Open Consultation"  (always shown unless cancelled)
-     Secondary: "Join Meeting"       (only ONLINE && meetLink && not cancelled/completed)
-     Overflow:  "Mark Complete", "Reschedule", "Cancel"
+   Appointment card
    ===================================================================== */
 function apptCard(a){
   const p = a.patient || {};
@@ -576,21 +576,52 @@ function goToConsult(id){
   location.hash = '#consult/' + id;
 }
 
-/* Overflow menu open/close + click-outside */
+/* Overflow menu open/close + viewport-safe positioning */
+function closeOverflowMenus(except){
+  document.querySelectorAll('.np-overflow-menu.is-open').forEach(menu => {
+    if (menu === except) return;
+    menu.classList.remove('is-open');
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.maxHeight = '';
+  });
+}
+function positionOverflowMenu(trigger, menu){
+  const margin = 12;
+  const gap = 6;
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  menu.style.maxHeight = Math.max(160, window.innerHeight - margin * 2) + 'px';
+  const triggerRect = trigger.getBoundingClientRect();
+  const width = Math.min(menu.offsetWidth || 220, window.innerWidth - margin * 2);
+  const height = menu.offsetHeight || 200;
+  let left = triggerRect.right - width;
+  left = Math.max(margin, Math.min(left, window.innerWidth - margin - width));
+  const spaceBelow = window.innerHeight - triggerRect.bottom - margin;
+  const spaceAbove = triggerRect.top - margin;
+  const openUp = height > spaceBelow && spaceAbove > spaceBelow;
+  let top = openUp ? Math.max(margin, triggerRect.top - Math.min(height, spaceAbove) - gap) : (triggerRect.bottom + gap);
+  const maxHeight = Math.max(140, openUp ? spaceAbove : spaceBelow);
+  menu.style.left = left + 'px';
+  menu.style.top = Math.max(margin, Math.min(top, window.innerHeight - margin - Math.min(height, maxHeight))) + 'px';
+  menu.style.maxHeight = maxHeight + 'px';
+}
 function toggleOverflow(btn){
-  const menu = btn.nextElementSibling;
+  const menu = btn && btn.nextElementSibling;
+  if (!menu) return;
   const isOpen = menu.classList.contains('is-open');
-  // close any other open menus
-  document.querySelectorAll('.np-overflow-menu.is-open').forEach(m => m.classList.remove('is-open'));
-  if (!isOpen) menu.classList.add('is-open');
+  closeOverflowMenus();
+  if (isOpen) return;
+  menu.classList.add('is-open');
+  positionOverflowMenu(btn, menu);
 }
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.np-overflow')){
-    document.querySelectorAll('.np-overflow-menu.is-open').forEach(m => m.classList.remove('is-open'));
-  }
+  if (!e.target.closest('.np-overflow')) closeOverflowMenus();
 });
+window.addEventListener('resize', () => closeOverflowMenus());
+window.addEventListener('scroll', () => closeOverflowMenus(), true);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') document.querySelectorAll('.np-overflow-menu.is-open').forEach(m => m.classList.remove('is-open'));
+  if (e.key === 'Escape') closeOverflowMenus();
 });
 
 /* =====================================================================
@@ -632,7 +663,7 @@ function closePatientModal(){
 }
 
 /* =====================================================================
-   CONSULTATION WORKSPACE — FIX 2
+   Consultation workspace
    Renders the same content the modal used, but full-page, deep-linkable.
    ===================================================================== */
 async function openConsultation(id){
@@ -805,7 +836,7 @@ function renderConsultBody(root, a, compact){
 }
 
 /* =====================================================================
-   FIX 4 — Prescription form renderer (root-cause fix)
+   Prescription form renderer
    Instead of physically MOVING the single #rxForm element (which gets
    destroyed when consultContainer.innerHTML is rewritten), we keep an
    HTML TEMPLATE STRING captured once from the static markup, and render
@@ -1077,7 +1108,7 @@ document.addEventListener('submit', async (e) => {
 });
 
 /* =====================================================================
-   FIX 3 — PRESCRIPTION ARCHIVE
+   Prescription archive
    ===================================================================== */
 let rxArchiveCache = [];
 async function loadRxArchive(){
@@ -1148,13 +1179,19 @@ function renderRxArchive(){
    APPOINTMENT ACTIONS
    ===================================================================== */
 async function toggleComplete(id){
-  if (!confirm('Mark this appointment as completed?')) return;
+  const ok = await NPModal.confirm({
+    title: 'Mark appointment as completed?',
+    message: 'This will close the consultation, finalise the invoice, and move the appointment out of the waiting room.',
+    okText: 'Mark completed',
+  });
+  if (!ok) return;
   try {
     await api('/doctor/appointments/' + encodeURIComponent(id) + '/complete', { method:'POST' });
+    NPToast.success('Appointment marked completed');
     loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
     // If we're in the workspace for this id, refresh it
     if (activeConsultId === id) openConsultation(id);
-  } catch (ex){ alert(ex.message || 'Could not complete'); }
+  } catch (ex){ NPToast.error(ex.message || 'Could not complete'); }
 }
 function cancelAppt(id){
   $('#cancelApptId').value = id;
@@ -1265,6 +1302,11 @@ function loadSettings(){
     populateAvailability(d);
     populateClinic(d);
     populateFees(d);
+    // Upgrade profile-photo input to a drag-and-drop dropzone (idempotent).
+    if (typeof NPDropzone !== 'undefined') {
+      const input = document.getElementById('photoInput');
+      if (input) NPDropzone.bind(input, { label: 'Drop profile photo here', hint: 'or click to browse (JPG / PNG)' });
+    }
   }).catch(()=>{});
 }
 function populateAvailability(d){
@@ -1356,6 +1398,18 @@ function setupForms(){
       workingDays:  $('#workingDaysVal').value || '',
       isAvailable:  !!e.target.isAvailable.checked
     };
+    // Client-side guard so bug #16 (end < start) never reaches the server.
+    function _hm(s){ if (!s) return null; const m = String(s).match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1])*60 + Number(m[2])) : null; }
+    const pairs = [['Online', body.availableFromOnline, body.availableToOnline],
+                   ['Offline', body.availableFromOffline, body.availableToOffline]];
+    for (const [label, a, b] of pairs) {
+      const av = _hm(a), bv = _hm(b);
+      if (av != null && bv != null && av >= bv) {
+        if (typeof NPToast !== 'undefined') NPToast.error(label + ' availability: start time must be before end time.');
+        else alert(label + ' availability: start time must be before end time.');
+        return;
+      }
+    }
     try { await api('/doctor/availability', { method:'PUT', body }); alert('Availability saved.'); loadSettings(); }
     catch (ex){ alert(ex.message || 'Could not save'); }
   });
@@ -1406,9 +1460,18 @@ function setupForms(){
   });
 }
 async function removePhoto(){
-  if (!confirm('Remove your profile photo?')) return;
-  try { await api('/doctor/profile-image', { method:'DELETE' }); loadSettings(); }
-  catch (ex){ alert(ex.message || 'Could not remove photo'); }
+  const ok = await NPModal.confirm({
+    title: 'Remove profile photo?',
+    message: 'Your photo will be removed from the public listing. You can upload a new one any time.',
+    okText: 'Remove photo',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await api('/doctor/profile-image', { method:'DELETE' });
+    NPToast.success('Profile photo removed');
+    loadSettings();
+  } catch (ex){ NPToast.error(ex.message || 'Could not remove photo'); }
 }
 
 /* =====================================================================
@@ -1422,4 +1485,98 @@ async function removePhoto(){
     } catch {}
   }
   $('#loginScreen').classList.remove('hidden');
+})();
+
+
+/* =====================================================================
+   MOBILE DRAWER + CONSULT "BACK" BUTTON
+   (merged from former assets/np-fixes.js)
+   ===================================================================== */
+(function(){
+  'use strict';
+  var doc = document;
+  var mqMobile = window.matchMedia ? window.matchMedia('(max-width:1023px)') : null;
+
+  function setBodyLock(locked){
+    if (!doc.body) return;
+    doc.body.classList.toggle('np-drawer-open', !!locked);
+  }
+
+  function wireSidebar(){
+    var sidebar  = doc.getElementById('sidebar');
+    var backdrop = doc.getElementById('sidebarBackdrop');
+    var toggle   = doc.getElementById('sidebarToggle');
+    if (!sidebar || !backdrop) return;
+
+    function isOpen(){ return sidebar.classList.contains('is-open'); }
+    function close(){
+      sidebar.classList.remove('is-open');
+      backdrop.classList.remove('is-open');
+      backdrop.setAttribute('aria-hidden','true');
+      setBodyLock(false);
+    }
+
+    if (toggle){
+      toggle.addEventListener('click', function(){
+        setTimeout(function(){ setBodyLock(isOpen()); }, 0);
+      });
+    }
+    doc.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && isOpen()) close();
+    });
+    function onResize(){ if (!mqMobile || !mqMobile.matches) close(); }
+    if (mqMobile && mqMobile.addEventListener) mqMobile.addEventListener('change', onResize);
+    else if (mqMobile && mqMobile.addListener) mqMobile.addListener(onResize);
+  }
+
+  /* "← Back to Appointments" bar injected into the consultation workspace. */
+  function injectConsultBackButton(){
+    var container = doc.getElementById('consultContainer');
+    if (!container) return;
+    var mo = new MutationObserver(function(){
+      var workspace = doc.getElementById('consultWorkspace');
+      if (!workspace) return;
+      if (workspace.querySelector('.np-consult-backbar')) return;
+      var bar = doc.createElement('div');
+      bar.className = 'np-consult-backbar';
+      bar.innerHTML =
+        '<button type="button" class="np-consult-back" aria-label="Back to appointments">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>' +
+          '<span>Back to Appointments</span>' +
+        '</button>' +
+        '<span class="np-consult-breadcrumb">Appointments &rsaquo; <span>Consultation</span></span>';
+      workspace.insertBefore(bar, workspace.firstChild);
+      bar.querySelector('.np-consult-back').addEventListener('click', function(){
+        var prev = (window.__prevDoctorTab || 'appointmentsTab');
+        if (typeof setActiveTab === 'function'){
+          if (location.hash.indexOf('#consult/') === 0){
+            history.replaceState(null, '', location.pathname + location.search);
+          }
+          setActiveTab(prev);
+        } else if (window.history && history.length > 1){
+          history.back();
+        } else {
+          location.hash = '';
+        }
+      });
+    });
+    mo.observe(container, { childList: true, subtree: true });
+  }
+
+  function trackPreviousTab(){
+    if (typeof window.setActiveTab !== 'function') return;
+    var orig = window.setActiveTab;
+    window.setActiveTab = function(id){
+      try { if (id !== 'consultTab') window.__prevDoctorTab = id; } catch(_){}
+      return orig.apply(this, arguments);
+    };
+  }
+
+  function boot(){
+    try { wireSidebar(); } catch(_){}
+    try { injectConsultBackButton(); } catch(_){}
+    setTimeout(trackPreviousTab, 0);
+  }
+  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();

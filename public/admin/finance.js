@@ -5,7 +5,7 @@
    Depends on app.js for: api(), $, $$, escapeHtml(), fmtDate(),
                           fmtDateTime(), __doctorsCache, statusBadge-ish helpers.
 
-   v2.1 (FIX 8 — login regression):
+   v2.1:
      The previous version scheduled a setTimeout(refreshPendingBadge, 1500)
      on every DOMContentLoaded — including the login screen. With no token
      in localStorage, that 1.5-second timer fired a call against the
@@ -200,16 +200,20 @@
   }
 
   async function generateSettlement(doctorId, year, month) {
-    const ok = confirm(`Freeze ${MONTH_NAMES[month-1]} ${year} totals for this doctor?\n\nThis snapshots the numbers and links all eligible appointments. You can still re-generate before marking it PAID.`);
+    const ok = await NPModal.confirm({
+      title: `Freeze ${MONTH_NAMES[month-1]} ${year} totals?`,
+      message: 'This snapshots the numbers and links all eligible appointments. You can still re-generate before marking it PAID.',
+      okText: 'Generate settlement',
+    });
     if (!ok) return;
     try {
       await api('/admin/finance/settlements/generate', {
         method: 'POST',
         body: JSON.stringify({ doctorId, year, month })
       });
-      alert('Settlement generated.');
+      NPToast.success('Settlement generated.');
       loadRevenue();
-    } catch (err) { alert('Failed: ' + err.message); }
+    } catch (err) { NPToast.error('Failed: ' + err.message); }
   }
 
   /* =====================================================================
@@ -261,17 +265,17 @@
       ].filter(Boolean).join(' ');
       return `
         <tr>
-          <td>${period}</td>
-          <td>
+          <td data-label="Period">${period}</td>
+          <td data-label="Doctor">
             <div style="font-weight:600;">${drNameHtml(s.doctor?.name || '—')}</div>
             <div style="font-size:.7rem; color:var(--np-muted);">${escapeHtml(s.doctor?.specialization || 'Pediatrician')}</div>
           </td>
-          <td style="text-align:right;">${s.totalConsultations}</td>
-          <td style="text-align:right;">${inr(s.totalRevenue)}</td>
-          <td style="text-align:right; font-weight:600;">${inr(s.doctorNetAmount)}</td>
-          <td>${statusPill(s.status)}</td>
-          <td>${s.paidAt ? fmtDate(s.paidAt) : '—'}</td>
-          <td style="text-align:right; white-space:nowrap;">${actions}</td>
+          <td data-label="Consults" style="text-align:right;">${s.totalConsultations}</td>
+          <td data-label="Total Revenue" style="text-align:right;">${inr(s.totalRevenue)}</td>
+          <td data-label="Net Paid" style="text-align:right; font-weight:600;">${inr(s.doctorNetAmount)}</td>
+          <td data-label="Status">${statusPill(s.status)}</td>
+          <td data-label="Paid On">${s.paidAt ? fmtDate(s.paidAt) : '—'}</td>
+          <td data-label="Actions" style="text-align:right; white-space:nowrap;">${actions}</td>
         </tr>
       `;
     }).join('');
@@ -448,16 +452,16 @@
       const period = `${MONTH_NAMES[s.periodMonth - 1]} ${s.periodYear}`;
       return `
         <tr>
-          <td style="font-family:'Courier New', monospace; font-size:.8rem;">${escapeHtml(s.invoiceNumber || '—')}</td>
-          <td>${period}</td>
-          <td>${drNameHtml(s.doctor?.name || '—')}</td>
-          <td style="text-align:right; font-weight:600;">${inr(s.doctorNetAmount)}</td>
-          <td>
+          <td data-label="Invoice #" style="font-family:'Courier New', monospace; font-size:.8rem;">${escapeHtml(s.invoiceNumber || '—')}</td>
+          <td data-label="Period">${period}</td>
+          <td data-label="Doctor">${drNameHtml(s.doctor?.name || '—')}</td>
+          <td data-label="Doctor Net" style="text-align:right; font-weight:600;">${inr(s.doctorNetAmount)}</td>
+          <td data-label="Reference">
             <div style="font-size:.78rem;">${escapeHtml(s.paymentMode || '')}</div>
             <div style="font-size:.7rem; color:var(--np-muted); font-family:'Courier New', monospace;">${escapeHtml(s.paymentReference || '')}</div>
           </td>
-          <td>${s.paidAt ? fmtDateTime(s.paidAt) : '—'}</td>
-          <td style="text-align:right; white-space:nowrap;">
+          <td data-label="Paid On">${s.paidAt ? fmtDateTime(s.paidAt) : '—'}</td>
+          <td data-label="Actions" style="text-align:right; white-space:nowrap;">
             <button class="np-btn np-btn--primary np-btn--sm" onclick="Finance.downloadInvoice('${s.id}')">Download PDF</button>
           </td>
         </tr>

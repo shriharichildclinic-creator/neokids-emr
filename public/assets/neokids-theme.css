@@ -1,0 +1,1129 @@
+/* =====================================================================
+   NeoKidsPro EMR — Brand Theme Layer  (v3.1 · 2026 · Blue-Green rebrand)
+   ---------------------------------------------------------------------
+   Loaded AFTER doctor/styles.css, admin/styles.css and Tailwind. This
+   file is the single source of truth for NeoKidsPro branding across the
+   whole EMR (Admin, Doctor, Booking Widget, Reset password).
+
+   v3.1 changes (per Brand Book):
+     • PRIMARY IDENTITY  ➜  Blue-Green  #89BCBD   (was pink in v3.0)
+     • Pink / coral / yellow / lavender / lime are now SPARING ACCENTS
+     • Soft cream surface, larger radius, premium shadows
+     • Polished, WCAG-AA dark mode that follows the same hierarchy
+     • Never changes structure, JS hooks, or class names — visuals only
+   ===================================================================== */
+
+/* ---------- Typography:  Poppins (display) + Inter (UI) ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ============================================================
+   1. BRAND TOKENS  (Light theme)
+   ============================================================ */
+:root{
+  /* ── Primary — Blue-Green (NeoKidsPro Hero) ── */
+  --nk-teal-50:#F1F7F7;
+  --nk-teal-100:#DCEBEB;
+  --nk-teal-200:#BFDCDC;
+  --nk-teal-300:#A4CDCE;
+  --nk-teal-400:#89BCBD;   /* ★ PRIMARY — #89BCBD ★ */
+  --nk-teal-500:#6FAAAB;
+  --nk-teal-600:#5A9495;
+  --nk-teal-700:#467878;
+  --nk-teal-800:#345B5B;
+
+  /* ── Accent palette from Brand Book ── */
+  --nk-pink-50:#FFF1F5;
+  --nk-pink-100:#FFE0EB;
+  --nk-pink-200:#FFC2D9;
+  --nk-pink-300:#FFA6C5;
+  --nk-pink-400:#FE84A4;        /* Soft Coral Pink */
+  --nk-pink-500:#F46A8E;
+  --nk-pink-600:#D94E74;
+  --nk-pink-700:#B53A5B;
+
+  --nk-orange-400:#F9A945;      /* Warm Apricot */
+  --nk-orange-500:#E89331;
+  --nk-yellow-400:#FED960;      /* Soft Sun */
+  --nk-yellow-500:#F2C73F;
+  --nk-purple-400:#CE7ED4;      /* Soft Lavender */
+  --nk-purple-500:#B864BE;
+  --nk-lime-400:#C0CF56;        /* Fresh Lime */
+  --nk-lime-500:#A8B948;
+  --nk-blush:#FFEEEF;           /* Warm Blush White */
+
+  /* ── Neutrals / ink ── */
+  --nk-ink:#0F2E3A;             /* deep teal-ink page headings */
+  --nk-ink-2:#1F3A4A;
+  --nk-text:#1E293B;
+  --nk-muted:#64748B;
+  --nk-border:#D9E6E6;          /* cool teal-tinted border */
+  --nk-border-soft:#E8F0F0;
+  --nk-surface:#F7FAFA;         /* premium cool cream */
+  --nk-card:#ffffff;
+  --nk-row-hover:#F1F7F7;
+
+  /* ── Shadows (cool, soft, layered) ── */
+  --nk-shadow-xs: 0 1px 2px rgba(15,46,58,.04);
+  --nk-shadow-sm: 0 1px 2px rgba(15,46,58,.05), 0 4px 14px -6px rgba(15,46,58,.08);
+  --nk-shadow-md: 0 4px 12px -2px rgba(15,46,58,.08), 0 16px 32px -12px rgba(15,46,58,.14);
+  --nk-shadow-lg: 0 24px 48px -16px rgba(15,46,58,.22), 0 4px 10px rgba(15,46,58,.07);
+  --nk-ring-primary: 0 0 0 4px rgba(137,188,189,.25);
+
+  /* ── Geometry ── */
+  --nk-radius-sm: 10px;
+  --nk-radius:    14px;
+  --nk-radius-card: 18px;
+  --nk-radius-lg: 22px;
+  --nk-radius-pill: 999px;
+
+  /* ── Brand gradients ── */
+  --nk-grad-primary: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
+  --nk-grad-hero:    linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-500) 55%, var(--nk-pink-400) 100%);
+  --nk-grad-soft:    linear-gradient(180deg, #F4FAFA 0%, #FFFFFF 100%);
+
+  /* Re-map the legacy --np-* tokens so the ENTIRE existing UI
+     (admin/styles.css + doctor/styles.css) instantly adopts the
+     new NeoKidsPro Blue-Green identity — no markup changes. */
+  --np-primary: var(--nk-teal-400);
+  --np-primary-600: var(--nk-teal-600);
+  --np-blue: var(--nk-teal-500);
+  --np-mint: var(--nk-teal-100);
+  --np-cream: var(--nk-blush);
+  --np-coral: var(--nk-pink-400);
+  --np-ink: var(--nk-ink);
+  --np-surface: var(--nk-surface);
+  --np-border: var(--nk-border);
+  --np-muted: var(--nk-muted);
+  --np-text: var(--nk-text);
+  --np-card-shadow: var(--nk-shadow-sm);
+  --np-card-shadow-hover: var(--nk-shadow-md);
+  --np-radius-card: 18px;
+}
+
+/* ============================================================
+   2. GLOBAL  — typography, page background, focus, scrollbars
+   ============================================================ */
+html,body{
+  background: var(--nk-surface);
+  color: var(--nk-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-feature-settings: 'cv11','ss01','ss03';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.np-sidebar__title,
+.np-login__title,
+.np-header__page-title,
+.np-panel__title,
+.np-modal__title,
+.np-drawer__title,
+.np-kpi__value,
+.np-doc-card__name,
+h1,h2,h3{
+  font-family: 'Poppins','Inter', system-ui, sans-serif;
+  letter-spacing: -.01em;
+}
+.np-kpi__value{ font-weight:700; }
+
+:focus-visible{
+  outline: 2px solid var(--nk-teal-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+::selection{ background: var(--nk-teal-100); color: var(--nk-teal-800); }
+
+/* Scrollbar (light) */
+*::-webkit-scrollbar{ width:10px; height:10px; }
+*::-webkit-scrollbar-thumb{
+  background: #C3DBDB;
+  border-radius: 999px;
+  border:2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover{ background:#9CC4C5; background-clip: padding-box; border:2px solid transparent; }
+*::-webkit-scrollbar-track{ background: transparent; }
+
+/* ============================================================
+   3. LOGO MARK
+   ============================================================ */
+.np-sidebar__logo,
+.np-login__logo{
+  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 60%, var(--nk-pink-400) 100%);
+  box-shadow: 0 8px 22px -6px rgba(137,188,189,.55), 0 2px 6px -2px rgba(15,46,58,.15);
+  position: relative;
+}
+.np-sidebar__logo::after,
+.np-login__logo::after{
+  content:"";
+  position:absolute; inset:-1px;
+  border-radius: inherit;
+  background: radial-gradient(circle at 30% 20%, rgba(255,255,255,.45), transparent 60%);
+  pointer-events:none;
+}
+
+/* ============================================================
+   4. SIDEBAR
+   ============================================================ */
+.np-sidebar{
+  background: #ffffff;
+  border-right: 1px solid var(--nk-border-soft);
+}
+.np-sidebar__brand{
+  border-bottom: 1px solid var(--nk-border-soft);
+  background: linear-gradient(180deg, #F1F7F7, transparent);
+}
+.np-nav-item{
+  border-radius: 12px;
+  font-weight: 500;
+  color: #334155;
+  transition: background .16s ease, color .16s ease, border-color .16s ease, transform .12s ease;
+}
+.np-nav-item:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+}
+.np-nav-item.active{
+  background: linear-gradient(135deg, rgba(137,188,189,.18), rgba(137,188,189,.06));
+  color: var(--nk-teal-700);
+  border-color: rgba(137,188,189,.35);
+  box-shadow: inset 0 0 0 1px rgba(137,188,189,.18);
+}
+.np-nav-item.active .np-nav-item__icon{ color: var(--nk-teal-600); }
+.np-nav-badge{
+  background: var(--nk-pink-400);   /* sparing pink accent for notification badge */
+  color: #fff;
+  font-weight: 600;
+}
+.np-sidebar__section{
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: .68rem;
+  color: var(--nk-teal-700);
+}
+.np-sidebar__footer{ border-top: 1px solid var(--nk-border-soft); }
+
+/* ============================================================
+   5. HEADER
+   ============================================================ */
+.np-header{
+  background: #ffffff;
+  border-bottom: 1px solid var(--nk-border-soft);
+  backdrop-filter: saturate(180%) blur(6px);
+}
+.np-header__page-title{ color: var(--nk-ink); font-weight: 700; letter-spacing: -.015em; }
+
+.np-iconbtn{
+  border: 1px solid var(--nk-border);
+  border-radius: 12px;
+  background:#fff;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .12s ease;
+}
+.np-iconbtn:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-color: var(--nk-teal-200);
+}
+
+.np-profile__trigger{ transition: background .15s ease, border-color .15s ease; }
+.np-profile__trigger:hover{
+  background: var(--nk-teal-50);
+  border-color: var(--nk-teal-200);
+}
+.np-profile__avatar{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  box-shadow: 0 2px 6px -1px rgba(15,46,58,.18);
+}
+.np-profile__menu{
+  border-radius: 14px;
+  border-color: var(--nk-border);
+  box-shadow: var(--nk-shadow-md);
+  overflow: hidden;
+}
+.np-profile__menu-item:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+}
+
+/* ============================================================
+   6. PANELS / CARDS / KPI
+   ============================================================ */
+.np-panel{
+  background:#fff;
+  border:1px solid var(--nk-border-soft);
+  border-radius: var(--nk-radius-card);
+  box-shadow: var(--nk-shadow-sm);
+}
+.np-panel__title{ color: var(--nk-ink); font-weight:700; letter-spacing:-.01em; }
+
+.np-kpi{
+  background:#fff;
+  border:1px solid var(--nk-border-soft);
+  border-radius: 20px;
+  padding: 1.2rem 1.3rem;
+  box-shadow: var(--nk-shadow-sm);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  position: relative;
+  overflow: hidden;
+}
+.np-kpi:hover{
+  transform: translateY(-2px);
+  box-shadow: var(--nk-shadow-md);
+  border-color: var(--nk-teal-200);
+}
+.np-kpi::before{
+  width: 5px;
+  border-radius: 5px 0 0 5px;
+  background: var(--nk-teal-400);
+}
+/* KPI semantic variants (kept visually consistent across cards) */
+.np-kpi--blue::before  { background: linear-gradient(180deg, var(--nk-teal-400),  var(--nk-teal-600));  }
+.np-kpi--mint::before  { background: linear-gradient(180deg, var(--nk-teal-300),  var(--nk-teal-500));  }
+.np-kpi--coral::before { background: linear-gradient(180deg, var(--nk-pink-400),  var(--nk-pink-500));  }
+.np-kpi--cream::before { background: linear-gradient(180deg, var(--nk-yellow-400),var(--nk-orange-400));}
+.np-kpi--violet::before{ background: linear-gradient(180deg, var(--nk-purple-400),#9F5BA8);             }
+.np-kpi--rose::before  { background: linear-gradient(180deg, var(--nk-pink-400),  var(--nk-pink-600));  }
+.np-kpi__value{ color: var(--nk-ink); }
+.np-kpi__label{ color: var(--nk-muted); font-weight:500; }
+
+/* Soft branded background tint behind dashboards (subtle) */
+.np-content{ background: transparent; }
+
+/* ============================================================
+   7. BUTTONS
+   ============================================================ */
+.np-btn{
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: .88rem;
+  letter-spacing: .005em;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.np-btn--primary{
+  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
+  border-color: var(--nk-teal-600);
+  color:#fff;
+  box-shadow: 0 6px 18px -6px rgba(90,148,149,.55);
+}
+.np-btn--primary:hover{
+  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%);
+  border-color: var(--nk-teal-700);
+  box-shadow: 0 10px 22px -6px rgba(70,120,120,.65);
+  transform: translateY(-1px);
+}
+.np-btn:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-color: var(--nk-teal-200);
+}
+.np-btn--success{
+  background: linear-gradient(135deg, #2AB99A, #189B82);
+  border-color:#189B82;
+  color:#fff;
+}
+.np-btn--success:hover{
+  background: linear-gradient(135deg, #189B82, #0F7A66);
+  border-color:#0F7A66;
+  color:#fff;
+}
+.np-btn--danger{
+  background: linear-gradient(135deg, #EF6F87, #D94E74);
+  border-color:#D94E74;
+  color:#fff;
+}
+.np-btn--danger:hover{
+  background: linear-gradient(135deg, #D94E74, #B53A5B);
+  color:#fff;
+}
+.np-btn--ghost{ background:#fff; border-color: var(--nk-border); color: var(--nk-text); }
+.np-btn--ghost:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); border-color: var(--nk-teal-200); }
+.np-btn--add-doctor{
+  box-shadow: 0 8px 22px -6px rgba(90,148,149,.55);
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  border-color: var(--nk-teal-600);
+  color:#fff;
+}
+.np-btn--add-doctor:hover{
+  box-shadow: 0 12px 26px -6px rgba(70,120,120,.65);
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+}
+
+/* Tailwind brand-primary utility overrides (legacy pink → teal) */
+.text-brand-primary{ color: var(--nk-teal-600) !important; }
+.bg-brand-primary  { background: var(--nk-teal-400) !important; }
+.bg-brand-surface  { background: var(--nk-surface) !important; }
+.border-brand-primary{ border-color: var(--nk-teal-400) !important; }
+.hover\:text-brand-primary:hover{ color: var(--nk-teal-600) !important; }
+.hover\:bg-brand-primary:hover  { background: var(--nk-teal-500) !important; }
+.from-brand-primary{ --tw-gradient-from: var(--nk-teal-400) !important; }
+.to-brand-primary  { --tw-gradient-to:   var(--nk-teal-600) !important; }
+
+/* ============================================================
+   8. FORMS
+   ============================================================ */
+.np-input, .np-select, .np-textarea,
+input.np-input, select.np-select, textarea.np-textarea{
+  border-radius: 12px;
+  border:1px solid var(--nk-border);
+  background:#fff;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.np-input:focus, .np-select:focus, .np-textarea:focus{
+  border-color: var(--nk-teal-400);
+  box-shadow: var(--nk-ring-primary);
+  outline: none;
+}
+.np-field__label{ color: var(--nk-ink); font-weight: 600; font-size: .82rem; }
+.np-field__hint { color: var(--nk-muted); font-size: .76rem; }
+.np-error{
+  background:#FFF1F3; border:1px solid #FCC7D2; color:#9F1E36;
+  border-radius: 12px;
+}
+.np-search input{
+  border-radius: 12px;
+  border-color: var(--nk-border);
+}
+.np-search input:focus{
+  border-color: var(--nk-teal-400);
+  box-shadow: var(--nk-ring-primary);
+}
+
+/* ============================================================
+   9. BADGES
+   ============================================================ */
+.np-badge{ font-weight:600; padding:.22rem .65rem; border-radius:999px; font-size:.74rem; letter-spacing:.01em; }
+.np-badge--green{ background:#DCF5EE; color:#0F7A66; }
+.np-badge--mint{  background: var(--nk-teal-100); color: var(--nk-teal-700); }
+.np-badge--blue{  background: var(--nk-teal-100); color: var(--nk-teal-700); }
+.np-badge--violet{background:#F1E4F3; color:#7A3D85; }
+.np-badge--amber{ background:#FEF3CC; color:#8A5A0F; }
+.np-badge--red{   background:#FEE2E5; color:#9F1E36; }
+.np-badge--slate{ background:#EEF2F4; color:#475569; }
+.np-badge--pink{  background: var(--nk-pink-100); color: var(--nk-pink-700); }
+
+/* ============================================================
+   10. TABLES
+   ============================================================ */
+.np-table-wrap{
+  border:1px solid var(--nk-border-soft);
+  border-radius: 16px;
+  background:#fff;
+  overflow: hidden;
+}
+.np-table th{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-bottom: 1px solid var(--nk-border);
+  font-weight:700;
+  text-transform: uppercase;
+  letter-spacing:.04em;
+  font-size:.72rem;
+}
+.np-table td{ border-bottom: 1px solid var(--nk-border-soft); }
+.np-table tr:hover td{ background: var(--nk-row-hover); }
+.np-table .np-empty{ background:#FBFDFD; }
+
+/* ============================================================
+   11. LOGIN
+   ============================================================ */
+.np-login{
+  background:
+    radial-gradient(1100px 600px at 85% -10%, rgba(137,188,189,.28), transparent 60%),
+    radial-gradient(900px 600px at 0% 110%, rgba(254,132,164,.18), transparent 60%),
+    radial-gradient(700px 500px at 50% 50%, rgba(254,217,96,.10), transparent 70%),
+    var(--nk-surface);
+}
+.np-login__card{
+  border-radius: 28px;
+  box-shadow: var(--nk-shadow-lg);
+  border:1px solid #E2EEEE;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.np-login__card::before{
+  content:""; position:absolute; inset:0 0 auto 0; height:6px;
+  background: linear-gradient(90deg, var(--nk-teal-400), var(--nk-pink-400), var(--nk-yellow-400));
+}
+.np-login__logo{
+  width: 64px; height: 64px;
+  border-radius: 22px;
+}
+.np-login__title{ color: var(--nk-ink); font-weight: 700; letter-spacing:-.01em; }
+.np-login__subtitle{ color: var(--nk-muted); }
+
+/* ============================================================
+   12. EMPTY STATES
+   ============================================================ */
+.np-empty__icon{
+  background: linear-gradient(135deg, rgba(137,188,189,.22), rgba(254,132,164,.16));
+  color: var(--nk-teal-700);
+  border-radius: 16px;
+}
+.np-empty__title{ color: var(--nk-ink); }
+.np-empty__sub  { color: var(--nk-muted); }
+
+/* ============================================================
+   13. DOCTOR CARDS
+   ============================================================ */
+.np-doc-card{
+  border:1.5px solid var(--nk-border-soft);
+  border-radius: 18px;
+  box-shadow: var(--nk-shadow-sm);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .15s ease;
+}
+.np-doc-card:hover{
+  border-color: var(--nk-teal-200);
+  box-shadow: var(--nk-shadow-md);
+  transform: translateY(-2px);
+}
+.np-doc-card__avatar{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  box-shadow: 0 0 0 1.5px rgba(137,188,189,.25), 0 2px 6px -2px rgba(15,46,58,.25);
+}
+.np-doc-card__stats{
+  background: linear-gradient(180deg, #F4FAFA, #FBFDFD);
+  border:1px solid var(--nk-border-soft);
+  border-radius: 12px;
+}
+.np-doc-card__name{ color: var(--nk-ink); }
+.np-doc-card__pill--ok  { background:#DCF5EE; color:#0F7A66; }
+.np-doc-card__pill--warn{ background:#FEF3CC; color:#8A5A0F; }
+.np-doc-card__pill--kyc { background: var(--nk-teal-100); color: var(--nk-teal-700); }
+.np-doc-card__clinic    { background: var(--nk-teal-50); color: var(--nk-teal-700); }
+
+/* ============================================================
+   14. MODAL + DRAWER
+   ============================================================ */
+.np-modal{ background: rgba(15,46,58,.55); backdrop-filter: blur(4px); }
+.np-modal__panel{ border-radius: 22px; box-shadow: var(--nk-shadow-lg); }
+.np-modal__head{ border-bottom: 1px solid var(--nk-border-soft); }
+.np-modal__title{ color: var(--nk-ink); }
+.np-modal__close:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); }
+
+.np-drawer__backdrop{ background: rgba(15,46,58,.55); backdrop-filter: blur(4px); }
+.np-drawer__panel{ border-top-left-radius: 22px; border-bottom-left-radius: 22px; box-shadow: var(--nk-shadow-lg); }
+.np-drawer__head{ border-bottom: 1px solid var(--nk-border-soft); }
+
+/* ============================================================
+   15. APPOINTMENT ROWS / TABS / CONSULT
+   ============================================================ */
+.np-appt-row:hover{ background: var(--nk-row-hover); }
+.np-appt-row{ border-bottom: 1px solid var(--nk-border-soft); transition: background .15s ease; }
+
+#consultWorkspace .np-pm-tab.active{
+  color: var(--nk-teal-700);
+  border-bottom-color: var(--nk-teal-400);
+}
+#consultWorkspace .np-pm-tab:hover{ color: var(--nk-teal-700); }
+
+/* Bars / chart accents */
+.np-bars__bar{
+  background: linear-gradient(180deg, var(--nk-teal-400), var(--nk-teal-600));
+  border-radius: 6px 6px 0 0;
+}
+
+/* code chips */
+.np-content code{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: .85em;
+}
+
+/* ============================================================
+   16. THEME TOGGLE BUTTON  (np-ux.js)
+   ============================================================ */
+.np-theme-toggle{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600)) !important;
+  box-shadow: 0 10px 26px -8px rgba(70,120,120,.55) !important;
+  transition: background .2s ease, transform .15s ease, box-shadow .2s ease !important;
+}
+.np-theme-toggle:hover{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700)) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 14px 32px -8px rgba(70,120,120,.7) !important;
+}
+
+/* ============================================================
+   17. COMMAND PALETTE / CHIPS / DATE RANGE / DROPZONE  (np-ux.js)
+   ============================================================ */
+.np-chip{
+  background: var(--nk-teal-50);
+  border-color: var(--nk-teal-200);
+  color: var(--nk-teal-700);
+  border-radius: 999px;
+}
+.np-palette{
+  border-radius: 16px !important;
+  box-shadow: var(--nk-shadow-lg) !important;
+}
+.np-palette__item.is-active{ background: var(--nk-teal-50); color: var(--nk-teal-700); }
+.np-daterange__btn{ border-radius: 10px; }
+.np-daterange__btn.is-active{ background: var(--nk-teal-400); border-color: var(--nk-teal-400); color:#fff; }
+.np-dropzone{
+  border-radius: 14px;
+  border-style: dashed;
+  background:#FBFDFD;
+}
+.np-dropzone:hover, .np-dropzone.is-drag{
+  background: var(--nk-teal-50);
+  border-color: var(--nk-teal-400);
+  color: var(--nk-teal-700);
+}
+
+/* ============================================================
+   18. MICRO-INTERACTIONS
+   ============================================================ */
+@keyframes np-fade-in   { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:none} }
+@keyframes np-pulse-soft{ 0%,100%{opacity:1} 50%{opacity:.6} }
+.np-panel, .np-card, .np-kpi, .np-doc-card{ animation: np-fade-in .25s ease both; }
+.np-skeleton{ animation: np-pulse-soft 1.4s ease-in-out infinite; background:#EEF3F3; border-radius:8px; }
+
+/* ============================================================
+   19. DARK MODE  —  WCAG-AA, Blue-Green primary, sparing accents
+   ---------------------------------------------------------------------
+   Dark surfaces:
+     bg page      #0A1216
+     surface lvl1 #11202A   (cards, panels)
+     surface lvl2 #18303A   (hover row, inputs)
+     border       #234551
+     text         #E6EEF1
+     muted        #91A6B0
+     ink (head)   #F4F9FA
+     accent teal  #A4CDCE (brighter for contrast)
+   ===================================================================== */
+html[data-theme="dark"]{
+  --nk-ink:       #F4F9FA;
+  --nk-ink-2:     #DDE7EA;
+  --nk-text:      #E6EEF1;
+  --nk-muted:     #91A6B0;
+  --nk-surface:   #0A1216;
+  --nk-card:      #11202A;
+  --nk-border:    #234551;
+  --nk-border-soft:#1A323C;
+  --nk-row-hover: #18303A;
+
+  /* Brighten primary for dark contrast (still Blue-Green) */
+  --nk-teal-50:   rgba(137,188,189,.10);
+  --nk-teal-100:  rgba(137,188,189,.18);
+  --nk-teal-200:  rgba(137,188,189,.32);
+  --nk-teal-300:  #B4D7D7;
+  --nk-teal-400:  #A4CDCE;
+  --nk-teal-500:  #89BCBD;
+  --nk-teal-600:  #6FAAAB;
+  --nk-teal-700:  #5A9495;
+
+  /* Soften accents to read on dark */
+  --nk-pink-50:   rgba(254,132,164,.10);
+  --nk-pink-100:  rgba(254,132,164,.18);
+  --nk-pink-200:  rgba(254,132,164,.32);
+  --nk-pink-400:  #FE9CB7;
+  --nk-pink-600:  #F46A8E;
+  --nk-pink-700:  #FE9CB7;
+
+  --nk-blush:     #1A323C;
+  --nk-shadow-sm: 0 1px 2px rgba(0,0,0,.4), 0 6px 16px -6px rgba(0,0,0,.55);
+  --nk-shadow-md: 0 4px 12px -2px rgba(0,0,0,.5),  0 16px 32px -12px rgba(0,0,0,.6);
+  --nk-shadow-lg: 0 30px 60px -16px rgba(0,0,0,.75);
+  --nk-ring-primary: 0 0 0 4px rgba(164,205,206,.28);
+
+  /* Re-map legacy --np-* tokens for dark */
+  --np-surface: var(--nk-surface);
+  --np-border:  var(--nk-border);
+  --np-muted:   var(--nk-muted);
+  --np-text:    var(--nk-text);
+  --np-ink:     var(--nk-ink);
+  --np-primary: var(--nk-teal-500);
+  --np-primary-600: var(--nk-teal-400);
+  --np-blue: var(--nk-teal-500);
+  --np-mint: rgba(137,188,189,.18);
+  --np-card-shadow: var(--nk-shadow-sm);
+  --np-card-shadow-hover: var(--nk-shadow-md);
+
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body{
+  background: var(--nk-surface);
+  color: var(--nk-text);
+}
+
+/* Scrollbar (dark) */
+html[data-theme="dark"] *::-webkit-scrollbar-thumb{ background:#2C4A56; }
+html[data-theme="dark"] *::-webkit-scrollbar-thumb:hover{ background:#406877; }
+
+/* --- Sidebar & header --- */
+html[data-theme="dark"] .np-sidebar{
+  background: #0D1A21;
+  border-right-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-sidebar__brand{
+  background: linear-gradient(180deg, rgba(137,188,189,.12), transparent);
+  border-bottom-color: var(--nk-border-soft);
+}
+html[data-theme="dark"] .np-sidebar__title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-sidebar__subtitle,
+html[data-theme="dark"] .np-sidebar__footer{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-sidebar__section{ color: var(--nk-teal-400); }
+html[data-theme="dark"] .np-sidebar__footer{ border-top-color: var(--nk-border-soft); }
+
+html[data-theme="dark"] .np-nav-item{ color:#C8D5DB; }
+html[data-theme="dark"] .np-nav-item:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-nav-item.active{
+  background: linear-gradient(135deg, rgba(137,188,189,.28), rgba(137,188,189,.10));
+  color: var(--nk-teal-300);
+  border-color: rgba(137,188,189,.45);
+  box-shadow: inset 0 0 0 1px rgba(137,188,189,.30);
+}
+html[data-theme="dark"] .np-nav-item.active .np-nav-item__icon{ color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-nav-badge{ background: var(--nk-pink-400); color:#1A0E14; }
+
+html[data-theme="dark"] .np-header,
+html[data-theme="dark"] .np-topbar{
+  background: var(--nk-card) !important;
+  border-bottom-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-header__page-title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-header__page-subtitle{ color: var(--nk-muted); }
+
+html[data-theme="dark"] .np-iconbtn{
+  background: var(--nk-card);
+  color: var(--nk-text);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-iconbtn:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+  border-color: rgba(137,188,189,.40);
+}
+
+html[data-theme="dark"] .np-profile__trigger{ color: var(--nk-text); }
+html[data-theme="dark"] .np-profile__trigger:hover{
+  background: rgba(137,188,189,.12);
+  border-color: rgba(137,188,189,.40);
+}
+html[data-theme="dark"] .np-profile__name{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-profile__role{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-profile__menu{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-profile__menu-item{ color: var(--nk-text); }
+html[data-theme="dark"] .np-profile__menu-item:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-profile__menu-item.is-danger{ color:#FCA5A5; }
+html[data-theme="dark"] .np-profile__menu-item.is-danger:hover{ background: rgba(252,165,165,.12); }
+html[data-theme="dark"] .np-profile__menu-divider{ background: var(--nk-border-soft); }
+
+/* --- Panels, cards, KPIs, modals, drawers --- */
+html[data-theme="dark"] .np-panel,
+html[data-theme="dark"] .np-card,
+html[data-theme="dark"] .np-kpi,
+html[data-theme="dark"] .np-table-wrap,
+html[data-theme="dark"] .np-modal__panel,
+html[data-theme="dark"] .np-drawer__panel,
+html[data-theme="dark"] .np-doc-card{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+  box-shadow: var(--nk-shadow-sm);
+}
+html[data-theme="dark"] .np-panel__title,
+html[data-theme="dark"] .np-modal__title,
+html[data-theme="dark"] .np-drawer__title,
+html[data-theme="dark"] .np-kpi__value,
+html[data-theme="dark"] .np-doc-card__name,
+html[data-theme="dark"] .np-ink{
+  color: var(--nk-ink) !important;
+}
+html[data-theme="dark"] .np-panel__subtitle,
+html[data-theme="dark"] .np-kpi__label,
+html[data-theme="dark"] .np-kpi__sub,
+html[data-theme="dark"] .np-doc-card__role,
+html[data-theme="dark"] .np-doc-card__qual,
+html[data-theme="dark"] .np-doc-card__contact,
+html[data-theme="dark"] .np-mut,
+html[data-theme="dark"] .np-empty,
+html[data-theme="dark"] .np-empty__sub{
+  color: var(--nk-muted) !important;
+}
+html[data-theme="dark"] .np-empty__title{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] .np-doc-card__avatar{ border-color: var(--nk-card); }
+html[data-theme="dark"] .np-doc-card__stats{
+  background:#0E1A22;
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-doc-card__stat-label{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-doc-card__stat-value{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-doc-card__clinic{ background: rgba(137,188,189,.16); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-doc-card__pill--ok{ background: rgba(34,197,148,.18); color:#7AE0BE; }
+html[data-theme="dark"] .np-doc-card__pill--warn{ background: rgba(249,169,69,.18); color:#FBC97A; }
+html[data-theme="dark"] .np-doc-card__pill--kyc{ background: rgba(137,188,189,.18); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-doc-card__actions{ border-top-color: var(--nk-border); }
+
+/* KPI accent bars (vibrant in dark) */
+html[data-theme="dark"] .np-kpi::before{ filter: brightness(1.18) saturate(1.1); }
+
+/* --- Tables --- */
+html[data-theme="dark"] .np-table{ color: var(--nk-text); }
+html[data-theme="dark"] .np-table th{
+  background:#0E1A22 !important;
+  color: var(--nk-teal-300) !important;
+  border-bottom-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-table td{
+  border-bottom-color: var(--nk-border-soft) !important;
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-table tr:hover td{ background: var(--nk-row-hover) !important; }
+html[data-theme="dark"] .np-table .np-empty{ background:#0E1A22; }
+
+/* --- Forms --- */
+html[data-theme="dark"] .np-input,
+html[data-theme="dark"] .np-select,
+html[data-theme="dark"] .np-textarea,
+html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea{
+  background:#0E1A22 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-input::placeholder,
+html[data-theme="dark"] .np-textarea::placeholder,
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{ color:#6F8693 !important; }
+html[data-theme="dark"] .np-input:focus,
+html[data-theme="dark"] .np-select:focus,
+html[data-theme="dark"] .np-textarea:focus,
+html[data-theme="dark"] input:focus, html[data-theme="dark"] select:focus, html[data-theme="dark"] textarea:focus{
+  border-color: var(--nk-teal-400) !important;
+  box-shadow: var(--nk-ring-primary) !important;
+}
+html[data-theme="dark"] .np-field__label{ color:#DEE6EA; }
+html[data-theme="dark"] .np-field__hint{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-error{
+  background: rgba(225,29,72,.14) !important;
+  border-color: rgba(225,29,72,.45) !important;
+  color:#FECDD3 !important;
+}
+html[data-theme="dark"] .np-search input{
+  background:#0E1A22 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-search svg{ color: var(--nk-muted); }
+html[data-theme="dark"] select option{ background:#0E1A22; color: var(--nk-text); }
+
+/* --- Buttons (dark) --- */
+html[data-theme="dark"] .np-btn{
+  background:#142531;
+  color: var(--nk-text);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-btn:hover{
+  background: rgba(137,188,189,.16);
+  color: var(--nk-teal-300);
+  border-color: rgba(137,188,189,.4);
+}
+html[data-theme="dark"] .np-btn--ghost{ background: transparent; }
+html[data-theme="dark"] .np-btn--primary{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+  border-color: var(--nk-teal-700);
+  color:#fff;
+}
+html[data-theme="dark"] .np-btn--primary:hover{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  color:#fff;
+}
+html[data-theme="dark"] .np-btn--success{
+  background: linear-gradient(135deg, #2AB99A, #0F7A66);
+  color:#fff;
+}
+html[data-theme="dark"] .np-btn--danger{
+  background: linear-gradient(135deg, #EF6F87, #B53A5B);
+  color:#fff;
+  border-color:#B53A5B;
+}
+html[data-theme="dark"] .np-btn--add-doctor{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+  color:#fff;
+  border-color: var(--nk-teal-700);
+}
+html[data-theme="dark"] .np-btn--ghost.np-btn--icon.np-btn--danger{
+  color:#FCA5A5;
+  border-color: rgba(252,165,165,.35);
+}
+html[data-theme="dark"] .np-btn--ghost.np-btn--icon.np-btn--danger:hover{
+  background: rgba(252,165,165,.12);
+  border-color:#FCA5A5;
+}
+
+/* --- Tabs / appointment rows / consult --- */
+html[data-theme="dark"] .np-appt-row{ border-bottom-color: var(--nk-border-soft); }
+html[data-theme="dark"] .np-appt-row:hover{ background: var(--nk-row-hover); }
+html[data-theme="dark"] .np-appt-row__time-h,
+html[data-theme="dark"] .np-appt-row__name{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-appt-row__time-d,
+html[data-theme="dark"] .np-appt-row__meta{ color: var(--nk-muted); }
+html[data-theme="dark"] #consultWorkspace .np-pm-tab{ color: var(--nk-muted); }
+html[data-theme="dark"] #consultWorkspace .np-pm-tab.active{
+  color: var(--nk-teal-300);
+  border-bottom-color: var(--nk-teal-400);
+}
+
+/* --- Modal + drawer (dark) --- */
+html[data-theme="dark"] .np-modal{ background: rgba(2,8,12,.7); }
+html[data-theme="dark"] .np-modal__head{ border-bottom-color: var(--nk-border); }
+html[data-theme="dark"] .np-modal__title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-modal__close{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-modal__close:hover{ background: rgba(137,188,189,.16); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-drawer__backdrop{ background: rgba(2,8,12,.65); }
+html[data-theme="dark"] .np-drawer__head{ border-bottom-color: var(--nk-border); }
+
+/* --- Badges (dark) --- */
+html[data-theme="dark"] .np-badge--green,
+html[data-theme="dark"] .np-badge--mint  { background: rgba(34,197,148,.18); color:#7AE0BE; }
+html[data-theme="dark"] .np-badge--blue  { background: rgba(137,188,189,.20); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-badge--amber { background: rgba(249,169,69,.22); color:#FBC97A; }
+html[data-theme="dark"] .np-badge--red   { background: rgba(225,29,72,.22);  color:#FECDD3; }
+html[data-theme="dark"] .np-badge--slate { background: rgba(148,163,184,.18); color:#CBD5E1; }
+html[data-theme="dark"] .np-badge--violet{ background: rgba(206,126,212,.22); color:#E9C2EE; }
+html[data-theme="dark"] .np-badge--pink  { background: rgba(254,132,164,.20); color:#FFC2D5; }
+
+/* --- Empty states (dark) --- */
+html[data-theme="dark"] .np-empty__icon{
+  background: linear-gradient(135deg, rgba(137,188,189,.22), rgba(254,132,164,.16));
+  color: var(--nk-teal-300);
+}
+
+/* --- Login (dark) --- */
+html[data-theme="dark"] .np-login{
+  background:
+    radial-gradient(1100px 600px at 85% -10%, rgba(137,188,189,.28), transparent 60%),
+    radial-gradient(900px 600px at 0% 110%, rgba(254,132,164,.18), transparent 60%),
+    #060B0F;
+}
+html[data-theme="dark"] .np-login__card{
+  background: var(--nk-card) !important;
+  border:1px solid var(--nk-border);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-login__title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-login__subtitle{ color: var(--nk-muted); }
+
+/* --- Tailwind utility overrides (dark) --- */
+html[data-theme="dark"] .text-slate-300{ color:#A3B4BD !important; }
+html[data-theme="dark"] .text-slate-400,
+html[data-theme="dark"] .text-slate-500{ color: var(--nk-muted) !important; }
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-900{ color: var(--nk-text) !important; }
+html[data-theme="dark"] .bg-white{ background: var(--nk-card) !important; }
+html[data-theme="dark"] .bg-brand-surface,
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100{ background: var(--nk-surface) !important; }
+html[data-theme="dark"] .border,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-300{ border-color: var(--nk-border) !important; }
+html[data-theme="dark"] .text-brand-primary{ color: var(--nk-teal-300) !important; }
+html[data-theme="dark"] .hover\:text-brand-primary:hover{ color: var(--nk-teal-300) !important; }
+html[data-theme="dark"] .bg-brand-primary{ background: var(--nk-teal-500) !important; }
+
+/* Code blocks (dark) */
+html[data-theme="dark"] .np-content code,
+html[data-theme="dark"] code{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+
+/* Command palette + chips (dark) */
+html[data-theme="dark"] .np-palette{ background: var(--nk-card); color: var(--nk-text); }
+html[data-theme="dark"] .np-palette__input{ border-bottom-color: var(--nk-border); color: var(--nk-text); }
+html[data-theme="dark"] .np-palette__item{ color: var(--nk-text); }
+html[data-theme="dark"] .np-palette__item.is-active{ background: rgba(137,188,189,.20); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-chip{ background: rgba(137,188,189,.20); color: var(--nk-teal-300); border-color: rgba(137,188,189,.40); }
+html[data-theme="dark"] .np-daterange__btn{ background:#142531; color: var(--nk-text); border-color: var(--nk-border); }
+html[data-theme="dark"] .np-daterange__btn.is-active{ background: var(--nk-teal-500); color:#fff; border-color: var(--nk-teal-500); }
+html[data-theme="dark"] .np-dropzone{ background:#0E1A22; color: var(--nk-muted); border-color: var(--nk-border); }
+html[data-theme="dark"] .np-dropzone:hover,
+html[data-theme="dark"] .np-dropzone.is-drag{
+  background: rgba(137,188,189,.10); border-color: var(--nk-teal-400); color: var(--nk-teal-300);
+}
+
+/* Notif row error */
+html[data-theme="dark"] .np-notif-row td.np-notif-error{ color:#FECACA; }
+
+/* Range/checkbox accent */
+html[data-theme="dark"] input[type=checkbox],
+html[data-theme="dark"] input[type=radio]{ accent-color: var(--nk-teal-400); }
+
+/* Dark skeletons */
+html[data-theme="dark"] .np-skeleton{ background:#1B2F39; }
+
+/* ============================================================
+   20. RESPONSIVE polish
+   ============================================================ */
+@media (max-width:600px){
+  .np-login__card{ border-radius: 22px; padding: 1.5rem; }
+  .np-kpi__value{ font-size:1.4rem; }
+  .np-header__inner{ padding:.75rem 1rem; }
+  .np-panel{ border-radius: 14px; }
+}
+
+/* ============================================================
+   21. ADMIN PANEL  — neutralize hard-coded inline text colors for dark mode
+   ============================================================ */
+html[data-theme="dark"] [style*="color:#0F2A47"],
+html[data-theme="dark"] [style*="color: #0F2A47"],
+html[data-theme="dark"] [style*="color:#0F2E3A"],
+html[data-theme="dark"] [style*="color: #0F2E3A"]{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] [style*="color:#6B7280"],
+html[data-theme="dark"] [style*="color: #6B7280"],
+html[data-theme="dark"] [style*="color:#64748B"],
+html[data-theme="dark"] [style*="color: #64748B"]{ color: var(--nk-muted) !important; }
+
+/* Inline yellow / red alert boxes inside admin panel — adjust for dark */
+html[data-theme="dark"] [style*="background:#FFFBEB"],
+html[data-theme="dark"] [style*="background: #FFFBEB"]{
+  background: rgba(249,169,69,.12) !important;
+  border-color: rgba(249,169,69,.35) !important;
+  color:#FBC97A !important;
+}
+html[data-theme="dark"] [style*="background:#FEF2F2"],
+html[data-theme="dark"] [style*="background: #FEF2F2"]{
+  background: rgba(225,29,72,.12) !important;
+  border-color: rgba(225,29,72,.4) !important;
+  color:#FECDD3 !important;
+}
+
+/* drop-down chevron next to profile name */
+html[data-theme="dark"] svg[style*="color:#64748B"]{ color: var(--nk-muted) !important; }
+
+/* ============================================================
+   22. SETTING CARDS (doctor settings)
+   ============================================================ */
+.np-setting-card{
+  background: var(--nk-card);
+  border:1px solid var(--nk-border-soft);
+  border-radius:18px;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.np-setting-card:hover{ border-color: var(--nk-teal-200); box-shadow: var(--nk-shadow-sm); }
+html[data-theme="dark"] .np-setting-card{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-setting-card__icon{ box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); }
+
+/* ============================================================
+   23. STATS BAR helpers
+   ============================================================ */
+html[data-theme="dark"] #statsBar > *{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+}
+
+/* ============================================================
+   24. Misc Tailwind classes used in markup — dark mode rewrites
+   ============================================================ */
+html[data-theme="dark"] .border-b,
+html[data-theme="dark"] .border-t,
+html[data-theme="dark"] .border-r,
+html[data-theme="dark"] .border-l{ border-color: var(--nk-border) !important; }
+html[data-theme="dark"] .bg-amber-50  { background: rgba(249,169,69,.12) !important; color:#FBC97A !important; }
+html[data-theme="dark"] .text-amber-700{ color:#FBC97A !important; }
+html[data-theme="dark"] .bg-red-50    { background: rgba(225,29,72,.14) !important; }
+html[data-theme="dark"] .text-red-500,
+html[data-theme="dark"] .text-red-600 { color:#FCA5A5 !important; }
+html[data-theme="dark"] .text-green-600{ color:#7AE0BE !important; }
+html[data-theme="dark"] .border-amber-200{ border-color: rgba(249,169,69,.35) !important; }
+html[data-theme="dark"] .border-red-100,
+html[data-theme="dark"] .border-red-200{ border-color: rgba(225,29,72,.35) !important; }
+html[data-theme="dark"] .bg-pink-50{ background: rgba(254,132,164,.12) !important; }
+html[data-theme="dark"] .text-pink-600,
+html[data-theme="dark"] .text-pink-700{ color:#FFC2D5 !important; }
+
+/* ============================================================
+   25. NP-UI TOASTS / MODALS (assets/np-ui.js)
+   ============================================================ */
+.np-ui-toast{
+  border-radius: 14px !important;
+  box-shadow: var(--nk-shadow-md) !important;
+}
+html[data-theme="dark"] .np-ui-toast{
+  background:#0F1A22 !important; color: var(--nk-text) !important;
+  border:1px solid var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-ui-modal{ background: rgba(2,8,12,.7) !important; }
+html[data-theme="dark"] .np-ui-modal__panel{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+  border:1px solid var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-ui-modal__input{
+  background:#0E1A22 !important; color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-ui-modal__title,
+html[data-theme="dark"] .np-ui-empty__title{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] .np-ui-modal__message,
+html[data-theme="dark"] .np-ui-empty__msg{ color: var(--nk-muted) !important; }
+
+/* ============================================================
+   26. Native date / time inputs
+   ============================================================ */
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="time"],
+html[data-theme="dark"] input[type="datetime-local"]{
+  color-scheme: dark;
+}
+
+/* ============================================================
+   27. PRINT  — keep prescriptions / invoices clean B/W in print
+   ============================================================ */
+@media print{
+  html, body{ background:#fff !important; color:#000 !important; }
+  .np-sidebar, .np-header, .np-theme-toggle, .np-profile, .np-iconbtn{ display:none !important; }
+  .np-panel, .np-card, .np-kpi, .np-table-wrap{
+    box-shadow:none !important; border-color:#ddd !important;
+  }
+}
+
+/* ============================================================
+   28. UTILITY — sparing pink/orange/yellow/purple accents
+   ============================================================
+   These named utility classes let markup opt-in to brand accents
+   without using them as the default UI color. */
+.np-accent-pink   { color: var(--nk-pink-500); }
+.np-accent-orange { color: var(--nk-orange-500); }
+.np-accent-yellow { color: var(--nk-yellow-500); }
+.np-accent-purple { color: var(--nk-purple-500); }
+.np-accent-lime   { color: var(--nk-lime-500); }
+.np-bg-pink-soft  { background: var(--nk-pink-100); color: var(--nk-pink-700); }
+.np-bg-mint-soft  { background: var(--nk-teal-100); color: var(--nk-teal-700); }
+
+/* ============================================================
+   29. FOCUS STATE — accessible across all interactive elements
+   ============================================================ */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible{
+  outline: 2px solid var(--nk-teal-500);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+html[data-theme="dark"] a:focus-visible,
+html[data-theme="dark"] button:focus-visible,
+html[data-theme="dark"] [role="button"]:focus-visible{
+  outline-color: var(--nk-teal-300);
+}

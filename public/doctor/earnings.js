@@ -140,13 +140,13 @@
     } else {
       tbody.innerHTML = rows.map(r => `
         <tr>
-          <td>${escapeHtml(fmtDate(r.date))} <span style="color:var(--np-muted); font-size:.7rem;">${escapeHtml(r.startTime || '')}</span></td>
-          <td>${escapeHtml(r.patient?.name || '—')}</td>
-          <td>${escapeHtml(r.consultationType)}</td>
-          <td style="text-align:right;">${inr(r.patientPayment)}</td>
-          <td style="text-align:right;">${inr(r.doctorGross)}</td>
-          <td style="text-align:right; color:#B45309;">${inr(r.tds)}</td>
-          <td style="text-align:right; font-weight:600;">${inr(r.doctorNet)}</td>
+          <td data-label="Date">${escapeHtml(fmtDate(r.date))} <span style="color:var(--np-muted); font-size:.7rem;">${escapeHtml(r.startTime || '')}</span></td>
+          <td data-label="Patient">${escapeHtml(r.patient?.name || '—')}</td>
+          <td data-label="Type">${escapeHtml(r.consultationType)}</td>
+          <td data-label="Fee" style="text-align:right;">${inr(r.patientPayment)}</td>
+          <td data-label="My Gross" style="text-align:right;">${inr(r.doctorGross)}</td>
+          <td data-label="TDS" style="text-align:right; color:#B45309;">${inr(r.tds)}</td>
+          <td data-label="My Net" style="text-align:right; font-weight:600;">${inr(r.doctorNet)}</td>
         </tr>
       `).join('');
     }
@@ -160,13 +160,13 @@
         const per = `${MONTH_NAMES[x.periodMonth - 1]} ${x.periodYear}`;
         return `
           <tr>
-            <td>${per}</td>
-            <td style="text-align:right;">${x.totalConsultations}</td>
-            <td style="text-align:right;">${inr(x.totalRevenue)}</td>
-            <td style="text-align:right; font-weight:600;">${inr(x.doctorNetAmount)}</td>
-            <td>${statusPill(x.status)}</td>
-            <td>${x.paidAt ? fmtDate(x.paidAt) : '—'}</td>
-            <td style="text-align:right;">
+            <td data-label="Period">${per}</td>
+            <td data-label="Consults" style="text-align:right;">${x.totalConsultations}</td>
+            <td data-label="Total Revenue" style="text-align:right;">${inr(x.totalRevenue)}</td>
+            <td data-label="My Net" style="text-align:right; font-weight:600;">${inr(x.doctorNetAmount)}</td>
+            <td data-label="Status">${statusPill(x.status)}</td>
+            <td data-label="Paid On">${x.paidAt ? fmtDate(x.paidAt) : '—'}</td>
+            <td data-label="Invoice" style="text-align:right;">
               ${x.status === 'PAID'
                 ? `<button class="np-btn np-btn--ghost np-btn--sm" onclick="Earnings.downloadInvoice('${x.id}')">PDF</button>`
                 : '—'}

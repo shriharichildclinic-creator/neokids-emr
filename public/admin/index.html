@@ -4,10 +4,25 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>NeoKidsPro · Admin Panel</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>
+<link rel="apple-touch-icon" href="/assets/favicon.svg"/>
+<link rel="manifest" href="/assets/manifest.webmanifest"/>
+<meta name="theme-color" content="#89BCBD"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/admin/styles.css?v=2.1.2"/>
+<link rel="stylesheet" href="/admin/styles.css"/>
+<!-- NeoKidsPro brand theme (light + dark) — v3.1 Blue-Green rebrand -->
+<link rel="stylesheet" href="/assets/neokids-theme.css"/>
+<script>
+  // Apply persisted theme as early as possible to avoid FOUC
+  try {
+    var t = localStorage.getItem('np-theme');
+    if (t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.setAttribute('data-theme','dark');
+    }
+  } catch(_) {}
+</script>
 </head>
 <body>
 
@@ -17,7 +32,7 @@
 <div id="loginScreen" class="np-login">
   <div class="np-login__card">
     <div class="np-login__logo" aria-hidden="true">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg>
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
     </div>
     <h1 class="np-login__title">NeoKidsPro Admin</h1>
     <p class="np-login__subtitle">Pediatric clinic management</p>
@@ -48,7 +63,7 @@
     <aside id="sidebar" class="np-sidebar" aria-label="Primary navigation">
       <div class="np-sidebar__brand">
         <div class="np-sidebar__logo" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         </div>
         <div>
           <div class="np-sidebar__title">NeoKidsPro</div>
@@ -147,7 +162,7 @@
         <section id="dashboardView" class="tab-pane">
           <div id="statsGrid" class="np-kpi-grid"></div>
           <div class="np-divider"></div>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;" id="dashSecondGrid">
+          <div id="dashSecondGrid" class="np-dash-second">
             <div class="np-panel">
               <div class="np-panel__head">
                 <div style="flex:1">
@@ -192,7 +207,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input id="docSearch" type="search" placeholder="Search by name, email, phone, clinic…" autocomplete="off"/>
                 </div>
-                <select id="docFilterAvail" class="np-select" aria-label="Filter availability" style="width:auto;">
+                <select id="docFilterAvail" class="np-select" aria-label="Filter availability">
                   <option value="">All</option>
                   <option value="active">Active only</option>
                   <option value="inactive">Inactive only</option>
@@ -216,42 +231,31 @@
               </div>
             </div>
             <div class="np-panel__body">
-              <div class="np-filterbar">
-                <div class="np-search">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  <input id="apptSearch" type="search" placeholder="Search patient, phone, problem…" autocomplete="off"/>
+              <form id="apptFilters" class="np-filterbar np-filterbar--appointments" novalidate>
+                <div class="np-filter-control np-filter-control--search">
+                  <label class="np-filter-control__label" for="apptSearch">Search</label>
+                  <div class="np-search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input id="apptSearch" type="search" placeholder="Patient, phone, or problem" autocomplete="off"/>
+                  </div>
                 </div>
-                <select id="filterStatus" class="np-select" style="width:auto;">
-                  <option value="">All statuses</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="CONFIRMED">Confirmed</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="CANCELLED">Cancelled</option>
-                </select>
-                <select id="filterType" class="np-select" style="width:auto;">
-                  <option value="">All types</option>
-                  <option value="ONLINE">Online</option>
-                  <option value="OFFLINE">In-person</option>
-                </select>
-                <select id="filterPayment" class="np-select" style="width:auto;">
-                  <option value="">All payments</option>
-                  <option value="PAID">Paid</option>
-                  <option value="UNPAID">Unpaid</option>
-                  <option value="CASH_PENDING">Cash pending</option>
-                  <option value="CASH_COLLECTED">Cash collected</option>
-                  <option value="FAILED">Failed</option>
-                  <option value="REFUNDED">Refunded</option>
-                </select>
-                <select id="filterDoctor" class="np-select" style="width:auto;">
-                  <option value="">All doctors</option>
-                </select>
-                <input id="filterFrom" type="date" class="np-select" aria-label="From date" style="width:auto;">
-                <input id="filterTo"   type="date" class="np-select" aria-label="To date"   style="width:auto;">
-                <button id="applyFilters" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
-                <button id="clearFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
-              </div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="filterStatus">Status</label><select id="filterStatus" class="np-select"><option value="">All statuses</option><option value="PENDING">Pending</option><option value="CONFIRMED">Confirmed</option><option value="COMPLETED">Completed</option><option value="CANCELLED">Cancelled</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="filterType">Visit type</label><select id="filterType" class="np-select"><option value="">All types</option><option value="ONLINE">Online</option><option value="OFFLINE">In-person</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="filterPayment">Payment</label><select id="filterPayment" class="np-select"><option value="">All payments</option><option value="PAID">Paid</option><option value="UNPAID">Unpaid</option><option value="CASH_PENDING">Cash pending</option><option value="CASH_COLLECTED">Cash collected</option><option value="FAILED">Failed</option><option value="REFUNDED">Refunded</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="filterDoctor">Doctor</label><select id="filterDoctor" class="np-select"><option value="">All doctors</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="filterFrom">From</label><input id="filterFrom" type="date" class="np-select"/></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="filterTo">To</label><input id="filterTo" type="date" class="np-select"/></div>
+                <div class="np-filter-actions" aria-label="Appointment filters">
+                  <button id="applyFilters" type="submit" class="np-btn np-btn--primary np-btn--sm">Apply filters</button>
+                  <button id="clearFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                </div>
+              </form>
+              <!-- Date range presets — set From/To with one click. -->
+              <div id="apptDateRange" style="margin:8px 0;"></div>
+              <!-- Active filter chips (rendered by JS after each search). -->
+              <div id="apptFilterChips" style="display:none;"></div>
               <div class="np-table-wrap">
-                <table class="np-table">
+                <table class="np-table np-sticky-head">
                   <thead>
                     <tr>
                       <th>Date / Time</th>
@@ -281,13 +285,13 @@
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshRevenue">Refresh</button>
             </div>
             <div class="np-panel__body">
-              <div class="np-filterbar">
-                <select id="revMonth" class="np-select" style="width:auto;" aria-label="Month"></select>
-                <select id="revYear"  class="np-select" style="width:auto;" aria-label="Year"></select>
-                <select id="revDoctor" class="np-select" style="width:auto;" aria-label="Doctor">
+              <div class="np-filterbar np-filterbar--toolbar">
+                <select id="revMonth" class="np-select" aria-label="Month"></select>
+                <select id="revYear"  class="np-select" aria-label="Year"></select>
+                <select id="revDoctor" class="np-select" aria-label="Doctor">
                   <option value="">All doctors</option>
                 </select>
-                <select id="revPaymentType" class="np-select" style="width:auto;" aria-label="Payment type">
+                <select id="revPaymentType" class="np-select" aria-label="Payment type">
                   <option value="">All payment types</option>
                   <option value="ONLINE">Online</option>
                   <option value="OFFLINE">In-person</option>
@@ -333,13 +337,13 @@
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshSettlements">Refresh</button>
             </div>
             <div class="np-panel__body">
-              <div class="np-filterbar">
-                <select id="stlMonth" class="np-select" style="width:auto;"></select>
-                <select id="stlYear"  class="np-select" style="width:auto;"></select>
-                <select id="stlDoctor" class="np-select" style="width:auto;">
+              <div class="np-filterbar np-filterbar--toolbar">
+                <select id="stlMonth" class="np-select"></select>
+                <select id="stlYear"  class="np-select"></select>
+                <select id="stlDoctor" class="np-select">
                   <option value="">All doctors</option>
                 </select>
-                <select id="stlStatus" class="np-select" style="width:auto;">
+                <select id="stlStatus" class="np-select">
                   <option value="">All statuses</option>
                   <option value="GENERATED">Generated (awaiting payment)</option>
                   <option value="PAID">Paid</option>
@@ -347,7 +351,7 @@
                 <button id="applySettlements" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
                 <button id="clearSettlements" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
               </div>
-              <div class="np-table-wrap">
+              <div class="np-table-wrap np-table-wrap--responsive">
                 <table class="np-table">
                   <thead>
                     <tr>
@@ -379,16 +383,16 @@
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" id="refreshInvoices">Refresh</button>
             </div>
             <div class="np-panel__body">
-              <div class="np-filterbar">
-                <select id="invMonth" class="np-select" style="width:auto;"></select>
-                <select id="invYear"  class="np-select" style="width:auto;"></select>
-                <select id="invDoctor" class="np-select" style="width:auto;">
+              <div class="np-filterbar np-filterbar--toolbar">
+                <select id="invMonth" class="np-select"></select>
+                <select id="invYear"  class="np-select"></select>
+                <select id="invDoctor" class="np-select">
                   <option value="">All doctors</option>
                 </select>
                 <button id="applyInvoices" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
                 <button id="clearInvoices" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
               </div>
-              <div class="np-table-wrap">
+              <div class="np-table-wrap np-table-wrap--responsive">
                 <table class="np-table">
                   <thead>
                     <tr>
@@ -420,38 +424,25 @@
             </div>
             <div class="np-panel__body">
               <div id="notifCounts" class="np-row" style="gap:.5rem; flex-wrap:wrap; margin-bottom:1rem;"></div>
-              <div class="np-filterbar">
-                <div class="np-search">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  <input id="notifSearch" type="search" placeholder="Search recipient, template, or error…" autocomplete="off"/>
+              <form id="notifFilters" class="np-filterbar np-filterbar--notifications" novalidate>
+                <div class="np-filter-control np-filter-control--search">
+                  <label class="np-filter-control__label" for="notifSearch">Search</label>
+                  <div class="np-search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input id="notifSearch" type="search" placeholder="Recipient, template, or error" autocomplete="off"/>
+                  </div>
                 </div>
-                <select id="notifStatus" class="np-select" style="width:auto;">
-                  <option value="">All statuses</option>
-                  <option value="SENT">Sent</option>
-                  <option value="FAILED">Failed</option>
-                  <option value="QUEUED">Queued</option>
-                </select>
-                <select id="notifChannel" class="np-select" style="width:auto;" aria-label="Filter by channel">
-                  <option value="">All channels</option>
-                  <option value="WHATSAPP">WhatsApp</option>
-                  <option value="EMAIL">Email</option>
-                </select>
-                <!-- UI/UX Improvement #2 — recipient/audience grouping -->
-                <select id="notifAudience" class="np-select" style="width:auto;" aria-label="Filter by recipient type">
-                  <option value="">All recipient types</option>
-                  <option value="PATIENT">Patient Templates</option>
-                  <option value="DOCTOR">Doctor Templates</option>
-                  <option value="ADMIN">Admin / System Templates</option>
-                  <option value="OTHER">Other</option>
-                </select>
-                <select id="notifTemplate" class="np-select" style="width:auto;" aria-label="Filter by template">
-                  <option value="">All templates</option>
-                </select>
-                <input id="notifFrom" type="date" class="np-select" aria-label="From" style="width:auto;">
-                <input id="notifTo"   type="date" class="np-select" aria-label="To"   style="width:auto;">
-                <button id="applyNotifFilters" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
-                <button id="clearNotifFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
-              </div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="notifStatus">Status</label><select id="notifStatus" class="np-select"><option value="">All statuses</option><option value="SENT">Sent</option><option value="FAILED">Failed</option><option value="QUEUED">Queued</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="notifChannel">Channel</label><select id="notifChannel" class="np-select"><option value="">All channels</option><option value="WHATSAPP">WhatsApp</option><option value="EMAIL">Email</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="notifAudience">Recipient type</label><select id="notifAudience" class="np-select"><option value="">All recipient types</option><option value="PATIENT">Patient templates</option><option value="DOCTOR">Doctor templates</option><option value="ADMIN">Admin / system templates</option><option value="OTHER">Other</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="notifTemplate">Template</label><select id="notifTemplate" class="np-select"><option value="">All templates</option></select></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="notifFrom">From</label><input id="notifFrom" type="date" class="np-select"/></div>
+                <div class="np-filter-control"><label class="np-filter-control__label" for="notifTo">To</label><input id="notifTo" type="date" class="np-select"/></div>
+                <div class="np-filter-actions" aria-label="Notification filters">
+                  <button id="applyNotifFilters" type="submit" class="np-btn np-btn--primary np-btn--sm">Apply filters</button>
+                  <button id="clearNotifFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                </div>
+              </form>
               <div class="np-table-wrap">
                 <table class="np-table">
                   <thead>
@@ -746,9 +737,6 @@
   </div>
 </div>
 
-<script src="app.js?v=2.1.2"></script>
-<script src="finance.js?v=2.1.0"></script>
-
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-</body>
-</html>
+<script src="/assets/np-ui.js"></script>
+<script src="app.js"></script>
+<script src="finance.js"></script>

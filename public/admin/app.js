@@ -1,23 +1,6 @@
 /* =====================================================================
-   NeoKidsPro Admin Panel v2.1
-   - FIX 4: Modernized dashboard with rich KPIs + 14-day chart
-   - FIX 5: Appointment table with full filters (search, status, type,
-            payment, doctor, date range)
-   - FIX 6: Doctor insights drawer (completion %, revenue, sparkline)
-   - FIX 7: Notification Logs view with filters & detail modal
-   - FIX 8 (regression): Admin login broke after sign-out because:
-              (a) finance.js polled a protected endpoint on every page
-                  load — including the login screen — which returned 401,
-              (b) the api() 401 interceptor blindly called location.reload()
-                  even when no token had been sent, creating a tight
-                  reload loop that ate the user's typing in the login form,
-              (c) logout() itself called location.reload(), which re-armed
-                  the same DOMContentLoaded → poll → 401 → reload chain.
-            This file now (i) only reloads on 401 when a token WAS sent,
-            (ii) makes logout a pure DOM swap (no reload), and
-            (iii) drives Finance.refreshPendingBadge() from showDashboard()
-            instead of from a global DOMContentLoaded timer.
-   - 100% backwards compatible: all existing endpoints unchanged.
+   NeoKidsPro EMR — Admin App
+   Dashboard, appointments, doctor management, notifications, and settings UI.
    ===================================================================== */
 
 const API = '/api';
@@ -110,10 +93,17 @@ function fmtDateTime(iso){
   return d.toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) + ' ' +
          d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
 }
+// Compact currency (used in dense places: doctor cards, table cells)
 function fmtCurrency(n){
   const v = Number(n||0);
   if (v >= 100000) return '₹' + (v/100000).toFixed(v%100000===0?0:1) + 'L';
   if (v >= 1000)   return '₹' + (v/1000).toFixed(v%1000===0?0:1) + 'k';
+  return '₹' + v.toLocaleString('en-IN');
+}
+// Full currency with thousands separators (₹1,250). Used wherever space allows.
+function fmtCurrencyFull(n){
+  if (typeof NPFmt !== 'undefined' && NPFmt.inr) return NPFmt.inr(n);
+  const v = Number(n||0);
   return '₹' + v.toLocaleString('en-IN');
 }
 function statusBadge(s){
@@ -178,6 +168,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
     if (data.role !== 'ADMIN') throw new Error('Not an admin account');
     TOKEN = data.token;
     localStorage.setItem('np_admin_token', TOKEN);
+    if (typeof NPSession !== 'undefined') NPSession.start(TOKEN);
     showDashboard();
   } catch (err) {
     $('#loginError').textContent = err.message;
@@ -185,12 +176,27 @@ $('#loginForm').addEventListener('submit', async (e) => {
   }
 });
 async function forgotPassword() {
-  const email = prompt('Enter your admin account email');
-  if (!email) return;
+  const email = await NPModal.prompt({
+    title: 'Forgot password',
+    message: 'Enter the email address associated with your admin account. If it matches, we\u2019ll send you a reset link.',
+    placeholder: 'admin@neokidspro.in',
+    inputType: 'email',
+    okText: 'Send reset link',
+  });
+  if (!email || !email.trim()) return;
   try {
-    const res = await api('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
-    alert(res.previewUrl ? `Reset link (mock mode): ${res.previewUrl}` : 'If the account exists, a reset link has been sent.');
-  } catch (err) { alert(err.message); }
+    const res = await api('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email: email.trim() }) });
+    if (res.previewUrl) {
+      await NPModal.alert({
+        title: 'Reset link generated (mock mode)',
+        message: res.previewUrl,
+        okText: 'Copy & close',
+      });
+      try { await navigator.clipboard.writeText(res.previewUrl); NPToast.success('Reset link copied to clipboard'); } catch (_) { /* ignore */ }
+    } else {
+      NPToast.success('If the account exists, a reset link has been sent.');
+    }
+  } catch (err) { NPToast.error(err.message); }
 }
 /* Logout — pure DOM swap, NO location.reload().
  *
@@ -204,6 +210,7 @@ function logout() {
   TOKEN = null;
   __doctorsCache = [];
   __apptsCache = [];
+  if (typeof NPSession !== 'undefined') NPSession.stop();
   showLogin();
 }
 
@@ -229,7 +236,7 @@ const VIEW_META = {
   notifView:       { title:'Notification Logs',  sub:'Audit WhatsApp & email deliveries' },
   settingsView:    { title:'Settings',           sub:'Account management' }
 };
-function setView(view) {
+function setView(view, opts) {
   $$('.tab-pane').forEach(v => v.classList.add('hidden'));
   const el = document.getElementById(view); if (el) el.classList.remove('hidden');
   $$('.np-nav-item').forEach(n => n.classList.remove('active'));
@@ -237,9 +244,16 @@ function setView(view) {
   if (link) link.classList.add('active');
   const meta = VIEW_META[view];
   if (meta) { $('#pageTitle').textContent = meta.title; $('#pageSubtitle').textContent = meta.sub; }
+  // Persist active view in URL hash for refresh-survivability + bookmarks.
+  try {
+    if (!(opts && opts.skipHash)) {
+      const slug = view.replace(/View$/, '');
+      if (location.hash !== '#' + slug) history.replaceState(null, '', '#' + slug);
+    }
+  } catch (_) {}
   if (view === 'dashboardView') loadDashboard();
   if (view === 'doctorsView')   loadDoctors();
-  if (view === 'apptsView')     { loadDoctorsForFilter(); loadAppointments(); }
+  if (view === 'apptsView')     { loadDoctorsForFilter(); loadAppointments(); _setupApptDateRange(); }
   if (view === 'notifView')     { loadNotifTemplates(); loadNotifications(); }
   // ─ Revenue Management views (handlers live in finance.js) ─
   if (view === 'revenueView'     && window.Finance) Finance.loadRevenue();
@@ -251,10 +265,11 @@ function setupSidebar(){
   const sidebar = $('#sidebar'); const backdrop = $('#sidebarBackdrop'); const toggle = $('#sidebarToggle');
   if (!sidebar || !toggle || !backdrop) return;
   if (toggle.__bound) return; toggle.__bound = true;
-  function open(){ sidebar.classList.add('is-open'); backdrop.classList.add('is-open'); }
-  function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); }
+  function open(){ sidebar.classList.add('is-open'); backdrop.classList.add('is-open'); document.body.classList.add('np-drawer-open'); }
+  function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); document.body.classList.remove('np-drawer-open'); }
   toggle.addEventListener('click', () => sidebar.classList.contains('is-open') ? close() : open());
   backdrop.addEventListener('click', close);
+  window.addEventListener('resize', () => { if (window.innerWidth > 1023) close(); });
   $$('.np-nav-item').forEach(b => b.addEventListener('click', () => {
     setView(b.dataset.view);
     if (window.matchMedia('(max-width:1023px)').matches) close();
@@ -270,28 +285,38 @@ function setupProfileMenu(){
 }
 
 /* =====================================================================
-   DASHBOARD — FIX 4
+   Dashboard
    ===================================================================== */
 async function loadDashboard() {
+  // KPI loading skeleton.
+  try {
+    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsGrid'), 6);
+  } catch (_) {}
   try {
     const a = await api('/admin/analytics');
-    // KPI cards
+    // KPI cards — each card gets a tooltip that explains the metric.
     const cards = [
       { kind:'blue',  label:"Today's Appointments", value: a.todayAppointments,
-        extra: deltaTag(a.todayAppointments, a.yesterdayAppointments) },
+        extra: deltaTag(a.todayAppointments, a.yesterdayAppointments),
+        tip: 'Count of bookings scheduled for today across all doctors.' },
       { kind:'mint',  label:"Last 7 days",          value: a.last7Appointments,
-        sub: `${a.last30Appointments} in last 30 days` },
+        sub: `${a.last30Appointments} in last 30 days`,
+        tip: 'Bookings made in the last 7 calendar days.' },
       { kind:'coral', label:"Total Patients",       value: a.totalPatients,
-        sub: `${a.totalDoctors} active doctors` },
+        sub: `${a.totalDoctors} active doctors`,
+        tip: 'Unique patient records ever created in the system.' },
       { kind:'cream', label:"Lifetime Revenue",     value: fmtCurrency(a.totalRevenue),
-        sub: `${fmtCurrency(a.revenueLast30)} in last 30 days` },
+        sub: `${fmtCurrency(a.revenueLast30)} in last 30 days`,
+        tip: 'Sum of feeAtBooking for completed + confirmed paid appointments since launch.' },
       { kind:'violet',label:"Completion Rate",      value: a.completionRate + '%',
-        sub: `${a.completedAppointments} of ${a.totalAppointments} completed` },
+        sub: `${a.completedAppointments} of ${a.totalAppointments} completed`,
+        tip: 'Completion Rate = completed ÷ (confirmed + completed). Higher is better.' },
       { kind:'rose',  label:"Cancellation Rate",    value: a.cancellationRate + '%',
-        sub: `${a.cancelledAppointments} cancelled` }
+        sub: `${a.cancelledAppointments} cancelled`,
+        tip: 'Cancellation Rate = cancelled ÷ total appointments. Lower is better.' }
     ];
     $('#statsGrid').innerHTML = cards.map(c => `
-      <div class="np-kpi np-kpi--${c.kind}">
+      <div class="np-kpi np-kpi--${c.kind}" title="${escapeHtml(c.tip||'')}">
         <div class="np-kpi__label">${escapeHtml(c.label)}</div>
         <div class="np-kpi__value">${escapeHtml(String(c.value))}</div>
         ${c.sub ? `<div class="np-kpi__sub">${escapeHtml(c.sub)}</div>` : ''}
@@ -344,9 +369,16 @@ async function loadDashboard() {
 }
 
 /* =====================================================================
-   DOCTORS — modernized cards + insights drawer (FIX 6)
+   Doctors and insights drawer
    ===================================================================== */
 async function loadDoctors() {
+  // Loading skeleton while we wait for the network.
+  try {
+    const grid = $('#doctorsGrid');
+    if (grid && typeof NPSkeleton !== 'undefined') {
+      grid.innerHTML = Array.from({length:6}, () => '<div class="np-ui-skel np-ui-skel--card"></div>').join('');
+    }
+  } catch (_) {}
   try {
     const docs = await api('/admin/doctors');
     // Fetch KYC for each doctor in parallel. The endpoint always returns a
@@ -502,11 +534,19 @@ async function toggleDoctor(id, isAvailable) {
   loadDoctors();
 }
 async function hardDeleteDoctor(id, name) {
-  if (!confirm(`Permanently delete ${drName(name)}? This is only allowed if the doctor has no appointments.`)) return;
+  const ok = await NPModal.confirm({
+    title: 'Permanently delete doctor?',
+    message: `Permanently delete ${drName(name)}? This is only allowed if the doctor has no appointments. This action cannot be undone.`,
+    okText: 'Delete permanently',
+    cancelText: 'Cancel',
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await api('/admin/doctors/' + id + '/hard', { method: 'DELETE' });
+    NPToast.success('Doctor deleted');
     loadDoctors();
-  } catch (err) { alert(err.message); }
+  } catch (err) { NPToast.error(err.message); }
 }
 
 /* ---- Doctor Modal (Add/Edit) ---- */
@@ -520,6 +560,15 @@ function openDoctorModal() {
   f.password.placeholder = '(invite link is preferred)';
   loadKycForDoctor(null);
   $('#doctorModal').classList.remove('hidden');
+  // Upgrade KYC file inputs to drag-and-drop dropzones (idempotent).
+  if (typeof NPDropzone !== 'undefined') {
+    setTimeout(() => {
+      ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
+        const input = document.querySelector(`#doctorForm input[name="${name}"]`);
+        if (input) NPDropzone.bind(input, { label: 'Drop ' + name + ' here', hint: 'or click to browse (PDF or image)' });
+      });
+    }, 0);
+  }
 }
 function closeDoctorModal() {
   $('#doctorModal').classList.add('hidden');
@@ -613,9 +662,28 @@ $('#doctorForm').addEventListener('submit', async (e) => {
         const status = res.inviteSent
           ? 'Doctor created — invite email sent.'
           : 'Doctor created — email delivery NOT confirmed.';
-        alert(`${status}\n\nInvite link${ttl}:\n${res.invitePreviewUrl}\n\nCopy this link if the doctor does not receive the email.`);
+        // Replace the blocking alert with a non-blocking toast that has a
+        // Copy-link action button. Falls back to a modal alert if NPToast is
+        // not loaded for some reason.
+        if (typeof NPToast !== 'undefined') {
+          NPToast.success(status + ' Click "Copy link" to share' + ttl + '.', {
+            title: 'Invite link ready',
+            duration: 15000,
+            action: { label: 'Copy link', onClick: () => {
+              try {
+                navigator.clipboard.writeText(res.invitePreviewUrl);
+                NPToast.info('Invite link copied to clipboard');
+              } catch (_) {
+                NPModal.alert({ title:'Invite link', message: res.invitePreviewUrl });
+              }
+            } }
+          });
+        } else {
+          alert(status + '\n\nInvite link' + ttl + ':\n' + res.invitePreviewUrl);
+        }
       } else {
-        alert('Doctor created and invite email sent.');
+        if (typeof NPToast !== 'undefined') NPToast.success('Doctor created and invite email sent.');
+        else alert('Doctor created and invite email sent.');
       }
       // Flip the modal into edit-mode for this new doctor so the admin can
       // upload KYC documents immediately without re-opening.
@@ -631,7 +699,7 @@ $('#doctorForm').addEventListener('submit', async (e) => {
   } catch (err) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
 });
 
-/* ---- Doctor Insights Drawer (FIX 6) ---- */
+/* ---- Doctor insights drawer ---- */
 async function openInsights(id){
   const drawer = $('#doctorDrawer');
   const body = $('#drawerBody');
@@ -739,7 +807,7 @@ $('#docSearch').addEventListener('input', renderDoctors);
 $('#docFilterAvail').addEventListener('change', renderDoctors);
 
 /* =====================================================================
-   APPOINTMENTS — FIX 5
+   Appointments
    ===================================================================== */
 async function loadDoctorsForFilter(){
   try {
@@ -774,41 +842,100 @@ async function loadAppointments() {
       tbody.innerHTML = `<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No appointments match</div><div class="np-empty__sub">Try clearing some filters.</div></div></td></tr>`;
       return;
     }
-    tbody.innerHTML = appts.map(a => `
-      <tr>
-        <td>
+    // Sort by date+time so the table is always chronological.
+    appts.sort((a,b) => {
+      const ka = String(a.date) + ' ' + String(a.startTime||'');
+      const kb = String(b.date) + ' ' + String(b.startTime||'');
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+    tbody.innerHTML = appts.map(a => {
+      // Visual cue for online vs in-person via a left-border color on the row.
+      const rowAccent = a.consultationType === 'ONLINE'
+        ? 'border-left:3px solid #10b981;'
+        : (a.consultationType === 'OFFLINE' ? 'border-left:3px solid #3b82f6;' : '');
+      return `
+      <tr class="np-appt-tr" style="${rowAccent}">
+        <td data-label="When">
           <div><b>${escapeHtml(fmtDate(a.date))}</b></div>
           <div class="np-mut" style="font-size:.78rem;">${escapeHtml(fmtTime(a.startTime))}${a.endTime ? ' – ' + escapeHtml(fmtTime(a.endTime)) : ''}</div>
         </td>
-        <td>
+        <td data-label="Patient">
           <div><b>${escapeHtml(a.patient.name)}</b></div>
           <div class="np-mut" style="font-size:.78rem;">+91 ${escapeHtml(a.patient.phone||'')}</div>
           ${a.primaryProblem ? `<div class="np-mut" style="font-size:.75rem; margin-top:.15rem;">${escapeHtml(a.primaryProblem)}</div>` : ''}
         </td>
-        <td>${drNameHtml(a.doctor.name)}<br/><span class="np-mut" style="font-size:.75rem;">${escapeHtml(a.doctor.specialization||'')}</span></td>
-        <td>${typeBadge(a.consultationType)}</td>
-        <td>${statusBadge(a.status)}${a.status === 'CANCELLED' && a.notes ? `<div style="font-size:.72rem; color:#B91C1C; margin-top:.2rem;">${escapeHtml(a.notes)}</div>` : ''}</td>
-        <td>${paymentBadge(a.paymentStatus)}</td>
-        <td style="text-align:right;"><b>${fmtCurrency(a.feeAtBooking)}</b></td>
-      </tr>`).join('');
+        <td data-label="Doctor">${drNameHtml(a.doctor.name)}<br/><span class="np-mut" style="font-size:.75rem;">${escapeHtml(a.doctor.specialization||'')}</span></td>
+        <td data-label="Type">${typeBadge(a.consultationType)}</td>
+        <td data-label="Status">${statusBadge(a.status)}${a.status === 'CANCELLED' && a.notes ? `<div style="font-size:.72rem; color:#B91C1C; margin-top:.2rem;">${escapeHtml(a.notes)}</div>` : ''}</td>
+        <td data-label="Payment">${paymentBadge(a.paymentStatus)}</td>
+        <td data-label="Fee" style="text-align:right;"><b>${fmtCurrencyFull(a.feeAtBooking)}</b></td>
+      </tr>`;
+    }).join('');
+    // Render filter chips so active filters are visible at a glance.
+    _renderApptFilterChips({ status, type, payment, doctorId, from, to, q });
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7"><div class="np-error">${escapeHtml(err.message)}</div></td></tr>`;
   }
 }
-$('#applyFilters').addEventListener('click', loadAppointments);
+$('#apptFilters').addEventListener('submit', (event) => { event.preventDefault(); loadAppointments(); });
 $('#clearFilters').addEventListener('click', () => {
   ['filterStatus','filterType','filterPayment','filterDoctor','filterFrom','filterTo','apptSearch'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   loadAppointments();
 });
+// Render the active-filter chip bar above the table.
+function _renderApptFilterChips(state){
+  const host = document.getElementById('apptFilterChips');
+  if (!host || typeof NPChips === 'undefined') return;
+  const labels = {
+    status:'Status', type:'Type', payment:'Payment',
+    doctorId:'Doctor', from:'From', to:'To', q:'Search'
+  };
+  const docName = (id) => {
+    const d = (__doctorsCache || []).find(x => x.id === id);
+    return d ? drName(d.name) : id;
+  };
+  const chips = [];
+  Object.keys(labels).forEach(k => {
+    const v = state[k];
+    if (!v || (k === 'q' && v.length < 2)) return;
+    const display = k === 'doctorId' ? docName(v) : v;
+    chips.push({
+      label: labels[k] + ': ' + display,
+      onClear: () => {
+        const map = {
+          status:'filterStatus', type:'filterType', payment:'filterPayment',
+          doctorId:'filterDoctor', from:'filterFrom', to:'filterTo', q:'apptSearch'
+        };
+        const el = document.getElementById(map[k]); if (el) el.value = '';
+        loadAppointments();
+      },
+    });
+  });
+  NPChips.render(host, chips, () => {
+    document.getElementById('clearFilters').click();
+  });
+}
+function _setupApptDateRange(){
+  const host = document.getElementById('apptDateRange');
+  if (!host || host.dataset.wired === '1' || typeof NPDateRange === 'undefined') return;
+  host.dataset.wired = '1';
+  NPDateRange.render(host, (range) => {
+    const f = document.getElementById('filterFrom');
+    const t = document.getElementById('filterTo');
+    if (f) f.value = range.fromIso;
+    if (t) t.value = range.toIso;
+    loadAppointments();
+  });
+}
 $('#apptSearch').addEventListener('input', () => { /* debounce */
   clearTimeout(window.__apptSearchTimer);
   window.__apptSearchTimer = setTimeout(loadAppointments, 280);
 });
 
 /* =====================================================================
-   NOTIFICATION LOGS — FIX 7
+   Notification logs
    ===================================================================== */
 let __notifTemplatesCache = null;
 
@@ -910,15 +1037,15 @@ async function loadNotifications(){
       tbody.innerHTML = `<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No notifications match</div><div class="np-empty__sub">Adjust filters or wait for the next event.</div></div></td></tr>`;
       return;
     }
-    tbody.innerHTML = rows.map(n => `
-      <tr class="np-notif-row" style="cursor:pointer;" data-id="${escapeHtml(n.id)}">
-        <td>${escapeHtml(fmtDateTime(n.createdAt))}</td>
-        <td>${channelBadge(n.channel)}</td>
-        <td>${escapeHtml(n.template || '')}</td>
-        <td>${escapeHtml(n.recipient || '')}</td>
-        <td>${notifStatusBadge(n.status)}${n.direction ? ` <span class="np-badge np-badge--slate" style="margin-left:.25rem;">${escapeHtml(n.direction)}</span>` : ''}</td>
-        <td class="np-notif-error" style="max-width:280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(n.errorMessage || '')}</td>
-      </tr>`).join('');
+  tbody.innerHTML = rows.map(n => `
+  <tr class="np-notif-row" style="cursor:pointer;" data-id="${escapeHtml(n.id)}">
+    <td data-label="When">${escapeHtml(fmtDateTime(n.createdAt))}</td>
+    <td data-label="Channel">${channelBadge(n.channel)}</td>
+    <td data-label="Template">${escapeHtml(n.template || '')}</td>
+    <td data-label="Recipient">${escapeHtml(n.recipient || '')}</td>
+    <td data-label="Status">${notifStatusBadge(n.status)}${n.direction ? ` <span class="np-badge np-badge--slate" style="margin-left:.25rem;">${escapeHtml(n.direction)}</span>` : ''}</td>
+    <td class="np-notif-error" data-label="Error" style="max-width:280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(n.errorMessage || '')}</td>
+  </tr>`).join('');
     // click to open detail
     $$('#notifTbody tr').forEach(tr => tr.addEventListener('click', () => {
       const id = tr.getAttribute('data-id');
@@ -943,12 +1070,12 @@ function openNotifModal(n){
     ${n.errorMessage ? `
       <div class="np-field">
         <div class="np-field__label">Error</div>
-        <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:10px; padding:.6rem .75rem; color:#991B1B; font-family: ui-monospace, monospace; font-size:.78rem; white-space:pre-wrap;">${escapeHtml(n.errorMessage)}</div>
+        <div class="np-error" style="font-family: ui-monospace, monospace; font-size:.78rem; white-space:pre-wrap; padding:.6rem .75rem;">${escapeHtml(n.errorMessage)}</div>
       </div>` : ''}
     ${n.payload ? `
       <div class="np-field">
         <div class="np-field__label">Payload</div>
-        <pre style="background:#F8FAFC; border:1px solid var(--np-border); border-radius:10px; padding:.7rem; font-size:.75rem; max-height: 320px; overflow:auto;">${escapeHtml(JSON.stringify(n.payload, null, 2))}</pre>
+        <pre class="np-code-block">${escapeHtml(JSON.stringify(n.payload, null, 2))}</pre>
       </div>` : ''}
   `;
   $('#notifModal').classList.remove('hidden');
@@ -956,7 +1083,7 @@ function openNotifModal(n){
 function closeNotifModal(){ $('#notifModal').classList.add('hidden'); }
 
 $('#refreshNotifs').addEventListener('click', loadNotifications);
-$('#applyNotifFilters').addEventListener('click', loadNotifications);
+$('#notifFilters').addEventListener('submit', (event) => { event.preventDefault(); loadNotifications(); });
 $('#clearNotifFilters').addEventListener('click', () => {
   ['notifStatus','notifChannel','notifAudience','notifTemplate','notifFrom','notifTo','notifSearch'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
@@ -1019,7 +1146,34 @@ async function showDashboard() {
   }
   setupSidebar();
   setupProfileMenu();
-  setView('dashboardView');
+  // Restore last view from URL hash (so refresh / bookmarks survive).
+  const restored = (function(){
+    try {
+      const h = (location.hash || '').replace(/^#/, '').trim();
+      if (!h) return null;
+      const candidate = h + 'View';
+      return document.getElementById(candidate) ? candidate : null;
+    } catch (_) { return null; }
+  })();
+  setView(restored || 'dashboardView', { skipHash: !!restored });
+  if (typeof NPSession !== 'undefined' && TOKEN) NPSession.start(TOKEN);
+  // Wire up command palette commands once the dashboard is mounted.
+  if (typeof NPPalette !== 'undefined' && !window.__npPaletteWired) {
+    window.__npPaletteWired = true;
+    [
+      ['Go to Dashboard',     '🏠', () => setView('dashboardView')],
+      ['Go to Doctors',       '👩‍⚕️', () => setView('doctorsView')],
+      ['Go to Appointments',  '📅', () => setView('apptsView')],
+      ['Go to Revenue',       '💰', () => setView('revenueView')],
+      ['Go to Settlements',   '🧾', () => setView('settlementsView')],
+      ['Go to Invoices',      '📄', () => setView('invoicesView')],
+      ['Go to Notifications', '🔔', () => setView('notifView')],
+      ['Go to Settings',      '⚙️', () => setView('settingsView')],
+      ['Add Doctor',          '➕', () => { setView('doctorsView'); setTimeout(() => openDoctorModal(), 50); }],
+      ['Toggle dark mode',    '🌙', () => NPTheme && NPTheme.toggle()],
+      ['Sign out',            '⏻', () => logout()],
+    ].forEach(([label, icon, run]) => NPPalette.register({ label, icon, run, keywords: label }));
+  }
 
   // Now that we are definitely authenticated, refresh the pending-
   // settlements sidebar badge. This replaces the unsafe global timer in
@@ -1207,14 +1361,24 @@ async function verifyKyc(targetStatus){
   if (!__currentKycDoctorId) return;
   let body = { status: targetStatus };
   if (targetStatus === 'REJECTED'){
-    const reason = prompt('Rejection reason (required):', '');
+    const reason = await NPModal.prompt({
+      title: 'Reject KYC',
+      message: 'Please provide a clear rejection reason. This will be shown to the doctor.',
+      placeholder: 'e.g. Aadhaar card image is blurred — please re-upload',
+      okText: 'Reject KYC',
+    });
     if (!reason || !reason.trim()){
-      alert('Rejection reason is required.');
+      NPToast.warn('Rejection reason is required.');
       return;
     }
     body.rejectionReason = reason.trim();
   } else if (targetStatus === 'VERIFIED'){
-    if (!confirm('Mark this doctor\'s KYC as VERIFIED? This will allow settlement generation.')) return;
+    const ok = await NPModal.confirm({
+      title: 'Verify KYC?',
+      message: 'Mark this doctor\u2019s KYC as VERIFIED. This will allow settlement generation.',
+      okText: 'Mark verified',
+    });
+    if (!ok) return;
   }
   try {
     await api('/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc/status', {
@@ -1227,3 +1391,53 @@ async function verifyKyc(targetStatus){
     alert(err.message);
   }
 }
+
+/* =====================================================================
+   MOBILE DRAWER — body scroll-lock + robustness enhancements
+   (merged from former assets/np-fixes.js)
+   ===================================================================== */
+(function(){
+  'use strict';
+  var doc = document;
+  var mqMobile = window.matchMedia ? window.matchMedia('(max-width:1023px)') : null;
+
+  function setBodyLock(locked){
+    if (!doc.body) return;
+    doc.body.classList.toggle('np-drawer-open', !!locked);
+  }
+
+  function wire(){
+    var sidebar  = doc.getElementById('sidebar');
+    var backdrop = doc.getElementById('sidebarBackdrop');
+    var toggle   = doc.getElementById('sidebarToggle');
+    if (!sidebar || !backdrop) return;
+
+    function isOpen(){ return sidebar.classList.contains('is-open'); }
+    function close(){
+      sidebar.classList.remove('is-open');
+      backdrop.classList.remove('is-open');
+      backdrop.setAttribute('aria-hidden','true');
+      setBodyLock(false);
+    }
+
+    // Sync body-lock whenever the drawer opens/closes.
+    if (toggle){
+      toggle.addEventListener('click', function(){
+        setTimeout(function(){ setBodyLock(isOpen()); }, 0);
+      });
+    }
+
+    // ESC closes drawer on mobile.
+    doc.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && isOpen()) close();
+    });
+
+    // Drop drawer state when viewport grows past mobile.
+    function onResize(){ if (!mqMobile || !mqMobile.matches) close(); }
+    if (mqMobile && mqMobile.addEventListener) mqMobile.addEventListener('change', onResize);
+    else if (mqMobile && mqMobile.addListener) mqMobile.addListener(onResize);
+  }
+
+  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', wire);
+  else wire();
+})();
