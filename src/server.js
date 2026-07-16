@@ -38,7 +38,16 @@ const { ensureStorageWritable } = require('../scripts/ensure-storage');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+
+    // Allow the booking widget to be embedded in an iframe.
+    // We'll tighten this later so only the booking widget is embeddable.
+    frameguard: false,
+  })
+);
 
 if (process.env.NODE_ENV === 'production') {
   app.use(cors({
