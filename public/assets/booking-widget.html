@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
-  Booking widget — fixes #27, #30, #31, #32
-  UI/UX redesigned to match NeoKidsPro brand identity.
-  All business logic, API calls, validation, payment integration unchanged.
+  NeoKidsPro — Booking Widget
+  Embedded via iframe on neokidspro.in (WordPress / Elementor).
+  Light mode only — colors are hardcoded, not theme-dependent.
 -->
 <html lang="en">
 <head>
@@ -16,26 +16,14 @@
 <link rel="stylesheet" href="/assets/vendor/tailwind.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
-<!--
-  Dark Mode is intentionally NOT supported on the Booking Widget.
-  The widget is embedded on the patient-facing NeoKidsPro website
-  (neokidspro.in) which only uses Light Mode. Force light color-scheme
-  so browser UI (form controls, date pickers, scrollbars) matches.
--->
 <script>
   try {
-    // Never inherit a persisted dark theme on the booking widget.
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.style.colorScheme = 'light';
-  } catch(_) {}
+  } catch (_) {}
 </script>
 <style>
-/* ────────────────────────────────────────────────────────────────
-   Booking widget — Light Mode ONLY (embedded on neokidspro.in).
-   Dark mode has been fully removed. All colors are literal Light Mode
-   values so the widget can never inherit a dark theme from a host page.
-   ──────────────────────────────────────────────────────────────── */
-:root, html:root, html[data-theme] {
+:root {
   --bw-pink:        #FE84A4;
   --bw-pink-hover:  #e8688c;
   --bw-pink-50:     #fff0f3;
@@ -69,8 +57,8 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   background: var(--bw-card);
   color: var(--bw-text);
-  min-height: 100vh;
-  margin: 0; padding: 0;
+  margin: 0;
+  padding: 0;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -78,22 +66,19 @@ body {
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
 @keyframes shimmer { to { background-position: 200% 0; } }
 
-/* ── Outer wrapper — contained, matches the site's container philosophy
-      (same idea as .nkp-hero-inner / .nkp-svc-grid on neokidspro.in: a
-      centered max-width column with comfortable side padding, not edge-to-edge) ── */
+/* ── Page container — contained width matching the site's section
+      proportions, not edge-to-edge and not a small floating card ── */
 .bw-page {
   width: 100%;
-  max-width: 720px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 32px 20px 48px;
+  padding: 56px 40px 72px;
   background: #ffffff;
 }
-@media (max-width: 480px) { .bw-page { padding: 20px 16px 36px; } }
+@media (max-width: 960px) { .bw-page { padding: 44px 24px 56px; } }
+@media (max-width: 480px) { .bw-page { padding: 32px 16px 40px; } }
 
-/* ── Card shell — a soft card like the rest of the site's cards
-      (.nkp-svc-card / .nkp-about-card), not a full-bleed app shell.
-      No min-height:100vh — the card now sizes to its actual content,
-      which is what removes the empty space below the booking flow. ── */
+/* ── Card shell ── */
 .bw-card {
   background: var(--bw-card);
   border-radius: var(--bw-radius-lg);
@@ -169,9 +154,7 @@ body {
 }
 .bw-hiw-step-desc { font-size: 12.5px; color: var(--bw-body); line-height: 1.55; }
 
-/* ── Header — light, integrated, matches the pill+heading pattern used
-      across every section of neokidspro.in (.nkp-svc-head, .nkp-faq-head,
-      .nkp-about pill etc). No dark gradient, no separate "app header" feel. ── */
+/* ── Header ── */
 .bw-header {
   background: var(--bw-surface);
   padding: 28px 28px 22px;
@@ -478,6 +461,13 @@ body {
 }
 .bw-btn-secondary:hover:not(:disabled) { background: var(--bw-teal-50); border-color: rgba(137,188,189,.4); color: var(--bw-teal); }
 
+.bw-btn-ghost {
+  background: transparent; color: var(--bw-body);
+  border: none; box-shadow: none; text-decoration: underline;
+  text-underline-offset: 3px; font-weight: 500;
+}
+.bw-btn-ghost:hover:not(:disabled) { color: var(--bw-teal); background: transparent; }
+
 /* ── Summary card ── */
 .bw-summary-card {
   background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.25);
@@ -648,7 +638,7 @@ body {
         </h2>
         <p class="bw-welcome-sub">
           Welcome to NeoKidsPro's online booking system. Schedule a consultation with
-          our expert paediatricians — online from home or in-clinic at Shri Hari Child Clinic.
+          our expert paediatricians — online from home or in person at the clinic.
         </p>
       </div>
 
@@ -665,6 +655,9 @@ body {
         <button type="button" data-action="showHowItWorks" class="bw-btn bw-btn-secondary">
           How does it work?
         </button>
+        <a href="https://neokidspro.in/our-doctors/" target="_top" class="bw-btn bw-btn-ghost">
+          Meet Our Doctors
+        </a>
       </div>
     </section>
 
@@ -687,7 +680,7 @@ body {
           </div>
           <div class="bw-hiw-content">
             <div class="bw-hiw-step-title">Choose Consultation Type</div>
-            <div class="bw-hiw-step-desc">Pick online teleconsultation from home, or an in-clinic visit at Shri Hari Child Clinic.</div>
+            <div class="bw-hiw-step-desc">Pick online teleconsultation from home, or an in-clinic visit with our paediatric team.</div>
           </div>
         </div>
         <div class="bw-hiw-step">
@@ -779,7 +772,7 @@ body {
           <div class="bw-mode-check"></div>
           <div class="bw-mode-icon-wrap">🏥</div>
           <div class="bw-mode-title">Clinic Visit</div>
-          <div class="bw-mode-desc">Visit Shri Hari Child Clinic for a physical checkup.</div>
+          <div class="bw-mode-desc">Visit our clinic for a physical checkup.</div>
         </button>
       </div>
 
@@ -1480,25 +1473,12 @@ document.addEventListener('click', (ev) => {
 
 bootFromQueryString();
 
-/* ────────────────────────────────────────────────────────────────
-   Iframe auto-resize — reports actual content height to the parent
-   WordPress page so the iframe never has leftover blank space below
-   the booking flow. Fires on load, on every step change, and on any
-   layout shift (ResizeObserver), so it stays in sync as the widget
-   moves through steps of very different heights.
-
-   NOTE: the parent page (wherever this is embedded via <iframe>) needs
-   a small listener to actually apply the height — see the comment
-   block right after this script for the ~10 lines to add on the
-   WordPress/Elementor side (e.g. in an HTML widget next to the iframe,
-   or your theme's footer).
-   ──────────────────────────────────────────────────────────────── */
+/* Reports content height to the parent page so the embedding <iframe>
+   can size itself to match — see integration notes for the parent-page
+   listener this pairs with. */
 (function () {
   function reportHeight() {
-    var h = Math.max(
-      document.documentElement.scrollHeight,
-      document.body.scrollHeight
-    );
+    var h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
     try {
       window.parent.postMessage({ type: 'nkp-booking-widget-height', height: h }, '*');
     } catch (_) {}
@@ -1508,8 +1488,7 @@ bootFromQueryString();
   document.addEventListener('click', function () { setTimeout(reportHeight, 60); });
 
   if ('ResizeObserver' in window) {
-    var ro = new ResizeObserver(function () { reportHeight(); });
-    ro.observe(document.body);
+    new ResizeObserver(reportHeight).observe(document.body);
   } else {
     setInterval(reportHeight, 500);
   }
@@ -1519,25 +1498,3 @@ bootFromQueryString();
 </script>
 </body>
 </html>
-
-<!--
-  ─────────────────────────────────────────────────────────────────
-  PARENT-PAGE SNIPPET (paste this once on neokidspro.in, NOT in this
-  file — e.g. in an Elementor "Custom HTML" widget right next to
-  wherever the booking widget <iframe> lives, or in your theme's
-  footer if the iframe appears on multiple pages):
-
-  <script>
-  window.addEventListener('message', function (e) {
-    if (e.data && e.data.type === 'nkp-booking-widget-height') {
-      var frame = document.querySelector('iframe[src*="book"]'); // adjust selector to match your actual iframe (e.g. by id or src)
-      if (frame) frame.style.height = e.data.height + 'px';
-    }
-  });
-  </script>
-
-  This is what actually removes the scroll space below the widget —
-  the fix inside this file only reports the height; the parent page
-  has to be listening and applying it to the <iframe> element's height.
-  ─────────────────────────────────────────────────────────────────
--->
