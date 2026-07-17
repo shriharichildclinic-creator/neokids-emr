@@ -67,12 +67,10 @@
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
-  background: var(--bw-surface);
-  background-image:
-    radial-gradient(circle, rgba(254,132,164,0.10) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background: var(--bw-card);
   color: var(--bw-text);
   min-height: 100vh;
+  margin: 0; padding: 0;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -80,18 +78,85 @@ body {
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
 @keyframes shimmer { to { background-position: 200% 0; } }
 
-/* ── Outer wrapper ── */
-.bw-page { max-width: 700px; margin: 0 auto; padding: 20px 16px 40px; }
+/* ── Outer wrapper — fills iframe width ── */
+.bw-page { width: 100%; margin: 0; padding: 0; }
 
-/* ── Card shell ── */
+/* ── Card shell — no outer shadow/border in iframe context ── */
 .bw-card {
   background: var(--bw-card);
-  border-radius: var(--bw-radius-lg);
-  box-shadow: var(--bw-shadow-lg);
-  border: 1.5px solid var(--bw-border);
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
   overflow: hidden;
   animation: fadeUp .35s ease forwards;
+  min-height: 100vh;
 }
+
+/* ── Welcome & How-It-Works screens ── */
+.bw-intro {
+  padding: 40px 28px 36px;
+  animation: fadeUp .35s ease forwards;
+}
+@media (max-width: 480px) { .bw-intro { padding: 28px 16px 28px; } }
+
+.bw-welcome-hero {
+  text-align: center; margin-bottom: 32px;
+}
+.bw-welcome-mascot {
+  width: 88px; height: 88px; border-radius: 28px; margin: 0 auto 18px;
+  background: linear-gradient(135deg, #2E5556 0%, #89BCBD 100%);
+  display: flex; align-items: center; justify-content: center; font-size: 40px;
+  box-shadow: 0 12px 32px rgba(46,85,86,0.2);
+}
+.bw-welcome-title {
+  font-family: 'Poppins', sans-serif; font-weight: 800;
+  font-size: clamp(22px, 4vw, 28px); color: var(--bw-ink); line-height: 1.22; margin-bottom: 12px;
+}
+.bw-welcome-sub {
+  font-size: 14.5px; color: var(--bw-body); line-height: 1.72; max-width: 480px; margin: 0 auto;
+}
+
+.bw-trust-strip {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 24px 0 28px;
+}
+.bw-trust-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.25);
+  border-radius: var(--bw-radius-pill); padding: 7px 14px;
+  font-size: 12.5px; font-weight: 600; color: #3d7677;
+}
+
+.bw-welcome-btns {
+  display: flex; flex-direction: column; gap: 10px; max-width: 400px; margin: 0 auto;
+}
+
+/* How it works */
+.bw-hiw-steps {
+  display: flex; flex-direction: column; gap: 0; margin: 20px 0 28px;
+}
+.bw-hiw-step {
+  display: flex; gap: 16px; align-items: flex-start; position: relative; padding-bottom: 20px;
+}
+.bw-hiw-step:last-child { padding-bottom: 0; }
+.bw-hiw-step-left { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.bw-hiw-num {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bw-teal); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 14px;
+  flex-shrink: 0; box-shadow: 0 4px 12px rgba(137,188,189,.35);
+}
+.bw-hiw-connector {
+  width: 2px; flex: 1; min-height: 18px; margin-top: 4px;
+  background: linear-gradient(to bottom, var(--bw-teal), rgba(137,188,189,.15));
+}
+.bw-hiw-step:last-child .bw-hiw-connector { display: none; }
+.bw-hiw-content { padding-top: 6px; }
+.bw-hiw-step-title {
+  font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 14.5px;
+  color: var(--bw-ink); margin-bottom: 2px;
+}
+.bw-hiw-step-desc { font-size: 12.5px; color: var(--bw-body); line-height: 1.55; }
 
 /* ── Header ── */
 .bw-header {
@@ -149,6 +214,7 @@ body {
   border-bottom: 1.5px solid var(--bw-border);
   gap: 0;
 }
+.bw-stepper.is-hidden { display: none; }
 .bw-step-item {
   display: flex; align-items: center; flex: 1;
 }
@@ -571,6 +637,118 @@ body {
     <span id="step3Label" class="sr-only">3. Slot</span>
     <span id="step4Label" class="sr-only">4. Confirm</span>
 
+    <!-- ── WELCOME SCREEN ── -->
+    <section id="welcomeScreen" class="bw-intro" role="region" aria-labelledby="welcomeHeading">
+      <div class="bw-welcome-hero">
+        <div class="bw-welcome-mascot" aria-hidden="true">🩺</div>
+        <h2 id="welcomeHeading" class="bw-welcome-title">
+          Book Your Child's<br>Appointment
+        </h2>
+        <p class="bw-welcome-sub">
+          Welcome to NeoKidsPro's online booking system. Schedule a consultation with
+          our expert paediatricians — online from home or in-clinic at Shri Hari Child Clinic.
+        </p>
+      </div>
+
+      <div class="bw-trust-strip">
+        <span class="bw-trust-chip">🎥 Online &amp; In-Clinic</span>
+        <span class="bw-trust-chip">⏱ Takes 2 minutes</span>
+        <span class="bw-trust-chip">💗 5000+ Families</span>
+      </div>
+
+      <div class="bw-welcome-btns">
+        <button type="button" data-action="startBooking" class="bw-btn bw-btn-primary">
+          Start Booking →
+        </button>
+        <button type="button" data-action="showHowItWorks" class="bw-btn bw-btn-secondary">
+          How does it work?
+        </button>
+      </div>
+    </section>
+
+    <!-- ── HOW IT WORKS SCREEN ── -->
+    <section id="howItWorksScreen" class="hidden bw-intro" role="region" aria-labelledby="hiwHeading">
+      <div class="bw-section-head" style="text-align:center;">
+        <div class="bw-section-pill" style="display:inline-flex;">
+          <span class="bw-section-pill-dot" aria-hidden="true"></span>
+          Simple &amp; Quick
+        </div>
+        <h2 id="hiwHeading" class="bw-section-h2">How Booking Works</h2>
+        <p class="bw-section-sub">Your appointment in 5 easy steps — takes about 2 minutes.</p>
+      </div>
+
+      <div class="bw-hiw-steps">
+        <div class="bw-hiw-step">
+          <div class="bw-hiw-step-left">
+            <div class="bw-hiw-num">1</div>
+            <div class="bw-hiw-connector"></div>
+          </div>
+          <div class="bw-hiw-content">
+            <div class="bw-hiw-step-title">Choose Consultation Type</div>
+            <div class="bw-hiw-step-desc">Pick online teleconsultation from home, or an in-clinic visit at Shri Hari Child Clinic.</div>
+          </div>
+        </div>
+        <div class="bw-hiw-step">
+          <div class="bw-hiw-step-left">
+            <div class="bw-hiw-num">2</div>
+            <div class="bw-hiw-connector"></div>
+          </div>
+          <div class="bw-hiw-content">
+            <div class="bw-hiw-step-title">Select a Doctor</div>
+            <div class="bw-hiw-step-desc">Browse available paediatricians and choose the right specialist for your child.</div>
+          </div>
+        </div>
+        <div class="bw-hiw-step">
+          <div class="bw-hiw-step-left">
+            <div class="bw-hiw-num">3</div>
+            <div class="bw-hiw-connector"></div>
+          </div>
+          <div class="bw-hiw-content">
+            <div class="bw-hiw-step-title">Enter Patient Details</div>
+            <div class="bw-hiw-step-desc">Fill in the child's name, date of birth, and reason for the visit.</div>
+          </div>
+        </div>
+        <div class="bw-hiw-step">
+          <div class="bw-hiw-step-left">
+            <div class="bw-hiw-num">4</div>
+            <div class="bw-hiw-connector"></div>
+          </div>
+          <div class="bw-hiw-content">
+            <div class="bw-hiw-step-title">Pick a Date &amp; Time</div>
+            <div class="bw-hiw-step-desc">Select from real-time available slots. Your chosen time is held for you.</div>
+          </div>
+        </div>
+        <div class="bw-hiw-step">
+          <div class="bw-hiw-step-left">
+            <div class="bw-hiw-num">5</div>
+            <div class="bw-hiw-connector"></div>
+          </div>
+          <div class="bw-hiw-content">
+            <div class="bw-hiw-step-title">Confirm &amp; Pay</div>
+            <div class="bw-hiw-step-desc">Review your booking summary, accept the terms, and confirm. Online appointments require payment via Cashfree. Clinic visits are pay-at-clinic.</div>
+          </div>
+        </div>
+        <div class="bw-hiw-step">
+          <div class="bw-hiw-step-left">
+            <div class="bw-hiw-num" style="background:var(--bw-pink);">✓</div>
+          </div>
+          <div class="bw-hiw-content">
+            <div class="bw-hiw-step-title">Receive Confirmation</div>
+            <div class="bw-hiw-step-desc">You'll get an instant booking confirmation and a WhatsApp reminder ~30 minutes before your appointment.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bw-welcome-btns">
+        <button type="button" data-action="startBooking" class="bw-btn bw-btn-primary">
+          Start Booking →
+        </button>
+        <button type="button" data-action="showWelcome" class="bw-btn bw-btn-secondary">
+          ← Back
+        </button>
+      </div>
+    </section>
+
     <!-- ── STEP 1 — Consultation type + Doctor ── -->
     <section id="step1" class="bw-body" role="region" aria-labelledby="step1Heading">
       <h2 id="step1Heading" class="sr-only">Choose consultation mode and doctor</h2>
@@ -800,6 +978,32 @@ function safeUrl(u){
   const t = u.trim();
   if (/^\s*javascript:/i.test(t)) return '';
   return escapeHtml(t);
+}
+
+// ── Intro screen helpers ──
+function showWelcome() {
+  $('#welcomeScreen').classList.remove('hidden');
+  $('#howItWorksScreen').classList.add('hidden');
+  [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
+  $('#successScreen').classList.add('hidden');
+  $('#failureScreen').classList.add('hidden');
+  document.querySelector('.bw-stepper').classList.add('is-hidden');
+}
+
+function showHowItWorks() {
+  $('#welcomeScreen').classList.add('hidden');
+  $('#howItWorksScreen').classList.remove('hidden');
+  [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
+  $('#successScreen').classList.add('hidden');
+  $('#failureScreen').classList.add('hidden');
+  document.querySelector('.bw-stepper').classList.add('is-hidden');
+}
+
+function startBooking() {
+  $('#welcomeScreen').classList.add('hidden');
+  $('#howItWorksScreen').classList.add('hidden');
+  document.querySelector('.bw-stepper').classList.remove('is-hidden');
+  goTo(1);
 }
 
 // ── Update visual stepper ──
@@ -1156,7 +1360,10 @@ function startPaymentPolling(appt, orderId){
 
 function showSuccess(appt, isOnline, customMessage=''){
   [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
+  $('#welcomeScreen').classList.add('hidden');
+  $('#howItWorksScreen').classList.add('hidden');
   $('#failureScreen').classList.add('hidden');
+  document.querySelector('.bw-stepper').classList.add('is-hidden');
   const s = $('#successScreen');
   s.classList.remove('hidden');
 
@@ -1176,7 +1383,10 @@ function showSuccess(appt, isOnline, customMessage=''){
 
 function showFailure(appt, cashfreeStatus, message){
   [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
+  $('#welcomeScreen').classList.add('hidden');
+  $('#howItWorksScreen').classList.add('hidden');
   $('#successScreen').classList.add('hidden');
+  document.querySelector('.bw-stepper').classList.add('is-hidden');
   const f = $('#failureScreen');
   f.classList.remove('hidden');
   $('#failureMsg').textContent = message || 'Your payment could not be confirmed.';
@@ -1193,14 +1403,24 @@ function resetWidget(){
   state.slot = null;
   $('#failureScreen').classList.add('hidden');
   $('#successScreen').classList.add('hidden');
-  goTo(1);
+  showWelcome();
 }
 
 async function bootFromQueryString(){
   const qs = new URLSearchParams(window.location.search);
   const doctorId = qs.get('doctor');
   const recallId = qs.get('recall');
-  if (!doctorId && !recallId) { loadDoctors(); return; }
+  // No deep-link params → show welcome screen, hide stepper
+  if (!doctorId && !recallId) {
+    document.querySelector('.bw-stepper').classList.add('is-hidden');
+    // step1 is visible by default; hide it and show welcome
+    $('#step1').classList.add('hidden');
+    $('#welcomeScreen').classList.remove('hidden');
+    return;
+  }
+  // Deep-link with ?doctor= or ?recall= → skip welcome, go straight to booking
+  document.querySelector('.bw-stepper').classList.remove('is-hidden');
+  $('#welcomeScreen').classList.add('hidden');
 
   let prefill = null;
   if (recallId) {
@@ -1243,6 +1463,9 @@ document.addEventListener('click', (ev) => {
   if (!t) return;
   const action = t.getAttribute('data-action');
   switch (action) {
+    case 'startBooking':    startBooking(); break;
+    case 'showHowItWorks':  showHowItWorks(); break;
+    case 'showWelcome':     showWelcome(); break;
     case 'setMode':         setMode(t.getAttribute('data-mode')); break;
     case 'selectDoctor':    selectDoctor(t.getAttribute('data-id')); break;
     case 'goTo':            goTo(parseInt(t.getAttribute('data-step'), 10)); break;
