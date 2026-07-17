@@ -78,18 +78,29 @@ body {
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
 @keyframes shimmer { to { background-position: 200% 0; } }
 
-/* ── Outer wrapper — fills iframe width ── */
-.bw-page { width: 100%; margin: 0; padding: 0; }
+/* ── Outer wrapper — contained, matches the site's container philosophy
+      (same idea as .nkp-hero-inner / .nkp-svc-grid on neokidspro.in: a
+      centered max-width column with comfortable side padding, not edge-to-edge) ── */
+.bw-page {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  background: #ffffff;
+}
+@media (max-width: 480px) { .bw-page { padding: 20px 16px 36px; } }
 
-/* ── Card shell — no outer shadow/border in iframe context ── */
+/* ── Card shell — a soft card like the rest of the site's cards
+      (.nkp-svc-card / .nkp-about-card), not a full-bleed app shell.
+      No min-height:100vh — the card now sizes to its actual content,
+      which is what removes the empty space below the booking flow. ── */
 .bw-card {
   background: var(--bw-card);
-  border-radius: 0;
-  box-shadow: none;
-  border: none;
+  border-radius: var(--bw-radius-lg);
+  box-shadow: var(--bw-shadow-md);
+  border: 1.5px solid var(--bw-border);
   overflow: hidden;
   animation: fadeUp .35s ease forwards;
-  min-height: 100vh;
 }
 
 /* ── Welcome & How-It-Works screens ── */
@@ -158,52 +169,45 @@ body {
 }
 .bw-hiw-step-desc { font-size: 12.5px; color: var(--bw-body); line-height: 1.55; }
 
-/* ── Header ── */
+/* ── Header — light, integrated, matches the pill+heading pattern used
+      across every section of neokidspro.in (.nkp-svc-head, .nkp-faq-head,
+      .nkp-about pill etc). No dark gradient, no separate "app header" feel. ── */
 .bw-header {
-  background: linear-gradient(135deg, #2E5556 0%, #3d7677 55%, #89BCBD 130%);
-  padding: 28px 28px 24px;
+  background: var(--bw-surface);
+  padding: 28px 28px 22px;
   position: relative;
   overflow: hidden;
+  border-bottom: 1.5px solid var(--bw-border);
 }
 .bw-header::before {
   content: ''; position: absolute; inset: 0;
-  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
-  background-size: 22px 22px; pointer-events: none;
+  background-image: radial-gradient(circle, rgba(254,132,164,0.12) 1px, transparent 1px);
+  background-size: 24px 24px; opacity: .6; pointer-events: none;
 }
-.bw-header-blob1 {
-  position: absolute; width: 180px; height: 180px; border-radius: 50%;
-  background: rgba(255,255,255,.08); top: -60px; right: -40px;
-  pointer-events: none;
-}
-.bw-header-blob2 {
-  position: absolute; width: 90px; height: 90px; border-radius: 50%;
-  background: rgba(254,132,164,.18); bottom: -30px; right: 80px;
-  pointer-events: none;
-}
-.bw-header-inner { display: flex; align-items: center; gap: 16px; position: relative; z-index: 1; }
+.bw-header-inner { display: flex; align-items: center; gap: 14px; position: relative; z-index: 1; }
 .bw-header-icon {
-  width: 52px; height: 52px; border-radius: 16px;
-  background: rgba(255,255,255,.16); backdrop-filter: blur(4px);
+  width: 48px; height: 48px; border-radius: 14px;
+  background: rgba(254,132,164,.14); border: 1.5px solid rgba(254,132,164,.28);
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; font-size: 22px;
+  flex-shrink: 0; font-size: 20px;
 }
 .bw-header-title {
   font-family: 'Poppins', sans-serif; font-weight: 800;
-  font-size: clamp(20px, 4vw, 26px); color: #fff; line-height: 1.2;
+  font-size: clamp(19px, 4vw, 24px); color: var(--bw-ink); line-height: 1.2;
 }
 .bw-header-sub {
-  font-size: 13px; color: rgba(255,255,255,.75);
+  font-size: 13px; color: var(--bw-body);
   margin-top: 3px; font-weight: 400;
 }
 .bw-header-badge {
   display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25);
-  border-radius: var(--bw-radius-pill); padding: 4px 12px;
-  font-size: 11px; font-weight: 700; color: #fff;
-  letter-spacing: .5px; text-transform: uppercase; margin-top: 8px;
+  background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.3);
+  border-radius: var(--bw-radius-pill); padding: 4px 12px 4px 9px;
+  font-size: 10.5px; font-weight: 700; color: #3d7677;
+  letter-spacing: .5px; text-transform: uppercase; margin-top: 9px;
 }
 .bw-header-badge-dot {
-  width: 6px; height: 6px; border-radius: 50%; background: #FE84A4;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--bw-teal);
   animation: pulse 2s infinite;
 }
 
@@ -593,8 +597,6 @@ body {
 
     <!-- Header -->
     <header class="bw-header">
-      <div class="bw-header-blob1" aria-hidden="true"></div>
-      <div class="bw-header-blob2" aria-hidden="true"></div>
       <div class="bw-header-inner">
         <div class="bw-header-icon" aria-hidden="true">🩺</div>
         <div>
@@ -1477,6 +1479,65 @@ document.addEventListener('click', (ev) => {
 });
 
 bootFromQueryString();
+
+/* ────────────────────────────────────────────────────────────────
+   Iframe auto-resize — reports actual content height to the parent
+   WordPress page so the iframe never has leftover blank space below
+   the booking flow. Fires on load, on every step change, and on any
+   layout shift (ResizeObserver), so it stays in sync as the widget
+   moves through steps of very different heights.
+
+   NOTE: the parent page (wherever this is embedded via <iframe>) needs
+   a small listener to actually apply the height — see the comment
+   block right after this script for the ~10 lines to add on the
+   WordPress/Elementor side (e.g. in an HTML widget next to the iframe,
+   or your theme's footer).
+   ──────────────────────────────────────────────────────────────── */
+(function () {
+  function reportHeight() {
+    var h = Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight
+    );
+    try {
+      window.parent.postMessage({ type: 'nkp-booking-widget-height', height: h }, '*');
+    } catch (_) {}
+  }
+
+  window.addEventListener('load', reportHeight);
+  document.addEventListener('click', function () { setTimeout(reportHeight, 60); });
+
+  if ('ResizeObserver' in window) {
+    var ro = new ResizeObserver(function () { reportHeight(); });
+    ro.observe(document.body);
+  } else {
+    setInterval(reportHeight, 500);
+  }
+
+  setTimeout(reportHeight, 300);
+})();
 </script>
 </body>
 </html>
+
+<!--
+  ─────────────────────────────────────────────────────────────────
+  PARENT-PAGE SNIPPET (paste this once on neokidspro.in, NOT in this
+  file — e.g. in an Elementor "Custom HTML" widget right next to
+  wherever the booking widget <iframe> lives, or in your theme's
+  footer if the iframe appears on multiple pages):
+
+  <script>
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.type === 'nkp-booking-widget-height') {
+      var frame = document.querySelector('iframe[src*="book"]'); // adjust selector to match your actual iframe (e.g. by id or src)
+      if (frame) frame.style.height = e.data.height + 'px';
+    }
+  });
+  </script>
+
+  This is what actually removes the scroll space below the widget —
+  the fix inside this file only reports the height; the parent page
+  has to be listening and applying it to the <iframe> element's height.
+  ─────────────────────────────────────────────────────────────────
+-->
