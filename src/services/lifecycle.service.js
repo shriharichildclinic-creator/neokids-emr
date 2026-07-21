@@ -75,6 +75,11 @@ async function decrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
   });
 }
 
+// Vaccination reminders run at most once per calendar day per process.
+// The dedup lives in NotificationLog, but this cheap guard avoids
+// hammering the scan every 5 minutes.
+let _lastVaccinationScanDay = null;
+
 async function runLifecycleJobs() {
   try {
     await expirePendingAppointments();        // Bug 10
@@ -82,6 +87,18 @@ async function runLifecycleJobs() {
     const automation = require('./automation.service');
     await automation.processReminders();
     await automation.processFollowUpRecalls();   // Bug 3 — soft recall
+
+    // ── NEW: Vaccination reminders (daily scan) ──
+    const today = new Date().toISOString().slice(0, 10);
+    if (_lastVaccinationScanDay !== today) {
+      const vacc = require('./vaccination.service');
+      try {
+        await vacc.processVaccinationReminders();
+        _lastVaccinationScanDay = today;
+      } catch (e) {
+        logger.error('Vaccination reminder scan failed', e);
+      }
+    }
   } catch (error) {
     logger.error('Lifecycle job failed', error);
   }

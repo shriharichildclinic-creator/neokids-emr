@@ -97,6 +97,7 @@
 const prisma   = require('../config/prisma');
 const logger   = require('../utils/logger');
 const whatsapp = require('./whatsapp.service');
+const waMedia  = require('./whatsapp-media.service');   // NEW — WhatsApp PDF sharing
 const email    = require('./email.service');
 const pdf      = require('./pdf.service');
 const meet     = require('./googleMeet.service');
@@ -396,6 +397,29 @@ async function onOnlineBookingConfirmed(appointment) {
     invoiceUrl = inv.url;
     invoiceFilepath = inv.filepath;
   } catch (e) { logger.error('Invoice generation failed', e); }
+
+  // ── NEW: WhatsApp Invoice PDF share (Meta Cloud API) ──
+  // Runs alongside the existing email attachment path below.
+  if (invoiceFilepath && a.patient.phone) {
+    try {
+      const r = await waMedia.sendInvoicePdf({
+        appointment: a, filepath: invoiceFilepath, publicUrl: invoiceUrl
+      });
+      await logNotification({
+        appointmentId: a.id, channel: 'WHATSAPP', recipient: a.patient.phone,
+        template: process.env.WA_TPL_INVOICE_PDF || 'neokids_invoice_pdf',
+        direction: 'PATIENT', status: 'SENT', payload: r || undefined
+      });
+    } catch (e) {
+      logger.error(`WA invoice PDF failed for ${a.id}: ${e.message}`);
+      await logNotification({
+        appointmentId: a.id, channel: 'WHATSAPP', recipient: a.patient.phone,
+        template: process.env.WA_TPL_INVOICE_PDF || 'neokids_invoice_pdf',
+        direction: 'PATIENT', status: 'FAILED',
+        errorMessage: `${e.message}${e.code ? ` (code=${e.code})` : ''}`
+      });
+    }
+  }
 
   await prisma.appointment.update({
     where: { id: a.id },
@@ -747,6 +771,33 @@ async function onPrescriptionCreated(appointment, prescription) {
       })
     });
   }
+
+  // ── NEW: WhatsApp Prescription PDF share (Meta Cloud API) ──
+  // Preserves the existing email flow above. Runs after email so a
+  // WhatsApp failure never blocks the email delivery.
+  if (appointment.patient.phone) {
+    try {
+      const r = await waMedia.sendPrescriptionPdf({
+        appointment, filepath: pdfRes.filepath, publicUrl: pdfRes.url
+      });
+      await logNotification({
+        appointmentId: appointment.id, channel: 'WHATSAPP',
+        recipient: appointment.patient.phone,
+        template: process.env.WA_TPL_PRESCRIPTION_PDF || 'neokids_prescription_pdf',
+        direction: 'PATIENT', status: 'SENT', payload: r || undefined
+      });
+    } catch (e) {
+      logger.error(`WA prescription PDF failed for ${appointment.id}: ${e.message}`);
+      await logNotification({
+        appointmentId: appointment.id, channel: 'WHATSAPP',
+        recipient: appointment.patient.phone,
+        template: process.env.WA_TPL_PRESCRIPTION_PDF || 'neokids_prescription_pdf',
+        direction: 'PATIENT', status: 'FAILED',
+        errorMessage: `${e.message}${e.code ? ` (code=${e.code})` : ''}`
+      });
+    }
+  }
+
   return pdfRes;
 }
 
@@ -776,6 +827,29 @@ async function resendPrescription(appointment, prescription) {
       attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
     })
   });
+
+  // ── NEW: re-share on WhatsApp as well ──
+  if (appointment.patient.phone) {
+    try {
+      await waMedia.sendPrescriptionPdf({
+        appointment, filepath: pdfRes.filepath, publicUrl: pdfRes.url
+      });
+      await logNotification({
+        appointmentId: appointment.id, channel: 'WHATSAPP',
+        recipient: appointment.patient.phone,
+        template: (process.env.WA_TPL_PRESCRIPTION_PDF || 'neokids_prescription_pdf') + '__resend',
+        direction: 'PATIENT', status: 'SENT'
+      });
+    } catch (e) {
+      await logNotification({
+        appointmentId: appointment.id, channel: 'WHATSAPP',
+        recipient: appointment.patient.phone,
+        template: (process.env.WA_TPL_PRESCRIPTION_PDF || 'neokids_prescription_pdf') + '__resend',
+        direction: 'PATIENT', status: 'FAILED',
+        errorMessage: `${e.message}${e.code ? ` (code=${e.code})` : ''}`
+      });
+    }
+  }
 
   return pdfRes;
 }
