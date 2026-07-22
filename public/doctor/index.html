@@ -72,7 +72,13 @@
       </div>
       <div class="np-field">
         <label class="np-field__label" for="password">Password</label>
-        <input id="password" name="password" type="password" class="np-input" placeholder="••••••••" required autocomplete="current-password">
+        <div class="np-password-wrap">
+          <input id="password" name="password" type="password" class="np-input np-input--password" placeholder="••••••••" required autocomplete="current-password">
+          <button type="button" class="np-password-toggle" data-target="password" aria-label="Show password" aria-pressed="false" onclick="togglePasswordVisibility(this)">
+            <svg class="np-password-toggle__icon np-password-toggle__icon--show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="np-password-toggle__icon np-password-toggle__icon--hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.79 19.79 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-3.17 4.19"/><line x1="1" y1="1" x2="23" y2="23"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>
+          </button>
+        </div>
       </div>
       <div id="loginError" class="np-error hidden"></div>
       <button type="submit" class="np-btn np-btn--primary w-full justify-center" style="width:100%; padding:.75rem 1rem;">

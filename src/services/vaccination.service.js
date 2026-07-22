@@ -9,7 +9,7 @@
 //      (default: 7 days before due date, once per vaccine per window).
 //   3. Sends a WhatsApp template reminder + an Email reminder that
 //      encourages parents to book a vaccination consultation with
-//      Dr. Vishal Parmar.
+//      Dr. Vishal Parmar (hardcoded inside the Meta template).
 //
 // It reuses:
 //   - whatsapp.service.sendWhatsAppWithFallback  (primary + text fallback)
@@ -23,14 +23,16 @@ const whatsapp = require('./whatsapp.service');
 const email    = require('./email.service');
 const { formatDateOnly, getTodayDateString } = require('../utils/date');
 
-const PROVIDER_DOCTOR_NAME =
-  process.env.VACC_DOCTOR_NAME || 'Dr. Vishal Parmar';
+// Doctor name is now hardcoded inside the Meta-approved template
+// (neokids_vaccination_reminder). Kept here ONLY for the email fallback body.
+const PROVIDER_DOCTOR_NAME = 'Dr. Vishal Parmar';
 const CLINIC_NAME =
   process.env.CLINIC_NAME || 'NeoKidsPro Clinic';
-const BOOKING_URL_BASE =
-  (process.env.PUBLIC_BOOKING_URL || process.env.APP_URL || 'https://neokidspro.in').replace(/\/+$/, '');
-const VACC_DOCTOR_ID =
-  process.env.VACC_DOCTOR_ID || ''; // optional prefill for booking widget
+
+// Static website URL for the WhatsApp "Book Vaccination" button
+// (matches the approved Meta template — no dynamic suffix, no parameters).
+const VACCINATION_WEBSITE_URL = 'https://vaxiclinics.com/';
+
 const WA_TPL_VACCINATION =
   process.env.WA_TPL_VACCINATION || 'neokids_vaccination_reminder';
 
@@ -140,14 +142,6 @@ function pickApproaching(scheduleExpanded, referenceDate = new Date()) {
   });
 }
 
-function bookingLinkFor(patient) {
-  const params = new URLSearchParams();
-  if (VACC_DOCTOR_ID) params.set('doctor', VACC_DOCTOR_ID);
-  params.set('vacc', '1');
-  params.set('patient', patient.id);
-  return `${BOOKING_URL_BASE}/assets/booking-widget.html?${params.toString()}`;
-}
-
 // Logging + dedup
 async function alreadySentToday(patientId, code, dueDate) {
   const key = `VACC:${code}:${isoDay(dueDate)}`;
@@ -198,7 +192,7 @@ async function logFailed(patientId, phoneOrEmail, channel, code, dueDate, err) {
 }
 
 // Build the email HTML body
-function buildEmailHtml({ patient, vaccine, doctorName, bookingLink }) {
+function buildEmailHtml({ patient, vaccine, doctorName }) {
   const parent = patient.parentName || 'Parent';
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.55;max-width:600px;">
@@ -221,15 +215,15 @@ function buildEmailHtml({ patient, vaccine, doctorName, bookingLink }) {
       <p>Please book a vaccination consultation with <b>${escapeHtml(doctorName)}</b> so your child stays
         on schedule.</p>
       <p style="margin:22px 0;">
-        <a href="${bookingLink}"
+        <a href="${VACCINATION_WEBSITE_URL}"
            style="display:inline-block;padding:12px 22px;background:#4DA8FF;color:#fff;
                   border-radius:8px;text-decoration:none;font-weight:bold;">
-          📅 Book Vaccination Consultation
+          📅 Book Vaccination
         </a>
       </p>
       <p style="font-size:12px;color:#666;">
         If the button doesn't work, open this link in your browser:<br>
-        <a href="${bookingLink}" style="color:#4DA8FF;word-break:break-all;">${bookingLink}</a>
+        <a href="${VACCINATION_WEBSITE_URL}" style="color:#4DA8FF;word-break:break-all;">${VACCINATION_WEBSITE_URL}</a>
       </p>
       <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
       <p style="font-size:12px;color:#888;margin:0;">
@@ -249,13 +243,15 @@ function escapeHtml(s) {
 // Core: send both channels for ONE approaching vaccine
 async function sendReminderForVaccine(patient, vaccine) {
   const doctorName  = PROVIDER_DOCTOR_NAME;
-  const bookingLink = bookingLinkFor(patient);
   const dueStr      = formatDateOnly(vaccine.dueDate);
 
   // ── WhatsApp ──
-  // Template: neokids_vaccination_reminder
-  //   Body:   {{1}} ChildName  {{2}} Vaccine  {{3}} DueDate  {{4}} DoctorName
-  //   Button: URL suffix = short booking token / dose code
+  // Template: neokids_vaccination_reminder (Meta-approved)
+  //   Header:  None
+  //   Body:    {{1}} Child Name  {{2}} Vaccine Name  {{3}} Due Date
+  //            (Doctor name "Dr. Vishal Parmar" is HARDCODED in the template.)
+  //   Button:  Static "Book Vaccination" URL → https://vaxiclinics.com/
+  //            (no dynamic suffix, no URL parameters)
   if (patient.phone) {
     try {
       const result = await whatsapp.sendWhatsAppWithFallback({
@@ -263,16 +259,15 @@ async function sendReminderForVaccine(patient, vaccine) {
         primaryTemplate:  WA_TPL_VACCINATION,
         fallbackTemplate: null,
         bodyParams: [
-          patient.name,
-          vaccine.name,
-          dueStr,
-          doctorName
+          patient.name,   // {{1}} Child Name
+          vaccine.name,   // {{2}} Vaccine Name
+          dueStr          // {{3}} Due Date
         ],
-        urlButtonParam: `vacc=${encodeURIComponent(vaccine.code)}&patient=${patient.id}`,
+        // Static Visit Website button — no suffix, no dynamic parameters.
+        urlButtonParam: null,
         plainTextFallback:
           `Hello ${patient.parentName || 'Parent'}, ${patient.name}'s ${vaccine.name} ` +
-          `vaccination is due on ${dueStr}. Please book a consultation with ${doctorName}: ` +
-          `${bookingLink} — ${CLINIC_NAME}`
+          `vaccination is due on ${dueStr}. Book here: ${VACCINATION_WEBSITE_URL} — ${CLINIC_NAME}`
       });
       if (result.ok) {
         await logSent(patient.id, patient.phone, 'WHATSAPP', vaccine.code, vaccine.dueDate, result.response || { via: result.via });
@@ -290,7 +285,7 @@ async function sendReminderForVaccine(patient, vaccine) {
       await email.sendEmail({
         to: patient.email,
         subject: `Vaccination reminder for ${patient.name} — ${vaccine.name} due ${dueStr}`,
-        html: buildEmailHtml({ patient, vaccine, doctorName, bookingLink })
+        html: buildEmailHtml({ patient, vaccine, doctorName })
       });
       await logSent(patient.id, patient.email, 'EMAIL', vaccine.code, vaccine.dueDate, { subject: 'vaccination_reminder' });
     } catch (e) {

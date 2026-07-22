@@ -145,6 +145,21 @@ $('#loginForm').addEventListener('submit', async (e) => {
     err.classList.remove('hidden');
   }
 });
+function togglePasswordVisibility(btn) {
+  if (!btn) return;
+  const targetId = btn.getAttribute('data-target');
+  const input = document.getElementById(targetId);
+  if (!input) return;
+  const showIcon = btn.querySelector('.np-password-toggle__icon--show');
+  const hideIcon = btn.querySelector('.np-password-toggle__icon--hide');
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  btn.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
+  btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+  if (showIcon) showIcon.style.display = isHidden ? 'none' : '';
+  if (hideIcon) hideIcon.style.display = isHidden ? '' : 'none';
+}
+
 function forgotPassword(){
   const email = ($('#email').value || '').trim();
   if (!email){ alert('Enter your email first, then click Forgot password.'); return; }
