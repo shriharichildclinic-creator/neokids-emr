@@ -1173,3 +1173,129 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
   .np-profile__trigger{ padding:.32rem; }
   .np-filter-actions{ grid-template-columns:1fr; }
 }
+
+/* =====================================================================
+   Notification template dropdown (UI polish only — backend unchanged)
+   Improves spacing, readability, and grouping visuals for the
+   <select id="notifTemplate"> element.
+   ===================================================================== */
+.np-notif-template-select{
+  padding-top: .55rem;
+  padding-bottom: .55rem;
+  line-height: 1.35;
+  font-weight: 500;
+  min-width: 260px;
+}
+.np-notif-template-select optgroup{
+  font-weight: 700;
+  font-style: normal;
+  color: var(--np-primary-600);
+  background: #F4F8FB;
+  padding: .25rem 0;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  font-size: .78rem;
+}
+.np-notif-template-select option{
+  font-weight: 500;
+  color: var(--np-text);
+  padding: .35rem .55rem;
+  background: #FFFFFF;
+}
+.np-notif-template-select option:disabled{
+  color: var(--np-muted);
+  font-style: italic;
+}
+html[data-theme="dark"] .np-notif-template-select optgroup{
+  background: rgba(255,255,255,.04);
+  color: var(--np-primary);
+}
+html[data-theme="dark"] .np-notif-template-select option{
+  background: transparent;
+  color: #E6EEF7;
+}
+
+/* =====================================================================
+   Doctor EMR UUID display (read-only, admin doctor drawer)
+   UI only — no backend changes.
+   ===================================================================== */
+.np-uuid-card{
+  margin: 0 0 1rem;
+  padding: .7rem .8rem .8rem;
+  border: 1px solid var(--np-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #F8FBFD 0%, #F1F6FA 100%);
+}
+.np-uuid-card__label{
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--np-primary-600);
+  margin-bottom: .4rem;
+}
+.np-uuid-card__label svg{ width: 14px; height: 14px; }
+.np-uuid-card__row{
+  display: flex;
+  align-items: stretch;
+  gap: .45rem;
+}
+.np-uuid-card__value{
+  flex: 1;
+  min-width: 0;
+  padding: .5rem .65rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .82rem;
+  color: var(--np-ink);
+  background: #FFFFFF;
+  border: 1px solid var(--np-border);
+  border-radius: 8px;
+  outline: none;
+  cursor: text;
+  user-select: all;
+}
+.np-uuid-card__value:focus{
+  border-color: var(--np-primary);
+  box-shadow: 0 0 0 3px rgba(137,188,189,.20);
+}
+.np-uuid-card__copy{
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .5rem .75rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--np-primary-600);
+  background: #FFFFFF;
+  border: 1px solid var(--np-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.np-uuid-card__copy svg{ width: 14px; height: 14px; }
+.np-uuid-card__copy:hover{
+  background: var(--np-mint);
+  border-color: var(--np-primary);
+}
+.np-uuid-card__copy.is-copied{
+  background: #E7F5EA;
+  color: #16794A;
+  border-color: #A7D7B4;
+}
+html[data-theme="dark"] .np-uuid-card{
+  background: rgba(255,255,255,.03);
+  border-color: rgba(255,255,255,.08);
+}
+html[data-theme="dark"] .np-uuid-card__value{
+  background: rgba(255,255,255,.05);
+  color: #E6EEF7;
+  border-color: rgba(255,255,255,.10);
+}
+html[data-theme="dark"] .np-uuid-card__copy{
+  background: rgba(255,255,255,.04);
+  color: var(--np-primary);
+  border-color: rgba(255,255,255,.10);
+}

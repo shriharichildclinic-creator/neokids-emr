@@ -187,6 +187,7 @@ async function init(){
     populateAvailability(me);
     populateClinic(me);
     populateFees(me);
+    populateDoctorUuid(me);
   } catch (ex){
     if (ex.status === 401){ logout(); return; }
     console.warn('doctor/me failed', ex);
@@ -1317,12 +1318,65 @@ function loadSettings(){
     populateAvailability(d);
     populateClinic(d);
     populateFees(d);
+    populateDoctorUuid(d);
     // Upgrade profile-photo input to a drag-and-drop dropzone (idempotent).
     if (typeof NPDropzone !== 'undefined') {
       const input = document.getElementById('photoInput');
       if (input) NPDropzone.bind(input, { label: 'Drop profile photo here', hint: 'or click to browse (JPG / PNG)' });
     }
   }).catch(()=>{});
+}
+
+/* =====================================================================
+   Doctor EMR UUID (read-only display in Profile / Settings)
+   UI only — no API or database changes.
+   ===================================================================== */
+function populateDoctorUuid(d){
+  const input = document.getElementById('doctorUuidInput');
+  const btn   = document.getElementById('doctorUuidCopyBtn');
+  if (!input || !btn) return;
+  const uuid = (d && d.id) || '';
+  input.value = uuid;
+  if (!btn.__wired) {
+    btn.__wired = true;
+    btn.addEventListener('click', () => __npCopyDoctorUuid(input.value, btn));
+  }
+  btn.disabled = !uuid;
+}
+function __npCopyDoctorUuid(text, btn){
+  if (!text) return;
+  const done = () => {
+    if (!btn) return;
+    const span = btn.querySelector('span');
+    const original = span ? span.textContent : '';
+    btn.classList.add('is-copied');
+    if (span) span.textContent = 'Copied';
+    setTimeout(() => {
+      btn.classList.remove('is-copied');
+      if (span) span.textContent = original || 'Copy';
+    }, 1400);
+  };
+  const fallback = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      done();
+    } catch(_){}
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+  } catch(_) { fallback(); }
 }
 function populateAvailability(d){
   ['availableFromOnline_h','availableToOnline_h','availableFromOffline_h','availableToOffline_h'].forEach(name => {

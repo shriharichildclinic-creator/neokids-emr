@@ -757,6 +757,21 @@ async function openInsights(id){
         </div>
       </div>
 
+      <!-- Doctor EMR UUID (read-only, with copy button) -->
+      <div class="np-uuid-card" role="group" aria-label="Doctor EMR UUID">
+        <div class="np-uuid-card__label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>
+          <span>Doctor EMR UUID</span>
+        </div>
+        <div class="np-uuid-card__row">
+          <input class="np-uuid-card__value" type="text" readonly value="${escapeHtml(d.id || '')}" aria-label="Doctor EMR UUID (read-only)" onclick="this.select()"/>
+          <button type="button" class="np-uuid-card__copy" data-copy="${escapeHtml(d.id || '')}" aria-label="Copy Doctor UUID">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            <span>Copy</span>
+          </button>
+        </div>
+      </div>
+
       <div class="np-kpi-grid" style="grid-template-columns: repeat(2, 1fr);">
         <div class="np-kpi np-kpi--blue">
           <div class="np-kpi__label">Total appointments</div>
@@ -811,11 +826,55 @@ async function openInsights(id){
         <div class="np-panel__body" style="padding:0;">${upcoming}</div>
       </div>
     `;
+    // Wire the UUID copy button (read-only, no API changes).
+    const copyBtn = body.querySelector('.np-uuid-card__copy');
+    if (copyBtn) copyBtn.addEventListener('click', () => __npCopyToClipboard(copyBtn.getAttribute('data-copy') || '', copyBtn));
   } catch (err) {
     body.innerHTML = `<div class="np-error">${escapeHtml(err.message)}</div>`;
   }
 }
 function closeDoctorDrawer(){ $('#doctorDrawer').classList.add('hidden'); }
+
+/* =====================================================================
+   Clipboard helper for read-only UUID displays (UI utility only).
+   ===================================================================== */
+function __npCopyToClipboard(text, btn){
+  if (!text) return;
+  const done = () => {
+    if (!btn) return;
+    const span = btn.querySelector('span');
+    const original = span ? span.textContent : '';
+    btn.classList.add('is-copied');
+    if (span) span.textContent = 'Copied';
+    setTimeout(() => {
+      btn.classList.remove('is-copied');
+      if (span) span.textContent = original || 'Copy';
+    }, 1400);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => __npCopyFallback(text, done));
+    } else {
+      __npCopyFallback(text, done);
+    }
+  } catch(_) {
+    __npCopyFallback(text, done);
+  }
+}
+function __npCopyFallback(text, done){
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    done && done();
+  } catch(_){}
+}
 
 /* ---- Doctor filter bar listeners ---- */
 $('#docSearch').addEventListener('input', renderDoctors);
@@ -954,6 +1013,85 @@ $('#apptSearch').addEventListener('input', () => { /* debounce */
    ===================================================================== */
 let __notifTemplatesCache = null;
 
+/* ─── Notification template UI helpers ──────────────────────────────────────
+ * UI-ONLY improvements:
+ *   • Display user-friendly names in the dropdown while the <option value="">
+ *     still carries the raw template key (backend mapping unchanged).
+ *   • Organize into readable optgroups with counts.
+ *   • Group labels use human wording ("Patient notifications", etc.).
+ * ─────────────────────────────────────────────────────────────────────────── */
+const __NOTIF_TEMPLATE_LABELS = {
+  // Patient
+  APPOINTMENT_BOOKED:            'Appointment booked — confirmation',
+  APPOINTMENT_CONFIRMED:         'Appointment confirmed',
+  APPOINTMENT_REMINDER:          'Appointment reminder',
+  APPOINTMENT_REMINDER_24H:      'Appointment reminder — 24 hours before',
+  APPOINTMENT_REMINDER_1H:       'Appointment reminder — 1 hour before',
+  APPOINTMENT_RESCHEDULED:       'Appointment rescheduled',
+  APPOINTMENT_CANCELLED:         'Appointment cancelled',
+  APPOINTMENT_COMPLETED:         'Appointment completed',
+  APPOINTMENT_MISSED:            'Appointment missed / no-show',
+  PAYMENT_RECEIVED:              'Payment received',
+  PAYMENT_FAILED:                'Payment failed',
+  PAYMENT_REFUNDED:              'Payment refunded',
+  PRESCRIPTION_ISSUED:           'Prescription issued',
+  PRESCRIPTION_READY:            'Prescription ready to view',
+  PATIENT_WELCOME:               'Patient welcome',
+  PATIENT_OTP:                   'Patient login OTP',
+  PATIENT_PASSWORD_RESET:        'Patient password reset',
+  CONSULTATION_STARTED:          'Consultation started',
+  CONSULTATION_LINK:             'Consultation join link',
+  FEEDBACK_REQUEST:              'Feedback request',
+
+  // Doctor
+  DOCTOR_INVITE:                 'Doctor invitation',
+  DOCTOR_WELCOME:                'Doctor welcome',
+  DOCTOR_PASSWORD_RESET:         'Doctor password reset',
+  DOCTOR_NEW_APPOINTMENT:        'New appointment assigned',
+  DOCTOR_APPOINTMENT_CANCELLED:  'Appointment cancelled (doctor)',
+  DOCTOR_APPOINTMENT_RESCHEDULED:'Appointment rescheduled (doctor)',
+  DOCTOR_KYC_APPROVED:           'KYC approved',
+  DOCTOR_KYC_REJECTED:           'KYC rejected',
+  DOCTOR_KYC_PENDING:            'KYC pending review',
+  DOCTOR_PAYOUT_PROCESSED:       'Payout processed',
+  DOCTOR_SETTLEMENT_READY:       'Settlement ready',
+  DOCTOR_DAILY_SUMMARY:          'Daily appointments summary',
+
+  // Admin / system
+  ADMIN_NEW_DOCTOR:              'New doctor onboarded',
+  ADMIN_KYC_SUBMITTED:           'KYC submitted for review',
+  ADMIN_PAYMENT_ALERT:           'Payment alert',
+  ADMIN_ERROR_ALERT:             'System error alert',
+  ADMIN_DAILY_REPORT:            'Daily admin report',
+  ADMIN_WEEKLY_REPORT:           'Weekly admin report',
+  SYSTEM_MAINTENANCE:            'System maintenance notice'
+};
+
+const __NOTIF_AUDIENCE_LABELS = {
+  '':      'All recipient types',
+  PATIENT: 'Patient notifications',
+  DOCTOR:  'Doctor notifications',
+  ADMIN:   'Admin & system notifications',
+  OTHER:   'Other notifications'
+};
+
+function __notifPrettyName(rawTemplate){
+  if (!rawTemplate) return '';
+  if (__NOTIF_TEMPLATE_LABELS[rawTemplate]) return __NOTIF_TEMPLATE_LABELS[rawTemplate];
+  // Fallback: turn SNAKE_CASE / snake_case / kebab-case into Title Case.
+  return String(rawTemplate)
+    .replace(/[_\-.]+/g, ' ')
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (_, c) => c.toUpperCase())
+    .trim();
+}
+
+function __notifChannelLabel(ch){
+  if (!ch) return '';
+  const map = { WHATSAPP: 'WhatsApp', EMAIL: 'Email', SMS: 'SMS', PUSH: 'Push' };
+  return map[String(ch).toUpperCase()] || String(ch);
+}
+
 async function loadNotifTemplates(){
   try {
     const data = await api('/admin/notifications/templates');
@@ -972,27 +1110,32 @@ function renderNotifTemplateOptions(){
   const current  = sel.value;
   const audience = ($('#notifAudience') && $('#notifAudience').value) || '';
 
+  // Add a class so we can target dropdown-only styling without touching
+  // the underlying <select> logic.
+  sel.classList.add('np-notif-template-select');
+
   let html = '<option value="">All templates</option>';
   const { groups, flat } = __notifTemplatesCache;
 
-  // ── Update audience-filter labels with counts so an admin can see at a glance
-  // how many templates exist in each bucket (also makes UX#2 visually obvious).
+  // ── Audience-filter labels with counts (friendly wording).
   const audSel = $('#notifAudience');
   if (audSel && groups) {
-    const labels = {
-      '':        'All recipient types',
-      PATIENT:   'Patient Templates',
-      DOCTOR:    'Doctor Templates',
-      ADMIN:     'Admin / System Templates',
-      OTHER:     'Other'
-    };
     const totalFlat = (flat || []).length;
     [...audSel.options].forEach(opt => {
       const k = opt.value;
       const count = k ? ((groups[k] && groups[k].items.length) || 0) : totalFlat;
-      opt.textContent = labels[k] + ' (' + count + ')';
+      const base  = __NOTIF_AUDIENCE_LABELS[k] || opt.textContent;
+      opt.textContent = base + '  (' + count + ')';
     });
   }
+
+  const buildOption = (it) => {
+    const pretty  = __notifPrettyName(it.template);
+    const channel = __notifChannelLabel(it.channel);
+    const label   = channel ? (pretty + '  •  ' + channel) : pretty;
+    // Preserve raw template key as the value — backend mapping unchanged.
+    return `<option value="${escapeHtml(it.template)}" title="${escapeHtml(it.template)}">${escapeHtml(label)}</option>`;
+  };
 
   if (groups) {
     const order = ['PATIENT','DOCTOR','ADMIN','OTHER'];
@@ -1001,21 +1144,25 @@ function renderNotifTemplateOptions(){
       const g = groups[key];
       if (!g) continue;
       if (audience && key !== audience) continue;
-      if (!g.items.length) continue;        // skip empty groups in the dropdown itself
-      html += `<optgroup label="${escapeHtml(g.label)} (${g.items.length})">`;
-      for (const it of g.items) {
-        const lbl = it.template + (it.channel ? ' · ' + it.channel : '');
-        html += `<option value="${escapeHtml(it.template)}">${escapeHtml(lbl)}</option>`;
-      }
+      if (!g.items.length) continue;
+      const groupLabel = __NOTIF_AUDIENCE_LABELS[key] || g.label;
+      // Sort items alphabetically by friendly name for readability.
+      const items = g.items.slice().sort((a, b) =>
+        __notifPrettyName(a.template).localeCompare(__notifPrettyName(b.template))
+      );
+      html += `<optgroup label="— ${escapeHtml(groupLabel)}  (${items.length}) —">`;
+      for (const it of items) html += buildOption(it);
       html += '</optgroup>';
       rendered++;
     }
     if (!rendered) {
-      // No matching templates under current audience filter → show a hint.
       html += '<option value="" disabled>— No templates in this category yet —</option>';
     }
   } else if (flat) {
-    html += flat.map(r => `<option value="${escapeHtml(r.template)}">${escapeHtml(r.template)}${r.channel ? ' · ' + escapeHtml(r.channel) : ''}</option>`).join('');
+    const items = flat.slice().sort((a, b) =>
+      __notifPrettyName(a.template).localeCompare(__notifPrettyName(b.template))
+    );
+    html += items.map(buildOption).join('');
   }
   sel.innerHTML = html;
 
@@ -1056,7 +1203,7 @@ async function loadNotifications(){
   <tr class="np-notif-row" style="cursor:pointer;" data-id="${escapeHtml(n.id)}">
     <td data-label="When">${escapeHtml(fmtDateTime(n.createdAt))}</td>
     <td data-label="Channel">${channelBadge(n.channel)}</td>
-    <td data-label="Template">${escapeHtml(n.template || '')}</td>
+    <td data-label="Template" title="${escapeHtml(n.template || '')}">${escapeHtml(__notifPrettyName(n.template) || '')}</td>
     <td data-label="Recipient">${escapeHtml(n.recipient || '')}</td>
     <td data-label="Status">${notifStatusBadge(n.status)}${n.direction ? ` <span class="np-badge np-badge--slate" style="margin-left:.25rem;">${escapeHtml(n.direction)}</span>` : ''}</td>
     <td class="np-notif-error" data-label="Error" style="max-width:280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(n.errorMessage || '')}</td>
@@ -1078,7 +1225,7 @@ function openNotifModal(n){
       <div class="np-field"><div class="np-field__label">Status</div><div>${notifStatusBadge(n.status)}</div></div>
       <div class="np-field"><div class="np-field__label">Channel</div><div>${channelBadge(n.channel)}</div></div>
       <div class="np-field"><div class="np-field__label">Direction</div><div>${escapeHtml(n.direction || '—')}</div></div>
-      <div class="np-field"><div class="np-field__label">Template</div><div>${escapeHtml(n.template || '—')}</div></div>
+      <div class="np-field"><div class="np-field__label">Template</div><div title="${escapeHtml(n.template || '')}">${escapeHtml(__notifPrettyName(n.template) || '—')}${n.template ? `<div class="np-mut" style="font-size:.7rem; margin-top:.15rem; font-family: ui-monospace, monospace;">${escapeHtml(n.template)}</div>` : ''}</div></div>
       <div class="np-field"><div class="np-field__label">Recipient</div><div>${escapeHtml(n.recipient || '—')}</div></div>
       <div class="np-field" style="grid-column: span 2;"><div class="np-field__label">Appointment</div><div>${escapeHtml(n.appointmentId || '—')}</div></div>
     </div>
