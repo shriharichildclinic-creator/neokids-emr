@@ -665,6 +665,41 @@ body {
 .bw-hero-stat {
   position: absolute; right: 28px; top: 48px; width: 136px; border-radius: 24px; padding: 18px 16px; text-align: center;
 }
+
+/* ── Booking-flow phone mockup (adapted from the NeoKidsPro Services page
+      teleconsultation animation) — shows the same guided steps this widget
+      actually walks the parent through, cycling automatically. ── */
+@keyframes bwPhoneFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+@keyframes bwPhoneSlide { 0%{opacity:0;transform:translateX(14px);} 6%{opacity:1;transform:translateX(0);} 30%{opacity:1;transform:translateX(0);} 36%{opacity:0;transform:translateX(-14px);} 100%{opacity:0;transform:translateX(-14px);} }
+.bw-phone-wrap { position: relative; z-index: 1; display: flex; justify-content: center; }
+.bw-phone {
+  width: 190px; height: 388px; border-radius: 30px; background: #fff;
+  border: 5px solid var(--bw-ink); box-shadow: 0 24px 52px rgba(46,85,86,.22);
+  overflow: hidden; position: relative; animation: bwPhoneFloat 5s ease-in-out infinite;
+}
+.bw-phone::before {
+  content: ''; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  width: 46px; height: 9px; background: var(--bw-ink); border-radius: 8px; z-index: 5;
+}
+.bw-phone-screen { position: absolute; inset: 0; background: #f8f9fa; padding: 26px 9px 9px; }
+.bw-phone-panel { position: absolute; inset: 0; padding: 14px; opacity: 0; transform: translateX(14px); animation: bwPhoneSlide 10s infinite; display: flex; flex-direction: column; gap: 7px; }
+.bw-phone-panel.d0 { animation-delay: 0s; }
+.bw-phone-panel.d1 { animation-delay: 2.5s; }
+.bw-phone-panel.d2 { animation-delay: 5s; }
+.bw-phone-panel.d3 { animation-delay: 7.5s; }
+.bw-phone-title { font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 11px; color: var(--bw-ink); margin-bottom: 2px; }
+.bw-phone-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: #fafafa; border-radius: 9px; padding: 7px 9px; font-size: 9.5px; font-weight: 600; color: var(--bw-ink); }
+.bw-phone-card { background: #fff; border-radius: 9px; padding: 7px; border: 1.5px solid var(--bw-border); display: flex; gap: 6px; align-items: center; font-size: 8.5px; font-weight: 700; color: var(--bw-ink); }
+.bw-phone-card.act { border-color: var(--bw-pink); background: var(--bw-pink-50); }
+.bw-phone-slots { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+.bw-phone-slot { background: #fff; border-radius: 999px; padding: 4px 2px; border: 1.5px solid var(--bw-border); font-size: 7px; font-weight: 600; color: var(--bw-body); text-align: center; }
+.bw-phone-slot.act { background: var(--bw-pink); color: #fff; border-color: var(--bw-pink); }
+.bw-phone-confirm { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding-top: 20px; }
+.bw-phone-check { width: 38px; height: 38px; border-radius: 50%; background: var(--bw-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.bw-phone-dots { display: flex; gap: 5px; justify-content: center; margin-top: 12px; }
+.bw-phone-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(46,85,86,.15); }
+@media (prefers-reduced-motion: reduce) { .bw-phone, .bw-phone-panel { animation: none !important; } }
+@media (max-width: 980px) { .bw-phone-wrap { margin-top: 8px; } }
 .bw-hero-stat-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--bw-muted);
 }
@@ -700,16 +735,31 @@ body {
 .bw-journey-arrow {
   display: none;
 }
-.bw-faq-list { display: grid; gap: 14px; }
-.bw-faq-card { overflow: hidden; }
-.bw-faq-card summary {
-  list-style: none; cursor: pointer; padding: 20px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; color: var(--bw-ink);
+.bw-faq-list { display: flex; flex-direction: column; gap: 14px; }
+.bw-faq-card {
+  background: #fafbfb; border: 1.5px solid var(--bw-border); border-radius: 18px;
+  overflow: hidden; transition: border-color .25s, box-shadow .25s, background .25s;
 }
-.bw-faq-card summary::-webkit-details-marker { display: none; }
-.bw-faq-card summary::after { content: '+'; color: var(--bw-pink); font-size: 28px; line-height: 1; }
-.bw-faq-card[open] summary::after { content: '−'; }
-.bw-faq-content { padding: 0 22px 20px; font-size: 14px; line-height: 1.8; color: var(--bw-body); }
+.bw-faq-card.is-open { background: #fff; border-color: var(--bw-teal); box-shadow: var(--bw-shadow-sm); }
+.bw-faq-btn {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  background: none; border: none; cursor: pointer; text-align: left; padding: 20px 22px;
+  font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 15.5px; color: var(--bw-ink); line-height: 1.4;
+}
+.bw-faq-btn > span:first-child { flex: 1 1 auto; min-width: 0; }
+.bw-faq-icon {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: #fff; border: 1.5px solid var(--bw-border); color: var(--bw-teal);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .3s, background .25s, border-color .25s, color .25s;
+}
+.bw-faq-card.is-open .bw-faq-icon { background: var(--bw-teal); border-color: var(--bw-teal); color: #fff; transform: rotate(180deg); }
+.bw-faq-icon svg { width: 13px; height: 13px; }
+.bw-faq-panel { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+.bw-faq-content {
+  padding: 14px 22px 20px; margin: 0 22px; font-size: 13.5px; line-height: 1.8; color: var(--bw-body);
+  border-top: 1px solid var(--bw-border);
+}
 .bw-consult-card {
   position: relative; text-align: left; padding: 24px; border-radius: 24px;
 }
@@ -755,6 +805,21 @@ body {
 .bw-body:last-of-type, .bw-success, .bw-failure {
   border-radius: 0 0 28px 28px;
 }
+.bw-mode-summary {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.3);
+  border-radius: var(--bw-radius); padding: 12px 16px; margin-bottom: 4px;
+  animation: fadeUp .25s ease forwards;
+}
+.bw-mode-summary-icon { font-size: 18px; }
+.bw-mode-summary-text { font-size: 13.5px; color: #3d7677; }
+.bw-mode-summary-text strong { color: var(--bw-ink); font-weight: 700; }
+.bw-mode-summary-change {
+  margin-left: auto; background: #fff; border: 1.5px solid rgba(137,188,189,.4);
+  border-radius: var(--bw-radius-pill); padding: 5px 14px; font-size: 12px; font-weight: 700;
+  color: var(--bw-teal-dark); cursor: pointer;
+}
+.bw-mode-summary-change:hover { background: var(--bw-teal); color: #fff; border-color: var(--bw-teal); }
 .bw-input-invalid {
   border-color: #ef4444 !important;
   box-shadow: 0 0 0 4px rgba(239,68,68,.12) !important;
@@ -805,9 +870,44 @@ body {
           </div>
           <div class="bw-hero-visual">
             <div class="bw-hero-panel">
-              <div class="bw-hero-illustration" aria-hidden="true">🩺</div>
-              <div class="bw-hero-panel-title">Gentle, guided booking</div>
-              <p class="bw-hero-panel-copy">
+              <!-- Booking-flow phone mockup, adapted from the NeoKidsPro
+                   Services page teleconsultation animation. Purely decorative
+                   (aria-hidden) — mirrors the four real steps below it. -->
+              <div class="bw-phone-wrap" aria-hidden="true">
+                <div class="bw-phone">
+                  <div class="bw-phone-screen">
+                    <div class="bw-phone-panel d0">
+                      <div class="bw-phone-title">Step 1 · Consultation Type</div>
+                      <div class="bw-phone-card act"><span>🎥</span>Online Teleconsultation</div>
+                      <div class="bw-phone-card"><span>🏥</span>Clinic Visit</div>
+                    </div>
+                    <div class="bw-phone-panel d1">
+                      <div class="bw-phone-title">Step 2 · Doctor &amp; Slot</div>
+                      <div class="bw-phone-row">👩‍⚕️ Dr. Parmar <span>selected</span></div>
+                      <div class="bw-phone-slots">
+                        <div class="bw-phone-slot">10:00</div><div class="bw-phone-slot act">11:30</div><div class="bw-phone-slot">1:00</div>
+                        <div class="bw-phone-slot">3:00</div><div class="bw-phone-slot">4:30</div><div class="bw-phone-slot">6:00</div>
+                      </div>
+                    </div>
+                    <div class="bw-phone-panel d2">
+                      <div class="bw-phone-title">Step 3 · Patient Details</div>
+                      <div class="bw-phone-row">Child Name <span>Aanya S.</span></div>
+                      <div class="bw-phone-row">Age <span>3 yrs</span></div>
+                    </div>
+                    <div class="bw-phone-panel d3">
+                      <div class="bw-phone-confirm">
+                        <div class="bw-phone-check">✓</div>
+                        <div class="bw-phone-title">Booking Confirmed!</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="bw-phone-dots" aria-hidden="true">
+                  <span class="bw-phone-dot"></span><span class="bw-phone-dot"></span><span class="bw-phone-dot"></span><span class="bw-phone-dot"></span>
+                </div>
+              </div>
+              <div class="bw-hero-panel-title" style="text-align:center;margin-top:16px;">Gentle, guided booking</div>
+              <p class="bw-hero-panel-copy" style="text-align:center;">
                 Choose consultation type, select your doctor, pick a slot, add patient details, and confirm in minutes.
               </p>
               <div class="bw-hero-list">
@@ -916,11 +1016,43 @@ body {
             <div class="bw-landing-badge"><span class="bw-landing-badge-dot" aria-hidden="true"></span>FAQ</div>
             <h2 class="bw-landing-h2">Booking questions, answered clearly</h2>
           </div>
-          <div class="bw-faq-list">
-            <details class="bw-faq-card"><summary>Can I book both online and clinic appointments here?</summary><div class="bw-faq-content">Yes. The same booking widget supports both consultation types. Choose the option that suits your child and continue through the same guided flow.</div></details>
-            <details class="bw-faq-card"><summary>Will I see live appointment slots?</summary><div class="bw-faq-content">Yes. Slots are loaded live from the EMR, so only currently available times are shown after you choose a doctor and date.</div></details>
-            <details class="bw-faq-card"><summary>How does payment work?</summary><div class="bw-faq-content">Online consultations require secure Cashfree payment to confirm the booking. Clinic visits remain pay-at-clinic.</div></details>
-            <details class="bw-faq-card"><summary>Can I start from a doctor profile page?</summary><div class="bw-faq-content">Yes. Doctor profile buttons can open this widget with the doctor and consultation type already selected using safe query-parameter deep links.</div></details>
+          <div class="bw-faq-list" id="bwFaqList">
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel1" id="bwFaqBtn1">
+                <span>Can I book both online and clinic appointments here?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel1" role="region" aria-labelledby="bwFaqBtn1">
+                <div class="bw-faq-content">Yes. The same booking widget supports both consultation types. Choose the option that suits your child and continue through the same guided flow.</div>
+              </div>
+            </div>
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel2" id="bwFaqBtn2">
+                <span>Will I see live appointment slots?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel2" role="region" aria-labelledby="bwFaqBtn2">
+                <div class="bw-faq-content">Yes. Slots are loaded live from the EMR, so only currently available times are shown after you choose a doctor and date.</div>
+              </div>
+            </div>
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel3" id="bwFaqBtn3">
+                <span>How does payment work?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel3" role="region" aria-labelledby="bwFaqBtn3">
+                <div class="bw-faq-content">Online consultations require secure Cashfree payment to confirm the booking. Clinic visits remain pay-at-clinic.</div>
+              </div>
+            </div>
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel4" id="bwFaqBtn4">
+                <span>Can I start from a doctor profile page?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel4" role="region" aria-labelledby="bwFaqBtn4">
+                <div class="bw-faq-content">Yes. Doctor profile buttons can open this widget with the doctor and consultation type already selected using safe query-parameter deep links.</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -989,7 +1121,12 @@ body {
         <p class="bw-section-sub">Choose the best option for your child's care.</p>
       </div>
 
-      <div class="bw-mode-grid" role="radiogroup" aria-label="Consultation mode">
+      <!-- Shown only when the consultation mode has NOT already been chosen
+           (e.g. user clicked the generic "Book Appointment" button). If the
+           mode was already selected on the landing page or via ?mode= in the
+           URL, this collapses into a compact summary chip below instead of
+           asking the same question twice. -->
+      <div id="step1ModeSelector" class="bw-mode-grid" role="radiogroup" aria-label="Consultation mode">
         <button type="button" data-action="setMode" data-mode="ONLINE"
           id="modeOnline" role="radio" aria-checked="true"
           class="bw-mode-card c-teal is-active">
@@ -1006,6 +1143,16 @@ body {
           <div class="bw-mode-title">Clinic Visit</div>
           <div class="bw-mode-desc">Visit our clinic for a physical checkup.</div>
         </button>
+      </div>
+
+      <!-- Compact summary shown instead of the selector above once a mode
+           is already known, so the question isn't repeated. -->
+      <div id="step1ModeSummary" class="bw-mode-summary hidden">
+        <span class="bw-mode-summary-icon" id="step1ModeSummaryIcon" aria-hidden="true">🎥</span>
+        <span class="bw-mode-summary-text">
+          Consultation type: <strong id="step1ModeSummaryText">Online Teleconsultation</strong>
+        </span>
+        <button type="button" data-action="unlockMode" class="bw-mode-summary-change">Change</button>
       </div>
 
       <div class="bw-divider">
@@ -1172,7 +1319,7 @@ body {
 'use strict';
 
 const API_BASE = window.location.origin + '/api';
-const state = { mode: 'ONLINE', doctor: null, date: null, slot: null, landingDoctors: [] };
+const state = { mode: 'ONLINE', doctor: null, date: null, slot: null, landingDoctors: [], modePreselected: false };
 
 function formatINR(v) {
   const n = Number(v || 0);
@@ -1231,6 +1378,20 @@ function syncModeUI(mode) {
   syncModeCards('landingModeOnline', mode === 'ONLINE');
   syncModeCards('landingModeOffline', mode === 'OFFLINE');
 }
+function renderStep1ModeUI() {
+  const selector = $('#step1ModeSelector');
+  const summary  = $('#step1ModeSummary');
+  if (!selector || !summary) return;
+  if (state.modePreselected) {
+    selector.classList.add('hidden');
+    summary.classList.remove('hidden');
+    $('#step1ModeSummaryIcon').textContent = state.mode === 'ONLINE' ? '🎥' : '🏥';
+    $('#step1ModeSummaryText').textContent = state.mode === 'ONLINE' ? 'Online Teleconsultation' : 'Clinic Visit';
+  } else {
+    selector.classList.remove('hidden');
+    summary.classList.add('hidden');
+  }
+}
 function renderFlowSummary() {
   const bits = [
     `<span class="bw-flow-chip">${state.mode === 'ONLINE' ? '🎥 Online Consultation' : '🏥 Clinic Visit'}</span>`
@@ -1284,7 +1445,8 @@ function showBookingShell() {
 }
 async function startBooking(options = {}) {
   showBookingShell();
-  await setMode(options.mode || state.mode);
+  const hadExplicitMode = !!normalizeMode(options.mode);
+  await setMode(options.mode || state.mode, { explicit: hadExplicitMode });
   if (options.doctorId) {
     try {
       await preselectDoctor(options.doctorId);
@@ -1310,11 +1472,19 @@ function updateStepper(activeStep) {
   });
 }
 
-async function setMode(m){
+async function setMode(m, opts = {}){
   state.mode = normalizeMode(m) || 'ONLINE';
   syncModeUI(state.mode);
   renderFlowSummary();
+  // Any explicit mode pick (landing card, step-1 card, URL param, or quick-book
+  // shortcut) is treated as "known" so we never ask the same question twice.
+  if (opts.explicit !== false) state.modePreselected = true;
+  renderStep1ModeUI();
   await loadDoctors();
+}
+function unlockMode() {
+  state.modePreselected = false;
+  renderStep1ModeUI();
 }
 
 async function loadDoctors(){
@@ -1472,7 +1642,7 @@ function goTo(step){
   // Update visual stepper
   updateStepper(step);
 
-  if (step === 1) { loadDoctors(); }
+  if (step === 1) { renderStep1ModeUI(); loadDoctors(); }
   if (step === 2) { applyDobBounds(); $('#f_name').focus(); }
   if (step === 3) { initSlotPicker(); }
   if (step === 4) { renderSummary(); }
@@ -1780,7 +1950,7 @@ async function bootFromQueryString(){
 
   showBookingShell();
   if (requestedMode) state.mode = requestedMode;
-  await setMode(state.mode);
+  await setMode(state.mode, { explicit: !!requestedMode });
 
   let prefill = null;
   if (recallId) {
@@ -1845,8 +2015,27 @@ document.addEventListener('click', (ev) => {
     case 'pickSlot':         pickSlot(t, t.getAttribute('data-time')); break;
     case 'submitBooking':    submitBooking(); break;
     case 'resetWidget':      resetWidget(); break;
+    case 'unlockMode':       unlockMode(); break;
+    case 'toggleFaq':        toggleFaq(t); break;
   }
 });
+
+function toggleFaq(btn) {
+  const card  = btn.closest('.bw-faq-card');
+  const panel = card.querySelector('.bw-faq-panel');
+  const isOpen = card.classList.contains('is-open');
+  $$('#bwFaqList .bw-faq-card').forEach(other => {
+    other.classList.remove('is-open');
+    other.querySelector('.bw-faq-btn').setAttribute('aria-expanded', 'false');
+    other.querySelector('.bw-faq-panel').style.maxHeight = null;
+  });
+  if (!isOpen) {
+    card.classList.add('is-open');
+    btn.setAttribute('aria-expanded', 'true');
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+  }
+  reportHeightSoon();
+}
 
 bootFromQueryString();
 
