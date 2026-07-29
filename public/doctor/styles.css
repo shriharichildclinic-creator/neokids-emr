@@ -1165,6 +1165,16 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
 .np-overflow-menu.is-open{
   display:flex;
   position:fixed;
+  /* Neutralise the base rule's `right:0` / `top: calc(100%+6px)` so the
+     inline `left`/`top` set by positionOverflowMenu() are the sole
+     positioning inputs. Without this, `right:0` fights the inline
+     `left` and pins the menu to the viewport edge on desktop, and the
+     `top: calc(100% + 6px)` value (meaningless for position:fixed) can
+     make the menu render off-screen in some browsers. */
+  right:auto;
+  bottom:auto;
+  /* Escape any ancestor stacking / clipping context on desktop. */
+  z-index: 1000;
 }
 .np-overflow-item{ white-space:normal; }
 .np-table-wrap--responsive{

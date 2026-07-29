@@ -1020,60 +1020,81 @@ let __notifTemplatesCache = null;
  *   • Organize into readable optgroups with counts.
  *   • Group labels use human wording ("Patient notifications", etc.).
  * ─────────────────────────────────────────────────────────────────────────── */
+// Friendly labels for the raw backend template identifiers actually
+// emitted by the notification pipeline (WhatsApp template names +
+// EMAIL log keys). The `<option value="...">` still carries the raw
+// key so filtering, APIs, and DB values remain untouched.
 const __NOTIF_TEMPLATE_LABELS = {
-  // Patient
-  APPOINTMENT_BOOKED:            'Appointment booked — confirmation',
-  APPOINTMENT_CONFIRMED:         'Appointment confirmed',
-  APPOINTMENT_REMINDER:          'Appointment reminder',
-  APPOINTMENT_REMINDER_24H:      'Appointment reminder — 24 hours before',
-  APPOINTMENT_REMINDER_1H:       'Appointment reminder — 1 hour before',
-  APPOINTMENT_RESCHEDULED:       'Appointment rescheduled',
-  APPOINTMENT_CANCELLED:         'Appointment cancelled',
-  APPOINTMENT_COMPLETED:         'Appointment completed',
-  APPOINTMENT_MISSED:            'Appointment missed / no-show',
-  PAYMENT_RECEIVED:              'Payment received',
-  PAYMENT_FAILED:                'Payment failed',
-  PAYMENT_REFUNDED:              'Payment refunded',
-  PRESCRIPTION_ISSUED:           'Prescription issued',
-  PRESCRIPTION_READY:            'Prescription ready to view',
-  PATIENT_WELCOME:               'Patient welcome',
-  PATIENT_OTP:                   'Patient login OTP',
-  PATIENT_PASSWORD_RESET:        'Patient password reset',
-  CONSULTATION_STARTED:          'Consultation started',
-  CONSULTATION_LINK:             'Consultation join link',
-  FEEDBACK_REQUEST:              'Feedback request',
+  // ── Patient (recipient = patient) ──────────────────────────────────
+  // WhatsApp templates
+  neokids_booking_confirms_offline_v2: 'Appointment Confirmation (Clinic)',
+  neokids_online_appt_confirm_v2:      'Appointment Confirmation (Online)',
+  neokids_reminder_offline:            'Appointment Reminder (Clinic)',
+  neokids_reminder_offline_v2:         'Appointment Reminder (Clinic)',
+  neokids_reminder_online:             'Appointment Reminder (Online)',
+  neokids_reminder_online_v2:          'Appointment Reminder (Online)',
+  neokids_prescription_pdf:            'Prescription Sent',
+  neokids_prescription_pdf__resend:    'Prescription Resent',
+  neokids_invoice_pdf:                 'Invoice Sent',
+  neokids_vaccination_reminder:        'Vaccination Reminder',
+  reschedule_online_v2:                'Appointment Rescheduled',
+  cancellation_notice:                 'Appointment Cancelled',
+  // Email log keys (patient-facing)
+  PHYSICAL_CONFIRMED:                  'Appointment Confirmation (Clinic)',
+  ONLINE_CONFIRMED:                    'Appointment Confirmation (Online)',
+  RESCHEDULED:                         'Appointment Rescheduled',
+  CANCELLED:                           'Appointment Cancelled',
+  PRESCRIPTION:                        'Prescription Sent',
+  PRESCRIPTION_RESEND:                 'Prescription Resent',
+  PAYMENT_RECEIVED:                    'Payment Confirmation',
 
-  // Doctor
-  DOCTOR_INVITE:                 'Doctor invitation',
-  DOCTOR_WELCOME:                'Doctor welcome',
-  DOCTOR_PASSWORD_RESET:         'Doctor password reset',
-  DOCTOR_NEW_APPOINTMENT:        'New appointment assigned',
-  DOCTOR_APPOINTMENT_CANCELLED:  'Appointment cancelled (doctor)',
-  DOCTOR_APPOINTMENT_RESCHEDULED:'Appointment rescheduled (doctor)',
-  DOCTOR_KYC_APPROVED:           'KYC approved',
-  DOCTOR_KYC_REJECTED:           'KYC rejected',
-  DOCTOR_KYC_PENDING:            'KYC pending review',
-  DOCTOR_PAYOUT_PROCESSED:       'Payout processed',
-  DOCTOR_SETTLEMENT_READY:       'Settlement ready',
-  DOCTOR_DAILY_SUMMARY:          'Daily appointments summary',
+  // ── Doctor (recipient = doctor) ────────────────────────────────────
+  // WhatsApp templates
+  doctor_new_booking_offline:          'New Clinic Booking',
+  doctor_new_booking_online_v2:        'New Online Booking',
+  doctor_reminder_offline:             'Consultation Reminder (Clinic)',
+  doctor_reminder_online:              'Consultation Reminder (Online)',
+  // Email log keys (doctor-facing)
+  PHYSICAL_CONFIRMED_DOCTOR:           'New Clinic Booking',
+  ONLINE_CONFIRMED_DOCTOR:             'New Online Booking',
+  RESCHEDULED_DOCTOR:                  'Appointment Rescheduled (Doctor)',
+  CANCELLED_DOCTOR:                    'Appointment Cancelled (Doctor)',
+  doctor_welcome_email:                'Doctor Welcome',
 
-  // Admin / system
-  ADMIN_NEW_DOCTOR:              'New doctor onboarded',
-  ADMIN_KYC_SUBMITTED:           'KYC submitted for review',
-  ADMIN_PAYMENT_ALERT:           'Payment alert',
-  ADMIN_ERROR_ALERT:             'System error alert',
-  ADMIN_DAILY_REPORT:            'Daily admin report',
-  ADMIN_WEEKLY_REPORT:           'Weekly admin report',
-  SYSTEM_MAINTENANCE:            'System maintenance notice'
+  // ── System (not sent to a specific patient/doctor) ────────────────
+  DOCTOR_INVITE:                       'Doctor Invitation',
+  DOCTOR_INVITATION:                   'Doctor Invitation',
+  PASSWORD_RESET:                      'Password Reset',
+  ADMIN_PASSWORD_RESET:                'Password Reset (Admin)',
+  DOCTOR_PASSWORD_RESET:               'Password Reset (Doctor)',
+  ADMIN_LOGIN_ALERT:                   'Admin Login Alert',
+  ADMIN_ACCOUNT_NOTICE:                'Admin Account Notification',
+  SYSTEM_ERROR_ALERT:                  'System Error Alert',
+  SYSTEM_MAINTENANCE:                  'System Maintenance Notice'
 };
 
 const __NOTIF_AUDIENCE_LABELS = {
-  '':      'All recipient types',
-  PATIENT: 'Patient notifications',
-  DOCTOR:  'Doctor notifications',
-  ADMIN:   'Admin & system notifications',
-  OTHER:   'Other notifications'
+  '':      'All notifications',
+  PATIENT: 'Patient Notifications',
+  DOCTOR:  'Doctor Notifications',
+  SYSTEM:  'System Notifications'
 };
+
+// Front-end safety net so we still render exactly three categories
+// even if the backend hasn't been redeployed yet (older API may still
+// return ADMIN / OTHER buckets). Anything not clearly patient- or
+// doctor-facing folds into SYSTEM.
+function __notifClassifyAudience(rawTemplate){
+  const n = String(rawTemplate || '').toLowerCase();
+  if (!n) return 'SYSTEM';
+  if (/^doctor_/.test(n)) return 'DOCTOR';
+  if (/_doctor(_|$)/.test(n)) return 'DOCTOR';
+  if (/(settlement|payout|kyc|earning|onboard)/.test(n)) return 'DOCTOR';
+  if (/^(neokids_|patient_|booking_|appointment_|prescription_|payment_|invoice_|recall|followup|follow_up|consult_|reschedule_|cancellation_)/.test(n)) return 'PATIENT';
+  if (/^(physical_confirmed|online_confirmed|rescheduled|cancelled|prescription|prescription_resend)$/.test(n)) return 'PATIENT';
+  if (/(booking|appointment|prescription|invoice|reminder|recall|follow|consult|payment|vaccination)/.test(n)) return 'PATIENT';
+  return 'SYSTEM';
+}
 
 function __notifPrettyName(rawTemplate){
   if (!rawTemplate) return '';
@@ -1095,11 +1116,49 @@ function __notifChannelLabel(ch){
 async function loadNotifTemplates(){
   try {
     const data = await api('/admin/notifications/templates');
+    let payload;
     if (Array.isArray(data)) {
-      __notifTemplatesCache = { flat: data, groups: null };
+      payload = { flat: data, groups: null };
     } else {
-      __notifTemplatesCache = data || { flat: [], groups: null };
+      payload = data || { flat: [], groups: null };
     }
+
+    // Normalize the server response into exactly three UI categories:
+    // PATIENT / DOCTOR / SYSTEM. Older backends may still return ADMIN
+    // and/or OTHER buckets — fold both of those into SYSTEM. If groups
+    // are missing entirely, rebuild them from the flat list using the
+    // front-end classifier so the three-category UI still works.
+    const normalizedGroups = {
+      PATIENT: { label: 'Patient Notifications', items: [] },
+      DOCTOR:  { label: 'Doctor Notifications',  items: [] },
+      SYSTEM:  { label: 'System Notifications',  items: [] }
+    };
+    const push = (bucket, item) => {
+      const key = (bucket === 'PATIENT' || bucket === 'DOCTOR') ? bucket : 'SYSTEM';
+      normalizedGroups[key].items.push(item);
+    };
+    if (payload.groups) {
+      for (const [k, g] of Object.entries(payload.groups)) {
+        if (!g || !Array.isArray(g.items)) continue;
+        for (const it of g.items) push(k, it);
+      }
+    } else if (Array.isArray(payload.flat)) {
+      for (const it of payload.flat) {
+        push(__notifClassifyAudience(it.template), it);
+      }
+    }
+    // De-duplicate (template + channel) inside each bucket to guard
+    // against overlapping legacy classifications.
+    for (const g of Object.values(normalizedGroups)) {
+      const seen = new Set();
+      g.items = g.items.filter(it => {
+        const k = (it.template || '') + '|' + (it.channel || '');
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    }
+    __notifTemplatesCache = { flat: payload.flat || [], groups: normalizedGroups };
     renderNotifTemplateOptions();
   } catch(_) {}
 }
@@ -1138,7 +1197,7 @@ function renderNotifTemplateOptions(){
   };
 
   if (groups) {
-    const order = ['PATIENT','DOCTOR','ADMIN','OTHER'];
+    const order = ['PATIENT','DOCTOR','SYSTEM'];
     let rendered = 0;
     for (const key of order) {
       const g = groups[key];

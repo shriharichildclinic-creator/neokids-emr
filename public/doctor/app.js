@@ -592,47 +592,110 @@ function goToConsult(id){
   location.hash = '#consult/' + id;
 }
 
-/* Overflow menu open/close + viewport-safe positioning */
+/* Overflow menu open/close + viewport-safe positioning
+ *
+ * Desktop/laptop fix: on wide viewports the menu container has
+ * `position: fixed` (set in styles.css), so it must be positioned in
+ * viewport coordinates. The previous implementation measured the menu
+ * BEFORE its final layout was flushed and left ambiguous CSS on it,
+ * which allowed the base `right: 0` rule to win the cascade and pin
+ * the menu off-screen — making the ellipsis button appear
+ * non-functional. This version:
+ *   1. Moves the menu to <body> when open so no ancestor with
+ *      `overflow: hidden` / transform can clip it.
+ *   2. Forces `position: fixed` inline as a defensive override.
+ *   3. Measures menu size AFTER a layout flush.
+ *   4. Restores the menu to its original DOM position on close so the
+ *      card's event handlers keep working.
+ */
 function closeOverflowMenus(except){
   document.querySelectorAll('.np-overflow-menu.is-open').forEach(menu => {
     if (menu === except) return;
     menu.classList.remove('is-open');
     menu.style.left = '';
     menu.style.top = '';
+    menu.style.right = '';
+    menu.style.bottom = '';
+    menu.style.position = '';
     menu.style.maxHeight = '';
+    menu.style.zIndex = '';
+    // Restore into original parent if we detached it to <body>.
+    const origParent = menu.__npOrigParent;
+    const origNext   = menu.__npOrigNext;
+    if (origParent && menu.parentNode !== origParent) {
+      try {
+        if (origNext && origNext.parentNode === origParent) {
+          origParent.insertBefore(menu, origNext);
+        } else {
+          origParent.appendChild(menu);
+        }
+      } catch(_) {}
+    }
+    menu.__npOrigParent = null;
+    menu.__npOrigNext = null;
   });
 }
 function positionOverflowMenu(trigger, menu){
   const margin = 12;
   const gap = 6;
+  // Reset any previous inline positioning so measurements are clean.
   menu.style.left = '0px';
   menu.style.top = '0px';
+  menu.style.right = 'auto';
+  menu.style.bottom = 'auto';
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '1000';
   menu.style.maxHeight = Math.max(160, window.innerHeight - margin * 2) + 'px';
+
+  // Force a layout flush so offsetWidth/offsetHeight are the final
+  // sizes after the min-width/padding rules apply.
+  // eslint-disable-next-line no-unused-expressions
+  menu.offsetWidth;
+
   const triggerRect = trigger.getBoundingClientRect();
-  const width = Math.min(menu.offsetWidth || 220, window.innerWidth - margin * 2);
-  const height = menu.offsetHeight || 200;
+  const width  = Math.min(menu.offsetWidth  || 220, window.innerWidth  - margin * 2);
+  const height = Math.min(menu.offsetHeight || 200, window.innerHeight - margin * 2);
+
   let left = triggerRect.right - width;
   left = Math.max(margin, Math.min(left, window.innerWidth - margin - width));
+
   const spaceBelow = window.innerHeight - triggerRect.bottom - margin;
   const spaceAbove = triggerRect.top - margin;
   const openUp = height > spaceBelow && spaceAbove > spaceBelow;
-  let top = openUp ? Math.max(margin, triggerRect.top - Math.min(height, spaceAbove) - gap) : (triggerRect.bottom + gap);
   const maxHeight = Math.max(140, openUp ? spaceAbove : spaceBelow);
+  let top = openUp
+    ? Math.max(margin, triggerRect.top - Math.min(height, maxHeight) - gap)
+    : (triggerRect.bottom + gap);
+  top = Math.max(margin, Math.min(top, window.innerHeight - margin - Math.min(height, maxHeight)));
+
   menu.style.left = left + 'px';
-  menu.style.top = Math.max(margin, Math.min(top, window.innerHeight - margin - Math.min(height, maxHeight))) + 'px';
+  menu.style.top  = top  + 'px';
   menu.style.maxHeight = maxHeight + 'px';
 }
 function toggleOverflow(btn){
   const menu = btn && btn.nextElementSibling;
-  if (!menu) return;
+  if (!menu || !menu.classList.contains('np-overflow-menu')) return;
   const isOpen = menu.classList.contains('is-open');
   closeOverflowMenus();
   if (isOpen) return;
+
+  // Detach to <body> so ancestor overflow/transform cannot clip or
+  // re-anchor the fixed-positioned menu on desktop.
+  if (menu.parentNode && menu.parentNode !== document.body) {
+    menu.__npOrigParent = menu.parentNode;
+    menu.__npOrigNext   = menu.nextSibling;
+    document.body.appendChild(menu);
+  }
+
   menu.classList.add('is-open');
   positionOverflowMenu(btn, menu);
 }
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.np-overflow')) closeOverflowMenus();
+  // Any click on the trigger or inside an open menu is safe — the menu
+  // may now live under <body>, so also skip when the click target is
+  // inside a .np-overflow-menu directly.
+  if (e.target.closest('.np-overflow') || e.target.closest('.np-overflow-menu')) return;
+  closeOverflowMenus();
 });
 window.addEventListener('resize', () => closeOverflowMenus());
 window.addEventListener('scroll', () => closeOverflowMenus(), true);

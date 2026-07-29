@@ -328,14 +328,30 @@ exports.listNotifications = asyncHandler(async (req, res) => {
 // ────────────────────────────────────────────────────────────────────
 function classifyTemplateAudience(name) {
   const n = String(name || '').toLowerCase();
-  if (!n) return 'OTHER';
-  if (/^(patient_|booking_|appointment_|prescription_|payment_|recall|followup|follow_up|consult_)/.test(n)) return 'PATIENT';
-  if (/^(doctor_|doc_|settlement_|kyc_|onboard|payout_|earning_)/.test(n))                                  return 'DOCTOR';
-  if (/^(admin_|system_|alert_|report_|internal_|ops_)/.test(n))                                            return 'ADMIN';
-  if (/(booking|appointment|prescription|reminder|recall|follow|consult|payment)/.test(n)) return 'PATIENT';
-  if (/(settlement|payout|kyc|earning|onboard)/.test(n))                                   return 'DOCTOR';
-  if (/(alert|report|system|ops|internal)/.test(n))                                        return 'ADMIN';
-  return 'OTHER';
+  // Every notification MUST land in exactly one of PATIENT / DOCTOR /
+  // SYSTEM — there is no OTHER bucket in the UI. Anything that is not
+  // clearly patient- or doctor-facing (password reset, invitations,
+  // admin/ops alerts, login/security, unknown) is treated as SYSTEM.
+  if (!n) return 'SYSTEM';
+
+  // Doctor-directed templates (recipient is a doctor). The `doctor_*`
+  // WhatsApp templates and the `*_DOCTOR` email log keys are all here,
+  // along with KYC/payout/settlement/earnings notifications and the
+  // doctor invitation / welcome / password-reset flow.
+  if (/^doctor_/.test(n)) return 'DOCTOR';
+  if (/_doctor(_|$)/.test(n)) return 'DOCTOR';
+  if (/(settlement|payout|kyc|earning|onboard)/.test(n)) return 'DOCTOR';
+
+  // Patient-directed templates (recipient is a patient). Booking
+  // confirmations, reminders, prescriptions, invoices, payment
+  // confirmations, vaccination reminders, follow-ups, etc.
+  if (/^(neokids_|patient_|booking_|appointment_|prescription_|payment_|invoice_|recall|followup|follow_up|consult_|reschedule_|cancellation_)/.test(n)) return 'PATIENT';
+  if (/^(physical_confirmed|online_confirmed|rescheduled|cancelled|prescription|prescription_resend)$/.test(n)) return 'PATIENT';
+  if (/(booking|appointment|prescription|invoice|reminder|recall|follow|consult|payment|vaccination)/.test(n)) return 'PATIENT';
+
+  // Everything else — password reset, admin alerts, system emails,
+  // login/security, unclassified — is System.
+  return 'SYSTEM';
 }
 
 exports.listNotificationTemplates = asyncHandler(async (req, res) => {
@@ -347,10 +363,9 @@ exports.listNotificationTemplates = asyncHandler(async (req, res) => {
 
   const flat = [];
   const groups = {
-    PATIENT: { label: 'Patient Templates', items: [] },
-    DOCTOR:  { label: 'Doctor Templates',  items: [] },
-    ADMIN:   { label: 'Admin / System Templates', items: [] },
-    OTHER:   { label: 'Other / Uncategorised',    items: [] }
+    PATIENT: { label: 'Patient Notifications', items: [] },
+    DOCTOR:  { label: 'Doctor Notifications',  items: [] },
+    SYSTEM:  { label: 'System Notifications',  items: [] }
   };
   const seen = new Set();
   for (const r of rows) {

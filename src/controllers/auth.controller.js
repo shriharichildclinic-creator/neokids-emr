@@ -44,7 +44,18 @@ const FORGOT_GENERIC = Object.freeze({
 });
 
 function buildPasswordLink(rawToken) {
-  return `${process.env.APP_URL || ''}/assets/reset-password.html?token=${encodeURIComponent(rawToken)}`;
+  // The password reset / invite page is served by the EMR itself
+  // (not the WordPress patient site at APP_URL). Prefer an explicit
+  // EMR_URL, fall back to API_URL, and only fall back to APP_URL as a
+  // last resort so misconfigured environments never silently point at
+  // the patient site again.
+  const base = (
+    process.env.EMR_URL ||
+    process.env.API_URL ||
+    process.env.APP_URL ||
+    ''
+  ).replace(/\/+$/, '');
+  return `${base}/assets/reset-password.html?token=${encodeURIComponent(rawToken)}`;
 }
 
 async function sendPasswordEmail({ to, name, rawToken, purpose }) {
