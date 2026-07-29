@@ -1299,3 +1299,130 @@ html[data-theme="dark"] .np-uuid-card__copy{
   color: var(--np-primary);
   border-color: rgba(255,255,255,.10);
 }
+
+/* =====================================================================
+   MOBILE RESPONSIVENESS PASS — 320px → 768px
+   Fix ONLY mobile issues without changing desktop behavior.
+   ===================================================================== */
+
+/* Prevent horizontal page scroll caused by rogue elements. */
+html, body{ max-width:100%; overflow-x:hidden; }
+
+/* Universal safety at mobile widths */
+@media (max-width:1023px){
+  img, svg, video, canvas, iframe{ max-width:100%; height:auto; }
+  .np-content, .np-panel, .np-panel__body, .np-panel__head{
+    min-width:0;
+    max-width:100%;
+  }
+  .np-panel__body{ overflow-x:auto; }
+  .np-panel__body > *{ min-width:0; }
+}
+
+/* --- Modals — full width and safe height on mobile --- */
+@media (max-width:640px){
+  .np-modal{ padding:.5rem; align-items:flex-end; }
+  .np-modal__panel{
+    max-width:100%;
+    width:100%;
+    max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1rem);
+    border-radius: 18px 18px 14px 14px;
+  }
+  .np-modal__head{ padding:.85rem 1rem; }
+  .np-modal__body{ padding: 1rem; }
+}
+
+/* --- Drawer becomes full-width on small screens --- */
+@media (max-width:640px){
+  .np-drawer__panel{
+    max-width:100%;
+    width:100%;
+    border-radius: 0;
+  }
+  .np-drawer__head{ padding:.85rem 1rem; }
+  .np-drawer__body{ padding:.85rem 1rem 1rem; }
+}
+
+/* --- Profile menu never clips on mobile --- */
+@media (max-width:640px){
+  .np-profile__menu{
+    right:0;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 100px);
+    overflow-y:auto;
+  }
+  .np-profile__meta{ display:none; }
+}
+
+/* --- Doctor card actions on very small screens --- */
+@media (max-width:420px){
+  .np-doc-card{ padding:1rem .95rem .85rem; }
+  .np-doc-card__actions{
+    grid-template-columns: 1fr 1fr;
+    gap:.35rem;
+  }
+  .np-doc-card__actions .np-btn{
+    grid-column: span 1;
+    font-size:.74rem;
+    padding:.42rem .3rem;
+  }
+  .np-doc-card__actions .np-btn--icon{
+    grid-column: 2 / 3;
+    width:100%;
+    justify-self:end;
+  }
+}
+
+/* --- KPI cards ensure no overflow at 320px --- */
+@media (max-width:360px){
+  .np-kpi{ padding:.9rem 1rem; }
+  .np-kpi__value{ font-size:1.4rem; }
+}
+
+/* --- Tabs / segmented controls — horizontal scroll on mobile --- */
+@media (max-width:520px){
+  .np-tabbar{
+    width:100%;
+    max-width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .np-tab{ white-space:nowrap; flex-shrink:0; }
+}
+
+/* --- Header title truncation on 320px --- */
+@media (max-width:360px){
+  .np-header__inner{ padding:.65rem .75rem; gap:.5rem; }
+  .np-header__page-title{ font-size:.95rem; }
+}
+
+/* --- Buttons: never overflow their container --- */
+.np-btn{ max-width:100%; }
+.np-search{ min-width:0; }
+
+/* --- Notif template select becomes full-width on mobile --- */
+@media (max-width:640px){
+  .np-notif-template-select{
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* --- Generic table wraps: keep scrollable within viewport --- */
+@media (max-width:1023px){
+  .np-table-wrap{ max-width:100%; -webkit-overflow-scrolling:touch; }
+}
+
+/* --- Ensure fixed elements never push horizontal overflow --- */
+.np-shell, .np-main{ min-width:0; }
+
+/* --- np-grid-2 becomes single column on 380 and under --- */
+@media (max-width:380px){
+  .np-grid-2{ grid-template-columns:1fr; }
+}
+
+/* --- Login card fits within 320px viewport --- */
+@media (max-width:360px){
+  .np-login{ padding:.75rem; }
+  .np-login__card{ padding:1.25rem; border-radius:18px; }
+}

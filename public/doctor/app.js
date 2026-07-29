@@ -612,6 +612,7 @@ function closeOverflowMenus(except){
   document.querySelectorAll('.np-overflow-menu.is-open').forEach(menu => {
     if (menu === except) return;
     menu.classList.remove('is-open');
+    menu.classList.remove('np-overflow-menu--sheet');
     menu.style.left = '';
     menu.style.top = '';
     menu.style.right = '';
@@ -619,6 +620,8 @@ function closeOverflowMenus(except){
     menu.style.position = '';
     menu.style.maxHeight = '';
     menu.style.zIndex = '';
+    menu.style.width = '';
+    menu.style.maxWidth = '';
     // Restore into original parent if we detached it to <body>.
     const origParent = menu.__npOrigParent;
     const origNext   = menu.__npOrigNext;
@@ -638,6 +641,10 @@ function closeOverflowMenus(except){
 function positionOverflowMenu(trigger, menu){
   const margin = 12;
   const gap = 6;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const isNarrow = vw <= 480;
+
   // Reset any previous inline positioning so measurements are clean.
   menu.style.left = '0px';
   menu.style.top = '0px';
@@ -645,7 +652,10 @@ function positionOverflowMenu(trigger, menu){
   menu.style.bottom = 'auto';
   menu.style.position = 'fixed';
   menu.style.zIndex = '1000';
-  menu.style.maxHeight = Math.max(160, window.innerHeight - margin * 2) + 'px';
+  menu.style.width = '';
+  menu.style.maxWidth = '';
+  menu.classList.remove('np-overflow-menu--sheet');
+  menu.style.maxHeight = Math.max(160, vh - margin * 2) + 'px';
 
   // Force a layout flush so offsetWidth/offsetHeight are the final
   // sizes after the min-width/padding rules apply.
@@ -653,20 +663,42 @@ function positionOverflowMenu(trigger, menu){
   menu.offsetWidth;
 
   const triggerRect = trigger.getBoundingClientRect();
-  const width  = Math.min(menu.offsetWidth  || 220, window.innerWidth  - margin * 2);
-  const height = Math.min(menu.offsetHeight || 200, window.innerHeight - margin * 2);
 
+  // On very narrow viewports (mobile), open the menu as a bottom sheet
+  // anchored to the bottom of the screen so it can never be clipped or
+  // rendered off-screen. This preserves accessibility of all items and
+  // provides a large, comfortable touch target region.
+  if (isNarrow) {
+    const sheetWidth = Math.min(vw - margin * 2, 360);
+    const sheetMaxHeight = Math.min(vh - margin * 2, 420);
+    menu.classList.add('np-overflow-menu--sheet');
+    menu.style.width = sheetWidth + 'px';
+    menu.style.maxWidth = (vw - margin * 2) + 'px';
+    menu.style.left = Math.max(margin, (vw - sheetWidth) / 2) + 'px';
+    menu.style.right = 'auto';
+    menu.style.bottom = margin + 'px';
+    menu.style.top = 'auto';
+    menu.style.maxHeight = sheetMaxHeight + 'px';
+    return;
+  }
+
+  const width  = Math.min(menu.offsetWidth  || 220, vw - margin * 2);
+  const height = Math.min(menu.offsetHeight || 200, vh - margin * 2);
+
+  // Try to align the menu's right edge with the trigger's right edge
+  // (typical dropdown behaviour). If that would push it off the left,
+  // clamp to the viewport with a safe margin.
   let left = triggerRect.right - width;
-  left = Math.max(margin, Math.min(left, window.innerWidth - margin - width));
+  left = Math.max(margin, Math.min(left, vw - margin - width));
 
-  const spaceBelow = window.innerHeight - triggerRect.bottom - margin;
+  const spaceBelow = vh - triggerRect.bottom - margin;
   const spaceAbove = triggerRect.top - margin;
   const openUp = height > spaceBelow && spaceAbove > spaceBelow;
   const maxHeight = Math.max(140, openUp ? spaceAbove : spaceBelow);
   let top = openUp
     ? Math.max(margin, triggerRect.top - Math.min(height, maxHeight) - gap)
     : (triggerRect.bottom + gap);
-  top = Math.max(margin, Math.min(top, window.innerHeight - margin - Math.min(height, maxHeight)));
+  top = Math.max(margin, Math.min(top, vh - margin - Math.min(height, maxHeight)));
 
   menu.style.left = left + 'px';
   menu.style.top  = top  + 'px';
@@ -1076,12 +1108,12 @@ async function loadPatientHistoryInto(slot, patientId){
 function addMedRow(prefill){
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input class="med-name"  placeholder="e.g. Paracetamol 250mg syrup" value="${escapeHtml(prefill?.name||'')}"></td>
-    <td><input class="med-dose"  placeholder="2.5 ml"                          value="${escapeHtml(prefill?.dose||prefill?.dosage||'')}"></td>
-    <td><input class="med-freq"  placeholder="TDS / BD / SOS"                  value="${escapeHtml(prefill?.frequency||'')}"></td>
-    <td><input class="med-dur"   placeholder="3 days"                          value="${escapeHtml(prefill?.duration||'')}"></td>
-    <td><input class="med-inst"  placeholder="After food"                      value="${escapeHtml(prefill?.instructions||'')}"></td>
-    <td><button type="button" class="np-remove-row" title="Remove">×</button></td>
+    <td data-label="Medicine"><input class="med-name"  placeholder="e.g. Paracetamol 250mg syrup" value="${escapeHtml(prefill?.name||'')}"></td>
+    <td data-label="Dosage"><input class="med-dose"  placeholder="2.5 ml"                          value="${escapeHtml(prefill?.dose||prefill?.dosage||'')}"></td>
+    <td data-label="Frequency"><input class="med-freq"  placeholder="TDS / BD / SOS"                  value="${escapeHtml(prefill?.frequency||'')}"></td>
+    <td data-label="Duration"><input class="med-dur"   placeholder="3 days"                          value="${escapeHtml(prefill?.duration||'')}"></td>
+    <td data-label="Instructions"><input class="med-inst"  placeholder="After food"                      value="${escapeHtml(prefill?.instructions||'')}"></td>
+    <td data-label=""><button type="button" class="np-remove-row" title="Remove">×</button></td>
   `;
   tr.querySelector('.np-remove-row').addEventListener('click', () => tr.remove());
   $('#medsList').appendChild(tr);
