@@ -101,7 +101,7 @@ const waMedia  = require('./whatsapp-media.service');   // NEW — WhatsApp PDF 
 const email    = require('./email.service');
 const pdf      = require('./pdf.service');
 const meet     = require('./googleMeet.service');
-const { formatDateOnly, getTodayDateString, getCurrentTimeMinutes } = require('../utils/date');
+const { formatDateOnly, getTodayDateString, getCurrentTimeMinutes, parseDateOnly } = require('../utils/date');
 const { timeToMinutes } = require('./slot.service');
 const { incrementDoctorRevenue } = require('./lifecycle.service');
 
@@ -863,8 +863,14 @@ async function resendPrescription(appointment, prescription) {
 // ═════════════════════════════════════════════════════════════════
 async function processReminders() {
   const todayStr   = getTodayDateString();
-  const today      = new Date(`${todayStr}T12:00:00.000Z`);
   const nowMinutes = getCurrentTimeMinutes();
+
+  // Bug fix — `Appointment.date` is a Prisma `@db.Date`, which Prisma
+  // normalises to midnight (00:00:00.000Z). The previous query compared
+  // against a NOON (`T12:00:00.000Z`) Date, so the equality filter never
+  // matched any row and NO 30-minute appointment reminders were ever
+  // sent. `parseDateOnly` returns the correct midnight-UTC boundary.
+  const today = parseDateOnly(todayStr);
 
   const appts = await prisma.appointment.findMany({
     where: { date: today, status: 'CONFIRMED' },

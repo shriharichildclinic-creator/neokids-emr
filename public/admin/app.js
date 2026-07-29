@@ -371,7 +371,8 @@ async function loadDashboard() {
             <div class="np-appt-row__time-d">${escapeHtml(fmtDate(a.date))}</div>
           </div>
           <div class="np-appt-row__body">
-            <div class="np-appt-row__name">${escapeHtml(a.patient.name)} → ${drNameHtml(a.doctor.name)}</div>
+            <div class="np-appt-row__name">${escapeHtml(a.patient.name)}</div>
+            <div class="np-appt-row__assign">${drNameHtml(a.doctor.name)}</div>
             <div class="np-appt-row__meta">${escapeHtml(a.primaryProblem || '—')}</div>
           </div>
           <div class="np-appt-row__right">
@@ -916,11 +917,13 @@ async function loadAppointments() {
       tbody.innerHTML = `<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No appointments match</div><div class="np-empty__sub">Try clearing some filters.</div></div></td></tr>`;
       return;
     }
-    // Sort by date+time so the table is always chronological.
+    // Bug #7 — default to NEWEST first. The previous comparator re-sorted
+    // the list ascending, undoing the server's newest-first orderBy and
+    // burying today's appointments below older ones.
     appts.sort((a,b) => {
-      const ka = String(a.date) + ' ' + String(a.startTime||'');
-      const kb = String(b.date) + ' ' + String(b.startTime||'');
-      return ka < kb ? -1 : ka > kb ? 1 : 0;
+      const ka = String(a.date).slice(0,10) + ' ' + String(a.startTime||'');
+      const kb = String(b.date).slice(0,10) + ' ' + String(b.startTime||'');
+      return ka > kb ? -1 : ka < kb ? 1 : 0;
     });
     tbody.innerHTML = appts.map(a => {
       // Visual cue for online vs in-person via a left-border color on the row.
@@ -929,9 +932,10 @@ async function loadAppointments() {
         : (a.consultationType === 'OFFLINE' ? 'border-left:3px solid #3b82f6;' : '');
       return `
       <tr class="np-appt-tr" style="${rowAccent}">
-        <td data-label="When">
-          <div><b>${escapeHtml(fmtDate(a.date))}</b></div>
-          <div class="np-mut" style="font-size:.78rem;">${escapeHtml(fmtTime(a.startTime))}${a.endTime ? ' – ' + escapeHtml(fmtTime(a.endTime)) : ''}</div>
+        <td data-label="When" class="np-cell-when">
+          <div class="np-cell-when__line"><b>${escapeHtml(fmtDate(a.date))}</b>
+            <span class="np-mut np-cell-when__time">${escapeHtml(fmtTime(a.startTime))}${a.endTime ? ' – ' + escapeHtml(fmtTime(a.endTime)) : ''}</span>
+          </div>
         </td>
         <td data-label="Patient">
           <div><b>${escapeHtml(a.patient.name)}</b></div>
@@ -1263,9 +1267,11 @@ async function loadNotifications(){
     <td data-label="When">${escapeHtml(fmtDateTime(n.createdAt))}</td>
     <td data-label="Channel">${channelBadge(n.channel)}</td>
     <td data-label="Template" title="${escapeHtml(n.template || '')}">${escapeHtml(__notifPrettyName(n.template) || '')}</td>
-    <td data-label="Recipient">${escapeHtml(n.recipient || '')}</td>
+    <td data-label="Recipient" style="overflow-wrap:anywhere;">${escapeHtml(n.recipient || '')}</td>
     <td data-label="Status">${notifStatusBadge(n.status)}${n.direction ? ` <span class="np-badge np-badge--slate" style="margin-left:.25rem;">${escapeHtml(n.direction)}</span>` : ''}</td>
-    <td class="np-notif-error" data-label="Error" style="max-width:280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(n.errorMessage || '')}</td>
+    ${n.errorMessage
+      ? `<td class="np-notif-error" data-label="Error" style="max-width:280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(n.errorMessage)}</td>`
+      : `<td data-label="Error" class="np-mut">—</td>`}
   </tr>`).join('');
     // click to open detail
     $$('#notifTbody tr').forEach(tr => tr.addEventListener('click', () => {
@@ -1299,7 +1305,15 @@ function openNotifModal(n){
         <pre class="np-code-block">${escapeHtml(JSON.stringify(n.payload, null, 2))}</pre>
       </div>` : ''}
   `;
-  $('#notifModal').classList.remove('hidden');
+  const __nm = $('#notifModal');
+  __nm.classList.remove('hidden');
+  // Bug #7 — always open the detail modal scrolled to the TOP; previously a
+  // previously-scrolled modal retained its position and opened near the bottom.
+  requestAnimationFrame(() => {
+    const scrollers = __nm.querySelectorAll('.np-modal__panel, .np-modal__body');
+    scrollers.forEach(el => { el.scrollTop = 0; });
+    __nm.scrollTop = 0;
+  });
 }
 function closeNotifModal(){ $('#notifModal').classList.add('hidden'); }
 

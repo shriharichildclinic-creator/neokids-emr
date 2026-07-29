@@ -167,23 +167,26 @@
           : ''
       ].filter(Boolean).join(' ');
 
+      // Bug #5 — every cell gets a data-label so the mobile card layout
+      // (styles.css #revenueView td[data-label]) can group each financial
+      // value with its doctor record instead of overflowing horizontally.
       return `
         <tr>
-          <td>
+          <td data-label="Doctor">
             <div style="font-weight:600;">${drNameHtml(r.doctor.name)}</div>
             <div style="font-size:.7rem; color:var(--np-muted);">
               ${escapeHtml(r.doctor.specialization || 'Pediatrician')}
               · ${r.doctor.clinicSharePercent}/${r.doctor.doctorSharePercent} split · TDS ${r.doctor.tdsPercent}%
             </div>
           </td>
-          <td style="text-align:right;">${r.totals.consultations}</td>
-          <td style="text-align:right;">${inr(r.totals.totalRevenue)}</td>
-          <td style="text-align:right;">${inr(r.totals.clinicShare)}</td>
-          <td style="text-align:right;">${inr(r.totals.doctorGross)}</td>
-          <td style="text-align:right; color:#B45309;">${inr(r.totals.tds)}</td>
-          <td style="text-align:right; font-weight:600;">${inr(r.totals.doctorNet)}</td>
-          <td>${statusPill(ss)}</td>
-          <td style="text-align:right; white-space:nowrap;">${actions || '—'}</td>
+          <td data-label="Consults" style="text-align:right;">${r.totals.consultations}</td>
+          <td data-label="Total Revenue" style="text-align:right;">${inr(r.totals.totalRevenue)}</td>
+          <td data-label="Clinic Share" style="text-align:right;">${inr(r.totals.clinicShare)}</td>
+          <td data-label="Doctor Gross" style="text-align:right;">${inr(r.totals.doctorGross)}</td>
+          <td data-label="TDS" style="text-align:right; color:#B45309;">${inr(r.totals.tds)}</td>
+          <td data-label="Doctor Net" style="text-align:right; font-weight:600;">${inr(r.totals.doctorNet)}</td>
+          <td data-label="Status">${statusPill(ss)}</td>
+          <td data-label="Actions" style="text-align:right; white-space:nowrap;">${actions || '—'}</td>
         </tr>
       `;
     }).join('');

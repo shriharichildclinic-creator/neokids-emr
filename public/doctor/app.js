@@ -489,9 +489,13 @@ function renderAllAppointments(){
         .some(v => v && String(v).toLowerCase().includes(search));
     });
   }
+  // Bug #8 — `a.date` is a full ISO timestamp (e.g. "2026-07-29T00:00:00.000Z"),
+  // so `a.date + 'T' + time` produced "...T00:00:00.000ZT18:45" → Invalid Date
+  // and the comparator silently broke (NaN), so Newest/Oldest did nothing.
+  // Slice to YYYY-MM-DD first so both sort directions work.
+  const apptTime = (x) => new Date(String(x.date).slice(0,10) + 'T' + (x.startTime || '00:00')).getTime();
   arr.sort((a,b) => {
-    const ad = new Date(a.date + 'T' + (a.startTime||'00:00')).getTime();
-    const bd = new Date(b.date + 'T' + (b.startTime||'00:00')).getTime();
+    const ad = apptTime(a), bd = apptTime(b);
     return sort === 'date_asc' ? (ad - bd) : (bd - ad);
   });
   const list = $('#allList');
@@ -1250,7 +1254,7 @@ function renderRxArchive(){
         .some(v => v && String(v).toLowerCase().includes(search));
     });
   }
-  arr.sort((a,b) => new Date(b.date+'T'+(b.startTime||'00:00')) - new Date(a.date+'T'+(a.startTime||'00:00')));
+  arr.sort((a,b) => new Date(String(b.date).slice(0,10)+'T'+(b.startTime||'00:00')) - new Date(String(a.date).slice(0,10)+'T'+(a.startTime||'00:00')));
   if (!arr.length){
     list.innerHTML = emptyState('No prescriptions found',
       'Try clearing filters or expanding the date range.',

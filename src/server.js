@@ -38,6 +38,15 @@ const { ensureStorageWritable } = require('../scripts/ensure-storage');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// ─── Bug #1 — Trust the reverse proxy (Nginx) ─────────────────────────
+// The app runs behind Nginx, which sets X-Forwarded-For. Without
+// `trust proxy`, Express (and express-rate-limit) reads the header as
+// untrusted, logs ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every request,
+// and treats every proxied client as Nginx's own IP — breaking
+// per-client rate limiting and request tracking. `1` trusts the first
+// hop (the Nginx in front of this process) so req.ip is the real client.
+app.set('trust proxy', 1);
+
 app.use(
   helmet({
     contentSecurityPolicy: false,

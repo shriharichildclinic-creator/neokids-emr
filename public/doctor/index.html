@@ -342,9 +342,18 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input id="rxSearch" type="search" placeholder="Search by patient name, phone, diagnosis…" autocomplete="off"/>
                 </div>
-                <input id="rxFromDate" type="date" class="np-select" aria-label="From date">
-                <input id="rxToDate"   type="date" class="np-select" aria-label="To date">
-                <button id="rxClearFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                <div class="np-filter-control">
+                  <label class="np-filter-control__label" for="rxFromDate">From date</label>
+                  <input id="rxFromDate" type="date" class="np-select" placeholder="From date">
+                </div>
+                <div class="np-filter-control">
+                  <label class="np-filter-control__label" for="rxToDate">To date</label>
+                  <input id="rxToDate" type="date" class="np-select" placeholder="To date">
+                </div>
+                <div class="np-filter-control">
+                  <span class="np-filter-control__label np-filter-control__spacer" aria-hidden="true">&nbsp;</span>
+                  <button id="rxClearFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                </div>
               </div>
           <div id="rxArchiveList" class="np-appt-list"></div>
             </div>

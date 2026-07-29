@@ -732,7 +732,17 @@
   };
 
   // ─── NPDateRange — preset buttons ────────────────────────────────────────
-  function _isoDate(d) { return d.toISOString().slice(0, 10); }
+  // Bug fix — `d.toISOString()` converts to UTC before slicing, so a local
+  // midnight in a UTC+N timezone (e.g. IST = UTC+5:30) rolls back to the
+  // PREVIOUS calendar day. That made the "Today" chip return no rows and the
+  // "Yesterday" chip return the wrong date. Build the YYYY-MM-DD key from the
+  // LOCAL components instead.
+  function _isoDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
   function _startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
   const NPDateRange = {
     presets() {
