@@ -40,10 +40,9 @@
   }
 </script>
 <link rel="stylesheet" href="/doctor/styles.css"/>
-<!-- NeoKidsPro brand theme (light + dark) — v3.1 Blue-Green rebrand -->
+
 <link rel="stylesheet" href="/assets/neokids-theme.css"/>
 <script>
-  // Apply persisted theme as early as possible to avoid FOUC
   try {
     var t = localStorage.getItem('np-theme');
     if (t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -54,9 +53,6 @@
 </head>
 <body class="bg-brand-surface text-slate-800">
 
-<!-- =====================================================================
-     LOGIN SCREEN
-     ===================================================================== -->
 <div id="loginScreen" class="np-login">
   <div class="np-login__card">
     <div class="np-login__logo" aria-hidden="true">
@@ -91,17 +87,12 @@
   </div>
 </div>
 
-
-<!-- =====================================================================
-     MAIN DASHBOARD SHELL
-     ===================================================================== -->
 <div id="dashboard" class="hidden">
   <div id="sidebarBackdrop" class="np-backdrop" aria-hidden="true"></div>
 
   <div class="np-shell">
 
-    <!-- =================== SIDEBAR =================== -->
-    <aside id="sidebar" class="np-sidebar" aria-label="Primary navigation">
+<aside id="sidebar" class="np-sidebar" aria-label="Primary navigation">
       <div class="np-sidebar__brand">
         <div class="np-sidebar__logo" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -159,11 +150,9 @@
       </div>
     </aside>
 
-    <!-- =================== MAIN =================== -->
-    <main class="np-main">
+<main class="np-main">
 
-      <!-- HEADER -->
-      <header class="np-header">
+<header class="np-header">
         <div class="np-header__inner">
           <button id="sidebarToggle" type="button" class="np-iconbtn np-menu-toggle" aria-label="Open menu">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -208,11 +197,9 @@
         </div>
       </header>
 
-      <!-- CONTENT -->
-      <div class="np-content">
+<div class="np-content">
 
-        <!-- ============ DASHBOARD TAB ============ -->
-        <section id="dashboardTab" class="tab-pane">
+<section id="dashboardTab" class="tab-pane">
           <div id="statsBar" class="np-kpi-grid"></div>
           <div class="np-divider"></div>
           <div class="np-dash-grid np-dash-grid--2-1">
@@ -261,8 +248,7 @@
           </div>
         </section>
 
-        <!-- ============ WAITING ROOM TAB ============ -->
-        <section id="waitingTab" class="tab-pane hidden">
+<section id="waitingTab" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -280,8 +266,7 @@
           </div>
         </section>
 
-        <!-- ============ APPOINTMENTS TAB ============ -->
-        <section id="allTab" class="tab-pane hidden">
+<section id="allTab" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -317,8 +302,7 @@
           </div>
         </section>
 
-        <!-- ============ CONSULTATION WORKSPACE TAB ============ -->
-        <section id="consultTab" class="tab-pane hidden">
+<section id="consultTab" class="tab-pane hidden">
           <div id="consultContainer">
             <div class="np-empty">
               <div class="np-empty__title">No active consultation</div>
@@ -327,8 +311,7 @@
           </div>
         </section>
 
-        <!-- ============ PRESCRIPTION ARCHIVE TAB ============ -->
-        <section id="rxArchiveTab" class="tab-pane hidden">
+<section id="rxArchiveTab" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -360,8 +343,7 @@
           </div>
         </section>
 
-        <!-- ============ MY EARNINGS TAB ============ -->
-        <section id="earningsTab" class="tab-pane hidden">
+<section id="earningsTab" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -420,10 +402,9 @@
           </div>
         </section>
 
-        <!-- ============ SETTINGS TAB ============ -->
-        <section id="settingsTab" class="tab-pane hidden">
+<section id="settingsTab" class="tab-pane hidden">
           <div class="np-settings-grid">
-            <!-- Profile Photo -->
+            
             <div class="np-setting-card" id="setting-profile">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon">
@@ -443,8 +424,7 @@
                 <button type="button" class="np-btn np-btn--danger np-btn--sm" onclick="removePhoto()">Remove photo</button>
               </div>
 
-              <!-- Doctor EMR UUID (read-only, with copy button) -->
-              <div class="np-uuid-card" role="group" aria-label="Doctor EMR UUID">
+<div class="np-uuid-card" role="group" aria-label="Doctor EMR UUID">
                 <div class="np-uuid-card__label">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>
                   <span>Doctor EMR UUID</span>
@@ -469,8 +449,7 @@
               </form>
             </div>
 
-            <!-- Availability -->
-            <div class="np-setting-card">
+<div class="np-setting-card">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#89BCBD,#A4CDCE);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -556,8 +535,7 @@
               </form>
             </div>
 
-            <!-- Clinic Details -->
-            <div class="np-setting-card">
+<div class="np-setting-card">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#F46A8E,#FE84A4);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -594,8 +572,7 @@
               </form>
             </div>
 
-            <!-- Consultation Fees -->
-            <div class="np-setting-card">
+<div class="np-setting-card">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#E5A93A,#F2C770);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -620,8 +597,7 @@
               </form>
             </div>
 
-            <!-- Password -->
-            <div class="np-setting-card" id="setting-password">
+<div class="np-setting-card" id="setting-password">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#7A4FE0,#9F7DEF);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -652,15 +628,11 @@
           </div>
         </section>
 
-      </div><!-- /np-content -->
+      </div>
     </main>
   </div>
-</div><!-- /dashboard -->
+</div>
 
-
-<!-- =====================================================================
-     PATIENT MODAL (kept for "peek" use from dashboard snapshot)
-     ===================================================================== -->
 <div id="patientModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="patientModalTitle">
   <div class="np-modal__panel np-modal__panel--lg">
     <div class="np-modal__head">
@@ -677,8 +649,7 @@
     <div class="np-modal__body">
       <div id="patientDetail"></div>
 
-      <!-- Prescription form (preserved IDs/names; physically MOVED into pane by JS) -->
-      <form id="rxForm" class="hidden" style="margin-top:1rem;">
+<form id="rxForm" class="hidden" style="margin-top:1rem;">
         <div class="np-panel" style="box-shadow:none; border-radius:14px;">
           <div class="np-panel__head">
             <div class="np-panel__title">Prescription</div>
@@ -753,10 +724,6 @@
   </div>
 </div>
 
-
-<!-- =====================================================================
-     RESCHEDULE MODAL
-     ===================================================================== -->
 <div id="rescheduleModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rescheduleModalTitle">
   <div class="np-modal__panel">
     <div class="np-modal__head">
@@ -791,9 +758,6 @@
   </div>
 </div>
 
-<!-- =====================================================================
-     CANCEL APPOINTMENT MODAL
-     ===================================================================== -->
 <div id="cancelModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="cancelTitle">
   <div class="np-modal__backdrop" onclick="closeCancelModal()"></div>
   <div class="np-modal__card" style="max-width:480px;">

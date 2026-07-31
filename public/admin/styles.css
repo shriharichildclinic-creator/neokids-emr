@@ -1,7 +1,4 @@
-/* =====================================================================
-   NeoKidsPro Admin Panel — Modern UI styles
-   Mirrors the Doctor EMR design tokens so the brand feels unified.
-   ===================================================================== */
+
 
 :root{
   --np-primary:#89BCBD;
@@ -30,13 +27,9 @@ html,body{
   margin:0;
 }
 
-/* ========== APP SHELL ========== */
 .np-shell{
   display:grid;
-  /* min-width:0 on the main column prevents grid children from forcing
-     horizontal overflow when their content (e.g. doctor card grid) has a
-     min-content wider than the column — which was causing the sidebar
-     to visually clip the first card. */
+  
   grid-template-columns: 264px minmax(0, 1fr);
   min-height: 100vh;
 }
@@ -52,7 +45,7 @@ html,body{
   .np-sidebar{ position:fixed; left:0; top:0; bottom:0; width:264px;
     transform:translateX(-100%); transition: transform .25s ease; }
   .np-sidebar.is-open{ transform: translateX(0); }
-  /* In the mobile drawer the nav may overflow, so allow it to scroll. */
+  
   .np-sidebar__nav{ overflow-y:auto; }
 }
 .np-backdrop{
@@ -73,9 +66,7 @@ html,body{
 }
 .np-sidebar__title{ font-weight:700; color:var(--np-ink); line-height:1.1; }
 .np-sidebar__subtitle{ font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--np-muted); }
-/* Sidebar nav — on desktop the sidebar is sticky/fixed-height and its items
-   fit, so no inner scrollbar should appear. Only allow scrolling when the
-   viewport is genuinely short (or in the mobile drawer below). */
+
 .np-sidebar__nav{ padding:.75rem .75rem 1rem; flex:1; }
 @media (max-height:760px){ .np-sidebar__nav{ overflow-y:auto; } }
 .np-sidebar__section{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--np-muted); padding:.75rem .75rem .25rem; }
@@ -106,7 +97,6 @@ html,body{
   font-size:.75rem; color:var(--np-muted);
 }
 
-/* ========== MAIN / HEADER ========== */
 .np-main{ display:flex; flex-direction:column; min-width:0; }
 .np-header{
   background:#fff; border-bottom:1px solid var(--np-border);
@@ -164,7 +154,6 @@ html,body{
 .np-profile__menu-divider{ height:1px; background:var(--np-border); margin:.25rem 0; }
 .np-profile__menu-icon{ width:16px; height:16px; }
 
-/* ========== CONTENT / PANELS ========== */
 .np-content{ padding: 1.25rem 1.5rem 2rem; }
 
 .np-panel{
@@ -172,9 +161,7 @@ html,body{
   border:1px solid var(--np-border);
   border-radius: var(--np-radius-card);
   box-shadow: var(--np-card-shadow);
-  /* removed overflow:hidden — it was clipping hover lifts on cards and
-     the avatar of the leftmost card in each row. Use a defensive
-     border-radius on direct descendants instead if you need rounding. */
+  
 }
 .np-panel__head{
   display:flex; align-items:center; gap:.75rem;
@@ -186,7 +173,6 @@ html,body{
 
 .np-divider{ height:.85rem; }
 
-/* ========== KPI cards ========== */
 .np-kpi-grid{
   display:grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -220,9 +206,6 @@ html,body{
 .np-kpi__delta--down{ color:#DC2626; }
 .np-kpi__delta--flat{ color:var(--np-muted); }
 
-/* ========== Badges / status pills ========== */
-/* Bug #8 — standardised badge: consistent height, padding, radius and
-   wrapping so pills never stretch edge-to-edge or touch each other. */
 .np-badge{
   display:inline-flex; align-items:center; gap:.35rem;
   padding:.18rem .55rem;
@@ -233,8 +216,7 @@ html,body{
   white-space:nowrap;
   overflow-wrap:normal;
 }
-/* Pills inside stacked cards / table cells may wrap their text rather than
-   overflow, but never stretch to fill the row. */
+
 #notifView .np-badge, #revenueView .np-badge,
 #apptsView .np-badge, #settlementsView .np-badge{
   white-space:normal;
@@ -250,7 +232,6 @@ html,body{
 .np-badge--slate{ background:#E2E8F0; color:#475569; }
 .np-badge--violet{background:#EDE9FE; color:#5B21B6; }
 
-/* ========== Buttons ========== */
 .np-btn{
   display:inline-flex; align-items:center; justify-content:center;
   gap:.4rem;
@@ -279,7 +260,6 @@ html,body{
 .np-btn--danger:hover{ background:#B91C1C; color:#fff; border-color:#B91C1C; }
 .np-btn--sm{ padding:.35rem .65rem; font-size:.8rem; }
 
-/* ========== Forms ========== */
 .np-field{ display:flex; flex-direction:column; gap:.35rem; margin-bottom:.85rem; }
 .np-field__label{ font-size:.78rem; font-weight:600; color:var(--np-ink); }
 .np-field__hint{ font-size:.72rem; color:var(--np-muted); }
@@ -293,8 +273,7 @@ html,body{
   color: var(--np-text);
   font-family: inherit;
 }
-/* Bug #7 — give the native dropdown chevron room so it doesn't sit flush
-   against the right edge of the field. */
+
 select.np-select, .np-select{ padding-right:2rem; appearance:auto; }
 .np-textarea{ min-height: 70px; resize: vertical; }
 .np-input:focus, .np-select:focus, .np-textarea:focus{
@@ -307,7 +286,6 @@ select.np-select, .np-select{ padding-right:2rem; appearance:auto; }
   padding:.55rem .75rem; border-radius:10px; font-size:.82rem;
 }
 
-/* Password visibility toggle */
 .np-password-wrap{ position:relative; display:block; }
 .np-password-wrap .np-input,
 .np-password-wrap .np-input--password{ padding-right: 2.6rem; }
@@ -341,7 +319,6 @@ select.np-select, .np-select{ padding-right:2rem; appearance:auto; }
 html[data-theme="dark"] .np-password-toggle{ color:#94A3B8; }
 html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,.15); color:#fff; }
 
-/* Filter bar */
 .np-filterbar{
   display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;
   margin-bottom: 1rem;
@@ -360,7 +337,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 }
 .np-search input:focus{ outline:none; border-color: var(--np-primary); box-shadow:0 0 0 3px rgba(137,188,189,.15); }
 
-/* ========== Tables ========== */
 .np-table{
   width:100%;
   border-collapse: collapse;
@@ -391,7 +367,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   max-height: 70vh;
 }
 
-/* Empty state */
 .np-empty{
   text-align:center;
   padding: 2.5rem 1rem;
@@ -407,7 +382,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-empty__title{ font-weight:600; color: var(--np-text); margin-bottom:.25rem; }
 .np-empty__sub{ font-size:.85rem; }
 
-/* Login */
 .np-login{
   min-height:100vh;
   display:flex; align-items:center; justify-content:center;
@@ -427,10 +401,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-login__title{ font-size:1.35rem; font-weight:700; color: var(--np-ink); text-align:center; }
 .np-login__subtitle{ font-size:.85rem; color: var(--np-muted); text-align:center; margin-bottom:1.25rem; }
 
-/* ── Doctors grid container ────────────────────────────────
-   Use min(280px, 100%) so the grid can collapse below 280px on
-   narrow viewports instead of forcing horizontal overflow that pushes
-   the first card under the sidebar. Keeps box-sizing predictable. */
 .np-doc-grid{
   display:grid;
   grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
@@ -439,7 +409,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   min-width:0;
 }
 
-/* ── Doctor cards ─────────────────────────────────────────── */
 .np-doc-card{
   position:relative;
   background:#fff;
@@ -448,13 +417,11 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   box-shadow: 0 1px 3px rgba(15,42,71,.04), 0 4px 16px -4px rgba(15,42,71,.07);
   padding:1.1rem 1.1rem 0.9rem;
   display:grid;
-  /* Five fixed rows guarantee identical vertical rhythm across cards:
-     1) head   2) badges   3) stats (flex-grows)   4) meta   5) actions
-     This is the single biggest fix for unequal card heights. */
+  
   grid-template-rows: auto auto 1fr auto auto;
   row-gap:.75rem;
   height:100%;
-  min-width:0;          /* allow text inside to truncate, never push width */
+  min-width:0;          
   box-sizing:border-box;
   transition: box-shadow .2s ease, transform .18s ease, border-color .2s ease;
 }
@@ -462,16 +429,15 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   box-shadow: 0 6px 24px -6px rgba(137,188,189,.16), 0 2px 6px rgba(15,42,71,.05);
   transform: translateY(-2px);
   border-color: rgba(137,188,189,.3);
-  z-index:1; /* lift above neighbours so the shadow isn't clipped */
+  z-index:1; 
 }
 
-/* ── Card header: avatar + identity ─────────────────────── */
 .np-doc-card__head{
   display:flex; gap:.8rem; align-items:center;
   min-width:0;
 }
 .np-doc-card__avatar{
-  flex:0 0 44px;            /* fixed basis, never shrink, never grow */
+  flex:0 0 44px;            
   width:44px; height:44px; border-radius:50%;
   background: linear-gradient(135deg, var(--np-primary), var(--np-blue));
   color:#fff;
@@ -484,26 +450,24 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-doc-card__avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
 .np-doc-card__head-meta{ min-width:0; flex:1 1 auto; }
 
-/* Strong visual hierarchy — name is the anchor */
 .np-doc-card__name{
   font-weight:700; color:var(--np-ink); font-size:.98rem; line-height:1.2;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   margin:0 0 .15rem;
 }
-/* Secondary line — specialization only, muted */
+
 .np-doc-card__role{
   font-size:.76rem; color:var(--np-muted); line-height:1.3;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   margin:0;
 }
-/* Tertiary line — qualification, even more muted */
+
 .np-doc-card__qual{
   font-size:.7rem; color:#94A3B8; line-height:1.3;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   margin:.1rem 0 0;
 }
 
-/* ── Contact strip (email + phone) — compact, scannable ── */
 .np-doc-card__contact{
   display:flex; flex-direction:column; gap:.2rem;
   font-size:.74rem; color:var(--np-muted);
@@ -521,7 +485,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
 }
 
-/* ── Status badge row (active/inactive + clinic chip) ── */
 .np-doc-card__badge-row{
   display:flex; align-items:center; gap:.4rem; flex-wrap:wrap;
   min-width:0;
@@ -535,7 +498,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   background:#F1F6FB;
 }
 
-/* ── Stats grid — locked 2×2 regardless of card width ── */
 .np-doc-card__stats{
   display:grid; grid-template-columns: 1fr 1fr;
   gap:.5rem;
@@ -557,7 +519,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
-/* ── Meta strip (password warn + KYC) — compact pills, no wrap ── */
 .np-doc-card__meta{
   display:flex; flex-wrap:wrap; gap:.35rem;
   align-items:center;
@@ -574,7 +535,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-doc-card__pill--ok  { background:#DCFCE7; color:#15803D; }
 .np-doc-card__pill--kyc { background:#EEF2FF; color:#3730A3; }
 
-/* ── Action row — equal-width primary actions + trash on the end ── */
 .np-doc-card__actions{
   display:grid;
   grid-template-columns: 1fr 1fr 1fr auto;
@@ -592,7 +552,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   justify-content:center;
 }
 
-/* ── Trash (icon-only) button — pinned to end of grid ── */
 .np-btn--icon{
   width:32px; height:32px; padding:0; flex-shrink:0;
   display:inline-flex; align-items:center; justify-content:center;
@@ -607,7 +566,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   background:#FEF2F2; border-color:#DC2626;
 }
 
-/* Add Doctor button — prominent CTA */
 .np-btn--add-doctor{
   display:inline-flex; align-items:center; gap:.5rem;
   padding:.6rem 1.1rem;
@@ -628,11 +586,8 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   transform: rotate(90deg);
 }
 
-/* Doctors grid — legacy id selector kept for backward compat;
-   prefer the .np-doc-grid class which has the full ruleset. */
 #doctorsGrid{ align-items: stretch; min-width:0; }
 
-/* Drawer (used by Doctor insights) */
 .np-drawer{
   position:fixed; inset:0; z-index:60;
 }
@@ -655,7 +610,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-drawer__title{ flex:1; font-weight:700; color: var(--np-ink); }
 .np-drawer__body{ padding:1rem 1.25rem; overflow-y:auto; flex:1; }
 
-/* Sparkline-ish bar chart */
 .np-bars{
   display:flex; align-items:flex-end; gap:4px;
   height: 80px;
@@ -669,7 +623,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   background: linear-gradient(180deg, #E2E8F0, #CBD5E1);
 }
 
-/* Modal */
 .np-modal{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:1rem; background: rgba(15,42,71,.45); }
 .np-modal.hidden{ display:none; }
 .np-modal__panel{
@@ -690,25 +643,20 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-modal__close:hover{ background:#F1F6FB; color: var(--np-text); }
 .np-modal__body{ padding: 1rem 1.25rem 1.25rem; }
 
-/* Bug #7 (Notification Logs) — the detail modal must never scroll
-   horizontally: panel is width-capped and long values wrap in place. */
 .np-modal__panel{ overflow-x:hidden; }
 .np-modal__body{ min-width:0; }
 .np-modal__body .np-field{ min-width:0; overflow-wrap:anywhere; }
 
-/* Bug #4 (All Appointments) — keep date + time on one clean line. */
 .np-cell-when__line{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.15rem .4rem; }
 .np-cell-when__time{ font-size:.78rem; white-space:nowrap; }
 
-/* Bug #7 (Notification Logs) — clearer card separation on mobile. */
 #notifView .np-table tr.np-notif-row{
   background:var(--nk-card,#fff);
   border:1px solid var(--np-border);
   border-radius:14px;
   box-shadow:var(--np-card-shadow);
 }
-/* `np-code-block` previously had NO rule — raw JSON payloads rendered as an
-   unwrapped <pre> and forced the modal wider than the viewport on mobile. */
+
 .np-code-block{
   display:block; max-width:100%; overflow-x:auto;
   white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;
@@ -717,14 +665,12 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   font-size:.76rem; line-height:1.5; margin:0;
 }
 
-/* Row helper */
 .np-row{ display:flex; align-items:center; gap:.5rem; }
 .np-grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
 @media (max-width: 599px){ .np-grid-2{ grid-template-columns: 1fr; } }
 .np-mut{ color: var(--np-muted); }
 .np-ink{ color: var(--np-ink); }
 
-/* Status row for appointment list-style */
 .np-appt-row{
   display:flex; gap:.85rem; padding:.85rem 1rem;
   border-bottom: 1px solid var(--np-border);
@@ -738,64 +684,36 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-appt-row__time-d{ font-size:.75rem; color: var(--np-muted); }
 .np-appt-row__body{ flex:1; min-width:0; }
 .np-appt-row__name{ font-weight:600; color: var(--np-ink); }
-/* Bug #1 (Admin) — structured "assigned doctor" line replaces the old
-   "Patient → Doctor" arrow string, so the two names read clearly and long
-   names wrap gracefully on mobile. */
+
 .np-appt-row__assign{ font-size:.8rem; color:var(--np-muted); margin-top:.1rem; }
 .np-appt-row__name, .np-appt-row__assign{ overflow-wrap:anywhere; }
 .np-appt-row__meta{ font-size:.78rem; color: var(--np-muted); margin-top:.15rem; }
 .np-appt-row__right{ text-align:right; flex-shrink:0; }
 
-/* Tab pane */
 .tab-pane.hidden{ display:none; }
 
-/* Notification rows */
 .np-notif-row td.np-notif-error{ color:#B91C1C; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.78rem; }
 
-/* Utility */
 .hidden{ display:none !important; }
-/* =========================================================================
- * Dark-mode overrides for data-theme="dark" on <html>.
- * Only the surfaces, tables and inputs need explicit overrides; the rest
- * inherits from the existing palette via CSS custom properties.
- * ======================================================================= */
-html[data-theme="dark"]{
-  --np-bg:#0b1220; --np-surface:#0f172a; --np-text:#e2e8f0; --np-muted:#94a3b8;
-  --np-border:#1f2937; --np-ink:#f1f5f9; color-scheme: dark;
-}
-html[data-theme="dark"] body{ background:#0b1220; color:#e2e8f0; }
-html[data-theme="dark"] .np-panel,
-html[data-theme="dark"] .np-card,
-html[data-theme="dark"] .np-kpi,
-html[data-theme="dark"] .np-table-wrap,
-html[data-theme="dark"] .np-modal__panel{
-  background:#0f172a !important; color:#e2e8f0 !important; border-color:#1f2937 !important;
-}
-html[data-theme="dark"] .np-sidebar{ background:#070d19 !important; border-color:#1f2937 !important; }
-html[data-theme="dark"] .np-topbar{ background:#0f172a !important; border-color:#1f2937 !important; }
-html[data-theme="dark"] .np-table th{ background:#0b1220 !important; color:#cbd5e1 !important; }
-html[data-theme="dark"] .np-table td{ border-bottom-color:#1f2937 !important; }
-html[data-theme="dark"] .np-table tr:hover td{ background:#172033 !important; }
-html[data-theme="dark"] .np-input,
-html[data-theme="dark"] .np-select,
-html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]),
-html[data-theme="dark"] select,
-html[data-theme="dark"] textarea{
-  background:#0b1220 !important; color:#e2e8f0 !important; border-color:#1f2937 !important;
-}
-html[data-theme="dark"] .np-search{ background:#0b1220 !important; border-color:#1f2937 !important; }
-html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
 
-/* Empty-state polish (icons + spacing). */
+html[data-theme="dark"]{
+  --np-bg:      var(--nk-surface);
+  --np-surface: var(--nk-card);
+  --np-text:    var(--nk-text);
+  --np-muted:   var(--nk-muted);
+  --np-border:  var(--nk-border);
+  --np-ink:     var(--nk-ink);
+}
+html[data-theme="dark"] .np-search{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
+
 .np-empty{ text-align:center; padding:1.5rem .5rem; color:var(--np-muted); }
 .np-empty__title{ color: var(--np-ink); font-weight:700; margin-bottom:.25rem; }
 .np-empty__sub{ color: var(--np-muted); font-size:.85rem; }
 
-
-/* =====================================================================
-   ADMIN QA — structured responsive filter and list layouts
-   These rules pair with the labelled filter controls in index.html.
-   ===================================================================== */
 .np-filterbar--appointments,
 .np-filterbar--notifications{
   display:grid;
@@ -854,7 +772,6 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
 }
 .np-filter-actions .np-btn{ min-height:42px; }
 
-/* Active controls and status totals are content-safe: never create a page-wide scroll. */
 #apptFilterChips,
 #notifCounts{ max-width:100%; overflow:hidden; }
 #apptFilterChips .np-chips,
@@ -876,7 +793,6 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
 }
 #notifCounts .np-badge{ max-width:100%; white-space:normal; overflow-wrap:anywhere; }
 
-/* Mobile appointments are a purpose-built card list; desktop/tablet stays a table. */
 @media (max-width:720px){
   .np-content{ padding:1rem .75rem 1.5rem; }
   .np-panel__head{ padding:1rem 1rem .5rem; }
@@ -979,10 +895,6 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
   .np-filter-actions{ grid-template-columns:1fr; }
 }
 
-
-/* =====================================================================
-   STABILIZATION PASS — consolidated responsive fixes
-   ===================================================================== */
 .np-shell,
 .np-main{ overflow:visible; }
 .np-main{ min-height:100vh; }
@@ -992,8 +904,7 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
   height:100vh;
   overflow:visible;
 }
-/* Desktop sidebar fits its nav items; only scroll when the viewport is short
-   or in the mobile drawer, so no stray scrollbar appears on desktop. */
+
 @media (max-height:760px), (max-width:1023px){
   .np-sidebar__nav{
     overflow-y:auto;
@@ -1230,11 +1141,6 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
   .np-filter-actions{ grid-template-columns:1fr; }
 }
 
-/* =====================================================================
-   Notification template dropdown (UI polish only — backend unchanged)
-   Improves spacing, readability, and grouping visuals for the
-   <select id="notifTemplate"> element.
-   ===================================================================== */
 .np-notif-template-select{
   padding-top: .55rem;
   padding-bottom: .55rem;
@@ -1271,10 +1177,6 @@ html[data-theme="dark"] .np-notif-template-select option{
   color: #E6EEF7;
 }
 
-/* =====================================================================
-   Doctor EMR UUID display (read-only, admin doctor drawer)
-   UI only — no backend changes.
-   ===================================================================== */
 .np-uuid-card{
   margin: 0 0 1rem;
   padding: .7rem .8rem .8rem;
@@ -1356,15 +1258,8 @@ html[data-theme="dark"] .np-uuid-card__copy{
   border-color: rgba(255,255,255,.10);
 }
 
-/* =====================================================================
-   MOBILE RESPONSIVENESS PASS — 320px → 768px
-   Fix ONLY mobile issues without changing desktop behavior.
-   ===================================================================== */
-
-/* Prevent horizontal page scroll caused by rogue elements. */
 html, body{ max-width:100%; overflow-x:hidden; }
 
-/* Universal safety at mobile widths */
 @media (max-width:1023px){
   img, svg, video, canvas, iframe{ max-width:100%; height:auto; }
   .np-content, .np-panel, .np-panel__body, .np-panel__head{
@@ -1375,7 +1270,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-panel__body > *{ min-width:0; }
 }
 
-/* --- Modals — full width and safe height on mobile --- */
 @media (max-width:640px){
   .np-modal{ padding:.5rem; align-items:flex-end; }
   .np-modal__panel{
@@ -1388,7 +1282,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-modal__body{ padding: 1rem; }
 }
 
-/* --- Drawer becomes full-width on small screens --- */
 @media (max-width:640px){
   .np-drawer__panel{
     max-width:100%;
@@ -1399,7 +1292,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-drawer__body{ padding:.85rem 1rem 1rem; }
 }
 
-/* --- Profile menu never clips on mobile --- */
 @media (max-width:640px){
   .np-profile__menu{
     right:0;
@@ -1410,7 +1302,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-profile__meta{ display:none; }
 }
 
-/* --- Doctor card actions on very small screens --- */
 @media (max-width:420px){
   .np-doc-card{ padding:1rem .95rem .85rem; }
   .np-doc-card__actions{
@@ -1429,13 +1320,11 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
 }
 
-/* --- KPI cards ensure no overflow at 320px --- */
 @media (max-width:360px){
   .np-kpi{ padding:.9rem 1rem; }
   .np-kpi__value{ font-size:1.4rem; }
 }
 
-/* --- Tabs / segmented controls — horizontal scroll on mobile --- */
 @media (max-width:520px){
   .np-tabbar{
     width:100%;
@@ -1446,26 +1335,19 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-tab{ white-space:nowrap; flex-shrink:0; }
 }
 
-/* --- Header title truncation on 320px --- */
 @media (max-width:360px){
   .np-header__inner{ padding:.65rem .75rem; gap:.5rem; }
   .np-header__page-title{ font-size:.95rem; }
 }
 
-/* --- Buttons: never overflow their container --- */
 .np-btn{ max-width:100%; }
 .np-search{ min-width:0; }
 
-/* Bug #8 — shared button design tokens: a consistent minimum height and
-   vertical rhythm for every button, and a comfortable 44px touch target for
-   primary actions (e.g. Settings → Update password) so they no longer look
-   thin/weak next to the rest of the app. */
 .np-btn{ min-height:38px; }
 .np-btn--sm{ min-height:32px; }
 .np-btn--primary{ min-height:42px; }
 .np-btn--primary.np-btn--sm{ min-height:38px; }
 
-/* --- Notif template select becomes full-width on mobile --- */
 @media (max-width:640px){
   .np-notif-template-select{
     min-width: 0;
@@ -1473,20 +1355,16 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
 }
 
-/* --- Generic table wraps: keep scrollable within viewport --- */
 @media (max-width:1023px){
   .np-table-wrap{ max-width:100%; -webkit-overflow-scrolling:touch; }
 }
 
-/* --- Ensure fixed elements never push horizontal overflow --- */
 .np-shell, .np-main{ min-width:0; }
 
-/* --- np-grid-2 becomes single column on 380 and under --- */
 @media (max-width:380px){
   .np-grid-2{ grid-template-columns:1fr; }
 }
 
-/* --- Login card fits within 320px viewport --- */
 @media (max-width:360px){
   .np-login{ padding:.75rem; }
   .np-login__card{ padding:1.25rem; border-radius:18px; }

@@ -1,7 +1,4 @@
-/* =====================================================================
-   NeoKidsPro EMR — Doctor Panel — Modern UI styles
-   Pediatric SaaS · soft, calm, trustworthy.
-   ===================================================================== */
+
 
 :root{
   --np-primary:#89BCBD;
@@ -29,9 +26,6 @@ html,body{
   text-rendering: optimizeLegibility;
 }
 
-/* =====================================================================
-   APP SHELL — Sidebar + Main grid
-   ===================================================================== */
 .np-shell{
   display:grid;
   grid-template-columns: 264px 1fr;
@@ -42,7 +36,6 @@ html,body{
   .np-shell{ grid-template-columns: 1fr; }
 }
 
-/* ---------- Sidebar ---------- */
 .np-sidebar{
   background: #ffffff;
   border-right: 1px solid var(--np-border);
@@ -98,7 +91,6 @@ html,body{
   font-size: .75rem; color: var(--np-muted);
 }
 
-/* Mobile drawer */
 .np-backdrop{
   display:none;
   position:fixed; inset:0;
@@ -120,7 +112,6 @@ html,body{
   .np-sidebar.is-open{ transform: translateX(0); }
 }
 
-/* ---------- Main ---------- */
 .np-main{ min-width:0; display:flex; flex-direction:column; }
 
 .np-header{
@@ -150,7 +141,6 @@ html,body{
 .np-menu-toggle{ display:none; }
 @media (max-width:1023px){ .np-menu-toggle{ display:inline-flex; } }
 
-/* Profile dropdown */
 .np-profile{ position:relative; }
 .np-profile__trigger{
   display:flex; align-items:center; gap:.6rem;
@@ -198,13 +188,9 @@ html,body{
 .np-profile__menu-divider{ height:1px; background: var(--np-border); margin:.4rem .25rem; }
 .np-profile__menu-icon{ width:18px; height:18px; }
 
-/* Content area */
 .np-content{ padding: 1.5rem; max-width: 1440px; width:100%; margin: 0 auto; }
 @media (max-width:640px){ .np-content{ padding: 1rem; } }
 
-/* =====================================================================
-   KPI CARDS
-   ===================================================================== */
 .np-kpi-grid{
   display:grid;
   grid-template-columns: repeat(4, 1fr);
@@ -248,9 +234,6 @@ html,body{
 .np-kpi--cream  .np-kpi__icon{ background: linear-gradient(135deg, #E5A93A, #F2C770); }
 .np-kpi--cream::after{ background:#FFF8E7; opacity:.9; }
 
-/* =====================================================================
-   PANELS / SECTIONS
-   ===================================================================== */
 .np-panel{
   background:#fff;
   border:1px solid var(--np-border);
@@ -266,7 +249,6 @@ html,body{
 .np-panel__subtitle{ font-size:.78rem; color:var(--np-muted); }
 .np-panel__body{ padding: 1rem 1.2rem 1.2rem; }
 
-/* Tabs */
 .np-tabbar{
   display:flex; gap:.25rem;
   padding: .35rem;
@@ -293,9 +275,6 @@ html,body{
   box-shadow: 0 6px 14px -6px rgba(137,188,189,.55);
 }
 
-/* =====================================================================
-   APPOINTMENT CARDS (Waiting + Appointments)
-   ===================================================================== */
 .np-appt-list{ display:flex; flex-direction:column; gap:.65rem; }
 .np-appt{
   background:#fff;
@@ -317,8 +296,7 @@ html,body{
   background: #EEF4FB;
   color: var(--np-primary-600);
 }
-/* Bug #1 — keep the time on one line so "6:45 PM" never wraps the
-   "45"/"PM" onto a second line inside the badge. */
+
 .np-appt__time-h{ font-size:1.05rem; font-weight:700; line-height:1.15; white-space:nowrap; }
 .np-appt__time-d{ font-size:.65rem; letter-spacing:.06em; text-transform:uppercase; margin-top:.15rem; color: var(--np-muted); }
 .np-appt__body{ min-width:0; }
@@ -339,7 +317,6 @@ html,body{
   .np-appt__actions{ grid-column: 1 / -1; justify-content:flex-start; }
 }
 
-/* Status badge */
 .np-badge{
   display:inline-flex; align-items:center; gap:.35rem;
   font-size:.72rem; font-weight:600;
@@ -362,7 +339,6 @@ html,body{
 .np-badge--mint { background:#E2F7F1; color:#0F5C4F; border-color:#B8E8DC; }
 .np-badge--mint  .np-badge__dot{ background:#26A693; }
 
-/* Buttons */
 .np-btn{
   display:inline-flex; align-items:center; gap:.4rem;
   padding: .5rem .85rem;
@@ -390,9 +366,6 @@ html,body{
 .np-btn--success:hover{ background:#D1EFDB; }
 .np-btn--sm{ padding:.4rem .7rem; font-size:.78rem; }
 
-/* =====================================================================
-   FILTERS / SEARCH BAR
-   ===================================================================== */
 .np-filterbar{
   display:flex; gap:.65rem; flex-wrap:wrap;
   margin-bottom: 1rem;
@@ -427,9 +400,6 @@ html,body{
 }
 .np-select:focus{ outline:none; border-color: var(--np-primary); box-shadow: 0 0 0 4px rgba(137,188,189,.12); }
 
-/* =====================================================================
-   FORMS — Modern labels + focus rings
-   ===================================================================== */
 .np-field{ display:block; margin-bottom: .95rem; }
 .np-field__label{
   display:block; font-size:.78rem; font-weight:600; color: var(--np-ink);
@@ -461,7 +431,6 @@ html,body{
 .np-grid-3{ display:grid; grid-template-columns: repeat(3,1fr); gap:.85rem; }
 @media (max-width:640px){ .np-grid-2, .np-grid-3{ grid-template-columns: 1fr; } }
 
-/* Pill toggle (slot duration, working days) */
 .np-pills{ display:flex; flex-wrap:wrap; gap:.35rem; }
 .np-pill{
   padding: .42rem .75rem;
@@ -480,7 +449,6 @@ html,body{
   box-shadow: 0 4px 10px -3px rgba(137,188,189,.5);
 }
 
-/* Slot grid (reschedule) */
 .np-slots{
   display:grid; grid-template-columns: repeat(auto-fill, minmax(80px,1fr));
   gap:.5rem;
@@ -501,9 +469,6 @@ html,body{
 }
 .np-slot-btn:disabled{ opacity:.4; cursor: not-allowed; }
 
-/* =====================================================================
-   SETTINGS CARDS
-   ===================================================================== */
 .np-settings-grid{
   display:grid; grid-template-columns: repeat(2,1fr); gap:1rem;
 }
@@ -532,9 +497,6 @@ html,body{
 .np-setting-card__title{ font-weight:700; color: var(--np-ink); }
 .np-setting-card__sub{ font-size:.78rem; color: var(--np-muted); margin-top:.1rem; }
 
-/* =====================================================================
-   MODALS — glassmorphism
-   ===================================================================== */
 .np-modal{
   position:fixed; inset:0; z-index:100;
   display:flex; align-items:center; justify-content:center;
@@ -579,9 +541,6 @@ html,body{
 @keyframes npFadeIn{ from{opacity:0} to{opacity:1} }
 @keyframes npPop{ from{opacity:0; transform: translateY(8px) scale(.98)} to{opacity:1; transform: translateY(0) scale(1)} }
 
-/* =====================================================================
-   LOGIN SCREEN
-   ===================================================================== */
 .np-login{
   min-height:100vh;
   display:flex; align-items:center; justify-content:center;
@@ -619,7 +578,6 @@ html,body{
   font-size:.85rem;
 }
 
-/* Password visibility toggle */
 .np-password-wrap{ position:relative; display:block; }
 .np-password-wrap .np-input,
 .np-password-wrap .np-input--password{ padding-right: 2.6rem; }
@@ -653,9 +611,6 @@ html,body{
 html[data-theme="dark"] .np-password-toggle{ color:#94A3B8; }
 html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,.15); color:#fff; }
 
-/* =====================================================================
-   MEDS TABLE / Prescription
-   ===================================================================== */
 .np-meds-table{ width:100%; border-collapse: collapse; font-size:.85rem; }
 .np-meds-table thead th{
   text-align:left; font-size:.7rem; letter-spacing:.06em;
@@ -668,9 +623,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   border:1px solid var(--np-border); border-radius:9px; background:#fff;
 }
 .np-meds-table input:focus{ outline:none; border-color: var(--np-primary); box-shadow:0 0 0 3px rgba(137,188,189,.12); }
-/* Bug #2 — compact icon button for removing a medicine row. The mobile
-   override previously stretched it to the full row width; it now stays a
-   small, centered, tappable icon consistent with the design system. */
+
 .np-remove-row{
   background:#FEECEC; color:#A91D1D; border:0; border-radius:8px;
   width:34px; height:34px; cursor:pointer; font-weight:700; font-size:1rem;
@@ -679,7 +632,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 }
 .np-remove-row:hover{ background:#FCD9D9; }
 
-/* Empty / placeholders */
 .np-empty{
   text-align:center; padding: 2.5rem 1rem;
   color: var(--np-muted);
@@ -693,29 +645,24 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-empty__title{ font-weight:600; color: var(--np-ink); margin-bottom:.25rem; }
 .np-empty__sub{ font-size:.85rem; }
 
-/* Hidden utility (matches Tailwind) */
 .hidden{ display:none !important; }
 
-/* Accessibility — focus visible */
 :focus-visible{ outline: 2px solid var(--np-primary); outline-offset: 2px; border-radius: 6px; }
 
-/* Scrollbar polish */
 ::-webkit-scrollbar{ width:10px; height:10px; }
 ::-webkit-scrollbar-track{ background: transparent; }
 ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:999px; border:2px solid var(--np-surface); }
 ::-webkit-scrollbar-thumb:hover{ background:#94a3b8; }
 
-/* Small helpers used by JS-rendered partials */
 .np-row{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
 .np-mut{ color: var(--np-muted); }
 .np-ink{ color: var(--np-ink); }
 .np-divider{ height:1px; background: var(--np-border); margin: 1rem 0; }
 
-/* Bug 7 — consistent two-row card header */
 .np-appt__namerow {
   display: flex;
   align-items: center;
-  min-width: 0;            /* allow truncation in flex parent */
+  min-width: 0;            
 }
 .np-appt__namerow .np-appt__name {
   font-weight: 600;
@@ -731,7 +678,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   gap: .375rem .5rem;
   margin-top: .25rem;
 }
-/* Bug 1 — patient age chip on appointment cards */
+
 .np-appt__age{
   display:inline-block;
   margin-left:.5rem;
@@ -748,20 +695,8 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-btn--disabled {
   pointer-events: none;
   opacity: .5;
-}/* =====================================================================
-   NeoKidsPro EMR — styles.append.css
-   APPEND-ONLY. Do NOT delete or replace existing rules in styles.css.
-   Append this file to the end of styles.css:
-       cat styles.append.css >> styles.css
-   ----------------------------------------------------------------------
-   Adds:
-   - Patient-modal tab bar       (.np-pm-tab / .np-pm-pane)
-   - Patient history row layout  (.np-history-row / .np-history-rx)
-   - Disabled-button visual      (.np-btn--disabled)
-   - Rx success card polish      (#rxSuccessCard)
-   ===================================================================== */
+}
 
-/* ---- Patient modal: tab bar (Current / Prescription / Patient History) ---- */
 .np-pm-tabs {
   display: flex;
   gap: .25rem;
@@ -808,7 +743,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ---- Patient history: visit rows ---- */
 .np-history-row {
   display: grid;
   grid-template-columns: 92px 1fr;
@@ -830,7 +764,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   min-width: 0;
 }
 
-/* ---- Patient history: prescription cards ---- */
 .np-history-rx {
   padding: .75rem .85rem;
   border: 1px solid var(--np-border, #e5e7eb);
@@ -840,7 +773,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   margin-bottom: .55rem;
 }
 
-/* ---- Disabled-button visual (used by View / Download when PDF missing) ---- */
 .np-btn--disabled,
 .np-btn[disabled],
 .np-btn--disabled:hover {
@@ -850,7 +782,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   filter: grayscale(.2);
 }
 
-/* ---- Rx success card (Bug 3) ---- */
 #rxSuccessCard {
   background: #ecfdf5;
   border: 1px solid #10b981;
@@ -862,17 +793,11 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 #rxSuccessCard.hidden { display: none !important; }
 #rxSuccessSub { color: #047857; }
 
-/* ---- Mobile tweaks ---- */
 @media (max-width: 640px) {
   .np-pm-tab { padding: .5rem .55rem; font-size: .82rem; }
   .np-history-row { grid-template-columns: 76px 1fr; gap: .55rem; padding: .6rem; }
 }
 
-/* =====================================================================
-   v2.0 ADDITIONS — Overflow menu, sidebar badge, cancel reason, consult workspace
-   ===================================================================== */
-
-/* Sidebar live-count badge */
 .np-nav-badge{
   margin-left:auto;
   background: var(--np-coral, #FE84A4);
@@ -885,7 +810,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   text-align:center;
 }
 
-/* Overflow (⋮) menu on appointment cards */
 .np-overflow{
   position:relative;
   display:inline-flex;
@@ -936,7 +860,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-overflow-item.is-danger:hover{ background:#FEF2F2; color:#991B1B; }
 .np-overflow-icon{ width:16px; height:16px; flex-shrink:0; }
 
-/* Cancellation reason on completed/cancelled cards */
 .np-appt__cancel-reason{
   margin-top:.4rem;
   font-size:.82rem;
@@ -947,12 +870,10 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   padding:.4rem .55rem;
 }
 
-/* Action stack on appointment cards — make sure overflow doesn't wrap weirdly */
 .np-appt__actions{
   align-items:center;
 }
 
-/* Consultation workspace tweaks */
 #consultWorkspace .np-panel__head{
   padding-bottom: 1rem;
 }
@@ -972,13 +893,11 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 }
 #consultWorkspace .np-pm-tab:hover{ color: var(--np-primary-600); }
 
-/* Disabled link button visual */
 .np-btn--disabled{
   opacity:.4 !important;
   pointer-events:none !important;
 }
 
-/* code blocks inside tips */
 .np-content code{
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: .82rem;
@@ -988,12 +907,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   color: var(--np-primary-600);
 }
 
-/* ==========================================================
-   Tables (Earnings, Past Settlements, generic data tables)
-   Added during UX/UI fix pass — these classes were referenced
-   in markup (Earnings tab) but had no CSS in this stylesheet,
-   which caused columns to collapse with no padding.
-   ========================================================== */
 .np-table-wrap{
   border: 1px solid var(--np-border, #E5E7EB);
   border-radius: 14px;
@@ -1032,11 +945,9 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-table tbody tr:hover td{ background: #F8FBFE; }
 .np-table tbody tr.is-empty:hover td{ background: transparent; }
 
-/* Numeric / currency columns */
 .np-table td.np-num,
 .np-table th.np-num{ text-align: right; font-variant-numeric: tabular-nums; }
 
-/* Empty state row inside a table */
 .np-table .np-empty{
   text-align: center;
   padding: 1.5rem .9rem;
@@ -1044,46 +955,25 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   background: #FAFCFE;
 }
 
-/* Mobile: keep horizontal scroll instead of collapse */
 @media (max-width: 720px){
   .np-table{ font-size: .82rem; }
   .np-table th, .np-table td{ padding: .55rem .65rem; }
 }
 
-/* =========================================================================
- * Dark-mode overrides for data-theme="dark" on <html>.
- * ======================================================================= */
 html[data-theme="dark"]{
-  --np-bg:#0b1220; --np-surface:#0f172a; --np-text:#e2e8f0; --np-muted:#94a3b8;
-  --np-border:#1f2937; --np-ink:#f1f5f9; color-scheme: dark;
+  --np-bg:      var(--nk-surface);
+  --np-surface: var(--nk-card);
+  --np-text:    var(--nk-text);
+  --np-muted:   var(--nk-muted);
+  --np-border:  var(--nk-border);
+  --np-ink:     var(--nk-ink);
 }
-html[data-theme="dark"] body{ background:#0b1220; color:#e2e8f0; }
-html[data-theme="dark"] .np-panel,
-html[data-theme="dark"] .np-card,
-html[data-theme="dark"] .np-kpi,
-html[data-theme="dark"] .np-table-wrap,
-html[data-theme="dark"] .np-modal__panel{
-  background:#0f172a !important; color:#e2e8f0 !important; border-color:#1f2937 !important;
+html[data-theme="dark"] .np-search{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
 }
-html[data-theme="dark"] .np-sidebar{ background:#070d19 !important; border-color:#1f2937 !important; }
-html[data-theme="dark"] .np-topbar{ background:#0f172a !important; border-color:#1f2937 !important; }
-html[data-theme="dark"] .np-table th{ background:#0b1220 !important; color:#cbd5e1 !important; }
-html[data-theme="dark"] .np-table td{ border-bottom-color:#1f2937 !important; }
-html[data-theme="dark"] .np-table tr:hover td{ background:#172033 !important; }
-html[data-theme="dark"] .np-input,
-html[data-theme="dark"] .np-select,
-html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]),
-html[data-theme="dark"] select,
-html[data-theme="dark"] textarea{
-  background:#0b1220 !important; color:#e2e8f0 !important; border-color:#1f2937 !important;
-}
-html[data-theme="dark"] .np-search{ background:#0b1220 !important; border-color:#1f2937 !important; }
-html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
+html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
 
-
-/* =====================================================================
-   STABILIZATION PASS — responsive layout and overflow menus
-   ===================================================================== */
 .np-shell,
 .np-main{ overflow:visible; }
 .np-main{ min-height:100vh; }
@@ -1093,8 +983,7 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
   height:100vh;
   overflow:visible;
 }
-/* Desktop sidebar fits its nav items; only scroll when the viewport is short
-   or in the mobile drawer, so no stray scrollbar appears on desktop. */
+
 @media (max-height:760px), (max-width:1023px){
   .np-sidebar__nav{
     overflow-y:auto;
@@ -1125,7 +1014,7 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
   align-items:end;
   width:100%;
 }
-/* Bug #3 — labelled filter control wrapper (matches Admin panel). */
+
 .np-filter-control{ display:flex; flex-direction:column; gap:.35rem; min-width:0; max-width:100%; }
 .np-filter-control__label{
   display:block; color:var(--np-muted); font-size:.72rem; font-weight:700;
@@ -1188,15 +1077,10 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
 .np-overflow-menu.is-open{
   display:flex;
   position:fixed;
-  /* Neutralise the base rule's `right:0` / `top: calc(100%+6px)` so the
-     inline `left`/`top` set by positionOverflowMenu() are the sole
-     positioning inputs. Without this, `right:0` fights the inline
-     `left` and pins the menu to the viewport edge on desktop, and the
-     `top: calc(100% + 6px)` value (meaningless for position:fixed) can
-     make the menu render off-screen in some browsers. */
+  
   right:auto;
   bottom:auto;
-  /* Escape any ancestor stacking / clipping context on desktop. */
+  
   z-index: 1000;
 }
 .np-overflow-item{ white-space:normal; }
@@ -1338,10 +1222,6 @@ html[data-theme="dark"] .np-mut{ color:#94a3b8 !important; }
   .np-appt__actions .np-btn:first-child{ grid-column:1 / -1; }
 }
 
-/* =====================================================================
-   Doctor EMR UUID card (Profile / Settings — read-only)
-   UI only — no backend changes.
-   ===================================================================== */
 .np-uuid-card{
   margin: 0 0 1rem;
   padding: .75rem .85rem .85rem;
@@ -1428,14 +1308,6 @@ html[data-theme="dark"] .np-uuid-card__copy{
   border-color: rgba(255,255,255,.10);
 }
 
-/* =====================================================================
-   Consultation workspace — back button + breadcrumb (Task 3)
-   Fix: normal-sized back arrow, clean spacing, proper separation.
-   Structure is generated by injectConsultBackButton() in app.js:
-     .np-consult-backbar
-        └─ button.np-consult-back  (contains 16px svg + label)
-        └─ span.np-consult-breadcrumb  (Appointments › Consultation)
-   ===================================================================== */
 .np-consult-backbar{
   display: flex;
   flex-direction: column;
@@ -1516,17 +1388,8 @@ html[data-theme="dark"] .np-consult-back:hover{
   .np-consult-back{ font-size: .78rem; }
 }
 
-/* =====================================================================
-   MOBILE RESPONSIVENESS PASS — 320px → 768px
-   Fix ONLY mobile issues without changing desktop behavior.
-   Covers: viewport overflow, tables/cards, modals, dropdowns, action
-   menus, forms, sticky headers, touch targets.
-   ===================================================================== */
-
-/* Prevent any horizontal page scroll caused by rogue elements. */
 html, body{ max-width:100%; overflow-x:hidden; }
 
-/* Universal safety: no element should force horizontal scroll. */
 @media (max-width:1023px){
   img, svg, video, canvas, iframe{ max-width:100%; height:auto; }
   .np-content, .np-panel, .np-panel__body, .np-panel__head,
@@ -1540,11 +1403,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-appt__meta > span{ overflow-wrap:anywhere; }
 }
 
-/* --- Overflow (⋮) action menu — mobile bottom-sheet fallback --- */
-/* When JS detects a narrow viewport it adds .np-overflow-menu--sheet
-   so the menu is anchored to the bottom of the viewport instead of
-   floating near the trigger. This guarantees it is never clipped by
-   ancestor overflow, transforms, or the scrolling viewport edges. */
 .np-overflow-menu--sheet{
   padding: .5rem;
   border-radius: 16px;
@@ -1556,7 +1414,7 @@ html, body{ max-width:100%; overflow-x:hidden; }
   to  { opacity:1; transform: translateY(0); }
 }
 .np-overflow-menu--sheet .np-overflow-item{
-  padding: .75rem .8rem;   /* larger touch target on mobile */
+  padding: .75rem .8rem;   
   font-size: .92rem;
   border-radius: 10px;
 }
@@ -1564,7 +1422,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   margin-top: 2px;
 }
 
-/* --- Overflow trigger button — larger touch target on mobile --- */
 @media (max-width:640px){
   .np-overflow{ align-self:center; }
   .np-overflow-trigger{
@@ -1573,8 +1430,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
 }
 
-/* --- Appointment card action layout on very small screens --- */
-/* Ensure the ⋮ menu trigger is always visible and never clipped */
 .np-appt{ overflow:visible; }
 .np-appt__actions{ overflow:visible; }
 
@@ -1621,7 +1476,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
 }
 
-/* --- Modals — full width and safe height on mobile --- */
 @media (max-width:640px){
   .np-modal{ padding:.5rem; align-items:flex-end; }
   .np-modal__panel,
@@ -1638,7 +1492,7 @@ html, body{ max-width:100%; overflow-x:hidden; }
     flex-direction: column-reverse;
   }
   .np-modal__foot .np-btn{ width:100%; justify-content:center; }
-  /* Cancel modal uses a bespoke card class */
+  
   #cancelModal .np-modal__card{
     background:#fff;
     border-radius: 18px;
@@ -1652,7 +1506,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
 }
 
-/* --- Prescription meds table becomes stacked on very small screens --- */
 @media (max-width:600px){
   .np-meds-table{ font-size:.82rem; }
   .np-meds-table, .np-meds-table thead, .np-meds-table tbody,
@@ -1689,31 +1542,24 @@ html, body{ max-width:100%; overflow-x:hidden; }
     margin-bottom:.2rem;
   }
   .np-meds-table input{ padding:.5rem .6rem; font-size:.88rem; }
-  /* Bug #2 — keep the remove button a compact icon on mobile instead of
-     stretching it across the whole medicine row. */
+  
   .np-meds-table td[data-label=""]{ text-align:right; }
   .np-remove-row{ width:36px; height:36px; margin-left:auto; }
 }
 
-/* --- Slots grid: keep tap targets comfortable on 320px --- */
 @media (max-width:360px){
   .np-slots{ grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap:.4rem; }
   .np-slot-btn{ padding:.5rem .25rem; font-size:.8rem; }
 }
 
-/* --- Filter bar: doctor variant stacks cleanly on narrow screens --- */
 @media (max-width:420px){
   .np-filterbar--doctor{ grid-template-columns:1fr; gap:.6rem; }
   .np-filterbar--doctor > .np-search{ grid-column:auto; }
   .np-filterbar--doctor > .np-btn{ width:100%; }
-  /* Bug #3/#4 — labelled controls stack full-width, but secondary action
-     buttons (Clear) stay compact instead of stretching edge-to-edge. */
+  
   .np-filterbar--doctor .np-filter-control > .np-btn{ width:auto; align-self:flex-start; min-width:120px; }
 }
 
-/* --- My Earnings: compact filter row (Bug #4) --- */
-/* Month/Year selects + Apply sit on one compact row on mobile instead of
-   every control stretching full-width. */
 #earningsTab .np-filterbar--doctor{ grid-template-columns:1fr 1fr auto; }
 #earningsTab .np-filterbar--doctor .np-btn{ width:auto; }
 @media (max-width:420px){
@@ -1721,10 +1567,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   #earningsTab .np-filterbar--doctor .np-btn{ width:auto; min-width:120px; }
 }
 
-/* --- Prescription Archive: compact, consistent action buttons (Bug #3) --- */
-/* Keep the View PDF / Download / Open visit buttons uniform and prevent
-   them stretching full-width on mobile, with a clear primary/secondary
-   hierarchy and comfortable wrapping. */
 #rxArchiveList .np-appt__actions{ display:flex; flex-wrap:wrap; gap:.5rem; }
 #rxArchiveList .np-appt__actions .np-btn{
   flex:0 1 auto; width:auto; min-width:0; white-space:nowrap;
@@ -1734,7 +1576,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   #rxArchiveList .np-appt__actions .np-btn--primary{ flex:1 1 100%; }
 }
 
-/* --- Tabs: horizontal scroll instead of wrapping/clipping --- */
 @media (max-width:520px){
   .np-tabbar{
     width:100%;
@@ -1745,7 +1586,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-tab{ font-size:.82rem; padding:.5rem .75rem; }
 }
 
-/* --- Profile menu never clips on mobile --- */
 @media (max-width:640px){
   .np-profile__menu{
     right:0;
@@ -1755,7 +1595,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
 }
 
-/* --- Consultation workspace: back bar + tabs on mobile --- */
 @media (max-width:520px){
   .np-consult-backbar{ padding:.6rem .75rem .65rem; }
   .np-consult-breadcrumb{ font-size:.72rem; }
@@ -1770,26 +1609,20 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
 }
 
-/* --- KPI cards ensure no overflow at 320px --- */
 @media (max-width:360px){
   .np-kpi{ padding:.95rem .9rem; }
   .np-kpi__value{ font-size:1.5rem; }
 }
 
-/* --- Buttons: never overflow their container --- */
 .np-btn{ max-width:100%; }
 
-/* --- Ensure fixed-position overflow menus stay above modals when
-       used inside a modal, but below open modal for full sheet mode --- */
 .np-overflow-menu.is-open{ z-index: 1200; }
 
-/* --- Header title truncation on 320px --- */
 @media (max-width:360px){
   .np-header__inner{ padding:.65rem .75rem; gap:.5rem; }
   .np-header__page-title{ font-size:.95rem; }
 }
 
-/* --- History rows adapt on ultra-narrow screens --- */
 @media (max-width:360px){
   .np-history-row{
     grid-template-columns: 64px 1fr;

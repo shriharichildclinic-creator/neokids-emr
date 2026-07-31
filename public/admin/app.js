@@ -1,7 +1,4 @@
-/* =====================================================================
-   NeoKidsPro EMR — Admin App
-   Dashboard, appointments, doctor management, notifications, and settings UI.
-   ===================================================================== */
+
 
 const API = '/api';
 let TOKEN = localStorage.getItem('np_admin_token');
@@ -12,21 +9,6 @@ const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
 let __doctorsCache = [];
 let __apptsCache = [];
 
-/* -------- API helper --------
- *
- * The earlier version unconditionally did `location.reload()` on ANY 401.
- * That was the amplifier behind the post-logout reload loop:
- *   • finance.js polls /admin/finance/settlements on every page load
- *   • on the login screen there is no token → 401
- *   • api() reloads the page → DOMContentLoaded fires again → poll re-arms
- *   • the user can never finish typing the login form
- *
- * The patched helper only triggers a reload when a token WAS attached to
- * the failed request (i.e. genuine "session expired"). When the user has
- * no token to begin with, we simply throw so the caller can decide what
- * to do — typically the caller is on the login screen and silently
- * swallows the error.
- */
 async function api(path, opts = {}) {
   const tokenAtCallTime = TOKEN; // snapshot — used to detect "session expired"
   const headers = {
@@ -40,19 +22,11 @@ async function api(path, opts = {}) {
 
   if (r.status === 401) {
     if (tokenAtCallTime) {
-      // We DID send a token and the server rejected it → real session
-      // expiry. Clean up and surface the login screen via a soft swap
-      // (no full reload, so we don't risk re-arming background polls).
       localStorage.removeItem('np_admin_token');
       TOKEN = null;
       showLogin();
       const err = new Error('Session expired'); err.status = 401; throw err;
     }
-    // No token attached → caller is unauthenticated background code
-    // (typically running while the login screen is visible). Do NOT
-    // reload — that would wipe the user's in-progress form input and,
-    // combined with any DOMContentLoaded-scheduled work, create an
-    // infinite loop. Just throw an ordinary error.
     const err = new Error((data && (data.error || data.message)) || 'Unauthorized');
     err.status = 401; throw err;
   }
@@ -61,13 +35,10 @@ async function api(path, opts = {}) {
   return data;
 }
 
-/* -------- Utils -------- */
 function escapeHtml(s){
   return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-/* Strip any leading "Dr." / "Dr " the user may have typed when adding
-   a doctor, so we never render "Dr. Dr Anita Rao". Use drName(d.name)
-   wherever you would have written `'Dr. ' + d.name`. */
+
 function stripDrPrefix(name){
   return String(name == null ? '' : name).replace(/^\s*(dr\.?\s+)+/i, '').trim();
 }
@@ -93,14 +64,12 @@ function fmtDateTime(iso){
   return d.toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) + ' ' +
          d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
 }
-// Compact currency (used in dense places: doctor cards, table cells)
 function fmtCurrency(n){
   const v = Number(n||0);
   if (v >= 100000) return '₹' + (v/100000).toFixed(v%100000===0?0:1) + 'L';
   if (v >= 1000)   return '₹' + (v/1000).toFixed(v%1000===0?0:1) + 'k';
   return '₹' + v.toLocaleString('en-IN');
 }
-// Full currency with thousands separators (₹1,250). Used wherever space allows.
 function fmtCurrencyFull(n){
   if (typeof NPFmt !== 'undefined' && NPFmt.inr) return NPFmt.inr(n);
   const v = Number(n||0);
@@ -149,16 +118,10 @@ function deltaTag(curr, prev){
   return `<div class="np-kpi__delta np-kpi__delta--flat">— same as yesterday</div>`;
 }
 
-/* =====================================================================
-   AUTH
-   ===================================================================== */
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#loginError').classList.add('hidden');
   try {
-    // We intentionally use raw fetch here, not api(), so we never attach a
-    // (possibly stale) Authorization header to the login request and so a
-    // 401 from bad credentials does NOT enter the api() 401 interceptor.
     const r = await fetch(API + '/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: $('#email').value, password: $('#password').value })
@@ -207,19 +170,13 @@ async function forgotPassword() {
         message: res.previewUrl,
         okText: 'Copy & close',
       });
-      try { await navigator.clipboard.writeText(res.previewUrl); NPToast.success('Reset link copied to clipboard'); } catch (_) { /* ignore */ }
+      try { await navigator.clipboard.writeText(res.previewUrl); NPToast.success('Reset link copied to clipboard'); } catch (_) {  }
     } else {
       NPToast.success('If the account exists, a reset link has been sent.');
     }
   } catch (err) { NPToast.error(err.message); }
 }
-/* Logout — pure DOM swap, NO location.reload().
- *
- * Reloading on logout was actively harmful: it re-fired DOMContentLoaded,
- * which re-armed the finance.js 1.5 s poll, which hit /admin/finance/...
- * with no token, which 401'd, which (in the old api() helper) triggered
- * yet another reload. Now we just clear the token, restore the login
- * screen, and reset any in-page state we own. */
+
 function logout() {
   localStorage.removeItem('np_admin_token');
   TOKEN = null;
@@ -229,8 +186,6 @@ function logout() {
   showLogin();
 }
 
-/* Show / hide screens — both helpers also reset transient form/error
- * state so leftover content from the previous session never leaks. */
 function showLogin() {
   $('#dashboard').classList.add('hidden');
   $('#loginScreen').classList.remove('hidden');
@@ -238,9 +193,6 @@ function showLogin() {
   const err = $('#loginError'); if (err) { err.textContent = ''; err.classList.add('hidden'); }
 }
 
-/* =====================================================================
-   SHELL
-   ===================================================================== */
 const VIEW_META = {
   dashboardView:   { title:'Dashboard',          sub:'Overview of your clinic' },
   doctorsView:     { title:'Doctors',            sub:'Manage clinic doctors and their performance' },
@@ -259,7 +211,6 @@ function setView(view, opts) {
   if (link) link.classList.add('active');
   const meta = VIEW_META[view];
   if (meta) { $('#pageTitle').textContent = meta.title; $('#pageSubtitle').textContent = meta.sub; }
-  // Persist active view in URL hash for refresh-survivability + bookmarks.
   try {
     if (!(opts && opts.skipHash)) {
       const slug = view.replace(/View$/, '');
@@ -270,7 +221,6 @@ function setView(view, opts) {
   if (view === 'doctorsView')   loadDoctors();
   if (view === 'apptsView')     { loadDoctorsForFilter(); loadAppointments(); _setupApptDateRange(); }
   if (view === 'notifView')     { loadNotifTemplates(); loadNotifications(); }
-  // ─ Revenue Management views (handlers live in finance.js) ─
   if (view === 'revenueView'     && window.Finance) Finance.loadRevenue();
   if (view === 'settlementsView' && window.Finance) Finance.loadSettlements();
   if (view === 'invoicesView'    && window.Finance) Finance.loadInvoices();
@@ -299,17 +249,12 @@ function setupProfileMenu(){
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.remove('is-open'); });
 }
 
-/* =====================================================================
-   Dashboard
-   ===================================================================== */
 async function loadDashboard() {
-  // KPI loading skeleton.
   try {
     if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsGrid'), 6);
   } catch (_) {}
   try {
     const a = await api('/admin/analytics');
-    // KPI cards — each card gets a tooltip that explains the metric.
     const cards = [
       { kind:'blue',  label:"Today's Appointments", value: a.todayAppointments,
         extra: deltaTag(a.todayAppointments, a.yesterdayAppointments),
@@ -338,7 +283,6 @@ async function loadDashboard() {
         ${c.extra || ''}
       </div>`).join('');
 
-    // 14-day bars
     const max = Math.max(1, ...(a.daily || []).map(d => d.total));
     $('#dailyBars').innerHTML = (a.daily || []).map(d => {
       const h = Math.max(2, Math.round((d.total / max) * 80));
@@ -352,7 +296,6 @@ async function loadDashboard() {
       return '<span></span>';
     }).join('');
 
-    // Sidebar failed-notifs badge
     const fail = a.notificationsFailed || 0;
     const badge = $('#navBadgeFailed');
     if (badge) {
@@ -360,7 +303,6 @@ async function loadDashboard() {
       else { badge.classList.add('hidden'); }
     }
 
-    // Recent appts
     const appts = await api('/admin/appointments?limit=10');
     $('#recentAppts').innerHTML = (appts.length === 0)
       ? `<div class="np-empty"><div class="np-empty__title">No appointments yet</div><div class="np-empty__sub">Bookings will show up here.</div></div>`
@@ -384,11 +326,7 @@ async function loadDashboard() {
   }
 }
 
-/* =====================================================================
-   Doctors and insights drawer
-   ===================================================================== */
 async function loadDoctors() {
-  // Loading skeleton while we wait for the network.
   try {
     const grid = $('#doctorsGrid');
     if (grid && typeof NPSkeleton !== 'undefined') {
@@ -397,8 +335,6 @@ async function loadDoctors() {
   } catch (_) {}
   try {
     const docs = await api('/admin/doctors');
-    // Fetch KYC for each doctor in parallel. The endpoint always returns a
-    // valid shape (empty record → kycStatus: 'PENDING'), so this never 404s.
     const kycs = await Promise.all(
       docs.map(d => api('/admin/doctors/' + encodeURIComponent(d.id) + '/kyc').catch(() => null))
     );
@@ -409,24 +345,7 @@ async function loadDoctors() {
     $('#doctorsGrid').innerHTML = `<div class="np-error">${escapeHtml(err.message)}</div>`;
   }
 }
-/* ---------------------------------------------------------------------
- * Doctor card rendering
- *
- * Design goals (addressing the UI/UX issues raised):
- *  1. Equal-height cards — .np-doc-card uses grid-template-rows so every
- *     section sits at the exact same vertical position across cards.
- *  2. Single-line name with ellipsis — enforced via CSS, plus we keep the
- *     full name in a title attribute for hover.
- *  3. Avatar never clipped — fixed 44px basis, never shrinks; card has
- *     min-width:0 and box-sizing:border-box; grid uses minmax(min(280px,100%),1fr).
- *  4. Clean info hierarchy — name > specialization > qualification.
- *     Email/phone moved to a dedicated icon-prefixed contact strip.
- *  5. Qualification dedup — if d.qualification is already contained in
- *     d.specialization (case-insensitive) we hide it.
- *  6. Compact pills replace the wrapped password warning text.
- *  7. Stats locked to a 2×2 grid — layout is identical no matter the width.
- *  8. Actions row uses 1fr 1fr 1fr auto grid so spacing is identical.
- * ------------------------------------------------------------------ */
+
 function _docInitials(name){
   const clean = stripDrPrefix(name) || 'D';
   return clean.split(/\s+/).map(s => s[0]).slice(0,2).join('').toUpperCase();
@@ -441,8 +360,6 @@ function _docQualification(d){
   const q = String(d.qualification || '').trim();
   if (!q) return '';
   const spec = String(d.specialization || '').trim().toLowerCase();
-  // Suppress qualification if specialization already contains it (e.g.
-  // specialization = "Pediatrician — MBBS, MD" and qualification = "MBBS, MD")
   if (spec && spec.includes(q.toLowerCase())) return '';
   return `<div class="np-doc-card__qual" title="${escapeHtml(q)}">${escapeHtml(q)}</div>`;
 }
@@ -565,7 +482,6 @@ async function hardDeleteDoctor(id, name) {
   } catch (err) { NPToast.error(err.message); }
 }
 
-/* ---- Doctor Modal (Add/Edit) ---- */
 function openDoctorModal() {
   $('#doctorModalTitle').textContent = 'Add Doctor';
   const f = $('#doctorForm');
@@ -576,7 +492,6 @@ function openDoctorModal() {
   f.password.placeholder = '(invite link is preferred)';
   loadKycForDoctor(null);
   $('#doctorModal').classList.remove('hidden');
-  // Upgrade KYC file inputs to drag-and-drop dropzones (idempotent).
   if (typeof NPDropzone !== 'undefined') {
     setTimeout(() => {
       ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
@@ -610,7 +525,6 @@ function openEditDoctor(id) {
   f.consultationModes.value = d.consultationModes || 'BOTH';
   f.onlineConsultFee.value   = d.onlineConsultFee   ?? '';
   f.physicalConsultFee.value = d.physicalConsultFee ?? '';
-  // Revenue Management — per-doctor split
   if (f.clinicSharePercent) f.clinicSharePercent.value = d.clinicSharePercent ?? 25;
   if (f.doctorSharePercent) f.doctorSharePercent.value = d.doctorSharePercent ?? 75;
   if (f.tdsPercent)         f.tdsPercent.value         = d.tdsPercent ?? 10;
@@ -618,8 +532,6 @@ function openEditDoctor(id) {
   $('#doctorModal').classList.remove('hidden');
 }
 
-// Auto-keep the clinic + doctor share fields balanced to 100. The user can
-// edit either side; we update the other to (100 - this).
 document.addEventListener('input', (e) => {
   if (e.target && (e.target.id === 'docClinicPct' || e.target.id === 'docDoctorPct')) {
     const clinic = $('#docClinicPct'); const doc = $('#docDoctorPct');
@@ -650,7 +562,6 @@ $('#doctorForm').addEventListener('submit', async (e) => {
     onlineConsultFee: raw.onlineConsultFee === '' ? 0 : Number(raw.onlineConsultFee),
     physicalConsultFee: raw.physicalConsultFee === '' ? 0 : Number(raw.physicalConsultFee)
   };
-  // Revenue Management — only send share fields when the user actually filled them.
   if (raw.clinicSharePercent !== undefined && raw.clinicSharePercent !== '') {
     payload.clinicSharePercent = Number(raw.clinicSharePercent);
   }
@@ -668,19 +579,11 @@ $('#doctorForm').addEventListener('submit', async (e) => {
       alert('Doctor updated.');
     } else {
       const res = await api('/admin/doctors', { method: 'POST', body: JSON.stringify(payload) });
-      // Issue 12 — the backend now ALWAYS returns the invite link in
-      // `invitePreviewUrl` (regardless of SMTP mode), plus a boolean
-      // `inviteSent` describing whether email delivery succeeded.
-      // Show the link to the admin every time so it can be copy-pasted
-      // to the doctor over WhatsApp / Slack if email fails silently.
       const ttl = res.inviteExpiresInMinutes ? ` (expires in ${res.inviteExpiresInMinutes} min)` : '';
       if (res.invitePreviewUrl) {
         const status = res.inviteSent
           ? 'Doctor created — invite email sent.'
           : 'Doctor created — email delivery NOT confirmed.';
-        // Replace the blocking alert with a non-blocking toast that has a
-        // Copy-link action button. Falls back to a modal alert if NPToast is
-        // not loaded for some reason.
         if (typeof NPToast !== 'undefined') {
           NPToast.success(status + ' Click "Copy link" to share' + ttl + '.', {
             title: 'Invite link ready',
@@ -701,8 +604,6 @@ $('#doctorForm').addEventListener('submit', async (e) => {
         if (typeof NPToast !== 'undefined') NPToast.success('Doctor created and invite email sent.');
         else alert('Doctor created and invite email sent.');
       }
-      // Flip the modal into edit-mode for this new doctor so the admin can
-      // upload KYC documents immediately without re-opening.
       f.dataset.mode = 'edit';
       f.dataset.id   = res.id;
       f.email.readOnly = true;
@@ -715,7 +616,6 @@ $('#doctorForm').addEventListener('submit', async (e) => {
   } catch (err) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
 });
 
-/* ---- Doctor insights drawer ---- */
 async function openInsights(id){
   const drawer = $('#doctorDrawer');
   const body = $('#drawerBody');
@@ -758,7 +658,6 @@ async function openInsights(id){
         </div>
       </div>
 
-      <!-- Doctor EMR UUID (read-only, with copy button) -->
       <div class="np-uuid-card" role="group" aria-label="Doctor EMR UUID">
         <div class="np-uuid-card__label">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>
@@ -827,7 +726,6 @@ async function openInsights(id){
         <div class="np-panel__body" style="padding:0;">${upcoming}</div>
       </div>
     `;
-    // Wire the UUID copy button (read-only, no API changes).
     const copyBtn = body.querySelector('.np-uuid-card__copy');
     if (copyBtn) copyBtn.addEventListener('click', () => __npCopyToClipboard(copyBtn.getAttribute('data-copy') || '', copyBtn));
   } catch (err) {
@@ -836,9 +734,6 @@ async function openInsights(id){
 }
 function closeDoctorDrawer(){ $('#doctorDrawer').classList.add('hidden'); }
 
-/* =====================================================================
-   Clipboard helper for read-only UUID displays (UI utility only).
-   ===================================================================== */
 function __npCopyToClipboard(text, btn){
   if (!text) return;
   const done = () => {
@@ -877,13 +772,9 @@ function __npCopyFallback(text, done){
   } catch(_){}
 }
 
-/* ---- Doctor filter bar listeners ---- */
 $('#docSearch').addEventListener('input', renderDoctors);
 $('#docFilterAvail').addEventListener('change', renderDoctors);
 
-/* =====================================================================
-   Appointments
-   ===================================================================== */
 async function loadDoctorsForFilter(){
   try {
     if (!__doctorsCache.length) __doctorsCache = await api('/admin/doctors');
@@ -917,16 +808,12 @@ async function loadAppointments() {
       tbody.innerHTML = `<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No appointments match</div><div class="np-empty__sub">Try clearing some filters.</div></div></td></tr>`;
       return;
     }
-    // Bug #7 — default to NEWEST first. The previous comparator re-sorted
-    // the list ascending, undoing the server's newest-first orderBy and
-    // burying today's appointments below older ones.
     appts.sort((a,b) => {
       const ka = String(a.date).slice(0,10) + ' ' + String(a.startTime||'');
       const kb = String(b.date).slice(0,10) + ' ' + String(b.startTime||'');
       return ka > kb ? -1 : ka < kb ? 1 : 0;
     });
     tbody.innerHTML = appts.map(a => {
-      // Visual cue for online vs in-person via a left-border color on the row.
       const rowAccent = a.consultationType === 'ONLINE'
         ? 'border-left:3px solid #10b981;'
         : (a.consultationType === 'OFFLINE' ? 'border-left:3px solid #3b82f6;' : '');
@@ -949,7 +836,6 @@ async function loadAppointments() {
         <td data-label="Fee" style="text-align:right;"><b>${fmtCurrencyFull(a.feeAtBooking)}</b></td>
       </tr>`;
     }).join('');
-    // Render filter chips so active filters are visible at a glance.
     _renderApptFilterChips({ status, type, payment, doctorId, from, to, q });
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7"><div class="np-error">${escapeHtml(err.message)}</div></td></tr>`;
@@ -962,7 +848,6 @@ $('#clearFilters').addEventListener('click', () => {
   });
   loadAppointments();
 });
-// Render the active-filter chip bar above the table.
 function _renderApptFilterChips(state){
   const host = document.getElementById('apptFilterChips');
   if (!host || typeof NPChips === 'undefined') return;
@@ -1007,30 +892,14 @@ function _setupApptDateRange(){
     loadAppointments();
   });
 }
-$('#apptSearch').addEventListener('input', () => { /* debounce */
+$('#apptSearch').addEventListener('input', () => { 
   clearTimeout(window.__apptSearchTimer);
   window.__apptSearchTimer = setTimeout(loadAppointments, 280);
 });
 
-/* =====================================================================
-   Notification logs
-   ===================================================================== */
 let __notifTemplatesCache = null;
 
-/* ─── Notification template UI helpers ──────────────────────────────────────
- * UI-ONLY improvements:
- *   • Display user-friendly names in the dropdown while the <option value="">
- *     still carries the raw template key (backend mapping unchanged).
- *   • Organize into readable optgroups with counts.
- *   • Group labels use human wording ("Patient notifications", etc.).
- * ─────────────────────────────────────────────────────────────────────────── */
-// Friendly labels for the raw backend template identifiers actually
-// emitted by the notification pipeline (WhatsApp template names +
-// EMAIL log keys). The `<option value="...">` still carries the raw
-// key so filtering, APIs, and DB values remain untouched.
 const __NOTIF_TEMPLATE_LABELS = {
-  // ── Patient (recipient = patient) ──────────────────────────────────
-  // WhatsApp templates
   neokids_booking_confirms_offline_v2: 'Appointment Confirmation (Clinic)',
   neokids_online_appt_confirm_v2:      'Appointment Confirmation (Online)',
   neokids_reminder_offline:            'Appointment Reminder (Clinic)',
@@ -1043,7 +912,6 @@ const __NOTIF_TEMPLATE_LABELS = {
   neokids_vaccination_reminder:        'Vaccination Reminder',
   reschedule_online_v2:                'Appointment Rescheduled',
   cancellation_notice:                 'Appointment Cancelled',
-  // Email log keys (patient-facing)
   PHYSICAL_CONFIRMED:                  'Appointment Confirmation (Clinic)',
   ONLINE_CONFIRMED:                    'Appointment Confirmation (Online)',
   RESCHEDULED:                         'Appointment Rescheduled',
@@ -1052,20 +920,16 @@ const __NOTIF_TEMPLATE_LABELS = {
   PRESCRIPTION_RESEND:                 'Prescription Resent',
   PAYMENT_RECEIVED:                    'Payment Confirmation',
 
-  // ── Doctor (recipient = doctor) ────────────────────────────────────
-  // WhatsApp templates
   doctor_new_booking_offline:          'New Clinic Booking',
   doctor_new_booking_online_v2:        'New Online Booking',
   doctor_reminder_offline:             'Consultation Reminder (Clinic)',
   doctor_reminder_online:              'Consultation Reminder (Online)',
-  // Email log keys (doctor-facing)
   PHYSICAL_CONFIRMED_DOCTOR:           'New Clinic Booking',
   ONLINE_CONFIRMED_DOCTOR:             'New Online Booking',
   RESCHEDULED_DOCTOR:                  'Appointment Rescheduled (Doctor)',
   CANCELLED_DOCTOR:                    'Appointment Cancelled (Doctor)',
   doctor_welcome_email:                'Doctor Welcome',
 
-  // ── System (not sent to a specific patient/doctor) ────────────────
   DOCTOR_INVITE:                       'Doctor Invitation',
   DOCTOR_INVITATION:                   'Doctor Invitation',
   PASSWORD_RESET:                      'Password Reset',
@@ -1084,10 +948,6 @@ const __NOTIF_AUDIENCE_LABELS = {
   SYSTEM:  'System Notifications'
 };
 
-// Front-end safety net so we still render exactly three categories
-// even if the backend hasn't been redeployed yet (older API may still
-// return ADMIN / OTHER buckets). Anything not clearly patient- or
-// doctor-facing folds into SYSTEM.
 function __notifClassifyAudience(rawTemplate){
   const n = String(rawTemplate || '').toLowerCase();
   if (!n) return 'SYSTEM';
@@ -1103,7 +963,6 @@ function __notifClassifyAudience(rawTemplate){
 function __notifPrettyName(rawTemplate){
   if (!rawTemplate) return '';
   if (__NOTIF_TEMPLATE_LABELS[rawTemplate]) return __NOTIF_TEMPLATE_LABELS[rawTemplate];
-  // Fallback: turn SNAKE_CASE / snake_case / kebab-case into Title Case.
   return String(rawTemplate)
     .replace(/[_\-.]+/g, ' ')
     .toLowerCase()
@@ -1127,11 +986,6 @@ async function loadNotifTemplates(){
       payload = data || { flat: [], groups: null };
     }
 
-    // Normalize the server response into exactly three UI categories:
-    // PATIENT / DOCTOR / SYSTEM. Older backends may still return ADMIN
-    // and/or OTHER buckets — fold both of those into SYSTEM. If groups
-    // are missing entirely, rebuild them from the flat list using the
-    // front-end classifier so the three-category UI still works.
     const normalizedGroups = {
       PATIENT: { label: 'Patient Notifications', items: [] },
       DOCTOR:  { label: 'Doctor Notifications',  items: [] },
@@ -1151,8 +1005,6 @@ async function loadNotifTemplates(){
         push(__notifClassifyAudience(it.template), it);
       }
     }
-    // De-duplicate (template + channel) inside each bucket to guard
-    // against overlapping legacy classifications.
     for (const g of Object.values(normalizedGroups)) {
       const seen = new Set();
       g.items = g.items.filter(it => {
@@ -1173,14 +1025,11 @@ function renderNotifTemplateOptions(){
   const current  = sel.value;
   const audience = ($('#notifAudience') && $('#notifAudience').value) || '';
 
-  // Add a class so we can target dropdown-only styling without touching
-  // the underlying <select> logic.
   sel.classList.add('np-notif-template-select');
 
   let html = '<option value="">All templates</option>';
   const { groups, flat } = __notifTemplatesCache;
 
-  // ── Audience-filter labels with counts (friendly wording).
   const audSel = $('#notifAudience');
   if (audSel && groups) {
     const totalFlat = (flat || []).length;
@@ -1196,7 +1045,6 @@ function renderNotifTemplateOptions(){
     const pretty  = __notifPrettyName(it.template);
     const channel = __notifChannelLabel(it.channel);
     const label   = channel ? (pretty + '  •  ' + channel) : pretty;
-    // Preserve raw template key as the value — backend mapping unchanged.
     return `<option value="${escapeHtml(it.template)}" title="${escapeHtml(it.template)}">${escapeHtml(label)}</option>`;
   };
 
@@ -1209,7 +1057,6 @@ function renderNotifTemplateOptions(){
       if (audience && key !== audience) continue;
       if (!g.items.length) continue;
       const groupLabel = __NOTIF_AUDIENCE_LABELS[key] || g.label;
-      // Sort items alphabetically by friendly name for readability.
       const items = g.items.slice().sort((a, b) =>
         __notifPrettyName(a.template).localeCompare(__notifPrettyName(b.template))
       );
@@ -1252,7 +1099,6 @@ async function loadNotifications(){
     const data = await api('/admin/notifications' + (qs.toString() ? '?' + qs.toString() : ''));
     const rows = data.rows || [];
     const counts = data.counts || {};
-    // count chips
     $('#notifCounts').innerHTML = [
       `<span class="np-badge np-badge--green">${counts.SENT || 0} Sent</span>`,
       `<span class="np-badge np-badge--red">${counts.FAILED || 0} Failed</span>`,
@@ -1273,7 +1119,6 @@ async function loadNotifications(){
       ? `<td class="np-notif-error" data-label="Error" style="max-width:280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(n.errorMessage)}</td>`
       : `<td data-label="Error" class="np-mut">—</td>`}
   </tr>`).join('');
-    // click to open detail
     $$('#notifTbody tr').forEach(tr => tr.addEventListener('click', () => {
       const id = tr.getAttribute('data-id');
       const n = rows.find(r => r.id === id);
@@ -1307,8 +1152,6 @@ function openNotifModal(n){
   `;
   const __nm = $('#notifModal');
   __nm.classList.remove('hidden');
-  // Bug #7 — always open the detail modal scrolled to the TOP; previously a
-  // previously-scrolled modal retained its position and opened near the bottom.
   requestAnimationFrame(() => {
     const scrollers = __nm.querySelectorAll('.np-modal__panel, .np-modal__body');
     scrollers.forEach(el => { el.scrollTop = 0; });
@@ -1333,9 +1176,6 @@ $('#notifSearch').addEventListener('input', () => {
   window.__notifSearchTimer = setTimeout(loadNotifications, 280);
 });
 
-/* =====================================================================
-   SETTINGS — password change
-   ===================================================================== */
 $('#passwordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -1351,19 +1191,6 @@ $('#passwordForm').addEventListener('submit', async (e) => {
   } catch (err) { alert(err.message); }
 });
 
-/* =====================================================================
-   BOOT
-   =====================================================================
-   Two important properties of this boot flow:
-     1. We ALWAYS start by making sure the dashboard is hidden and the
-        login screen is the source of truth. The HTML already has these
-        classes, but a defensive reset costs nothing and protects against
-        any future tweak to the markup.
-     2. We only call showDashboard() once we know the token resolves to a
-        valid ADMIN. Any failure path drops back to the login screen via
-        showLogin() (which also clears the stale token), so the user is
-        never stranded on an empty shell.
-   ===================================================================== */
 async function showDashboard() {
   $('#loginScreen').classList.add('hidden');
   $('#dashboard').classList.remove('hidden');
@@ -1375,13 +1202,10 @@ async function showDashboard() {
       $('#adminInitials').textContent = u.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
     }
   } catch(e) {
-    // If /auth/me fails with 401, api() has already cleared the token and
-    // called showLogin(); just bail out of dashboard mounting.
     if (e && e.status === 401) return;
   }
   setupSidebar();
   setupProfileMenu();
-  // Restore last view from URL hash (so refresh / bookmarks survive).
   const restored = (function(){
     try {
       const h = (location.hash || '').replace(/^#/, '').trim();
@@ -1392,7 +1216,6 @@ async function showDashboard() {
   })();
   setView(restored || 'dashboardView', { skipHash: !!restored });
   if (typeof NPSession !== 'undefined' && TOKEN) NPSession.start(TOKEN);
-  // Wire up command palette commands once the dashboard is mounted.
   if (typeof NPPalette !== 'undefined' && !window.__npPaletteWired) {
     window.__npPaletteWired = true;
     [
@@ -1410,17 +1233,12 @@ async function showDashboard() {
     ].forEach(([label, icon, run]) => NPPalette.register({ label, icon, run, keywords: label }));
   }
 
-  // Now that we are definitely authenticated, refresh the pending-
-  // settlements sidebar badge. This replaces the unsafe global timer in
-  // finance.js that used to fire on every page load (including the login
-  // screen) and caused the post-logout 401 reload loop.
   if (window.Finance && typeof window.Finance.refreshPendingBadge === 'function') {
     window.Finance.refreshPendingBadge();
   }
 }
 
 (async () => {
-  // Defensive: enforce initial visibility regardless of any classList drift.
   $('#dashboard').classList.add('hidden');
   $('#loginScreen').classList.add('hidden');
 
@@ -1428,20 +1246,13 @@ async function showDashboard() {
     try {
       const me = await api('/auth/me');
       if (me && me.role === 'ADMIN') return showDashboard();
-      // Token resolves but it is not an admin — clear and fall through.
       localStorage.removeItem('np_admin_token');
       TOKEN = null;
     } catch {
-      // api() already cleared the token (real expiry) or threw with no
-      // token attached (race). Either way, fall through to login screen.
     }
   }
   showLogin();
 })();
-
-/* =====================================================================
-   KYC — Admin-managed onboarding documents (add/edit doctor modal)
-   ===================================================================== */
 
 let __currentKycDoctorId = null;
 
@@ -1483,7 +1294,6 @@ async function loadKycForDoctor(doctorId){
   const badge  = $('#kycStatusBadge');
   const verifiedAt = $('#kycVerifiedAt');
 
-  // Reset
   setKycFieldStatus('kycAadhaarStatus', 'kycAadhaarView', null);
   setKycFieldStatus('kycPanStatus',     'kycPanView',     null);
   setKycFieldStatus('kycChequeStatus',  'kycChequeView',  null);
@@ -1493,7 +1303,6 @@ async function loadKycForDoctor(doctorId){
   verifiedAt.textContent = '';
 
   if (!doctorId){
-    // Create mode — no doctor yet
     hint.classList.remove('hidden');
     upload.classList.add('hidden');
     verify.classList.add('hidden');
@@ -1515,23 +1324,19 @@ async function loadKycForDoctor(doctorId){
     return;
   }
 
-  // Status badge
   const bEl = $('#kycStatusBadge');
   if (bEl) bEl.outerHTML = kycBadge(kyc.kycStatus).replace('<span ', '<span id="kycStatusBadge" ');
 
-  // File status rows
   setKycFieldStatus('kycAadhaarStatus', 'kycAadhaarView', kyc.aadhaarUrl);
   setKycFieldStatus('kycPanStatus',     'kycPanView',     kyc.panUrl);
   setKycFieldStatus('kycChequeStatus',  'kycChequeView',  kyc.cancelledChequeUrl);
   setKycFieldStatus('kycMedCertStatus', 'kycMedCertView', kyc.medicalRegCertUrl);
 
-  // Rejection reason
   if (kyc.kycStatus === 'REJECTED' && kyc.rejectionReason){
     rejBox.classList.remove('hidden');
     $('#kycRejectionText').textContent = kyc.rejectionReason;
   }
 
-  // Verify/Reject controls — show when at least one file is on record
   const anyUploaded = !!(kyc.aadhaarUrl || kyc.panUrl || kyc.cancelledChequeUrl || kyc.medicalRegCertUrl);
   if (anyUploaded) verify.classList.remove('hidden'); else verify.classList.add('hidden');
 
@@ -1576,7 +1381,6 @@ async function uploadKycDocs(){
     let data = null; try { data = await r.json(); } catch(_) {}
     if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
 
-    // Clear the file inputs and reload status
     ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
       const input = f.querySelector(`input[type="file"][name="${name}"]`);
       if (input) input.value = '';
@@ -1584,7 +1388,6 @@ async function uploadKycDocs(){
 
     alert('KYC documents uploaded.');
     await loadKycForDoctor(__currentKycDoctorId);
-    // Refresh card badges in the background
     loadDoctors();
   } catch (err) {
     errEl.textContent = err.message;
@@ -1627,10 +1430,6 @@ async function verifyKyc(targetStatus){
   }
 }
 
-/* =====================================================================
-   MOBILE DRAWER — body scroll-lock + robustness enhancements
-   (merged from former assets/np-fixes.js)
-   ===================================================================== */
 (function(){
   'use strict';
   var doc = document;
@@ -1655,19 +1454,16 @@ async function verifyKyc(targetStatus){
       setBodyLock(false);
     }
 
-    // Sync body-lock whenever the drawer opens/closes.
     if (toggle){
       toggle.addEventListener('click', function(){
         setTimeout(function(){ setBodyLock(isOpen()); }, 0);
       });
     }
 
-    // ESC closes drawer on mobile.
     doc.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && isOpen()) close();
     });
 
-    // Drop drawer state when viewport grows past mobile.
     function onResize(){ if (!mqMobile || !mqMobile.matches) close(); }
     if (mqMobile && mqMobile.addEventListener) mqMobile.addEventListener('change', onResize);
     else if (mqMobile && mqMobile.addListener) mqMobile.addListener(onResize);

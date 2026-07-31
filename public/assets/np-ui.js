@@ -1,36 +1,8 @@
-/* ============================================================================
- * np-ui.js — shared UX primitives for NeoKidsPro EMR
- *
- * IMPORTANT: All CSS classes are namespaced with `np-ui-*` so they CANNOT
- * collide with the legacy `.np-modal` / `.np-toast` classes the admin and
- * doctor stylesheets already use for their own in-page panels.
- *
- * Public API:
- *   NPToast.success/warn/error/info(msg, opts)   — stacking toasts
- *   NPModal.confirm({ title, message, ... })     — promise-based confirm
- *   NPModal.prompt({ title, label, ... })        — promise-based prompt
- *   NPModal.alert({ title, message, ... })       — promise-based alert
- *   NPForm.setError(input, msg) / clearError(input) / clearAll(form)
- *   NPFmt.inr(value, { decimals })                — ₹1,250 / ₹500 formatter
- *   NPFmt.shortRef(uuid)                          — NK-YYYY-XXXX style short ref
- *   NPSkeleton.list(host, count)                  — shimmer placeholders
- *   NPSkeleton.cards(host, count)
- *   NPSkeleton.kpis(host, count)
- *   NPEmpty.render(host, { icon, title, hint, action })
- *   NPSession.start(token, { warnBeforeMs })      — warn before JWT expiry
- *
- * Also installs window.alert / window.confirm / window.prompt shims so legacy
- * code paths upgrade automatically without touching every call site.
- *
- * Zero external dependencies. No build step.
- * ========================================================================== */
+
 (function (global) {
   'use strict';
   if (global.NPToast && global.NPModal) return; // idempotent
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  Styles — injected once. All classes are np-ui-* to avoid collisions.
-  // ────────────────────────────────────────────────────────────────────────
   const CSS = `
   .np-ui-toast-host{position:fixed;top:16px;right:16px;z-index:99999;display:flex;flex-direction:column;gap:10px;max-width:min(420px,calc(100vw - 32px));pointer-events:none}
   @media (max-width:480px){.np-ui-toast-host{top:auto;bottom:16px;left:16px;right:16px;max-width:none}}
@@ -96,9 +68,6 @@
     document.head.appendChild(s);
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  Toast
-  // ────────────────────────────────────────────────────────────────────────
   let toastHost = null;
   function getToastHost() {
     if (toastHost && document.body.contains(toastHost)) return toastHost;
@@ -186,9 +155,6 @@
     info:    (m, o) => show('info',    m, o),
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  Modal — promise-based confirm / prompt / alert
-  // ────────────────────────────────────────────────────────────────────────
   function buildModal({ title, message, input, okText, cancelText, danger, defaultValue, placeholder, inputType }) {
     injectStyles();
     return new Promise((resolve) => {
@@ -292,9 +258,6 @@
     }),
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  NPForm — inline field error helper
-  // ────────────────────────────────────────────────────────────────────────
   const NPForm = {
     setError(input, msg) {
       if (!input) return;
@@ -322,9 +285,6 @@
     },
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  NPFmt — formatting helpers (currency, short booking ref)
-  // ────────────────────────────────────────────────────────────────────────
   const _INR = (typeof Intl !== 'undefined' && Intl.NumberFormat)
     ? new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
     : null;
@@ -350,9 +310,6 @@
     },
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  NPSkeleton — shimmer placeholders for loading states
-  // ────────────────────────────────────────────────────────────────────────
   const NPSkeleton = {
     list(host, count) {
       if (!host) return;
@@ -380,9 +337,6 @@
     },
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  NPEmpty — empty-state component
-  // ────────────────────────────────────────────────────────────────────────
   const NPEmpty = {
     render(host, opts) {
       if (!host) return;
@@ -412,9 +366,6 @@
     },
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  NPSession — JWT expiry warning ("Your session expires in 10 min")
-  // ────────────────────────────────────────────────────────────────────────
   function _decodeJwtExpMs(token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
@@ -441,9 +392,6 @@
     stop() { if (_sessionTimer) { clearTimeout(_sessionTimer); _sessionTimer = null; } },
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  Legacy shims — alert/confirm/prompt auto-upgrade.
-  // ────────────────────────────────────────────────────────────────────────
   global.nativeAlert   = global.alert;
   global.nativeConfirm = global.confirm;
   global.nativePrompt  = global.prompt;
@@ -462,9 +410,6 @@
     return NPModal.prompt({ message: String(msg || ''), defaultValue: def || '' });
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  //  Public exports
-  // ────────────────────────────────────────────────────────────────────────
   global.NPToast    = NPToast;
   global.NPModal    = NPModal;
   global.NPForm     = NPForm;
@@ -474,33 +419,30 @@
   global.NPSession  = NPSession;
 })(window);
 
-/* ============================================================================
- * np-ux.js — additional UX features built on top of np-ui.js
- *
- * Provides (all opt-in; namespaced; idempotent):
- *   • Dark mode toggle              — NPTheme.init() + a floating button
- *   • Command palette (Cmd/Ctrl+K)  — NPPalette.register({ id, label, run })
- *   • Keyboard shortcuts overlay    — press "?" to view, "/" focuses first .np-search input
- *   • Filter chips renderer         — NPChips.render(host, [{key,label,onClear}], onClearAll)
- *   • Date range presets            — NPDateRange.render(host, onChange) → returns {fromIso, toIso}
- *   • Drag-and-drop file input      — NPDropzone.bind(inputEl) to upgrade any <input type=file>
- *   • Sticky-table marker           — NPSticky.bind(tableEl) adds .np-sticky-head
- *
- * No external deps. Safe to load on admin, doctor, and the booking widget.
- * ========================================================================== */
 (function (global) {
   'use strict';
   if (global.NPTheme && global.NPPalette) return;
 
-  // ─── Styles ──────────────────────────────────────────────────────────────
   const CSS = `
-  /* Dark-mode tokens — applied by adding data-theme="dark" to <html>. */
-  html[data-theme="dark"]{
-    --np-bg:#0f172a; --np-surface:#1e293b; --np-text:#e2e8f0; --np-muted:#94a3b8;
-    --np-border:#334155; --np-ink:#f1f5f9;
-    color-scheme: dark;
+  
+  html[data-theme="dark"] .np-ui-toast{
+    background:#11202A;color:#E6EEF1;border:1px solid #234551;
+    box-shadow:0 12px 30px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.35);
   }
-  html[data-theme="dark"] body{ background:#0f172a; color:#e2e8f0; }
+  html[data-theme="dark"] .np-ui-toast__msg{color:#C8D5DB}
+  html[data-theme="dark"] .np-ui-toast__close{color:#91A6B0}
+  html[data-theme="dark"] .np-ui-toast__close:hover{color:#E6EEF1}
+  html[data-theme="dark"] .np-ui-modal{background:#11202A;color:#E6EEF1;border:1px solid #234551}
+  html[data-theme="dark"] .np-ui-modal__title{color:#F4F9FA}
+  html[data-theme="dark"] .np-ui-modal__message{color:#C8D5DB}
+  html[data-theme="dark"] .np-ui-modal__input{background:#0E1A22;color:#E6EEF1;border-color:#234551}
+  html[data-theme="dark"] .np-ui-modal__btn{color:#C8D5DB}
+  html[data-theme="dark"] .np-ui-modal__btn:hover{background:rgba(137,188,189,.14);color:#B4D7D7}
+  html[data-theme="dark"] .np-ui-skel{background:#1B2F39}
+  html[data-theme="dark"] .np-ui-skel::after{background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.08) 50%,transparent 100%)}
+  html[data-theme="dark"] .np-ui-empty{color:#91A6B0}
+  html[data-theme="dark"] .np-ui-empty__title{color:#F4F9FA}
+  html[data-theme="dark"] .np-ui-empty__hint{color:#91A6B0}
 
   .np-theme-toggle{
     position:fixed; right:14px; bottom:14px; z-index:90;
@@ -511,44 +453,51 @@
   .np-theme-toggle:hover{ background:#5A9495; }
   @media (max-width:600px){ .np-theme-toggle{ right:10px; bottom:74px; } }
 
-  /* Command palette */
-  .np-palette-host{position:fixed;inset:0;z-index:100001;display:flex;align-items:flex-start;justify-content:center;padding:10vh 16px 16px;background:rgba(15,23,42,.5);backdrop-filter:blur(2px);opacity:0;transition:opacity .15s ease}
+.np-palette-host{position:fixed;inset:0;z-index:100001;display:flex;align-items:flex-start;justify-content:center;padding:10vh 16px 16px;background:rgba(15,23,42,.5);backdrop-filter:blur(2px);opacity:0;transition:opacity .15s ease}
   .np-palette-host.is-visible{opacity:1}
   .np-palette{width:100%;max-width:560px;background:#fff;border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,.4);overflow:hidden;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111827}
-  html[data-theme="dark"] .np-palette{background:#1e293b;color:#e2e8f0}
+  html[data-theme="dark"] .np-palette{background:#11202A;color:#E6EEF1;border:1px solid #234551}
   .np-palette__input{display:block;width:100%;border:0;outline:0;padding:14px 16px;font-size:15px;background:transparent;color:inherit;border-bottom:1px solid #e5e7eb}
-  html[data-theme="dark"] .np-palette__input{border-bottom-color:#334155}
+  html[data-theme="dark"] .np-palette__input{border-bottom-color:#234551;color:#E6EEF1}
   .np-palette__list{max-height:50vh;overflow-y:auto;list-style:none;margin:0;padding:6px 0}
   .np-palette__item{padding:9px 16px;cursor:pointer;display:flex;align-items:center;gap:10px}
   .np-palette__item.is-active{background:#F1F7F7;color:#5A9495}
-  html[data-theme="dark"] .np-palette__item.is-active{background:#467878;color:#DCEBEB}
+  html[data-theme="dark"] .np-palette__item{color:#E6EEF1}
+  html[data-theme="dark"] .np-palette__item.is-active{background:rgba(137,188,189,.20);color:#B4D7D7}
+  html[data-theme="dark"] .np-palette__item__hint{color:#91A6B0}
+  html[data-theme="dark"] .np-palette__empty{color:#91A6B0}
+  html[data-theme="dark"] .np-palette-host{background:rgba(2,8,12,.65)}
   .np-palette__item__hint{margin-left:auto;font-size:12px;color:#9ca3af}
   .np-palette__empty{padding:20px;text-align:center;color:#9ca3af;font-size:13px}
 
-  /* Filter chips */
-  .np-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}
+.np-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}
   .np-chip{display:inline-flex;align-items:center;gap:4px;background:#F1F7F7;color:#467878;border:1px solid #DCEBEB;border-radius:999px;padding:3px 4px 3px 10px;font-size:12.5px;font-weight:500}
-  html[data-theme="dark"] .np-chip{background:#467878;color:#DCEBEB;border-color:#467878}
+  html[data-theme="dark"] .np-chip{background:rgba(137,188,189,.20);color:#B4D7D7;border-color:rgba(137,188,189,.40)}
   .np-chip__x{background:transparent;border:0;cursor:pointer;color:inherit;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:13px}
   .np-chip__x:hover{background:rgba(0,0,0,.06)}
   .np-chips__clear{background:transparent;border:0;color:#dc2626;cursor:pointer;font-size:12.5px;font-weight:600;margin-left:4px}
   .np-chips__clear:hover{text-decoration:underline}
 
-  /* Date range presets */
-  .np-daterange{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.np-daterange{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .np-daterange__btn{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:500;color:#1e293b;cursor:pointer}
   .np-daterange__btn:hover{background:#e2e8f0}
   .np-daterange__btn.is-active{background:#89BCBD;color:#fff;border-color:#89BCBD}
-  html[data-theme="dark"] .np-daterange__btn{background:#0f172a;color:#e2e8f0;border-color:#334155}
+  html[data-theme="dark"] .np-daterange__btn{background:#142531;color:#E6EEF1;border-color:#234551}
+  html[data-theme="dark"] .np-daterange__btn:hover{background:rgba(137,188,189,.14);border-color:rgba(137,188,189,.40)}
+  html[data-theme="dark"] .np-daterange__btn.is-active{background:#89BCBD;color:#fff;border-color:#89BCBD}
 
-  /* Dropzone */
-  .np-dropzone{display:block;border:2px dashed #cbd5e1;border-radius:10px;padding:18px;text-align:center;color:#64748b;background:#f8fafc;cursor:pointer;transition:background .15s,border-color .15s}
+html[data-theme="dark"] .np-dropzone{background:#0E1A22;color:#91A6B0;border-color:#234551}
+  html[data-theme="dark"] .np-dropzone:hover,
+  html[data-theme="dark"] .np-dropzone.is-drag{background:rgba(137,188,189,.10);border-color:#A4CDCE;color:#B4D7D7}
+
+html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
+
+.np-dropzone{display:block;border:2px dashed #cbd5e1;border-radius:10px;padding:18px;text-align:center;color:#64748b;background:#f8fafc;cursor:pointer;transition:background .15s,border-color .15s}
   .np-dropzone:hover,.np-dropzone.is-drag{background:#F1F7F7;border-color:#89BCBD;color:#5A9495}
   .np-dropzone__hint{font-size:12.5px;margin-top:4px}
   .np-dropzone input{display:none}
 
-  /* Sticky table head */
-  .np-sticky-head thead th{position:sticky;top:0;z-index:5;background:inherit}
+.np-sticky-head thead th{position:sticky;top:0;z-index:5;background:inherit}
   `;
 
   function injectStyles() {
@@ -559,7 +508,6 @@
     document.head.appendChild(s);
   }
 
-  // ─── NPTheme — dark mode toggle ──────────────────────────────────────────
   const NPTheme = {
     init() {
       injectStyles();
@@ -593,7 +541,6 @@
     },
   };
 
-  // ─── NPPalette — Cmd/Ctrl+K palette ──────────────────────────────────────
   const _commands = [];
   let _paletteHost = null;
 
@@ -670,7 +617,6 @@
     list() { return _commands.slice(); },
   };
 
-  // ─── Global hotkeys ──────────────────────────────────────────────────────
   function _isTypingTarget(t) {
     if (!t) return false;
     const tag = (t.tagName || '').toLowerCase();
@@ -704,7 +650,6 @@
     }
   });
 
-  // ─── NPChips — filter chips ──────────────────────────────────────────────
   const NPChips = {
     render(host, chips, onClearAll) {
       if (!host) return;
@@ -731,12 +676,6 @@
     },
   };
 
-  // ─── NPDateRange — preset buttons ────────────────────────────────────────
-  // Bug fix — `d.toISOString()` converts to UTC before slicing, so a local
-  // midnight in a UTC+N timezone (e.g. IST = UTC+5:30) rolls back to the
-  // PREVIOUS calendar day. That made the "Today" chip return no rows and the
-  // "Yesterday" chip return the wrong date. Build the YYYY-MM-DD key from the
-  // LOCAL components instead.
   function _isoDate(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -783,7 +722,6 @@
     },
   };
 
-  // ─── NPDropzone — drag/drop upgrade for <input type=file> ────────────────
   const NPDropzone = {
     bind(input, opts) {
       if (!input || input.dataset.npDz === '1') return;
@@ -822,7 +760,6 @@
     },
   };
 
-  // ─── NPSticky — sticky header marker ─────────────────────────────────────
   const NPSticky = {
     bind(table) { if (table) table.classList.add('np-sticky-head'); },
   };

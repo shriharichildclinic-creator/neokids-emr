@@ -1,90 +1,65 @@
-/* =====================================================================
-   NeoKidsPro EMR — Brand Theme Layer  (v3.1 · 2026 · Blue-Green rebrand)
-   ---------------------------------------------------------------------
-   Loaded AFTER doctor/styles.css, admin/styles.css and Tailwind. This
-   file is the single source of truth for NeoKidsPro branding across the
-   whole EMR (Admin, Doctor, Booking Widget, Reset password).
 
-   v3.1 changes (per Brand Book):
-     • PRIMARY IDENTITY  ➜  Blue-Green  #89BCBD   (was pink in v3.0)
-     • Pink / coral / yellow / lavender / lime are now SPARING ACCENTS
-     • Soft cream surface, larger radius, premium shadows
-     • Polished, WCAG-AA dark mode that follows the same hierarchy
-     • Never changes structure, JS hooks, or class names — visuals only
-   ===================================================================== */
 
-/* ---------- Typography:  Poppins (display) + Inter (UI) ---------- */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
-/* ============================================================
-   1. BRAND TOKENS  (Light theme)
-   ============================================================ */
 :root{
-  /* ── Primary — Blue-Green (NeoKidsPro Hero) ── */
+  
   --nk-teal-50:#F1F7F7;
   --nk-teal-100:#DCEBEB;
   --nk-teal-200:#BFDCDC;
   --nk-teal-300:#A4CDCE;
-  --nk-teal-400:#89BCBD;   /* ★ PRIMARY — #89BCBD ★ */
+  --nk-teal-400:#89BCBD;   
   --nk-teal-500:#6FAAAB;
   --nk-teal-600:#5A9495;
   --nk-teal-700:#467878;
   --nk-teal-800:#345B5B;
 
-  /* ── Accent palette from Brand Book ── */
-  --nk-pink-50:#FFF1F5;
+--nk-pink-50:#FFF1F5;
   --nk-pink-100:#FFE0EB;
   --nk-pink-200:#FFC2D9;
   --nk-pink-300:#FFA6C5;
-  --nk-pink-400:#FE84A4;        /* Soft Coral Pink */
+  --nk-pink-400:#FE84A4;        
   --nk-pink-500:#F46A8E;
   --nk-pink-600:#D94E74;
   --nk-pink-700:#B53A5B;
 
-  --nk-orange-400:#F9A945;      /* Warm Apricot */
+  --nk-orange-400:#F9A945;      
   --nk-orange-500:#E89331;
-  --nk-yellow-400:#FED960;      /* Soft Sun */
+  --nk-yellow-400:#FED960;      
   --nk-yellow-500:#F2C73F;
-  --nk-purple-400:#CE7ED4;      /* Soft Lavender */
+  --nk-purple-400:#CE7ED4;      
   --nk-purple-500:#B864BE;
-  --nk-lime-400:#C0CF56;        /* Fresh Lime */
+  --nk-lime-400:#C0CF56;        
   --nk-lime-500:#A8B948;
-  --nk-blush:#FFEEEF;           /* Warm Blush White */
+  --nk-blush:#FFEEEF;           
 
-  /* ── Neutrals / ink ── */
-  --nk-ink:#0F2E3A;             /* deep teal-ink page headings */
+--nk-ink:#0F2E3A;             
   --nk-ink-2:#1F3A4A;
   --nk-text:#1E293B;
   --nk-muted:#64748B;
-  --nk-border:#D9E6E6;          /* cool teal-tinted border */
+  --nk-border:#D9E6E6;          
   --nk-border-soft:#E8F0F0;
-  --nk-surface:#F7FAFA;         /* premium cool cream */
+  --nk-surface:#F7FAFA;         
   --nk-card:#ffffff;
   --nk-row-hover:#F1F7F7;
 
-  /* ── Shadows (cool, soft, layered) ── */
-  --nk-shadow-xs: 0 1px 2px rgba(15,46,58,.04);
+--nk-shadow-xs: 0 1px 2px rgba(15,46,58,.04);
   --nk-shadow-sm: 0 1px 2px rgba(15,46,58,.05), 0 4px 14px -6px rgba(15,46,58,.08);
   --nk-shadow-md: 0 4px 12px -2px rgba(15,46,58,.08), 0 16px 32px -12px rgba(15,46,58,.14);
   --nk-shadow-lg: 0 24px 48px -16px rgba(15,46,58,.22), 0 4px 10px rgba(15,46,58,.07);
   --nk-ring-primary: 0 0 0 4px rgba(137,188,189,.25);
 
-  /* ── Geometry ── */
-  --nk-radius-sm: 10px;
+--nk-radius-sm: 10px;
   --nk-radius:    14px;
   --nk-radius-card: 18px;
   --nk-radius-lg: 22px;
   --nk-radius-pill: 999px;
 
-  /* ── Brand gradients ── */
-  --nk-grad-primary: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
+--nk-grad-primary: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
   --nk-grad-hero:    linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-500) 55%, var(--nk-pink-400) 100%);
   --nk-grad-soft:    linear-gradient(180deg, #F4FAFA 0%, #FFFFFF 100%);
 
-  /* Re-map the legacy --np-* tokens so the ENTIRE existing UI
-     (admin/styles.css + doctor/styles.css) instantly adopts the
-     new NeoKidsPro Blue-Green identity — no markup changes. */
-  --np-primary: var(--nk-teal-400);
+--np-primary: var(--nk-teal-400);
   --np-primary-600: var(--nk-teal-600);
   --np-blue: var(--nk-teal-500);
   --np-mint: var(--nk-teal-100);
@@ -100,9 +75,6 @@
   --np-radius-card: 18px;
 }
 
-/* ============================================================
-   2. GLOBAL  — typography, page background, focus, scrollbars
-   ============================================================ */
 html,body{
   background: var(--nk-surface);
   color: var(--nk-text);
@@ -132,7 +104,6 @@ h1,h2,h3{
 }
 ::selection{ background: var(--nk-teal-100); color: var(--nk-teal-800); }
 
-/* Scrollbar (light) */
 *::-webkit-scrollbar{ width:10px; height:10px; }
 *::-webkit-scrollbar-thumb{
   background: #C3DBDB;
@@ -143,9 +114,6 @@ h1,h2,h3{
 *::-webkit-scrollbar-thumb:hover{ background:#9CC4C5; background-clip: padding-box; border:2px solid transparent; }
 *::-webkit-scrollbar-track{ background: transparent; }
 
-/* ============================================================
-   3. LOGO MARK
-   ============================================================ */
 .np-sidebar__logo,
 .np-login__logo{
   background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 60%, var(--nk-pink-400) 100%);
@@ -161,9 +129,6 @@ h1,h2,h3{
   pointer-events:none;
 }
 
-/* ============================================================
-   4. SIDEBAR
-   ============================================================ */
 .np-sidebar{
   background: #ffffff;
   border-right: 1px solid var(--nk-border-soft);
@@ -190,7 +155,7 @@ h1,h2,h3{
 }
 .np-nav-item.active .np-nav-item__icon{ color: var(--nk-teal-600); }
 .np-nav-badge{
-  background: var(--nk-pink-400);   /* sparing pink accent for notification badge */
+  background: var(--nk-pink-400);   
   color: #fff;
   font-weight: 600;
 }
@@ -203,9 +168,6 @@ h1,h2,h3{
 }
 .np-sidebar__footer{ border-top: 1px solid var(--nk-border-soft); }
 
-/* ============================================================
-   5. HEADER
-   ============================================================ */
 .np-header{
   background: #ffffff;
   border-bottom: 1px solid var(--nk-border-soft);
@@ -245,9 +207,6 @@ h1,h2,h3{
   color: var(--nk-teal-700);
 }
 
-/* ============================================================
-   6. PANELS / CARDS / KPI
-   ============================================================ */
 .np-panel{
   background:#fff;
   border:1px solid var(--nk-border-soft);
@@ -276,7 +235,7 @@ h1,h2,h3{
   border-radius: 5px 0 0 5px;
   background: var(--nk-teal-400);
 }
-/* KPI semantic variants (kept visually consistent across cards) */
+
 .np-kpi--blue::before  { background: linear-gradient(180deg, var(--nk-teal-400),  var(--nk-teal-600));  }
 .np-kpi--mint::before  { background: linear-gradient(180deg, var(--nk-teal-300),  var(--nk-teal-500));  }
 .np-kpi--coral::before { background: linear-gradient(180deg, var(--nk-pink-400),  var(--nk-pink-500));  }
@@ -286,12 +245,8 @@ h1,h2,h3{
 .np-kpi__value{ color: var(--nk-ink); }
 .np-kpi__label{ color: var(--nk-muted); font-weight:500; }
 
-/* Soft branded background tint behind dashboards (subtle) */
 .np-content{ background: transparent; }
 
-/* ============================================================
-   7. BUTTONS
-   ============================================================ */
 .np-btn{
   border-radius: 12px;
   font-weight: 600;
@@ -348,7 +303,6 @@ h1,h2,h3{
   background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
 }
 
-/* Tailwind brand-primary utility overrides (legacy pink → teal) */
 .text-brand-primary{ color: var(--nk-teal-600) !important; }
 .bg-brand-primary  { background: var(--nk-teal-400) !important; }
 .bg-brand-surface  { background: var(--nk-surface) !important; }
@@ -358,9 +312,6 @@ h1,h2,h3{
 .from-brand-primary{ --tw-gradient-from: var(--nk-teal-400) !important; }
 .to-brand-primary  { --tw-gradient-to:   var(--nk-teal-600) !important; }
 
-/* ============================================================
-   8. FORMS
-   ============================================================ */
 .np-input, .np-select, .np-textarea,
 input.np-input, select.np-select, textarea.np-textarea{
   border-radius: 12px;
@@ -388,9 +339,6 @@ input.np-input, select.np-select, textarea.np-textarea{
   box-shadow: var(--nk-ring-primary);
 }
 
-/* ============================================================
-   9. BADGES
-   ============================================================ */
 .np-badge{ font-weight:600; padding:.22rem .65rem; border-radius:999px; font-size:.74rem; letter-spacing:.01em; }
 .np-badge--green{ background:#DCF5EE; color:#0F7A66; }
 .np-badge--mint{  background: var(--nk-teal-100); color: var(--nk-teal-700); }
@@ -401,9 +349,6 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-badge--slate{ background:#EEF2F4; color:#475569; }
 .np-badge--pink{  background: var(--nk-pink-100); color: var(--nk-pink-700); }
 
-/* ============================================================
-   10. TABLES
-   ============================================================ */
 .np-table-wrap{
   border:1px solid var(--nk-border-soft);
   border-radius: 16px;
@@ -423,9 +368,6 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-table tr:hover td{ background: var(--nk-row-hover); }
 .np-table .np-empty{ background:#FBFDFD; }
 
-/* ============================================================
-   11. LOGIN
-   ============================================================ */
 .np-login{
   background:
     radial-gradient(1100px 600px at 85% -10%, rgba(137,188,189,.28), transparent 60%),
@@ -452,9 +394,6 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-login__title{ color: var(--nk-ink); font-weight: 700; letter-spacing:-.01em; }
 .np-login__subtitle{ color: var(--nk-muted); }
 
-/* ============================================================
-   12. EMPTY STATES
-   ============================================================ */
 .np-empty__icon{
   background: linear-gradient(135deg, rgba(137,188,189,.22), rgba(254,132,164,.16));
   color: var(--nk-teal-700);
@@ -463,9 +402,6 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-empty__title{ color: var(--nk-ink); }
 .np-empty__sub  { color: var(--nk-muted); }
 
-/* ============================================================
-   13. DOCTOR CARDS
-   ============================================================ */
 .np-doc-card{
   border:1.5px solid var(--nk-border-soft);
   border-radius: 18px;
@@ -492,9 +428,6 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-doc-card__pill--kyc { background: var(--nk-teal-100); color: var(--nk-teal-700); }
 .np-doc-card__clinic    { background: var(--nk-teal-50); color: var(--nk-teal-700); }
 
-/* ============================================================
-   14. MODAL + DRAWER
-   ============================================================ */
 .np-modal{ background: rgba(15,46,58,.55); backdrop-filter: blur(4px); }
 .np-modal__panel{ border-radius: 22px; box-shadow: var(--nk-shadow-lg); }
 .np-modal__head{ border-bottom: 1px solid var(--nk-border-soft); }
@@ -505,9 +438,6 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-drawer__panel{ border-top-left-radius: 22px; border-bottom-left-radius: 22px; box-shadow: var(--nk-shadow-lg); }
 .np-drawer__head{ border-bottom: 1px solid var(--nk-border-soft); }
 
-/* ============================================================
-   15. APPOINTMENT ROWS / TABS / CONSULT
-   ============================================================ */
 .np-appt-row:hover{ background: var(--nk-row-hover); }
 .np-appt-row{ border-bottom: 1px solid var(--nk-border-soft); transition: background .15s ease; }
 
@@ -517,13 +447,11 @@ input.np-input, select.np-select, textarea.np-textarea{
 }
 #consultWorkspace .np-pm-tab:hover{ color: var(--nk-teal-700); }
 
-/* Bars / chart accents */
 .np-bars__bar{
   background: linear-gradient(180deg, var(--nk-teal-400), var(--nk-teal-600));
   border-radius: 6px 6px 0 0;
 }
 
-/* code chips */
 .np-content code{
   background: var(--nk-teal-50);
   color: var(--nk-teal-700);
@@ -532,9 +460,6 @@ input.np-input, select.np-select, textarea.np-textarea{
   font-size: .85em;
 }
 
-/* ============================================================
-   16. THEME TOGGLE BUTTON  (np-ux.js)
-   ============================================================ */
 .np-theme-toggle{
   background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600)) !important;
   box-shadow: 0 10px 26px -8px rgba(70,120,120,.55) !important;
@@ -546,9 +471,6 @@ input.np-input, select.np-select, textarea.np-textarea{
   box-shadow: 0 14px 32px -8px rgba(70,120,120,.7) !important;
 }
 
-/* ============================================================
-   17. COMMAND PALETTE / CHIPS / DATE RANGE / DROPZONE  (np-ux.js)
-   ============================================================ */
 .np-chip{
   background: var(--nk-teal-50);
   border-color: var(--nk-teal-200);
@@ -573,27 +495,11 @@ input.np-input, select.np-select, textarea.np-textarea{
   color: var(--nk-teal-700);
 }
 
-/* ============================================================
-   18. MICRO-INTERACTIONS
-   ============================================================ */
 @keyframes np-fade-in   { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:none} }
 @keyframes np-pulse-soft{ 0%,100%{opacity:1} 50%{opacity:.6} }
 .np-panel, .np-card, .np-kpi, .np-doc-card{ animation: np-fade-in .25s ease both; }
 .np-skeleton{ animation: np-pulse-soft 1.4s ease-in-out infinite; background:#EEF3F3; border-radius:8px; }
 
-/* ============================================================
-   19. DARK MODE  —  WCAG-AA, Blue-Green primary, sparing accents
-   ---------------------------------------------------------------------
-   Dark surfaces:
-     bg page      #0A1216
-     surface lvl1 #11202A   (cards, panels)
-     surface lvl2 #18303A   (hover row, inputs)
-     border       #234551
-     text         #E6EEF1
-     muted        #91A6B0
-     ink (head)   #F4F9FA
-     accent teal  #A4CDCE (brighter for contrast)
-   ===================================================================== */
 html[data-theme="dark"]{
   --nk-ink:       #F4F9FA;
   --nk-ink-2:     #DDE7EA;
@@ -605,8 +511,7 @@ html[data-theme="dark"]{
   --nk-border-soft:#1A323C;
   --nk-row-hover: #18303A;
 
-  /* Brighten primary for dark contrast (still Blue-Green) */
-  --nk-teal-50:   rgba(137,188,189,.10);
+--nk-teal-50:   rgba(137,188,189,.10);
   --nk-teal-100:  rgba(137,188,189,.18);
   --nk-teal-200:  rgba(137,188,189,.32);
   --nk-teal-300:  #B4D7D7;
@@ -615,8 +520,7 @@ html[data-theme="dark"]{
   --nk-teal-600:  #6FAAAB;
   --nk-teal-700:  #5A9495;
 
-  /* Soften accents to read on dark */
-  --nk-pink-50:   rgba(254,132,164,.10);
+--nk-pink-50:   rgba(254,132,164,.10);
   --nk-pink-100:  rgba(254,132,164,.18);
   --nk-pink-200:  rgba(254,132,164,.32);
   --nk-pink-400:  #FE9CB7;
@@ -629,8 +533,7 @@ html[data-theme="dark"]{
   --nk-shadow-lg: 0 30px 60px -16px rgba(0,0,0,.75);
   --nk-ring-primary: 0 0 0 4px rgba(164,205,206,.28);
 
-  /* Re-map legacy --np-* tokens for dark */
-  --np-surface: var(--nk-surface);
+--np-surface: var(--nk-surface);
   --np-border:  var(--nk-border);
   --np-muted:   var(--nk-muted);
   --np-text:    var(--nk-text);
@@ -650,11 +553,9 @@ html[data-theme="dark"] body{
   color: var(--nk-text);
 }
 
-/* Scrollbar (dark) */
 html[data-theme="dark"] *::-webkit-scrollbar-thumb{ background:#2C4A56; }
 html[data-theme="dark"] *::-webkit-scrollbar-thumb:hover{ background:#406877; }
 
-/* --- Sidebar & header --- */
 html[data-theme="dark"] .np-sidebar{
   background: #0D1A21;
   border-right-color: var(--nk-border) !important;
@@ -722,7 +623,6 @@ html[data-theme="dark"] .np-profile__menu-item.is-danger{ color:#FCA5A5; }
 html[data-theme="dark"] .np-profile__menu-item.is-danger:hover{ background: rgba(252,165,165,.12); }
 html[data-theme="dark"] .np-profile__menu-divider{ background: var(--nk-border-soft); }
 
-/* --- Panels, cards, KPIs, modals, drawers --- */
 html[data-theme="dark"] .np-panel,
 html[data-theme="dark"] .np-card,
 html[data-theme="dark"] .np-kpi,
@@ -768,10 +668,8 @@ html[data-theme="dark"] .np-doc-card__pill--warn{ background: rgba(249,169,69,.1
 html[data-theme="dark"] .np-doc-card__pill--kyc{ background: rgba(137,188,189,.18); color: var(--nk-teal-300); }
 html[data-theme="dark"] .np-doc-card__actions{ border-top-color: var(--nk-border); }
 
-/* KPI accent bars (vibrant in dark) */
 html[data-theme="dark"] .np-kpi::before{ filter: brightness(1.18) saturate(1.1); }
 
-/* --- Tables --- */
 html[data-theme="dark"] .np-table{ color: var(--nk-text); }
 html[data-theme="dark"] .np-table th{
   background:#0E1A22 !important;
@@ -785,7 +683,6 @@ html[data-theme="dark"] .np-table td{
 html[data-theme="dark"] .np-table tr:hover td{ background: var(--nk-row-hover) !important; }
 html[data-theme="dark"] .np-table .np-empty{ background:#0E1A22; }
 
-/* --- Forms --- */
 html[data-theme="dark"] .np-input,
 html[data-theme="dark"] .np-select,
 html[data-theme="dark"] .np-textarea,
@@ -822,7 +719,6 @@ html[data-theme="dark"] .np-search input{
 html[data-theme="dark"] .np-search svg{ color: var(--nk-muted); }
 html[data-theme="dark"] select option{ background:#0E1A22; color: var(--nk-text); }
 
-/* --- Buttons (dark) --- */
 html[data-theme="dark"] .np-btn{
   background:#142531;
   color: var(--nk-text);
@@ -866,7 +762,6 @@ html[data-theme="dark"] .np-btn--ghost.np-btn--icon.np-btn--danger:hover{
   border-color:#FCA5A5;
 }
 
-/* --- Tabs / appointment rows / consult --- */
 html[data-theme="dark"] .np-appt-row{ border-bottom-color: var(--nk-border-soft); }
 html[data-theme="dark"] .np-appt-row:hover{ background: var(--nk-row-hover); }
 html[data-theme="dark"] .np-appt-row__time-h,
@@ -879,7 +774,6 @@ html[data-theme="dark"] #consultWorkspace .np-pm-tab.active{
   border-bottom-color: var(--nk-teal-400);
 }
 
-/* --- Modal + drawer (dark) --- */
 html[data-theme="dark"] .np-modal{ background: rgba(2,8,12,.7); }
 html[data-theme="dark"] .np-modal__head{ border-bottom-color: var(--nk-border); }
 html[data-theme="dark"] .np-modal__title{ color: var(--nk-ink); }
@@ -888,7 +782,6 @@ html[data-theme="dark"] .np-modal__close:hover{ background: rgba(137,188,189,.16
 html[data-theme="dark"] .np-drawer__backdrop{ background: rgba(2,8,12,.65); }
 html[data-theme="dark"] .np-drawer__head{ border-bottom-color: var(--nk-border); }
 
-/* --- Badges (dark) --- */
 html[data-theme="dark"] .np-badge--green,
 html[data-theme="dark"] .np-badge--mint  { background: rgba(34,197,148,.18); color:#7AE0BE; }
 html[data-theme="dark"] .np-badge--blue  { background: rgba(137,188,189,.20); color: var(--nk-teal-300); }
@@ -898,13 +791,11 @@ html[data-theme="dark"] .np-badge--slate { background: rgba(148,163,184,.18); co
 html[data-theme="dark"] .np-badge--violet{ background: rgba(206,126,212,.22); color:#E9C2EE; }
 html[data-theme="dark"] .np-badge--pink  { background: rgba(254,132,164,.20); color:#FFC2D5; }
 
-/* --- Empty states (dark) --- */
 html[data-theme="dark"] .np-empty__icon{
   background: linear-gradient(135deg, rgba(137,188,189,.22), rgba(254,132,164,.16));
   color: var(--nk-teal-300);
 }
 
-/* --- Login (dark) --- */
 html[data-theme="dark"] .np-login{
   background:
     radial-gradient(1100px 600px at 85% -10%, rgba(137,188,189,.28), transparent 60%),
@@ -919,7 +810,6 @@ html[data-theme="dark"] .np-login__card{
 html[data-theme="dark"] .np-login__title{ color: var(--nk-ink); }
 html[data-theme="dark"] .np-login__subtitle{ color: var(--nk-muted); }
 
-/* --- Tailwind utility overrides (dark) --- */
 html[data-theme="dark"] .text-slate-300{ color:#A3B4BD !important; }
 html[data-theme="dark"] .text-slate-400,
 html[data-theme="dark"] .text-slate-500{ color: var(--nk-muted) !important; }
@@ -938,14 +828,12 @@ html[data-theme="dark"] .text-brand-primary{ color: var(--nk-teal-300) !importan
 html[data-theme="dark"] .hover\:text-brand-primary:hover{ color: var(--nk-teal-300) !important; }
 html[data-theme="dark"] .bg-brand-primary{ background: var(--nk-teal-500) !important; }
 
-/* Code blocks (dark) */
 html[data-theme="dark"] .np-content code,
 html[data-theme="dark"] code{
   background: rgba(137,188,189,.14);
   color: var(--nk-teal-300);
 }
 
-/* Command palette + chips (dark) */
 html[data-theme="dark"] .np-palette{ background: var(--nk-card); color: var(--nk-text); }
 html[data-theme="dark"] .np-palette__input{ border-bottom-color: var(--nk-border); color: var(--nk-text); }
 html[data-theme="dark"] .np-palette__item{ color: var(--nk-text); }
@@ -959,19 +847,13 @@ html[data-theme="dark"] .np-dropzone.is-drag{
   background: rgba(137,188,189,.10); border-color: var(--nk-teal-400); color: var(--nk-teal-300);
 }
 
-/* Notif row error */
 html[data-theme="dark"] .np-notif-row td.np-notif-error{ color:#FECACA; }
 
-/* Range/checkbox accent */
 html[data-theme="dark"] input[type=checkbox],
 html[data-theme="dark"] input[type=radio]{ accent-color: var(--nk-teal-400); }
 
-/* Dark skeletons */
 html[data-theme="dark"] .np-skeleton{ background:#1B2F39; }
 
-/* ============================================================
-   20. RESPONSIVE polish
-   ============================================================ */
 @media (max-width:600px){
   .np-login__card{ border-radius: 22px; padding: 1.5rem; }
   .np-kpi__value{ font-size:1.4rem; }
@@ -979,9 +861,6 @@ html[data-theme="dark"] .np-skeleton{ background:#1B2F39; }
   .np-panel{ border-radius: 14px; }
 }
 
-/* ============================================================
-   21. ADMIN PANEL  — neutralize hard-coded inline text colors for dark mode
-   ============================================================ */
 html[data-theme="dark"] [style*="color:#0F2A47"],
 html[data-theme="dark"] [style*="color: #0F2A47"],
 html[data-theme="dark"] [style*="color:#0F2E3A"],
@@ -991,7 +870,6 @@ html[data-theme="dark"] [style*="color: #6B7280"],
 html[data-theme="dark"] [style*="color:#64748B"],
 html[data-theme="dark"] [style*="color: #64748B"]{ color: var(--nk-muted) !important; }
 
-/* Inline yellow / red alert boxes inside admin panel — adjust for dark */
 html[data-theme="dark"] [style*="background:#FFFBEB"],
 html[data-theme="dark"] [style*="background: #FFFBEB"]{
   background: rgba(249,169,69,.12) !important;
@@ -1005,12 +883,8 @@ html[data-theme="dark"] [style*="background: #FEF2F2"]{
   color:#FECDD3 !important;
 }
 
-/* drop-down chevron next to profile name */
 html[data-theme="dark"] svg[style*="color:#64748B"]{ color: var(--nk-muted) !important; }
 
-/* ============================================================
-   22. SETTING CARDS (doctor settings)
-   ============================================================ */
 .np-setting-card{
   background: var(--nk-card);
   border:1px solid var(--nk-border-soft);
@@ -1025,17 +899,11 @@ html[data-theme="dark"] .np-setting-card{
 }
 html[data-theme="dark"] .np-setting-card__icon{ box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); }
 
-/* ============================================================
-   23. STATS BAR helpers
-   ============================================================ */
 html[data-theme="dark"] #statsBar > *{
   background: var(--nk-card) !important;
   color: var(--nk-text) !important;
 }
 
-/* ============================================================
-   24. Misc Tailwind classes used in markup — dark mode rewrites
-   ============================================================ */
 html[data-theme="dark"] .border-b,
 html[data-theme="dark"] .border-t,
 html[data-theme="dark"] .border-r,
@@ -1053,9 +921,6 @@ html[data-theme="dark"] .bg-pink-50{ background: rgba(254,132,164,.12) !importan
 html[data-theme="dark"] .text-pink-600,
 html[data-theme="dark"] .text-pink-700{ color:#FFC2D5 !important; }
 
-/* ============================================================
-   25. NP-UI TOASTS / MODALS (assets/np-ui.js)
-   ============================================================ */
 .np-ui-toast{
   border-radius: 14px !important;
   box-shadow: var(--nk-shadow-md) !important;
@@ -1079,18 +944,12 @@ html[data-theme="dark"] .np-ui-empty__title{ color: var(--nk-ink) !important; }
 html[data-theme="dark"] .np-ui-modal__message,
 html[data-theme="dark"] .np-ui-empty__msg{ color: var(--nk-muted) !important; }
 
-/* ============================================================
-   26. Native date / time inputs
-   ============================================================ */
 html[data-theme="dark"] input[type="date"],
 html[data-theme="dark"] input[type="time"],
 html[data-theme="dark"] input[type="datetime-local"]{
   color-scheme: dark;
 }
 
-/* ============================================================
-   27. PRINT  — keep prescriptions / invoices clean B/W in print
-   ============================================================ */
 @media print{
   html, body{ background:#fff !important; color:#000 !important; }
   .np-sidebar, .np-header, .np-theme-toggle, .np-profile, .np-iconbtn{ display:none !important; }
@@ -1099,11 +958,6 @@ html[data-theme="dark"] input[type="datetime-local"]{
   }
 }
 
-/* ============================================================
-   28. UTILITY — sparing pink/orange/yellow/purple accents
-   ============================================================
-   These named utility classes let markup opt-in to brand accents
-   without using them as the default UI color. */
 .np-accent-pink   { color: var(--nk-pink-500); }
 .np-accent-orange { color: var(--nk-orange-500); }
 .np-accent-yellow { color: var(--nk-yellow-500); }
@@ -1112,9 +966,6 @@ html[data-theme="dark"] input[type="datetime-local"]{
 .np-bg-pink-soft  { background: var(--nk-pink-100); color: var(--nk-pink-700); }
 .np-bg-mint-soft  { background: var(--nk-teal-100); color: var(--nk-teal-700); }
 
-/* ============================================================
-   29. FOCUS STATE — accessible across all interactive elements
-   ============================================================ */
 a:focus-visible,
 button:focus-visible,
 [role="button"]:focus-visible{
@@ -1126,4 +977,210 @@ html[data-theme="dark"] a:focus-visible,
 html[data-theme="dark"] button:focus-visible,
 html[data-theme="dark"] [role="button"]:focus-visible{
   outline-color: var(--nk-teal-300);
+}
+
+.np-inline-panel{
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-inline-panel{
+  background: #0E1A22 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+
+html[data-theme="dark"] [style*="background:#FFF7ED"],
+html[data-theme="dark"] [style*="background: #FFF7ED"]{
+  background: rgba(249,169,69,.12) !important;
+  border-color: rgba(249,169,69,.35) !important;
+  color:#FBC97A !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #FED7AA"],
+html[data-theme="dark"] [style*="border: 1px solid #FED7AA"]{
+  border-color: rgba(249,169,69,.35) !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #FDE68A"],
+html[data-theme="dark"] [style*="border: 1px solid #FDE68A"]{
+  border-color: rgba(249,169,69,.35) !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #FECACA"],
+html[data-theme="dark"] [style*="border: 1px solid #FECACA"]{
+  border-color: rgba(225,29,72,.4) !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #E5E7EB"],
+html[data-theme="dark"] [style*="border: 1px solid #E5E7EB"]{
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] [style*="color:#B91C1C"],
+html[data-theme="dark"] [style*="color: #B91C1C"]{ color:#FCA5A5 !important; }
+html[data-theme="dark"] [style*="color:#92400E"],
+html[data-theme="dark"] [style*="color: #92400E"]{ color:#FBC97A !important; }
+
+html[data-theme="dark"] [style*="color:#0F172A"],
+html[data-theme="dark"] [style*="color: #0F172A"],
+html[data-theme="dark"] [style*="color:#111827"],
+html[data-theme="dark"] [style*="color: #111827"],
+html[data-theme="dark"] [style*="color:#1E293B"],
+html[data-theme="dark"] [style*="color: #1E293B"]{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] [style*="color:#374151"],
+html[data-theme="dark"] [style*="color: #374151"],
+html[data-theme="dark"] [style*="color:#475569"],
+html[data-theme="dark"] [style*="color: #475569"]{ color: var(--nk-text) !important; }
+
+html[data-theme="dark"] input[type="search"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="email"],
+html[data-theme="dark"] input[type="tel"],
+html[data-theme="dark"] input[type="password"],
+html[data-theme="dark"] input[type="url"]{
+  background:#0E1A22 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+
+html[data-theme="dark"] input[type="file"]{
+  color: var(--nk-text);
+}
+html[data-theme="dark"] input[type="file"]::-webkit-file-upload-button,
+html[data-theme="dark"] input[type="file"]::file-selector-button{
+  background:#142531;
+  color: var(--nk-text);
+  border:1px solid var(--nk-border);
+  border-radius:8px;
+  padding:.4rem .75rem;
+  margin-right:.6rem;
+  cursor:pointer;
+}
+html[data-theme="dark"] input[type="file"]::-webkit-file-upload-button:hover,
+html[data-theme="dark"] input[type="file"]::file-selector-button:hover{
+  background: rgba(137,188,189,.14);
+  border-color: rgba(137,188,189,.40);
+  color: var(--nk-teal-300);
+}
+
+html[data-theme="dark"] .np-pagination button,
+html[data-theme="dark"] .np-pager button,
+html[data-theme="dark"] .np-page-btn{
+  background:#142531 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-pagination button:hover,
+html[data-theme="dark"] .np-pager button:hover,
+html[data-theme="dark"] .np-page-btn:hover{
+  background: rgba(137,188,189,.14) !important;
+  border-color: rgba(137,188,189,.40) !important;
+  color: var(--nk-teal-300) !important;
+}
+html[data-theme="dark"] .np-pagination button.is-active,
+html[data-theme="dark"] .np-pager button.is-active,
+html[data-theme="dark"] .np-page-btn.is-active{
+  background: var(--nk-teal-500) !important;
+  border-color: var(--nk-teal-500) !important;
+  color:#fff !important;
+}
+
+html[data-theme="dark"] .np-tooltip,
+html[data-theme="dark"] [data-tooltip]::after{
+  background:#11202A !important;
+  color: var(--nk-text) !important;
+  border:1px solid var(--nk-border) !important;
+}
+
+html[data-theme="dark"] svg text{ fill: var(--nk-text); }
+html[data-theme="dark"] svg .np-chart-grid,
+html[data-theme="dark"] svg .np-chart-axis{ stroke: var(--nk-border); }
+
+html[data-theme="dark"] .bg-gray-50,
+html[data-theme="dark"] .bg-gray-100,
+html[data-theme="dark"] .bg-neutral-50,
+html[data-theme="dark"] .bg-neutral-100{ background: var(--nk-surface) !important; }
+html[data-theme="dark"] .bg-gray-200{ background:#1B2F39 !important; }
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-gray-600,
+html[data-theme="dark"] .text-neutral-500,
+html[data-theme="dark"] .text-neutral-600{ color: var(--nk-muted) !important; }
+html[data-theme="dark"] .text-gray-700,
+html[data-theme="dark"] .text-gray-800,
+html[data-theme="dark"] .text-gray-900,
+html[data-theme="dark"] .text-neutral-700,
+html[data-theme="dark"] .text-neutral-800,
+html[data-theme="dark"] .text-neutral-900{ color: var(--nk-text) !important; }
+html[data-theme="dark"] .border-gray-100,
+html[data-theme="dark"] .border-gray-200,
+html[data-theme="dark"] .border-gray-300,
+html[data-theme="dark"] .border-neutral-200,
+html[data-theme="dark"] .border-neutral-300{ border-color: var(--nk-border) !important; }
+
+.np-inline-note{
+  background:#FFF7ED;
+  border:1px solid #FED7AA;
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-inline-note{
+  background: rgba(249,169,69,.12) !important;
+  border-color: rgba(249,169,69,.35) !important;
+  color:#FBC97A !important;
+}
+
+.np-settlement-card{
+  border-radius:10px;
+  padding:.75rem .9rem;
+  border:1px solid transparent;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+.np-settlement-card[data-settlement-status="PAID"]{
+  background:#ECFDF5; border-color:#A7F3D0; color:#065F46;
+}
+.np-settlement-card[data-settlement-status="GENERATED"]{
+  background:#FEF3C7; border-color:#FCD34D; color:#92400E;
+}
+.np-settlement-card[data-settlement-status="NOT_GENERATED"],
+.np-settlement-card:not([data-settlement-status]){
+  background:#F4F8FB; border-color:#E5E7EB; color:#475569;
+}
+html[data-theme="dark"] .np-settlement-card[data-settlement-status="PAID"]{
+  background: rgba(34,197,148,.14) !important;
+  border-color: rgba(34,197,148,.35) !important;
+  color:#7AE0BE !important;
+}
+html[data-theme="dark"] .np-settlement-card[data-settlement-status="GENERATED"]{
+  background: rgba(249,169,69,.14) !important;
+  border-color: rgba(249,169,69,.40) !important;
+  color:#FBC97A !important;
+}
+html[data-theme="dark"] .np-settlement-card[data-settlement-status="NOT_GENERATED"],
+html[data-theme="dark"] .np-settlement-card:not([data-settlement-status]){
+  background:#0E1A22 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-muted) !important;
+}
+html[data-theme="dark"] .np-settlement-card code{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+  padding:1px 6px;
+  border-radius:4px;
+}
+
+.np-success-card{
+  background:#ECFDF5;
+  border:1px solid #10B981;
+  color:#065F46;
+}
+.np-success-card__title{ color:#065F46; }
+html[data-theme="dark"] .np-success-card{
+  background: rgba(34,197,148,.14) !important;
+  border-color: rgba(34,197,148,.40) !important;
+  color:#7AE0BE !important;
+}
+html[data-theme="dark"] .np-success-card__title{ color:#9DEAC9 !important; }
+
+html[data-theme="dark"] [style*="border-top:1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-top: 1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-bottom:1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-bottom: 1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-left:1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-right:1px dashed #E5E7EB"]{
+  border-color: var(--nk-border-soft) !important;
 }

@@ -1,8 +1,4 @@
-/* =====================================================================
-   NeoKidsPro EMR — Doctor App
-   Preserves the consultation workspace, patient modal, and prescription flow
-   while keeping appointment, archive, and waiting-room behavior unchanged.
-   ===================================================================== */
+
 
 const API = '/api';
 let TOKEN = localStorage.getItem('np_doctor_token');
@@ -14,7 +10,6 @@ let activeConsultId = null;
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
-/* ---------------- API helper ---------------- */
 async function api(path, opts={}){
   const headers = opts.headers || {};
   if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
@@ -32,7 +27,6 @@ async function api(path, opts={}){
   return data;
 }
 
-/* ---------------- Utils ---------------- */
 function fmtCurrency(n){
   const v = Number(n||0);
   if (v >= 100000) return '₹' + (v/100000).toFixed(v%100000===0?0:1) + 'L';
@@ -122,9 +116,6 @@ function paymentBadge(p){
   return `<span class="np-badge ${m.cls}"><span class="np-badge__dot"></span>${m.txt}</span>`;
 }
 
-/* =====================================================================
-   LOGIN
-   ===================================================================== */
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = $('#loginError');
@@ -174,9 +165,6 @@ function logout(){
   location.reload();
 }
 
-/* =====================================================================
-   INIT
-   ===================================================================== */
 async function init(){
   $('#loginScreen').classList.add('hidden');
   $('#dashboard').classList.remove('hidden');
@@ -196,7 +184,6 @@ async function init(){
   setupProfileMenu();
   setupTabs();
   if (typeof NPSession !== 'undefined' && TOKEN) NPSession.start(TOKEN);
-  // Register command-palette entries (idempotent).
   if (typeof NPPalette !== 'undefined' && !window.__npPaletteWired) {
     window.__npPaletteWired = true;
     [
@@ -215,11 +202,8 @@ async function init(){
   setupRescheduleModal();
   setupCancelModal();
   setupPatientModalTabs();
-  // Capture the prescription form HTML template once before any
-  // workspace render could destroy the static node.
   captureRxFormTemplate();
 
-  // Modal -> open workspace bridge
   const bridgeBtn = $('#modalOpenWorkspaceBtn');
   if (bridgeBtn) bridgeBtn.addEventListener('click', () => {
     if (!currentAppointment) return;
@@ -228,7 +212,6 @@ async function init(){
     location.hash = '#consult/' + id;
   });
 
-  // Archive filter listeners
   ['rxSearch','rxFromDate','rxToDate'].forEach(id => {
     const el = document.getElementById(id);
     if (el){
@@ -242,7 +225,6 @@ async function init(){
     renderRxArchive();
   });
 
-  // Hash router
   window.addEventListener('hashchange', handleHashRoute);
   handleHashRoute(); // boot route
   if (!location.hash){
@@ -269,9 +251,6 @@ function renderDoctorHeader(d){
   }
 }
 
-/* =====================================================================
-   SIDEBAR / DRAWER / PROFILE
-   ===================================================================== */
 function setupSidebar(){
   const sidebar = $('#sidebar');
   const backdrop = $('#sidebarBackdrop');
@@ -316,9 +295,6 @@ function setupProfileMenu(){
   });
 }
 
-/* =====================================================================
-   TABS
-   ===================================================================== */
 const TAB_META = {
   dashboardTab:  { title:'Dashboard',           sub:"Welcome back — here's what's happening today." },
   waitingTab:    { title:'Waiting Room',        sub:'Patients currently waiting to be seen' },
@@ -342,12 +318,10 @@ function setActiveTab(tabId){
   else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); }
   else if (tabId === 'rxArchiveTab') loadRxArchive();
   else if (tabId === 'earningsTab' && window.Earnings) Earnings.load();
-  // consultTab is rendered by openConsultation
 }
 function setupTabs(){
   $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
     const tab = btn.dataset.tab;
-    // Clear consult hash if leaving consult tab
     if (tab !== 'consultTab' && location.hash.startsWith('#consult/')){
       activeConsultId = null;
       $('#navConsult').style.display = 'none';
@@ -359,25 +333,17 @@ function setupTabs(){
   if (refresh) refresh.addEventListener('click', () => loadWaiting());
 }
 
-/* =====================================================================
-   Hash router
-   ===================================================================== */
 function handleHashRoute(){
   const m = (location.hash || '').match(/^#consult\/([A-Za-z0-9-]+)/);
   if (m){
     openConsultation(m[1]);
   } else {
-    // No consult route — hide nav badge entry
     const navC = $('#navConsult');
     if (navC) navC.style.display = 'none';
   }
 }
 
-/* =====================================================================
-   STATS / DASHBOARD
-   ===================================================================== */
 async function loadStats(){
-  // Loading skeleton while stats fetch is in flight.
   try {
     if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsBar'), 4);
   } catch (_) {}
@@ -418,7 +384,6 @@ async function loadDashSnapshot(){
   if (!el) return;
   try {
     const list = await api('/doctor/waiting-room');
-    // Update sidebar badge
     const badge = $('#navBadgeWaiting');
     if (badge){
       if (list && list.length){ badge.textContent = list.length; badge.classList.remove('hidden'); }
@@ -442,9 +407,6 @@ function emptyState(title, sub, ctaHtml){
     </div>`;
 }
 
-/* =====================================================================
-   Waiting room and appointments
-   ===================================================================== */
 async function loadWaiting(){
   const list = $('#waitingList');
   list.innerHTML = '';
@@ -489,10 +451,6 @@ function renderAllAppointments(){
         .some(v => v && String(v).toLowerCase().includes(search));
     });
   }
-  // Bug #8 — `a.date` is a full ISO timestamp (e.g. "2026-07-29T00:00:00.000Z"),
-  // so `a.date + 'T' + time` produced "...T00:00:00.000ZT18:45" → Invalid Date
-  // and the comparator silently broke (NaN), so Newest/Oldest did nothing.
-  // Slice to YYYY-MM-DD first so both sort directions work.
   const apptTime = (x) => new Date(String(x.date).slice(0,10) + 'T' + (x.startTime || '00:00')).getTime();
   arr.sort((a,b) => {
     const ad = apptTime(a), bd = apptTime(b);
@@ -514,9 +472,6 @@ function setupSearchFilters(){
   });
 }
 
-/* =====================================================================
-   Appointment card
-   ===================================================================== */
 function apptCard(a){
   const p = a.patient || {};
   const timeMain = fmtTime(a.startTime) || '—';
@@ -526,7 +481,6 @@ function apptCard(a){
   const canCancel = isLive;
   const canComplete = a.status !== 'COMPLETED' && a.status !== 'CANCELLED';
 
-  // Overflow menu items
   const overflowItems = [];
   if (canComplete) {
     overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); toggleComplete('${escapeHtml(a.id)}')">
@@ -596,22 +550,6 @@ function goToConsult(id){
   location.hash = '#consult/' + id;
 }
 
-/* Overflow menu open/close + viewport-safe positioning
- *
- * Desktop/laptop fix: on wide viewports the menu container has
- * `position: fixed` (set in styles.css), so it must be positioned in
- * viewport coordinates. The previous implementation measured the menu
- * BEFORE its final layout was flushed and left ambiguous CSS on it,
- * which allowed the base `right: 0` rule to win the cascade and pin
- * the menu off-screen — making the ellipsis button appear
- * non-functional. This version:
- *   1. Moves the menu to <body> when open so no ancestor with
- *      `overflow: hidden` / transform can clip it.
- *   2. Forces `position: fixed` inline as a defensive override.
- *   3. Measures menu size AFTER a layout flush.
- *   4. Restores the menu to its original DOM position on close so the
- *      card's event handlers keep working.
- */
 function closeOverflowMenus(except){
   document.querySelectorAll('.np-overflow-menu.is-open').forEach(menu => {
     if (menu === except) return;
@@ -626,7 +564,6 @@ function closeOverflowMenus(except){
     menu.style.zIndex = '';
     menu.style.width = '';
     menu.style.maxWidth = '';
-    // Restore into original parent if we detached it to <body>.
     const origParent = menu.__npOrigParent;
     const origNext   = menu.__npOrigNext;
     if (origParent && menu.parentNode !== origParent) {
@@ -649,7 +586,6 @@ function positionOverflowMenu(trigger, menu){
   const vh = window.innerHeight;
   const isNarrow = vw <= 480;
 
-  // Reset any previous inline positioning so measurements are clean.
   menu.style.left = '0px';
   menu.style.top = '0px';
   menu.style.right = 'auto';
@@ -661,17 +597,10 @@ function positionOverflowMenu(trigger, menu){
   menu.classList.remove('np-overflow-menu--sheet');
   menu.style.maxHeight = Math.max(160, vh - margin * 2) + 'px';
 
-  // Force a layout flush so offsetWidth/offsetHeight are the final
-  // sizes after the min-width/padding rules apply.
-  // eslint-disable-next-line no-unused-expressions
   menu.offsetWidth;
 
   const triggerRect = trigger.getBoundingClientRect();
 
-  // On very narrow viewports (mobile), open the menu as a bottom sheet
-  // anchored to the bottom of the screen so it can never be clipped or
-  // rendered off-screen. This preserves accessibility of all items and
-  // provides a large, comfortable touch target region.
   if (isNarrow) {
     const sheetWidth = Math.min(vw - margin * 2, 360);
     const sheetMaxHeight = Math.min(vh - margin * 2, 420);
@@ -689,9 +618,6 @@ function positionOverflowMenu(trigger, menu){
   const width  = Math.min(menu.offsetWidth  || 220, vw - margin * 2);
   const height = Math.min(menu.offsetHeight || 200, vh - margin * 2);
 
-  // Try to align the menu's right edge with the trigger's right edge
-  // (typical dropdown behaviour). If that would push it off the left,
-  // clamp to the viewport with a safe margin.
   let left = triggerRect.right - width;
   left = Math.max(margin, Math.min(left, vw - margin - width));
 
@@ -715,8 +641,6 @@ function toggleOverflow(btn){
   closeOverflowMenus();
   if (isOpen) return;
 
-  // Detach to <body> so ancestor overflow/transform cannot clip or
-  // re-anchor the fixed-positioned menu on desktop.
   if (menu.parentNode && menu.parentNode !== document.body) {
     menu.__npOrigParent = menu.parentNode;
     menu.__npOrigNext   = menu.nextSibling;
@@ -727,9 +651,6 @@ function toggleOverflow(btn){
   positionOverflowMenu(btn, menu);
 }
 document.addEventListener('click', (e) => {
-  // Any click on the trigger or inside an open menu is safe — the menu
-  // may now live under <body>, so also skip when the click target is
-  // inside a .np-overflow-menu directly.
   if (e.target.closest('.np-overflow') || e.target.closest('.np-overflow-menu')) return;
   closeOverflowMenus();
 });
@@ -739,15 +660,11 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeOverflowMenus();
 });
 
-/* =====================================================================
-   PATIENT MODAL — kept for "peek" use from dashboard snapshot
-   ===================================================================== */
 function setupPatientModalTabs(){
   document.addEventListener('click', (e) => {
     const t = e.target.closest('.np-pm-tab');
     if (!t || !t.dataset.pmTab) return;
     const target = t.dataset.pmTab;
-    // Scope to whatever container the tab lives in (modal OR workspace)
     const root = t.closest('.np-pm-scope') || document;
     root.querySelectorAll('.np-pm-tab').forEach(x => x.classList.toggle('active', x.dataset.pmTab === target));
     root.querySelectorAll('.np-pm-pane').forEach(x => x.classList.toggle('hidden', x.id !== 'pm-' + target && x.dataset.pmPaneId !== target));
@@ -760,12 +677,11 @@ function setupPatientModalTabs(){
 }
 
 async function openPatient(id){
-  // Used by modal-style "peek" — same body content the workspace renders.
   try {
     const data = await api('/doctor/appointments/' + encodeURIComponent(id));
     const a = data.appointment || data;
     currentAppointment = a;
-    renderConsultBody($('#patientDetail'), a, /*compact*/true);
+    renderConsultBody($('#patientDetail'), a, true);
     moveRxFormInto($('#patientDetail').querySelector('#rxFormSlot'), a, data);
     $('#patientModal').classList.remove('hidden');
   } catch (ex){
@@ -777,10 +693,6 @@ function closePatientModal(){
   $('#patientModal').classList.add('hidden');
 }
 
-/* =====================================================================
-   Consultation workspace
-   Renders the same content the modal used, but full-page, deep-linkable.
-   ===================================================================== */
 async function openConsultation(id){
   activeConsultId = id;
   const navC = $('#navConsult'); if (navC) navC.style.display = '';
@@ -851,7 +763,7 @@ async function openConsultation(id){
             ${a.notes ? `
               <div class="np-field" style="margin-top:.85rem;">
                 <div class="np-field__label">Notes</div>
-                <div style="background:#FFF7ED; padding:.7rem .85rem; border-radius:10px; border:1px solid #FED7AA; font-size:.9rem;">
+                <div class="np-inline-note" style="padding:.7rem .85rem; border-radius:10px; font-size:.9rem;">
                   ${escapeHtml(a.notes)}
                 </div>
               </div>` : ''}
@@ -862,8 +774,8 @@ async function openConsultation(id){
           </div>
 
           <div id="pm-prescription" class="np-pm-pane hidden" data-pm-pane-id="prescription">
-            <div id="rxSuccessCard" class="hidden" style="background:#ecfdf5; border:1px solid #10b981; padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
-              <div style="font-weight:700; color:#065f46; margin-bottom:.25rem;">✓ Prescription saved</div>
+            <div id="rxSuccessCard" class="np-success-card hidden" style="padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
+              <div class="np-success-card__title" style="font-weight:700; margin-bottom:.25rem;">✓ Prescription saved</div>
               <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">PDF generated and emailed to patient.</div>
               <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
                 <a id="rxViewBtn" class="np-btn np-btn--sm" href="#" target="_blank" rel="noopener">View PDF</a>
@@ -893,7 +805,6 @@ async function openConsultation(id){
   }
 }
 
-/* Render compact body for modal-peek mode (same content, light header) */
 function renderConsultBody(root, a, compact){
   const p = a.patient || {};
   root.innerHTML = `
@@ -931,8 +842,8 @@ function renderConsultBody(root, a, compact){
       </div>
 
       <div id="pm-prescription" class="np-pm-pane hidden" data-pm-pane-id="prescription">
-        <div id="rxSuccessCard" class="hidden" style="background:#ecfdf5; border:1px solid #10b981; padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
-          <div style="font-weight:700; color:#065f46; margin-bottom:.25rem;">✓ Prescription saved</div>
+        <div id="rxSuccessCard" class="np-success-card hidden" style="padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
+          <div class="np-success-card__title" style="font-weight:700; margin-bottom:.25rem;">✓ Prescription saved</div>
           <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">PDF generated and emailed to patient.</div>
           <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
             <a id="rxViewBtn" class="np-btn np-btn--sm" href="#" target="_blank" rel="noopener">View PDF</a>
@@ -950,25 +861,15 @@ function renderConsultBody(root, a, compact){
   `;
 }
 
-/* =====================================================================
-   Prescription form renderer
-   Instead of physically MOVING the single #rxForm element (which gets
-   destroyed when consultContainer.innerHTML is rewritten), we keep an
-   HTML TEMPLATE STRING captured once from the static markup, and render
-   a fresh copy into whichever slot needs it.
-   ===================================================================== */
 let RX_FORM_TEMPLATE = null;          // captured on first call, never null again
 
 function captureRxFormTemplate(){
   if (RX_FORM_TEMPLATE) return;
   const existing = document.getElementById('rxForm');
   if (!existing) return;              // index.html guarantees this exists at load
-  // Make sure the captured template starts hidden-class-free; we control
-  // visibility from the renderer based on appointment.status.
   const clone = existing.cloneNode(true);
   clone.classList.remove('hidden');
   RX_FORM_TEMPLATE = clone.outerHTML;
-  // Remove the static copy from the DOM so we never have duplicate IDs.
   existing.parentNode && existing.parentNode.removeChild(existing);
 }
 
@@ -980,14 +881,11 @@ function renderRxFormInto(slot, a, data){
     return;
   }
 
-  // Only show the prescription builder for actionable statuses.
-  // For CANCELLED, hide the form entirely and show a hint.
   if (!['CONFIRMED','PENDING','COMPLETED'].includes(a.status)){
     slot.innerHTML = '<div class="np-empty"><div class="np-empty__title">Prescription is read-only</div><div class="np-empty__sub">This appointment is ' + escapeHtml(a.status||'—') + '. You can no longer write a prescription.</div></div>';
     return;
   }
 
-  // Inject a fresh copy of the form template.
   slot.innerHTML = RX_FORM_TEMPLATE;
 
   const rxForm = slot.querySelector('#rxForm');
@@ -1023,17 +921,13 @@ function renderRxFormInto(slot, a, data){
       subtitle: 'Existing prescription on file. You can edit and re-save, or re-send to the patient.'
     });
   } else {
-    // Fresh form — hide success card if present.
     const card = document.querySelector('#rxSuccessCard');
     if (card) card.classList.add('hidden');
   }
 }
 
-// Backwards-compatibility shim. Some older call-sites may still call
-// moveRxFormInto(); route them to the new renderer.
 function moveRxFormInto(slot, a, data){ return renderRxFormInto(slot, a, data); }
 
-/* ---------- Patient history loader ---------- */
 async function loadPatientHistoryInto(slot, patientId){
   if (!slot) return;
   if (!patientId){ slot.innerHTML = 'No patient id available.'; return; }
@@ -1123,7 +1017,6 @@ function addMedRow(prefill){
   $('#medsList').appendChild(tr);
 }
 
-/* ---------- Prescription success card helpers ---------- */
 function showRxSuccessCard({ pdfUrl, emailRecipient, subtitle }){
   const card = document.querySelector('#rxSuccessCard');
   if (!card) return;
@@ -1162,7 +1055,6 @@ async function resendPrescription(){
   }
 }
 
-/* Prescription submit handler (global — works regardless of which container holds the form) */
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'rxForm') return;
   e.preventDefault();
@@ -1208,7 +1100,6 @@ document.addEventListener('submit', async (e) => {
         ? `PDF generated and emailed to ${r.delivery.emailRecipient}.`
         : 'PDF generated. Patient has no email — use Resend after adding one.'
     });
-    // Switch to the Prescription tab inside whichever scope holds it.
     const scope = e.target.closest('.np-pm-scope');
     if (scope){
       const tab = scope.querySelector('.np-pm-tab[data-pm-tab="prescription"]');
@@ -1222,9 +1113,6 @@ document.addEventListener('submit', async (e) => {
   }
 });
 
-/* =====================================================================
-   Prescription archive
-   ===================================================================== */
 let rxArchiveCache = [];
 async function loadRxArchive(){
   const list = $('#rxArchiveList');
@@ -1290,9 +1178,6 @@ function renderRxArchive(){
   }).join('');
 }
 
-/* =====================================================================
-   APPOINTMENT ACTIONS
-   ===================================================================== */
 async function toggleComplete(id){
   const ok = await NPModal.confirm({
     title: 'Mark appointment as completed?',
@@ -1304,7 +1189,6 @@ async function toggleComplete(id){
     await api('/doctor/appointments/' + encodeURIComponent(id) + '/complete', { method:'POST' });
     NPToast.success('Appointment marked completed');
     loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
-    // If we're in the workspace for this id, refresh it
     if (activeConsultId === id) openConsultation(id);
   } catch (ex){ NPToast.error(ex.message || 'Could not complete'); }
 }
@@ -1317,9 +1201,6 @@ function cancelAppt(id){
 }
 function closeCancelModal(){ $('#cancelModal').classList.add('hidden'); }
 
-/* =====================================================================
-   RESCHEDULE
-   ===================================================================== */
 let rsType = 'OFFLINE';
 function openReschedule(id, type){
   rsType = type || 'OFFLINE';
@@ -1407,9 +1288,6 @@ function setupCancelModal(){
   });
 }
 
-/* =====================================================================
-   SETTINGS
-   ===================================================================== */
 function loadSettings(){
   api('/doctor/me').then(d => {
     doctorCache = d;
@@ -1418,7 +1296,6 @@ function loadSettings(){
     populateClinic(d);
     populateFees(d);
     populateDoctorUuid(d);
-    // Upgrade profile-photo input to a drag-and-drop dropzone (idempotent).
     if (typeof NPDropzone !== 'undefined') {
       const input = document.getElementById('photoInput');
       if (input) NPDropzone.bind(input, { label: 'Drop profile photo here', hint: 'or click to browse (JPG / PNG)' });
@@ -1426,10 +1303,6 @@ function loadSettings(){
   }).catch(()=>{});
 }
 
-/* =====================================================================
-   Doctor EMR UUID (read-only display in Profile / Settings)
-   UI only — no API or database changes.
-   ===================================================================== */
 function populateDoctorUuid(d){
   const input = document.getElementById('doctorUuidInput');
   const btn   = document.getElementById('doctorUuidCopyBtn');
@@ -1566,7 +1439,6 @@ function setupForms(){
       workingDays:  $('#workingDaysVal').value || '',
       isAvailable:  !!e.target.isAvailable.checked
     };
-    // Client-side guard so bug #16 (end < start) never reaches the server.
     function _hm(s){ if (!s) return null; const m = String(s).match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1])*60 + Number(m[2])) : null; }
     const pairs = [['Online', body.availableFromOnline, body.availableToOnline],
                    ['Offline', body.availableFromOffline, body.availableToOffline]];
@@ -1642,9 +1514,6 @@ async function removePhoto(){
   } catch (ex){ NPToast.error(ex.message || 'Could not remove photo'); }
 }
 
-/* =====================================================================
-   AUTO-LOGIN
-   ===================================================================== */
 (async function bootstrap(){
   if (TOKEN){
     try {
@@ -1655,11 +1524,6 @@ async function removePhoto(){
   $('#loginScreen').classList.remove('hidden');
 })();
 
-
-/* =====================================================================
-   MOBILE DRAWER + CONSULT "BACK" BUTTON
-   (merged from former assets/np-fixes.js)
-   ===================================================================== */
 (function(){
   'use strict';
   var doc = document;
@@ -1697,8 +1561,7 @@ async function removePhoto(){
     else if (mqMobile && mqMobile.addListener) mqMobile.addListener(onResize);
   }
 
-  /* "← Back to Appointments" bar injected into the consultation workspace. */
-  function injectConsultBackButton(){
+function injectConsultBackButton(){
     var container = doc.getElementById('consultContainer');
     if (!container) return;
     var mo = new MutationObserver(function(){

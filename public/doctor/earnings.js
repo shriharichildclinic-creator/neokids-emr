@@ -1,9 +1,4 @@
-/* =====================================================================
-   NeoKidsPro Doctor Panel — My Earnings (Revenue Management)
-   ---------------------------------------------------------------------
-   Depends on doctor app.js for: api(), $, $$, escapeHtml(), fmtDate(),
-                                 fmtCurrency(), TOKEN.
-   ===================================================================== */
+
 (function () {
   'use strict';
 
@@ -93,8 +88,7 @@
       return;
     }
 
-    /* KPI grid */
-    const t = dash.totals;
+const t = dash.totals;
     const d = dash.doctor;
     $('#earnKpiGrid').innerHTML = [
       kpi('Total Patients',     String(t.consultations), 'Cashfree-paid only', 'blue'),
@@ -104,18 +98,15 @@
       kpi('Net Earnings',       compactInr(t.doctorNet), inr(t.doctorNet), 'blue')
     ].join('');
 
-    /* Settlement status card for THIS month */
-    const sCard = $('#earnSettlementCard');
+const sCard = $('#earnSettlementCard');
     const s = dash.settlement || { status: 'NOT_GENERATED' };
-    let cardBg = '#FFFBEB', cardBorder = '#FDE68A', cardText = '#92400E';
-    if (s.status === 'PAID')          { cardBg = '#ECFDF5'; cardBorder = '#A7F3D0'; cardText = '#065F46'; }
-    else if (s.status === 'GENERATED'){ cardBg = '#FEF3C7'; cardBorder = '#FCD34D'; cardText = '#92400E'; }
-    else                              { cardBg = '#F4F8FB'; cardBorder = '#E5E7EB'; cardText = '#475569'; }
+    sCard.classList.add('np-settlement-card');
+    sCard.setAttribute('data-settlement-status', s.status || 'NOT_GENERATED');
+    sCard.style.background = '';
+    sCard.style.border = '';
+    sCard.style.color = '';
 
     const period = `${MONTH_NAMES[month-1]} ${year}`;
-    sCard.style.background = cardBg;
-    sCard.style.border = `1px solid ${cardBorder}`;
-    sCard.style.color  = cardText;
 
     let msg = '';
     if (s.status === 'PAID') {
@@ -133,8 +124,7 @@
     sCard.innerHTML = msg;
     sCard.style.display = 'block';
 
-    /* Per-appointment breakdown */
-    const rows = breakdown.rows || [];
+const rows = breakdown.rows || [];
     if (!rows.length) {
       tbody.innerHTML = `<tr><td colspan="7" class="np-empty"><div>No Cashfree-paid appointments in this period.</div></td></tr>`;
     } else {
@@ -151,8 +141,7 @@
       `).join('');
     }
 
-    /* Past settlements */
-    const stb = $('#earnSettlementsTbody');
+const stb = $('#earnSettlementsTbody');
     if (!settlements.length) {
       stb.innerHTML = `<tr><td colspan="7" class="np-empty"><div>No past settlements yet.</div></td></tr>`;
     } else {

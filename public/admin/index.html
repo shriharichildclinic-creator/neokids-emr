@@ -12,10 +12,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/admin/styles.css"/>
-<!-- NeoKidsPro brand theme (light + dark) — v3.1 Blue-Green rebrand -->
+
 <link rel="stylesheet" href="/assets/neokids-theme.css"/>
 <script>
-  // Apply persisted theme as early as possible to avoid FOUC
   try {
     var t = localStorage.getItem('np-theme');
     if (t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -26,9 +25,6 @@
 </head>
 <body>
 
-<!-- =====================================================================
-     LOGIN
-     ===================================================================== -->
 <div id="loginScreen" class="np-login">
   <div class="np-login__card">
     <div class="np-login__logo" aria-hidden="true">
@@ -58,15 +54,11 @@
   </div>
 </div>
 
-<!-- =====================================================================
-     DASHBOARD SHELL
-     ===================================================================== -->
 <div id="dashboard" class="hidden">
   <div id="sidebarBackdrop" class="np-backdrop" aria-hidden="true"></div>
   <div class="np-shell">
 
-    <!-- SIDEBAR -->
-    <aside id="sidebar" class="np-sidebar" aria-label="Primary navigation">
+<aside id="sidebar" class="np-sidebar" aria-label="Primary navigation">
       <div class="np-sidebar__brand">
         <div class="np-sidebar__logo" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -127,8 +119,7 @@
       </div>
     </aside>
 
-    <!-- MAIN -->
-    <main class="np-main">
+<main class="np-main">
       <header class="np-header">
         <div class="np-header__inner">
           <button id="sidebarToggle" type="button" class="np-iconbtn np-menu-toggle" aria-label="Open menu">
@@ -164,8 +155,7 @@
 
       <div class="np-content">
 
-        <!-- ============ DASHBOARD VIEW ============ -->
-        <section id="dashboardView" class="tab-pane">
+<section id="dashboardView" class="tab-pane">
           <div id="statsGrid" class="np-kpi-grid"></div>
           <div class="np-divider"></div>
           <div id="dashSecondGrid" class="np-dash-second">
@@ -194,8 +184,7 @@
           </div>
         </section>
 
-        <!-- ============ DOCTORS VIEW ============ -->
-        <section id="doctorsView" class="tab-pane hidden">
+<section id="doctorsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -219,16 +208,13 @@
                   <option value="inactive">Inactive only</option>
                 </select>
               </div>
-              <!-- Doctors grid: layout is fully defined in styles.css as .np-doc-grid.
-                   Using a class (not inline styles) lets the responsive
-                   minmax(min(280px,100%), 1fr) rule kick in correctly. -->
+              
               <div id="doctorsGrid" class="np-doc-grid"></div>
             </div>
           </div>
         </section>
 
-        <!-- ============ APPOINTMENTS VIEW ============ -->
-        <section id="apptsView" class="tab-pane hidden">
+<section id="apptsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -256,9 +242,9 @@
                   <button id="clearFilters" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
                 </div>
               </form>
-              <!-- Date range presets — set From/To with one click. -->
+              
               <div id="apptDateRange" style="margin:8px 0;"></div>
-              <!-- Active filter chips (rendered by JS after each search). -->
+              
               <div id="apptFilterChips" style="display:none;"></div>
               <div class="np-table-wrap">
                 <table class="np-table np-sticky-head">
@@ -280,8 +266,7 @@
           </div>
         </section>
 
-        <!-- ============ REVENUE REPORTS VIEW ============ -->
-        <section id="revenueView" class="tab-pane hidden">
+<section id="revenueView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -332,8 +317,7 @@
           </div>
         </section>
 
-        <!-- ============ DOCTOR SETTLEMENTS VIEW ============ -->
-        <section id="settlementsView" class="tab-pane hidden">
+<section id="settlementsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -378,8 +362,7 @@
           </div>
         </section>
 
-        <!-- ============ INVOICES VIEW ============ -->
-        <section id="invoicesView" class="tab-pane hidden">
+<section id="invoicesView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -418,8 +401,7 @@
           </div>
         </section>
 
-        <!-- ============ NOTIFICATION LOGS VIEW ============ -->
-        <section id="notifView" class="tab-pane hidden">
+<section id="notifView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
@@ -468,8 +450,7 @@
           </div>
         </section>
 
-        <!-- ============ SETTINGS VIEW ============ -->
-        <section id="settingsView" class="tab-pane hidden">
+<section id="settingsView" class="tab-pane hidden">
           <div class="np-panel" style="max-width:560px;">
             <div class="np-panel__head">
               <div>
@@ -504,9 +485,6 @@
   </div>
 </div>
 
-<!-- =====================================================================
-     DOCTOR MODAL (Add / Edit)
-     ===================================================================== -->
 <div id="doctorModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="doctorModalTitle">
   <div class="np-modal__panel">
     <header class="np-modal__head">
@@ -561,7 +539,7 @@
             <input name="physicalConsultFee" type="number" min="0" step="0.01" class="np-input" placeholder="750"/>
           </div>
         </div>
-        <div style="margin-top:.75rem; padding:.75rem; border:1px solid #E5E7EB; border-radius:8px; background:#F9FAFB;">
+        <div class="np-inline-panel" style="margin-top:.75rem; padding:.75rem; border-radius:8px;">
           <div style="font-weight:600; font-size:.85rem; color:#0F2A47; margin-bottom:.4rem;">
             Revenue split (per-doctor)
           </div>
@@ -588,10 +566,7 @@
           <textarea name="bio" class="np-textarea" placeholder="Short biography"></textarea>
         </div>
 
-        <!-- ───── KYC documents ───── -->
-        <!-- Visible only after the doctor exists (edit mode). On create we
-             show a hint asking the admin to save first, then upload KYC. -->
-        <div id="doctorKycPanel" style="margin-top:1rem; padding:.85rem; border:1px solid #E5E7EB; border-radius:8px; background:#FAFBFC;">
+<div id="doctorKycPanel" class="np-inline-panel" style="margin-top:1rem; padding:.85rem; border-radius:8px;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.5rem;">
             <div>
               <div style="font-weight:600; font-size:.9rem; color:#0F2A47;">KYC Documents</div>
@@ -647,9 +622,8 @@
             </div>
           </div>
         </div>
-        <!-- ───── /KYC documents ───── -->
 
-        <div id="doctorFormError" class="np-error hidden"></div>
+<div id="doctorFormError" class="np-error hidden"></div>
         <div class="np-field" style="font-size:.75rem; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; padding:.55rem .75rem; border-radius:8px;">
           Best practice: leave the temporary password blank and let the doctor set their own via the email invite.
         </div>
@@ -662,9 +636,6 @@
   </div>
 </div>
 
-<!-- =====================================================================
-     DOCTOR INSIGHTS DRAWER
-     ===================================================================== -->
 <div id="doctorDrawer" class="np-drawer hidden" role="dialog" aria-modal="true">
   <div class="np-drawer__backdrop" onclick="closeDoctorDrawer()"></div>
   <div class="np-drawer__panel">
@@ -676,9 +647,6 @@
   </div>
 </div>
 
-<!-- =====================================================================
-     NOTIFICATION DETAIL MODAL
-     ===================================================================== -->
 <div id="notifModal" class="np-modal hidden" role="dialog" aria-modal="true">
   <div class="np-modal__panel">
     <header class="np-modal__head">
@@ -689,9 +657,6 @@
   </div>
 </div>
 
-<!-- =====================================================================
-     SETTLEMENT DETAIL MODAL
-     ===================================================================== -->
 <div id="settlementModal" class="np-modal hidden" role="dialog" aria-modal="true">
   <div class="np-modal__panel" style="max-width:880px;">
     <header class="np-modal__head">
@@ -702,9 +667,6 @@
   </div>
 </div>
 
-<!-- =====================================================================
-     MARK-AS-PAID MODAL
-     ===================================================================== -->
 <div id="markPaidModal" class="np-modal hidden" role="dialog" aria-modal="true">
   <div class="np-modal__panel" style="max-width:520px;">
     <header class="np-modal__head">
@@ -712,7 +674,7 @@
       <button type="button" class="np-modal__close" onclick="closeMarkPaidModal()" aria-label="Close">×</button>
     </header>
     <div class="np-modal__body">
-      <div id="markPaidSummary" style="background:#F4F8FB; border-radius:8px; padding:.75rem; margin-bottom:.75rem; font-size:.85rem;"></div>
+      <div id="markPaidSummary" class="np-inline-panel" style="border-radius:8px; padding:.75rem; margin-bottom:.75rem; font-size:.85rem;"></div>
       <form id="markPaidForm">
         <input type="hidden" name="settlementId"/>
         <div class="np-field">

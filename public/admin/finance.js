@@ -1,44 +1,16 @@
-/* =====================================================================
-   NeoKidsPro Admin Panel — Revenue Management module v2.1
-   ---------------------------------------------------------------------
-   Loads Revenue Reports, Doctor Settlements, Invoices views.
-   Depends on app.js for: api(), $, $$, escapeHtml(), fmtDate(),
-                          fmtDateTime(), __doctorsCache, statusBadge-ish helpers.
 
-   v2.1:
-     The previous version scheduled a setTimeout(refreshPendingBadge, 1500)
-     on every DOMContentLoaded — including the login screen. With no token
-     in localStorage, that 1.5-second timer fired a call against the
-     protected `/admin/finance/settlements?status=GENERATED` endpoint,
-     got 401, and the old api() helper reacted by reloading the page,
-     which re-fired DOMContentLoaded, which re-armed the timer — an
-     infinite reload loop that effectively prevented admin login.
-
-     This version:
-       1. Removes the global setTimeout from init().
-       2. Adds a hardened refreshPendingBadge() that bails out cleanly
-          when no token is present (defence in depth).
-       3. The badge refresh is now driven from app.js → showDashboard()
-          AFTER successful login, which is the only correct moment to
-          poll a protected endpoint.
-   ===================================================================== */
 (function () {
   'use strict';
 
   const $  = (s, root=document) => root.querySelector(s);
   const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
 
-  // Re-use helpers exposed by app.js (defined on window when needed)
-  // app.js exports nothing — but $, api, etc. are global because they
-  // are declared without `var`/`let`/`const`. We access them directly.
-
-  const MONTH_NAMES = [
+const MONTH_NAMES = [
     'January','February','March','April','May','June',
     'July','August','September','October','November','December'
   ];
 
-  /* ---------- Currency / number formatting ---------- */
-  function inr(n) {
+function inr(n) {
     const v = Number(n || 0);
     return '₹' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
@@ -50,8 +22,7 @@
     return '₹' + v.toLocaleString('en-IN');
   }
 
-  /* ---------- Period selectors ---------- */
-  function populatePeriodSelects() {
+function populatePeriodSelects() {
     const now = new Date();
     const curYear = now.getUTCFullYear();
     const curMonth = now.getUTCMonth() + 1;
@@ -79,7 +50,6 @@
   }
 
   async function populateDoctorFilters() {
-    // Reuse the cached list if app.js already populated it; otherwise fetch.
     let doctors = window.__doctorsCache || [];
     if (!doctors.length) {
       try { doctors = await api('/admin/doctors'); window.__doctorsCache = doctors; }
@@ -87,7 +57,6 @@
     }
     ['revDoctor','stlDoctor','invDoctor'].forEach(id => {
       const sel = $('#' + id); if (!sel) return;
-      // Keep the leading "All doctors" option, replace the rest
       const head = sel.options[0];
       sel.innerHTML = '';
       if (head) sel.appendChild(head);
@@ -110,10 +79,7 @@
     return `<span class="np-badge ${s.cls}"><span class="np-badge__dot"></span>${s.label}</span>`;
   }
 
-  /* =====================================================================
-     1. REVENUE REPORTS
-     ===================================================================== */
-  async function loadRevenue() {
+async function loadRevenue() {
     populatePeriodSelects();
     await populateDoctorFilters();
 
@@ -136,7 +102,6 @@
       return;
     }
 
-    // KPI grid (grand totals)
     const g = data.grandTotals;
     $('#revKpiGrid').innerHTML = [
       kpi('Total Revenue',     compactInr(g.totalRevenue), inr(g.totalRevenue), 'blue'),
@@ -147,7 +112,6 @@
       kpi('Consultations',     String(g.consultations),    `${g.consultations} Cashfree-paid appts`, 'mint')
     ].join('');
 
-    // Doctor rows
     if (!data.rows.length) {
       tbody.innerHTML = `<tr><td colspan="9" class="np-empty"><div>No revenue for this period.</div></td></tr>`;
       return;
@@ -167,9 +131,6 @@
           : ''
       ].filter(Boolean).join(' ');
 
-      // Bug #5 — every cell gets a data-label so the mobile card layout
-      // (styles.css #revenueView td[data-label]) can group each financial
-      // value with its doctor record instead of overflowing horizontally.
       return `
         <tr>
           <td data-label="Doctor">
@@ -219,10 +180,7 @@
     } catch (err) { NPToast.error('Failed: ' + err.message); }
   }
 
-  /* =====================================================================
-     2. DOCTOR SETTLEMENTS
-     ===================================================================== */
-  async function loadSettlements() {
+async function loadSettlements() {
     populatePeriodSelects();
     await populateDoctorFilters();
 
@@ -242,7 +200,6 @@
       return;
     }
 
-    // Pending settlements badge in sidebar
     const pending = list.filter(s => s.status === 'GENERATED').length;
     const badge = $('#navBadgePendingSettlements');
     if (badge) {
@@ -284,8 +241,7 @@
     }).join('');
   }
 
-  /* ---------- Settlement detail modal ---------- */
-  async function openSettlement(id) {
+async function openSettlement(id) {
     const modal = $('#settlementModal');
     const body  = $('#settlementModalBody');
     body.innerHTML = `<div class="np-empty"><div>Loading…</div></div>`;
@@ -365,8 +321,7 @@
 
   function closeSettlementModal() { $('#settlementModal').classList.add('hidden'); }
 
-  /* ---------- Mark-as-paid modal ---------- */
-  let _currentMarkPaidSettlement = null;
+let _currentMarkPaidSettlement = null;
 
   async function openMarkPaid(id) {
     try {
@@ -395,8 +350,7 @@
     _currentMarkPaidSettlement = null;
   }
 
-  /* Submit handler — attached on DOMContentLoaded */
-  function bindMarkPaidForm() {
+function bindMarkPaidForm() {
     const form = $('#markPaidForm');
     if (!form || form.__bound) return;
     form.__bound = true;
@@ -424,10 +378,7 @@
     });
   }
 
-  /* =====================================================================
-     3. INVOICES
-     ===================================================================== */
-  async function loadInvoices() {
+async function loadInvoices() {
     populatePeriodSelects();
     await populateDoctorFilters();
 
@@ -472,8 +423,7 @@
     }).join('');
   }
 
-  /* ---------- Download helper (handles auth header) ---------- */
-  async function downloadInvoice(settlementId) {
+async function downloadInvoice(settlementId) {
     try {
       const token = localStorage.getItem('np_admin_token');
       if (!token) throw new Error('Not signed in');
@@ -493,8 +443,7 @@
     } catch (err) { alert('Download failed: ' + err.message); }
   }
 
-  /* ---------- Wire up filter buttons ---------- */
-  function bindFilters() {
+function bindFilters() {
     const safe = (id, fn) => { const el = $('#' + id); if (el && !el.__bound) { el.__bound = true; el.addEventListener('click', fn); } };
     safe('refreshRevenue',    loadRevenue);
     safe('applyRevenue',      loadRevenue);
@@ -509,27 +458,13 @@
     safe('clearInvoices',   () => { $('#invDoctor').value = ''; loadInvoices(); });
   }
 
-  /* ---------- Boot ----------
-   *
-   * IMPORTANT: this runs on DOMContentLoaded, which means it executes
-   * on the LOGIN screen too. It must therefore only perform safe,
-   * non-network setup. Specifically, it MUST NOT trigger any call to
-   * protected endpoints — that is what caused the post-logout 401
-   * reload loop in v2.0. The pending-settlements badge is now refreshed
-   * by app.js's showDashboard() AFTER login succeeds.
-   */
-  function init() {
+function init() {
     populatePeriodSelects();
     bindFilters();
     bindMarkPaidForm();
-    // NOTE: no setTimeout(refreshPendingBadge, …) here on purpose.
   }
 
-  /* refreshPendingBadge — call this ONLY after the admin is authenticated.
-   * It guards against being called without a token (defence in depth):
-   * if no token is present we silently no-op so we never accidentally
-   * trigger a 401 → reload chain. */
-  async function refreshPendingBadge() {
+async function refreshPendingBadge() {
     if (!localStorage.getItem('np_admin_token')) return;
     try {
       const list = await api('/admin/finance/settlements?status=GENERATED');
@@ -538,10 +473,9 @@
         badge.textContent = list.length;
         badge.classList.toggle('hidden', list.length === 0);
       }
-    } catch (_) { /* silent — sidebar badge is non-critical */ }
+    } catch (_) {  }
   }
 
-  // Expose API
   window.Finance = {
     loadRevenue,
     loadSettlements,
@@ -555,7 +489,6 @@
     refreshPendingBadge
   };
 
-  // Expose modal close helpers for inline onclick handlers in index.html
   window.closeSettlementModal = closeSettlementModal;
   window.closeMarkPaidModal   = closeMarkPaidModal;
 
