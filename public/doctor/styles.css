@@ -101,11 +101,12 @@ html,body{
   display:none;
   position:fixed; inset:0;
   background: rgba(15,42,71,.45);
-  backdrop-filter: blur(2px);
+  /* v3.3.2: NO backdrop-filter here — dim only, do not blur the whole app. */
   z-index:35;
   opacity:0; transition: opacity .2s ease;
+  pointer-events:none; /* guard: when hidden, never intercept touches */
 }
-.np-backdrop.is-open{ display:block; opacity:1; }
+.np-backdrop.is-open{ display:block; opacity:1; pointer-events:auto; }
 
 @media (max-width:1023px){
   .np-sidebar{
@@ -536,10 +537,12 @@ html,body{
   position:fixed; inset:0; z-index:100;
   display:flex; align-items:center; justify-content:center;
   padding: 1rem;
-  background: rgba(15,42,71,.45);
-  backdrop-filter: blur(8px) saturate(180%);
+  background: rgba(15,42,71,.55);
+  /* v3.3.2: removed backdrop-filter — it was blurring modal content on mobile Safari. */
   animation: npFadeIn .18s ease;
+  isolation:isolate;
 }
+.np-modal.hidden{ display:none; }
 .np-modal__panel{
   background: rgba(255,255,255,.96);
   border:1px solid rgba(255,255,255,.6);
@@ -1138,11 +1141,19 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
     bottom:0;
     width:min(280px, 82vw);
     max-width:82vw;
-    z-index:48;
+    /* v3.3.2: sidebar strictly above backdrop; isolate to defeat stray stacking contexts. */
+    z-index:50;
+    isolation:isolate;
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
+    background: var(--nk-card);
+    /* Never inherit any ambient backdrop-filter blur */
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
   }
   .np-backdrop{ z-index:44; }
+  /* Sidebar must always be interactive when open, regardless of ambient overlays */
+  .np-sidebar.is-open{ pointer-events:auto; }
 }
 @media (max-width:900px){
   .np-filterbar--doctor{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
@@ -1721,4 +1732,16 @@ html, body{ max-width:100%; overflow-x:hidden; }
     gap:.5rem;
     padding:.5rem;
   }
+}
+
+/* v3.3.2: dark-mode payload / code blocks (parity with admin). */
+html[data-theme="dark"] .np-code-block{
+  background: var(--nk-surface) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-modal pre{
+  background: var(--nk-surface) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
 }

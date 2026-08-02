@@ -39,3 +39,26 @@
 
 ## Remaining blockers
 - None identified in the static UI pass. Dynamic backend data was preserved unchanged.
+
+## v3.3.2 — 2026-08-02 — Root-cause mobile regression fixes
+
+Fixed (surgical, no unrelated refactors):
+- Mobile sidebar no longer blurs the whole app. Removed `backdrop-filter: blur()`
+  from `.np-backdrop` (admin + doctor). Background dims only.
+- Sidebar remains fully interactive when open. Enforced `z-index:50 + isolation:isolate`
+  on the mobile drawer; backdrop stays at 44 and inherits no blur.
+- Closed backdrop no longer intercepts touch/click. Added `pointer-events:none` guard
+  on hidden `.np-backdrop` / `.np-drawer__backdrop`; re-enabled only when `.is-open`.
+- Notification cards on mobile open again. Fixed by the pointer-events guard above,
+  plus doctor `.np-modal` no longer inherits a whole-viewport blur.
+- Notification badges no longer stretch full-width on mobile. Removed the
+  `white-space:normal` override for `#notifView .np-badge`, added
+  `width:max-content; justify-self:start; flex:0 0 auto` inside notif grid cells so
+  WhatsApp / Email / Sent / Failed / Pending / Patient / Doctor pills hug their text.
+- Notification Details payload readable in dark mode. Added
+  `html[data-theme="dark"] .np-code-block` and `#notifModal pre` overrides.
+- Fixed duplicate sidebar wiring: the safety-net IIFE (admin + doctor) is now
+  idempotent, actually wires `backdrop.click → close`, and no longer shadows the
+  primary `setupSidebar` handlers.
+- Filter Apply/Clear buttons on Notifications use the shared `.np-btn` tokens
+  with a consistent `min-height:40px`.

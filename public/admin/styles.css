@@ -55,8 +55,12 @@ html,body{
 }
 .np-backdrop{
   display:none; position:fixed; inset:0; background: rgba(15,42,71,.4); z-index:39;
+  /* v3.3.2: never blur the whole app; never intercept touches when closed. */
+  pointer-events:none;
 }
-@media (max-width:1023px){ .np-backdrop.is-open{ display:block; } }
+@media (max-width:1023px){
+  .np-backdrop.is-open{ display:block; pointer-events:auto; }
+}
 
 .np-sidebar__brand{
   display:flex; align-items:center; gap:.75rem;
@@ -237,9 +241,15 @@ html,body{
   overflow-wrap:normal;
 }
 
+/* v3.3.2: DO NOT force white-space:normal on notif/revenue/appts/settlements badges.
+   It removed the natural inline-flex hug and let badges expand to fill their grid
+   cell on mobile, producing WhatsApp/Sent/Patient/Doctor "stretched capsules". */
 #notifView .np-badge, #revenueView .np-badge,
 #apptsView .np-badge, #settlementsView .np-badge{
-  white-space:normal;
+  white-space:nowrap;
+  width:max-content;
+  max-width:100%;
+  flex:0 0 auto;
 }
 .np-badge__dot{
   width:6px; height:6px; border-radius:999px; background: currentColor;
@@ -614,7 +624,9 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-drawer.hidden{ display:none; }
 .np-drawer__backdrop{
   position:absolute; inset:0; background: rgba(15,42,71,.45);
+  /* v3.3.2: solid dim only; never blur the underlying app. */
 }
+.np-drawer.hidden .np-drawer__backdrop{ pointer-events:none; }
 .np-drawer__panel{
   position:absolute; right:0; top:0; bottom:0;
   width: 100%; max-width: 540px;
@@ -729,6 +741,20 @@ html[data-theme="dark"] .np-search{
   border-color: var(--nk-border) !important;
 }
 html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
+/* v3.3.2: notification payload / code blocks in dark mode. */
+html[data-theme="dark"] .np-code-block{
+  background: var(--nk-surface) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] #notifModal .np-code-block,
+html[data-theme="dark"] #notifModal pre{
+  background: var(--nk-surface) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+/* Filter Apply/Clear on notifications — keep consistent height regardless of viewport. */
+#notifFilters .np-filter-actions .np-btn{ min-height:40px; }
 
 .np-empty{ text-align:center; padding:1.5rem .5rem; color:var(--np-muted); }
 .np-empty__title{ color: var(--np-ink); font-weight:700; margin-bottom:.25rem; }
@@ -919,6 +945,26 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   }
   #notifView .np-table tr.np-notif-row td::before{ min-width:0; content:attr(data-label); }
   #notifView .np-table tr.np-notif-row td.np-notif-error{ white-space:normal !important; overflow:visible !important; text-overflow:clip !important; }
+  /* v3.3.2: badges inside the notif mobile card must NEVER stretch to fill the grid cell. */
+  #notifView .np-table tr.np-notif-row td > .np-badge,
+  #notifView .np-table tr.np-notif-row td span.np-badge{
+    display:inline-flex !important;
+    width:max-content !important;
+    max-width:100% !important;
+    justify-self:start !important;
+    align-self:center !important;
+    flex:0 0 auto !important;
+    white-space:nowrap !important;
+  }
+  /* The status cell may contain two badges (status + direction). Wrap-friendly, hugging. */
+  #notifView .np-table tr.np-notif-row td[data-label="Status"]{
+    display:grid;
+    grid-template-columns:minmax(78px,.55fr) minmax(0,1.45fr);
+    align-items:center;
+  }
+  #notifView .np-table tr.np-notif-row td[data-label="Status"] > .np-badge + .np-badge{
+    margin-left:.35rem;
+  }
 }
 @media (min-width:721px) and (max-width:1023px){
   .np-filterbar--appointments,
@@ -1033,11 +1079,17 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
     bottom:0;
     width:min(280px, 82vw);
     max-width:82vw;
-    z-index:48;
+    /* v3.3.2: strictly above backdrop; isolate stacking; never inherit blur. */
+    z-index:50;
+    isolation:isolate;
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
+    background: var(--nk-card);
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
   }
   .np-backdrop{ z-index:44; }
+  .np-sidebar.is-open{ pointer-events:auto; }
 }
 @media (max-width:720px){
   .np-content{ padding:1rem .85rem 1.5rem; }

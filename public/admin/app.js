@@ -1445,8 +1445,16 @@ async function verifyKyc(targetStatus){
     var backdrop = doc.getElementById('sidebarBackdrop');
     var toggle   = doc.getElementById('sidebarToggle');
     if (!sidebar || !backdrop) return;
+    // v3.3.2: idempotent — never shadow the primary setupSidebar handlers.
+    if (backdrop.__npBound) return; backdrop.__npBound = true;
 
     function isOpen(){ return sidebar.classList.contains('is-open'); }
+    function open(){
+      sidebar.classList.add('is-open');
+      backdrop.classList.add('is-open');
+      backdrop.setAttribute('aria-hidden','false');
+      setBodyLock(true);
+    }
     function close(){
       sidebar.classList.remove('is-open');
       backdrop.classList.remove('is-open');
@@ -1454,7 +1462,14 @@ async function verifyKyc(targetStatus){
       setBodyLock(false);
     }
 
-    if (toggle){
+    // v3.3.2: safety-net backdrop click MUST close the drawer. Missing before.
+    backdrop.addEventListener('click', close);
+    backdrop.addEventListener('touchend', function(e){ e.preventDefault(); close(); }, { passive:false });
+
+    if (toggle && !toggle.__npSafetyBound){
+      toggle.__npSafetyBound = true;
+      // Do NOT double-toggle the classes (setupSidebar already handles that);
+      // only reconcile the body-lock state after the primary handler runs.
       toggle.addEventListener('click', function(){
         setTimeout(function(){ setBodyLock(isOpen()); }, 0);
       });

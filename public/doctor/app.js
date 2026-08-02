@@ -1535,6 +1535,8 @@ async function removePhoto(){
     var backdrop = doc.getElementById('sidebarBackdrop');
     var toggle   = doc.getElementById('sidebarToggle');
     if (!sidebar || !backdrop) return;
+    // v3.3.2: idempotent — never shadow the primary setupSidebar handlers.
+    if (backdrop.__npBound) return; backdrop.__npBound = true;
 
     function isOpen(){ return sidebar.classList.contains('is-open'); }
     function close(){
@@ -1544,7 +1546,12 @@ async function removePhoto(){
       setBodyLock(false);
     }
 
-    if (toggle){
+    // v3.3.2: safety-net backdrop click MUST close the drawer.
+    backdrop.addEventListener('click', close);
+    backdrop.addEventListener('touchend', function(e){ e.preventDefault(); close(); }, { passive:false });
+
+    if (toggle && !toggle.__npSafetyBound){
+      toggle.__npSafetyBound = true;
       toggle.addEventListener('click', function(){
         setTimeout(function(){ setBodyLock(isOpen()); }, 0);
       });
