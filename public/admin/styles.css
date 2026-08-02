@@ -763,14 +763,20 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
 .np-filterbar--appointments select,
 .np-filterbar--notifications select{ appearance:auto; }
 .np-filter-actions{
-  display:flex;
+  display:inline-flex;
   align-items:center;
   justify-content:flex-end;
   gap:.5rem;
   grid-column:1 / -1;
   min-width:0;
+  flex-wrap:wrap;
 }
-.np-filter-actions .np-btn{ min-height:42px; }
+.np-filter-actions .np-btn{
+  min-height:40px;
+  min-width:96px;
+  width:auto;
+  padding:.55rem 1rem;
+}
 
 #apptFilterChips,
 #notifCounts{ max-width:100%; overflow:hidden; }
@@ -802,8 +808,17 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   .np-filterbar--appointments .np-filter-control--search,
   .np-filterbar--notifications .np-filter-control--search,
   .np-filter-actions{ grid-column:auto; }
-  .np-filter-actions{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .np-filter-actions .np-btn{ width:100%; min-width:0; }
+  /* Compact Apply/Clear on mobile — no full-row stretch */
+  .np-filter-actions{
+    display:inline-flex;
+    justify-content:flex-end;
+    width:100%;
+  }
+  .np-filter-actions .np-btn{
+    width:auto;
+    min-width:104px;
+    flex:0 1 auto;
+  }
 
   #apptsView .np-table-wrap{
     overflow:visible;
@@ -895,21 +910,34 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   .np-filter-actions{ grid-template-columns:1fr; }
 }
 
-.np-shell,
-.np-main{ overflow:visible; }
-.np-main{ min-height:100vh; }
-.np-sidebar{
-  position:sticky;
-  top:0;
-  height:100vh;
-  overflow:visible;
-}
+.np-shell{ overflow:visible; }
+.np-main{ min-width:0; min-height:100vh; display:flex; flex-direction:column; }
 
-@media (max-height:760px), (max-width:1023px){
-  .np-sidebar__nav{
-    overflow-y:auto;
-    overscroll-behavior:contain;
-  }
+/* Fixed/sticky sidebar. The whole sidebar sticks; the content scrolls,
+   not the sidebar independently. On short viewports we still let the nav
+   column itself scroll only if it truly overflows. */
+.np-sidebar{
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: start;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.np-sidebar__nav{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.np-sidebar__nav::-webkit-scrollbar{ width: 6px; }
+.np-sidebar__brand,
+.np-sidebar__footer{ flex-shrink: 0; }
+
+@media (max-width: 1023px){
+  .np-sidebar{ position: fixed; }
 }
 .np-header{
   position:sticky;

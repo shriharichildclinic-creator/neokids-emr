@@ -580,51 +580,47 @@ function closeOverflowMenus(except){
   });
 }
 function positionOverflowMenu(trigger, menu){
+  // Anchor the dropdown directly beside the trigger.
+  // Never render detached at the top/bottom of the page as a full sheet;
+  // always stay inside the viewport with an appropriate open direction.
   const margin = 12;
   const gap = 6;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const isNarrow = vw <= 480;
 
+  // Reset any prior sheet-mode styling.
+  menu.classList.remove('np-overflow-menu--sheet');
+  menu.style.position = 'fixed';
   menu.style.left = '0px';
   menu.style.top = '0px';
   menu.style.right = 'auto';
   menu.style.bottom = 'auto';
-  menu.style.position = 'fixed';
-  menu.style.zIndex = '1000';
   menu.style.width = '';
-  menu.style.maxWidth = '';
-  menu.classList.remove('np-overflow-menu--sheet');
-  menu.style.maxHeight = Math.max(160, vh - margin * 2) + 'px';
+  menu.style.zIndex = '1000';
 
-  menu.offsetWidth;
+  // Constrain width to viewport while keeping menu compact next to trigger.
+  const availableW = vw - margin * 2;
+  const desiredW = Math.min(menu.offsetWidth || 220, 260);
+  const width = Math.min(desiredW, availableW);
+  menu.style.maxWidth = availableW + 'px';
+  menu.style.width = width + 'px';
+
+  // Force layout so we can measure the final height.
+  void menu.offsetWidth;
 
   const triggerRect = trigger.getBoundingClientRect();
-
-  if (isNarrow) {
-    const sheetWidth = Math.min(vw - margin * 2, 360);
-    const sheetMaxHeight = Math.min(vh - margin * 2, 420);
-    menu.classList.add('np-overflow-menu--sheet');
-    menu.style.width = sheetWidth + 'px';
-    menu.style.maxWidth = (vw - margin * 2) + 'px';
-    menu.style.left = Math.max(margin, (vw - sheetWidth) / 2) + 'px';
-    menu.style.right = 'auto';
-    menu.style.bottom = margin + 'px';
-    menu.style.top = 'auto';
-    menu.style.maxHeight = sheetMaxHeight + 'px';
-    return;
-  }
-
-  const width  = Math.min(menu.offsetWidth  || 220, vw - margin * 2);
   const height = Math.min(menu.offsetHeight || 200, vh - margin * 2);
 
+  // Horizontal: right-align to trigger, then clamp inside viewport.
   let left = triggerRect.right - width;
+  if (left < margin) left = Math.min(triggerRect.left, vw - margin - width);
   left = Math.max(margin, Math.min(left, vw - margin - width));
 
+  // Vertical: prefer below the trigger; flip up only if genuinely needed.
   const spaceBelow = vh - triggerRect.bottom - margin;
   const spaceAbove = triggerRect.top - margin;
   const openUp = height > spaceBelow && spaceAbove > spaceBelow;
-  const maxHeight = Math.max(140, openUp ? spaceAbove : spaceBelow);
+  const maxHeight = Math.max(160, openUp ? spaceAbove : spaceBelow);
   let top = openUp
     ? Math.max(margin, triggerRect.top - Math.min(height, maxHeight) - gap)
     : (triggerRect.bottom + gap);
@@ -1603,9 +1599,32 @@ function injectConsultBackButton(){
     };
   }
 
+  function wireThemeSwitch(){
+    const opts = document.querySelectorAll('#setting-appearance [data-theme-choice]');
+    if (!opts.length || !window.NPTheme) return;
+    const paint = () => {
+      const mode = window.NPTheme.current ? window.NPTheme.current() :
+        (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+      opts.forEach(el => {
+        const active = el.dataset.themeChoice === mode;
+        el.classList.toggle('is-active', active);
+        el.setAttribute('aria-checked', active ? 'true' : 'false');
+      });
+    };
+    opts.forEach(el => {
+      el.addEventListener('click', () => {
+        window.NPTheme.set(el.dataset.themeChoice);
+        paint();
+      });
+    });
+    document.addEventListener('np-theme-change', paint);
+    paint();
+  }
+
   function boot(){
     try { wireSidebar(); } catch(_){}
     try { injectConsultBackButton(); } catch(_){}
+    try { wireThemeSwitch(); } catch(_){}
     setTimeout(trackPreviousTab, 0);
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot);

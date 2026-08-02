@@ -508,6 +508,8 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     document.head.appendChild(s);
   }
 
+  // Theme controller. The floating header/nav toggle has been removed;
+  // Settings is the single source of truth for switching Dark Mode.
   const NPTheme = {
     init() {
       injectStyles();
@@ -517,27 +519,22 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
         : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
       this.set(dark ? 'dark' : 'light');
 
-      if (!document.getElementById('np-theme-toggle')) {
-        const btn = document.createElement('button');
-        btn.id = 'np-theme-toggle';
-        btn.type = 'button';
-        btn.className = 'np-theme-toggle';
-        btn.setAttribute('aria-label', 'Toggle dark mode');
-        btn.title = 'Toggle dark mode (D)';
-        btn.textContent = dark ? '☀' : '🌙';
-        btn.addEventListener('click', () => NPTheme.toggle());
-        document.body.appendChild(btn);
-      }
+      // Explicitly clean up any legacy floating toggle that a previous
+      // build may have left in the DOM (defensive).
+      const legacy = document.getElementById('np-theme-toggle');
+      if (legacy && legacy.parentNode) legacy.parentNode.removeChild(legacy);
     },
     set(mode) {
       document.documentElement.setAttribute('data-theme', mode);
       try { localStorage.setItem('np-theme', mode); } catch (_) {}
-      const btn = document.getElementById('np-theme-toggle');
-      if (btn) btn.textContent = mode === 'dark' ? '☀' : '🌙';
+      document.dispatchEvent(new CustomEvent('np-theme-change', { detail: { mode: mode } }));
     },
     toggle() {
       const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
       this.set(cur === 'dark' ? 'light' : 'dark');
+    },
+    current() {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
     },
   };
 

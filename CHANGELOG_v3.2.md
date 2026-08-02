@@ -1,32 +1,26 @@
-# CHANGELOG — v3.2 (Notification System Extensions)
+# NeoKidsPro EMR — v3.2 UI/UX & Dark Mode Audit
 
-## Added
-- **WhatsApp PDF sharing** (`src/services/whatsapp-media.service.js`)
-  - Uploads Prescription and Invoice PDFs to Meta Cloud API and sends
-    document-header templates: `neokids_prescription_pdf`, `neokids_invoice_pdf`.
-- **Vaccination reminder automation** (`src/services/vaccination.service.js`)
-  - IAP-based schedule expanded from `Patient.dateOfBirth`.
-  - Sends WhatsApp + Email reminders when a dose falls within
-    `VACC_APPROACH_DAYS` (default 7).
-  - Encourages booking with **Dr. Vishal Parmar**.
-- Docs: `docs/META_WHATSAPP_TEMPLATES.md`, `docs/VACCINATION_SCHEDULE.md`,
-  `docs/NOTIFICATION_EXTENSIONS.md`.
+## Summary
+Comprehensive UI/UX audit + Dark Mode audit across Doctor Panel and Admin
+Panel. No business logic or API changes. No new CSS/SCSS/patch files were
+introduced — every fix landed in the existing style, script and HTML files.
 
-## Changed
-- `src/services/automation.service.js`
-  - `onPrescriptionCreated` / `resendPrescription`: also share the PDF over
-    WhatsApp (after the existing email path, non-blocking).
-  - `onOnlineBookingConfirmed`: also share the invoice PDF over WhatsApp.
-- `src/services/lifecycle.service.js`
-  - Runs vaccination scan once per calendar day inside the existing
-    lifecycle tick.
-- `.env`: added `WA_TPL_PRESCRIPTION_PDF`, `WA_TPL_INVOICE_PDF`,
-  `WA_TPL_VACCINATION`, `VACC_DOCTOR_NAME`, `VACC_APPROACH_DAYS`,
-  `VACC_DOCTOR_ID`, `CLINIC_NAME`.
-
-## Preserved (unchanged)
-- `whatsapp.service.js` — existing template + fallback engine.
-- `email.service.js` — existing SMTP transport.
-- All existing Meta templates and their body-param shapes.
-- Existing automations (booking confirms, reminders, reschedule,
-  cancellation, follow-up recalls, doctor invites).
+## Files changed
+- `public/assets/neokids-theme.css` — Dark-Mode audit, design-system tokens,
+  theme switch, overflow menu polish, badge/pill anti-stretch, focus rings,
+  horizontal-overflow guard, calendar/date pickers, skeleton/tooltip/toast.
+- `public/assets/np-ui.js` — Removed floating header/nav Dark-Mode toggle,
+  added `NPTheme.current()` and `np-theme-change` event; Settings is now the
+  single source of truth for theme.
+- `public/doctor/styles.css` — Dashboard 2-1 grid spacing, sidebar sticky
+  behaviour (no independent scrolling), appointment card date/time badge fix,
+  status-pill anti-stretch, mobile appointment card padding across 720/520/400.
+- `public/doctor/index.html` — Added "Appearance" setting card with radio-group
+  theme switch above the Security card.
+- `public/doctor/app.js` — Rewrote overflow-menu positioning so the ⋮ menu
+  anchors beside the trigger (never at the bottom of the page); wired the
+  Settings theme switch.
+- `public/admin/styles.css` — Sidebar sticky/no-independent-scroll rewrite,
+  Apply/Clear filter buttons de-stretched at every breakpoint.
+- `public/admin/index.html` — Added "Appearance" panel to Settings.
+- `public/admin/app.js` — Wired the Settings theme switch.
