@@ -123,6 +123,14 @@ async function loadRevenue() {
         ss === 'NOT_GENERATED' && hasConsults
           ? `<button class="np-btn np-btn--primary np-btn--sm" onclick="Finance.generateSettlement('${r.doctor.id}', ${year}, ${month})">Generate Settlement</button>`
           : '',
+        // A GENERATED (not yet PAID) settlement's own stored snapshot can
+        // go stale — e.g. it was created before any appointments existed
+        // for the period, or new eligible appointments arrived afterward.
+        // Let the admin re-sync it to the current live totals any time
+        // before it's paid.
+        ss === 'GENERATED'
+          ? `<button class="np-btn np-btn--ghost np-btn--sm" onclick="Finance.generateSettlement('${r.doctor.id}', ${year}, ${month})">Regenerate</button>`
+          : '',
         r.settlement && r.settlement.id
           ? `<button class="np-btn np-btn--ghost np-btn--sm" onclick="Finance.openSettlement('${r.settlement.id}')">View</button>`
           : '',
@@ -216,6 +224,9 @@ async function loadSettlements() {
       const period = `${MONTH_NAMES[s.periodMonth - 1]} ${s.periodYear}`;
       const actions = [
         `<button class="np-btn np-btn--ghost np-btn--sm" onclick="Finance.openSettlement('${s.id}')">View</button>`,
+        s.status === 'GENERATED'
+          ? `<button class="np-btn np-btn--ghost np-btn--sm" onclick="Finance.generateSettlement('${s.doctorId}', ${s.periodYear}, ${s.periodMonth})">Regenerate</button>`
+          : '',
         s.status === 'GENERATED'
           ? `<button class="np-btn np-btn--primary np-btn--sm" onclick="Finance.openMarkPaid('${s.id}')">Mark Paid</button>`
           : '',
