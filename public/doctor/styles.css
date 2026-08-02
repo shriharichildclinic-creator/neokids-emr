@@ -998,33 +998,6 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
 .np-shell{ overflow:visible; }
 .np-main{ min-width:0; min-height:100vh; display:flex; flex-direction:column; }
 
-/* Fixed/sticky sidebar. The whole sidebar sticks; the content scrolls, not
-   the sidebar independently. On short viewports we allow the nav column
-   itself to scroll only if it truly overflows (keeps footer/brand visible). */
-.np-sidebar{
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  align-self: start;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.np-sidebar__nav{
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
-.np-sidebar__nav::-webkit-scrollbar{ width: 6px; }
-.np-sidebar__brand,
-.np-sidebar__footer{ flex-shrink: 0; }
-
-@media (max-width: 1023px){
-  /* Off-canvas drawer on mobile/tablet */
-  .np-sidebar{ position: fixed; }
-}
 .np-header{
   position:sticky;
   top:0;

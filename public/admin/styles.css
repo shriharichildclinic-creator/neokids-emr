@@ -45,8 +45,6 @@ html,body{
   .np-sidebar{ position:fixed; left:0; top:0; bottom:0; width:264px;
     transform:translateX(-100%); transition: transform .25s ease; }
   .np-sidebar.is-open{ transform: translateX(0); }
-  
-  .np-sidebar__nav{ overflow-y:auto; }
 }
 .np-backdrop{
   display:none; position:fixed; inset:0; background: rgba(15,42,71,.4); z-index:39;
@@ -68,7 +66,6 @@ html,body{
 .np-sidebar__subtitle{ font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--np-muted); }
 
 .np-sidebar__nav{ padding:.75rem .75rem 1rem; flex:1; }
-@media (max-height:760px){ .np-sidebar__nav{ overflow-y:auto; } }
 .np-sidebar__section{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--np-muted); padding:.75rem .75rem .25rem; }
 
 .np-nav-item{
@@ -913,32 +910,6 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
 .np-shell{ overflow:visible; }
 .np-main{ min-width:0; min-height:100vh; display:flex; flex-direction:column; }
 
-/* Fixed/sticky sidebar. The whole sidebar sticks; the content scrolls,
-   not the sidebar independently. On short viewports we still let the nav
-   column itself scroll only if it truly overflows. */
-.np-sidebar{
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  align-self: start;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.np-sidebar__nav{
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
-.np-sidebar__nav::-webkit-scrollbar{ width: 6px; }
-.np-sidebar__brand,
-.np-sidebar__footer{ flex-shrink: 0; }
-
-@media (max-width: 1023px){
-  .np-sidebar{ position: fixed; }
-}
 .np-header{
   position:sticky;
   top:0;
