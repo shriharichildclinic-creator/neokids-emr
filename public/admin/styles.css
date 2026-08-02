@@ -29,17 +29,24 @@ html,body{
 
 .np-shell{
   display:grid;
-  
   grid-template-columns: 264px minmax(0, 1fr);
-  min-height: 100vh;
+  height:100vh;
+  height:100dvh;
+  min-height:100vh;
+  min-height:100dvh;
+  overflow:hidden;
 }
 @media (max-width: 1023px){ .np-shell{ grid-template-columns: minmax(0, 1fr); } }
 
 .np-sidebar{
-  background:#fff;
+  background: var(--nk-card);
   border-right:1px solid var(--np-border);
   display:flex; flex-direction:column;
-  position:sticky; top:0; height:100vh; z-index:40;
+  position:sticky; top:0;
+  height:100vh;
+  height:100dvh;
+  overflow:hidden;
+  z-index:40;
 }
 @media (max-width:1023px){
   .np-sidebar{ position:fixed; left:0; top:0; bottom:0; width:264px;
@@ -65,7 +72,7 @@ html,body{
 .np-sidebar__title{ font-weight:700; color:var(--np-ink); line-height:1.1; }
 .np-sidebar__subtitle{ font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--np-muted); }
 
-.np-sidebar__nav{ padding:.75rem .75rem 1rem; flex:1; }
+.np-sidebar__nav{ padding:.75rem .75rem 1rem; flex:1; min-height:0; overflow:hidden; }
 .np-sidebar__section{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--np-muted); padding:.75rem .75rem .25rem; }
 
 .np-nav-item{
@@ -76,7 +83,7 @@ html,body{
   transition: background .15s ease, color .15s ease, border-color .15s ease;
   cursor:pointer;
 }
-.np-nav-item:hover{ background:#EEF4FB; color:var(--np-primary-600); }
+.np-nav-item:hover{ background: var(--nk-teal-50); color:var(--np-primary-600); }
 .np-nav-item__icon{ width:20px; height:20px; flex-shrink:0; color:currentColor; }
 .np-nav-item.active{
   background: linear-gradient(135deg, rgba(137,188,189,.10), rgba(77,168,255,.08));
@@ -94,10 +101,19 @@ html,body{
   font-size:.75rem; color:var(--np-muted);
 }
 
-.np-main{ display:flex; flex-direction:column; min-width:0; }
+.np-main{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  height:100vh;
+  height:100dvh;
+  overflow:hidden;
+}
 .np-header{
-  background:#fff; border-bottom:1px solid var(--np-border);
+  background: var(--nk-card); border-bottom:1px solid var(--np-border);
   position:sticky; top:0; z-index:30;
+  flex-shrink:0;
 }
 .np-header__inner{
   display:flex; align-items:center; gap:1rem;
@@ -109,7 +125,7 @@ html,body{
 
 .np-iconbtn{
   width:38px; height:38px; border-radius:10px; border:1px solid var(--np-border);
-  background:#fff; color: var(--np-text); display:inline-flex; align-items:center; justify-content:center;
+  background: var(--nk-card); color: var(--np-text); display:inline-flex; align-items:center; justify-content:center;
   cursor:pointer;
 }
 .np-iconbtn:hover{ background:#F1F6FB; color: var(--np-primary-600); }
@@ -134,7 +150,7 @@ html,body{
 .np-profile__role{ font-size:.7rem; color:var(--np-muted); }
 .np-profile__menu{
   position:absolute; right:0; top: calc(100% + 6px);
-  background:#fff; border:1px solid var(--np-border); border-radius:12px;
+  background: var(--nk-card); border:1px solid var(--np-border); border-radius:12px;
   box-shadow: var(--np-card-shadow-hover);
   min-width: 220px; padding:.35rem;
   display:none; z-index:50;
@@ -151,10 +167,17 @@ html,body{
 .np-profile__menu-divider{ height:1px; background:var(--np-border); margin:.25rem 0; }
 .np-profile__menu-icon{ width:16px; height:16px; }
 
-.np-content{ padding: 1.25rem 1.5rem 2rem; }
+.np-content{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  padding: 1.25rem 1.5rem 2rem;
+}
 
 .np-panel{
-  background:#fff;
+  background: var(--nk-card);
   border:1px solid var(--np-border);
   border-radius: var(--np-radius-card);
   box-shadow: var(--np-card-shadow);
@@ -177,7 +200,7 @@ html,body{
 }
 .np-kpi{
   position:relative;
-  background:#fff;
+  background: var(--nk-card);
   border:1px solid var(--np-border);
   border-radius: var(--np-radius-card);
   padding: 1.1rem 1.25rem;
@@ -226,7 +249,7 @@ html,body{
 .np-badge--mint{  background:#CCFBF1; color:#0F766E; }
 .np-badge--amber{ background:#FEF3C7; color:#92400E; }
 .np-badge--red{   background:#FEE2E2; color:#B91C1C; }
-.np-badge--slate{ background:#E2E8F0; color:#475569; }
+.np-badge--slate{ background:#E2E8F0; color: var(--nk-muted); }
 .np-badge--violet{background:#EDE9FE; color:#5B21B6; }
 
 .np-btn{
@@ -235,7 +258,7 @@ html,body{
   padding:.55rem .95rem;
   border-radius:10px;
   border:1px solid var(--np-border);
-  background:#fff;
+  background: var(--nk-card);
   font-weight:500;
   font-size:.88rem;
   color:var(--np-text);
@@ -265,7 +288,7 @@ html,body{
   padding:.6rem .8rem;
   border-radius:10px;
   border:1px solid var(--np-border);
-  background:#fff;
+  background: var(--nk-card);
   font-size:.88rem;
   color: var(--np-text);
   font-family: inherit;
@@ -330,7 +353,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-search input{
   width:100%; padding:.55rem .85rem .55rem 2.2rem;
   border:1px solid var(--np-border); border-radius:10px;
-  font-size:.85rem; background:#fff; font-family: inherit;
+  font-size:.85rem; background: var(--nk-card); font-family: inherit;
 }
 .np-search input:focus{ outline:none; border-color: var(--np-primary); box-shadow:0 0 0 3px rgba(137,188,189,.15); }
 
@@ -385,7 +408,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   padding:1rem;
 }
 .np-login__card{
-  background:#fff; border-radius:24px;
+  background: var(--nk-card); border-radius:24px;
   box-shadow: 0 24px 48px -16px rgba(15,42,71,.20), 0 2px 4px rgba(15,42,71,.04);
   width:100%; max-width:420px; padding:2rem;
 }
@@ -408,7 +431,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 
 .np-doc-card{
   position:relative;
-  background:#fff;
+  background: var(--nk-card);
   border:1.5px solid var(--np-border);
   border-radius:16px;
   box-shadow: 0 1px 3px rgba(15,42,71,.04), 0 4px 16px -4px rgba(15,42,71,.07);
@@ -595,7 +618,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-drawer__panel{
   position:absolute; right:0; top:0; bottom:0;
   width: 100%; max-width: 540px;
-  background:#fff;
+  background: var(--nk-card);
   box-shadow: -24px 0 48px -12px rgba(15,42,71,.25);
   display:flex; flex-direction:column;
 }
@@ -623,7 +646,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-modal{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:1rem; background: rgba(15,42,71,.45); }
 .np-modal.hidden{ display:none; }
 .np-modal__panel{
-  background:#fff; border-radius: 20px;
+  background: var(--nk-card); border-radius: 20px;
   box-shadow: 0 24px 48px -12px rgba(15,42,71,.3);
   width:100%; max-width: 540px; max-height: 90vh; overflow:auto;
 }
@@ -648,7 +671,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-cell-when__time{ font-size:.78rem; white-space:nowrap; }
 
 #notifView .np-table tr.np-notif-row{
-  background:var(--nk-card,#fff);
+  background: var(--nk-card);
   border:1px solid var(--np-border);
   border-radius:14px;
   box-shadow:var(--np-card-shadow);
@@ -839,7 +862,7 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
     box-sizing:border-box;
     margin:0 0 .75rem;
     padding:.9rem 1rem;
-    background:var(--nk-card,#fff);
+    background: var(--nk-card);
     border:1px solid var(--np-border);
     border-left-width:3px;
     border-radius:14px;
@@ -907,14 +930,22 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   .np-filter-actions{ grid-template-columns:1fr; }
 }
 
-.np-shell{ overflow:visible; }
-.np-main{ min-width:0; min-height:100vh; display:flex; flex-direction:column; }
+.np-shell{ overflow:hidden; }
+.np-main{
+  min-width:0;
+  min-height:0;
+  height:100vh;
+  height:100dvh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
 
 .np-header{
   position:sticky;
   top:0;
   z-index:42;
-  background:#fff;
+  background: var(--nk-card);
 }
 .np-header__inner{
   min-height:68px;
@@ -1003,6 +1034,8 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
     width:min(280px, 82vw);
     max-width:82vw;
     z-index:48;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
   }
   .np-backdrop{ z-index:44; }
 }
@@ -1077,7 +1110,7 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
     width:100%;
     margin:0 0 .75rem;
     padding:.9rem 1rem;
-    background:#fff;
+    background: var(--nk-card);
     border:1px solid var(--np-border);
     border-radius:14px;
     box-shadow:var(--np-card-shadow);
@@ -1151,7 +1184,7 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   font-weight: 700;
   font-style: normal;
   color: var(--np-primary-600);
-  background: #F4F8FB;
+  background: var(--nk-teal-50);
   padding: .25rem 0;
   letter-spacing: .02em;
   text-transform: uppercase;
@@ -1161,7 +1194,7 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   font-weight: 500;
   color: var(--np-text);
   padding: .35rem .55rem;
-  background: #FFFFFF;
+  background: var(--nk-card);
 }
 .np-notif-template-select option:disabled{
   color: var(--np-muted);
@@ -1207,7 +1240,7 @@ html[data-theme="dark"] .np-notif-template-select option{
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .82rem;
   color: var(--np-ink);
-  background: #FFFFFF;
+  background: var(--nk-card);
   border: 1px solid var(--np-border);
   border-radius: 8px;
   outline: none;
@@ -1226,7 +1259,7 @@ html[data-theme="dark"] .np-notif-template-select option{
   font-size: .78rem;
   font-weight: 600;
   color: var(--np-primary-600);
-  background: #FFFFFF;
+  background: var(--nk-card);
   border: 1px solid var(--np-border);
   border-radius: 8px;
   cursor: pointer;

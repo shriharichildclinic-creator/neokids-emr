@@ -6,7 +6,7 @@
   const CSS = `
   .np-ui-toast-host{position:fixed;top:16px;right:16px;z-index:99999;display:flex;flex-direction:column;gap:10px;max-width:min(420px,calc(100vw - 32px));pointer-events:none}
   @media (max-width:480px){.np-ui-toast-host{top:auto;bottom:16px;left:16px;right:16px;max-width:none}}
-  .np-ui-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;background:#fff;color:#111827;box-shadow:0 10px 25px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.08);border-left:4px solid #6b7280;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;opacity:0;transform:translateX(20px);transition:opacity .22s ease,transform .22s ease;will-change:opacity,transform}
+  .np-ui-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;background:var(--nk-card,#fff);color:var(--nk-text,#111827);border:1px solid var(--nk-border,transparent);box-shadow:0 10px 25px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.08);border-left:4px solid #6b7280;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;opacity:0;transform:translateX(20px);transition:opacity .22s ease,transform .22s ease;will-change:opacity,transform}
   .np-ui-toast.is-visible{opacity:1;transform:translateX(0)}
   .np-ui-toast.is-leaving{opacity:0;transform:translateX(20px)}
   .np-ui-toast--success{border-left-color:#10b981}
@@ -28,7 +28,7 @@
 
   .np-ui-modal-host{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.55);backdrop-filter:blur(2px);opacity:0;transition:opacity .18s ease}
   .np-ui-modal-host.is-visible{opacity:1}
-  .np-ui-modal{background:#fff;border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,.35);max-width:440px;width:100%;padding:22px;font:500 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111827;transform:scale(.96);transition:transform .18s ease}
+  .np-ui-modal{background:var(--nk-card,#fff);border:1px solid var(--nk-border,transparent);border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,.35);max-width:440px;width:100%;padding:22px;font:500 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--nk-text,#111827);transform:scale(.96);transition:transform .18s ease}
   .np-ui-modal-host.is-visible .np-ui-modal{transform:scale(1)}
   .np-ui-modal__title{font-size:17px;font-weight:700;margin:0 0 8px;color:#0f172a}
   .np-ui-modal__message{color:#374151;margin:0 0 16px;white-space:pre-wrap}
@@ -455,7 +455,7 @@
 
 .np-palette-host{position:fixed;inset:0;z-index:100001;display:flex;align-items:flex-start;justify-content:center;padding:10vh 16px 16px;background:rgba(15,23,42,.5);backdrop-filter:blur(2px);opacity:0;transition:opacity .15s ease}
   .np-palette-host.is-visible{opacity:1}
-  .np-palette{width:100%;max-width:560px;background:#fff;border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,.4);overflow:hidden;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111827}
+  .np-palette{width:100%;max-width:560px;background:var(--nk-card,#fff);border:1px solid var(--nk-border,transparent);border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,.4);overflow:hidden;font:500 14px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--nk-text,#111827)}
   html[data-theme="dark"] .np-palette{background:#11202A;color:#E6EEF1;border:1px solid #234551}
   .np-palette__input{display:block;width:100%;border:0;outline:0;padding:14px 16px;font-size:15px;background:transparent;color:inherit;border-bottom:1px solid #e5e7eb}
   html[data-theme="dark"] .np-palette__input{border-bottom-color:#234551;color:#E6EEF1}

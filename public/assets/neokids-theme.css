@@ -1731,3 +1731,187 @@ html[data-theme="dark"] .np-pagination__btn.is-active{
 html[data-theme="dark"] .np-empty,
 html[data-theme="dark"] .np-empty__title{ color: var(--nk-text); }
 html[data-theme="dark"] .np-empty__desc{ color: var(--nk-muted); }
+
+/* ===================================================================
+   v3.3.1 — DEFINITIVE dark-mode / responsive consolidation
+   -------------------------------------------------------------------
+   Root cause fixed above (in admin/ + doctor/ local stylesheets):
+   all hardcoded #fff / white / #ffffff / #F4F8FB / #E5E7EB tokens
+   have been converted to theme CSS variables so that dark mode is
+   INHERITED automatically instead of overridden per-selector.
+
+   This block is the single source of truth for the remaining
+   mobile-only components (mobile card conversions of tables,
+   payload panels, notification detail modal, doctor header, slot /
+   working-day pills, prescription archive). It targets every
+   selector the mobile media queries create, at any viewport.
+
+   Do NOT add another override layer below this. If a component
+   still looks wrong in dark mode, fix its base rule to use the
+   token, don't patch it here.
+   =================================================================== */
+
+/* --- 1. Mobile table-to-card conversions (admin) ------------------ */
+html[data-theme="dark"] #apptsView .np-table tr,
+html[data-theme="dark"] #notifView .np-table tr,
+html[data-theme="dark"] #notifView .np-table tr.np-notif-row,
+html[data-theme="dark"] #settlementsView .np-table tr,
+html[data-theme="dark"] #invoicesView .np-table tr,
+html[data-theme="dark"] #revenueView .np-table tr{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+  box-shadow: var(--nk-shadow-sm);
+}
+html[data-theme="dark"] #apptsView .np-table td[data-label],
+html[data-theme="dark"] #notifView .np-table td[data-label],
+html[data-theme="dark"] #settlementsView .np-table td[data-label],
+html[data-theme="dark"] #invoicesView .np-table td[data-label],
+html[data-theme="dark"] #revenueView .np-table td[data-label]{
+  border-bottom-color: var(--nk-border-soft) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] #apptsView .np-table td[data-label]::before,
+html[data-theme="dark"] #notifView .np-table td[data-label]::before,
+html[data-theme="dark"] #settlementsView .np-table td[data-label]::before,
+html[data-theme="dark"] #invoicesView .np-table td[data-label]::before,
+html[data-theme="dark"] #revenueView .np-table td[data-label]::before{
+  color: var(--nk-muted) !important;
+}
+
+/* --- 2. Payload / JSON code blocks (notification details) --------- */
+html[data-theme="dark"] pre,
+html[data-theme="dark"] pre.np-code-block,
+html[data-theme="dark"] .np-code-block,
+html[data-theme="dark"] .np-payload,
+html[data-theme="dark"] .np-json,
+html[data-theme="dark"] [data-role="payload"],
+html[data-theme="dark"] [data-role="json"]{
+  background: #0B1519 !important;
+  border: 1px solid var(--nk-border) !important;
+  color: #C7E2E4 !important;
+}
+
+/* --- 3. Notification detail modal (mobile + desktop) -------------- */
+html[data-theme="dark"] #notifDetailModal .np-modal__panel,
+html[data-theme="dark"] .np-notif-detail,
+html[data-theme="dark"] .np-notif-detail__card,
+html[data-theme="dark"] .np-notif-detail__section,
+html[data-theme="dark"] .np-notif-card{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-notif-detail__label,
+html[data-theme="dark"] .np-notif-card__meta{ color: var(--nk-muted) !important; }
+html[data-theme="dark"] .np-notif-detail__value,
+html[data-theme="dark"] .np-notif-card__title{ color: var(--nk-ink) !important; }
+
+/* --- 4. Appointment cards prescription tab ----------------------- */
+html[data-theme="dark"] .np-appt,
+html[data-theme="dark"] .np-appt-card,
+html[data-theme="dark"] .np-rx-card,
+html[data-theme="dark"] .np-prescription-card,
+html[data-theme="dark"] #rxArchiveList .np-appt,
+html[data-theme="dark"] #rxArchiveList .np-history-row,
+html[data-theme="dark"] #rxArchiveList .np-history-rx{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+
+/* --- 5. Doctor profile / header ---------------------------------- */
+html[data-theme="dark"] .np-doc-header,
+html[data-theme="dark"] .np-doctor-header,
+html[data-theme="dark"] .np-doc-profile,
+html[data-theme="dark"] .np-doctor-profile,
+html[data-theme="dark"] .np-doc-card__header{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-doc-header *:not(.np-btn):not(.np-btn *):not(.np-badge):not(.np-badge *){
+  color: inherit;
+}
+
+/* --- 6. Availability slots + working-day pills (mobile) ---------- */
+html[data-theme="dark"] .np-slot-btn,
+html[data-theme="dark"] .np-availability-slot,
+html[data-theme="dark"] .np-working-day,
+html[data-theme="dark"] .np-workday-pill,
+html[data-theme="dark"] .np-pill{
+  background: #142531 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-slot-btn.active,
+html[data-theme="dark"] .np-slot-btn.is-selected,
+html[data-theme="dark"] .np-availability-slot.active,
+html[data-theme="dark"] .np-working-day.active,
+html[data-theme="dark"] .np-workday-pill.active,
+html[data-theme="dark"] .np-pill.active,
+html[data-theme="dark"] .np-pill.is-active,
+html[data-theme="dark"] .np-pill[aria-pressed="true"]{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700)) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+html[data-theme="dark"] .np-slot-btn:hover:not(:disabled),
+html[data-theme="dark"] .np-availability-slot:hover:not(:disabled),
+html[data-theme="dark"] .np-working-day:hover:not(:disabled),
+html[data-theme="dark"] .np-workday-pill:hover:not(:disabled),
+html[data-theme="dark"] .np-pill:hover:not(.active):not(.is-active){
+  background: rgba(137,188,189,.14) !important;
+  border-color: rgba(137,188,189,.4) !important;
+  color: var(--nk-teal-300) !important;
+}
+
+/* --- 7. Shared inputs / dropdowns EVERYWHERE (mobile too) -------- */
+html[data-theme="dark"] .np-input,
+html[data-theme="dark"] .np-select,
+html[data-theme="dark"] .np-textarea,
+html[data-theme="dark"] .np-search,
+html[data-theme="dark"] .np-search input,
+html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea{
+  background: #0E1A22 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+
+/* --- 8. Universal safety net -------------------------------------
+   Any element still styled with a hardcoded light background at any
+   viewport width falls back to a card surface in dark mode.
+   Kept AFTER the mobile media queries so it wins the cascade.
+   ---------------------------------------------------------------- */
+@media (max-width: 1023px){
+  html[data-theme="dark"] [class*="np-"][class*="card"],
+  html[data-theme="dark"] [class*="np-"][class*="row"],
+  html[data-theme="dark"] [class*="np-"][class*="panel"],
+  html[data-theme="dark"] [class*="np-"][class*="modal__panel"],
+  html[data-theme="dark"] [class*="np-"][class*="drawer__panel"]{
+    background-color: var(--nk-card);
+    color: var(--nk-text);
+    border-color: var(--nk-border);
+  }
+  html[data-theme="dark"] .np-content [style*="background:#fff"],
+  html[data-theme="dark"] .np-content [style*="background: #fff"],
+  html[data-theme="dark"] .np-content [style*="background:#FFFFFF"],
+  html[data-theme="dark"] .np-content [style*="background: #FFFFFF"],
+  html[data-theme="dark"] .np-content [style*="background: white"]{
+    background: var(--nk-card) !important;
+    color: var(--nk-text) !important;
+  }
+}
+
+/* --- 9. Sticky sidebar reaffirmed at all sizes ------------------- */
+@media (min-width: 1024px){
+  .np-sidebar{
+    position: sticky !important;
+    top: 0 !important;
+    height: 100vh;
+    height: 100dvh;
+    align-self: start;
+  }
+}
