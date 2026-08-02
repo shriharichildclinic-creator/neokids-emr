@@ -1520,6 +1520,15 @@ html[data-theme="dark"] .np-uuid-card{
     left: 0; top: 0; bottom: 0;
     height: 100vh;
     height: 100dvh;
+    /* v3.3.3: this shared rule set previously reset z-index to 40 at ALL
+       widths (see base .np-sidebar rule above), which silently overrode the
+       admin/ and doctor/ panel-level mobile fix that raised the drawer to
+       z-index:50. Because .np-backdrop sits at z-index:44 on mobile, the
+       sidebar was landing BELOW the backdrop — the backdrop then visually
+       dimmed the drawer and (with pointer-events:auto while open) intercepted
+       every tap meant for the nav links. Re-asserting z-index:50 here, in the
+       single source of truth, keeps the drawer above the backdrop again. */
+    z-index: 50;
   }
   .np-sidebar__nav{ overflow-y: auto; }
 }
