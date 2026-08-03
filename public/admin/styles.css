@@ -195,7 +195,7 @@ html,body{
 .np-panel__subtitle{ font-size:.82rem; color:var(--np-muted); margin-top:.1rem; }
 .np-panel__body{ padding:.5rem 1.25rem 1.25rem; }
 
-.np-divider{ height:.85rem; }
+/* .np-divider is defined once, for both panels, in neokids-theme.css. */
 
 .np-dash-second{
   display:grid;
@@ -243,65 +243,12 @@ html,body{
 .np-kpi__delta--down{ color:#DC2626; }
 .np-kpi__delta--flat{ color:var(--np-muted); }
 
-.np-badge{
-  display:inline-flex; align-items:center; gap:.35rem;
-  padding:.18rem .55rem;
-  border-radius:999px;
-  font-size:.72rem;
-  font-weight:600;
-  line-height:1.35;
-  white-space:nowrap;
-  overflow-wrap:normal;
-}
-
-/* v3.3.2: DO NOT force white-space:normal on notif/revenue/appts/settlements badges.
-   It removed the natural inline-flex hug and let badges expand to fill their grid
-   cell on mobile, producing WhatsApp/Sent/Patient/Doctor "stretched capsules". */
-#notifView .np-badge, #revenueView .np-badge,
-#apptsView .np-badge, #settlementsView .np-badge{
-  white-space:nowrap;
-  width:max-content;
-  max-width:100%;
-  flex:0 0 auto;
-}
-.np-badge__dot{
-  width:6px; height:6px; border-radius:999px; background: currentColor;
-}
-.np-badge--green{ background:#DCFCE7; color:#15803D; }
-.np-badge--blue{  background:#DBEAFE; color:#1E40AF; }
-.np-badge--mint{  background:#CCFBF1; color:#0F766E; }
-.np-badge--amber{ background:#FEF3C7; color:#92400E; }
-.np-badge--red{   background:#FEE2E2; color:#B91C1C; }
-.np-badge--slate{ background:#E2E8F0; color: var(--nk-muted); }
-.np-badge--violet{background:#EDE9FE; color:#5B21B6; }
-
-.np-btn{
-  display:inline-flex; align-items:center; justify-content:center;
-  gap:.4rem;
-  padding:.55rem .95rem;
-  border-radius:10px;
-  border:1px solid var(--np-border);
-  background: var(--nk-card);
-  font-weight:500;
-  font-size:.88rem;
-  color:var(--np-text);
-  cursor:pointer;
-  text-decoration:none;
-  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .05s ease;
-}
-.np-btn:hover{ background:#F1F6FB; color: var(--np-primary-600); border-color: rgba(137,188,189,.25); }
-.np-btn:active{ transform: translateY(1px); }
-.np-btn--primary{
-  background: var(--np-primary); color:white; border-color: var(--np-primary);
-}
-.np-btn--primary:hover{ background: var(--np-primary-600); color:white; border-color: var(--np-primary-600); }
-.np-btn--ghost{ background:transparent; }
-.np-btn--ghost:hover{ background:#F1F6FB; }
-.np-btn--success{ background:#16A34A; color:#fff; border-color:#16A34A; }
-.np-btn--success:hover{ background:#15803D; color:#fff; border-color:#15803D; }
-.np-btn--danger{ background:#DC2626; color:#fff; border-color:#DC2626; }
-.np-btn--danger:hover{ background:#B91C1C; color:#fff; border-color:#B91C1C; }
-.np-btn--sm{ padding:.35rem .65rem; font-size:.8rem; }
+/* Button and badge/pill/chip base styling (sizing, color, radius, padding,
+   hover/focus states) is defined ONCE, for both panels, in
+   /assets/neokids-theme.css. Do not redeclare `.np-btn` / `.np-badge` here —
+   this was the root cause of Admin vs Doctor panel inconsistency and of the
+   v3.3.2 page-level patch below (now removed). */
+.np-btn:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); border-color: var(--nk-teal-200); }
 
 .np-field{ display:flex; flex-direction:column; gap:.35rem; margin-bottom:.85rem; }
 .np-field__label{ font-size:.78rem; font-weight:600; color:var(--np-ink); }
@@ -324,10 +271,7 @@ select.np-select, .np-select{ padding-right:2rem; appearance:auto; }
   border-color: var(--np-primary);
   box-shadow: 0 0 0 3px rgba(137,188,189,.15);
 }
-.np-error{
-  background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
-  padding:.55rem .75rem; border-radius:10px; font-size:.82rem;
-}
+/* .np-error is defined once, for both panels, in neokids-theme.css. */
 
 .np-password-wrap{ position:relative; display:block; }
 .np-password-wrap .np-input,
@@ -768,6 +712,15 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   box-shadow:var(--np-card-shadow);
 }
 
+/* Notification "Date & Time" column — always renders on one line, doesn't
+   get squeezed by neighbouring columns. */
+.np-table th.np-col-datetime,
+.np-table td.np-col-datetime{
+  white-space: nowrap;
+  min-width: 148px;
+  font-variant-numeric: tabular-nums;
+}
+
 .np-code-block{
   display:block; max-width:100%; overflow-x:auto;
   white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;
@@ -832,9 +785,6 @@ html[data-theme="dark"] #notifModal pre{
   border-color: var(--nk-border) !important;
   color: var(--nk-text) !important;
 }
-/* Filter Apply/Clear on notifications — keep consistent height regardless of viewport. */
-#notifFilters .np-filter-actions .np-btn{ min-height:40px; }
-
 .np-empty{ text-align:center; padding:1.5rem .5rem; color:var(--np-muted); }
 .np-empty__title{ color: var(--np-ink); font-weight:700; margin-bottom:.25rem; }
 .np-empty__sub{ color: var(--np-muted); font-size:.85rem; }
@@ -896,13 +846,6 @@ html[data-theme="dark"] #notifModal pre{
   min-width:0;
   flex-wrap:wrap;
 }
-.np-filter-actions .np-btn{
-  min-height:40px;
-  min-width:96px;
-  width:auto;
-  padding:.55rem 1rem;
-}
-
 #apptFilterChips,
 #notifCounts{ max-width:100%; overflow:hidden; }
 #apptFilterChips .np-chips,
@@ -933,16 +876,10 @@ html[data-theme="dark"] #notifModal pre{
   .np-filterbar--appointments .np-filter-control--search,
   .np-filterbar--notifications .np-filter-control--search,
   .np-filter-actions{ grid-column:auto; }
-  /* Compact Apply/Clear on mobile — no full-row stretch */
   .np-filter-actions{
     display:inline-flex;
     justify-content:flex-end;
     width:100%;
-  }
-  .np-filter-actions .np-btn{
-    width:auto;
-    min-width:104px;
-    flex:0 1 auto;
   }
 
   #apptsView .np-table-wrap{
@@ -1124,7 +1061,7 @@ html[data-theme="dark"] #notifModal pre{
   min-width:0;
   max-width:100%;
 }
-.np-filterbar--toolbar > .np-btn{ min-height:42px; }
+.np-filterbar--toolbar > .np-btn{ min-width:0; }
 .np-filterbar--appointments,
 .np-filterbar--notifications{
   width:100%;
@@ -1201,7 +1138,6 @@ html[data-theme="dark"] #notifModal pre{
     max-width:min(280px, calc(100vw - 24px));
   }
   .np-filterbar--toolbar{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
-  .np-filterbar--toolbar > .np-btn{ min-height:40px; }
   #settlementsView .np-table-wrap,
   #invoicesView .np-table-wrap,
   #revenueView .np-table-wrap,
@@ -1429,8 +1365,17 @@ html, body{ max-width:100%; overflow-x:hidden; }
     min-width:0;
     max-width:100%;
   }
-  .np-panel__body{ overflow-x:auto; }
+  /* Root cause of clipped chart tooltips: setting only overflow-x here
+     implicitly computed overflow-y to "auto" as well (per the CSS overflow
+     spec), which cut off anything that renders above a panel's box — like
+     the chart tooltip. Tables already scroll via .np-table-wrap, so this
+     doesn't need to apply to every panel body, and we make overflow-y
+     explicit so it can never silently clip content again. */
+  .np-panel__body:has(.np-table-wrap){ overflow-x:auto; overflow-y:visible; }
   .np-panel__body > *{ min-width:0; }
+  /* Explicit fallback (doesn't rely on :has() support) — the chart panel
+     body must never clip vertically, since the tooltip renders above it. */
+  #dashSecondGrid .np-panel__body{ overflow:visible; }
 }
 
 @media (max-width:640px){
@@ -1505,11 +1450,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
 
 .np-btn{ max-width:100%; }
 .np-search{ min-width:0; }
-
-.np-btn{ min-height:38px; }
-.np-btn--sm{ min-height:32px; }
-.np-btn--primary{ min-height:42px; }
-.np-btn--primary.np-btn--sm{ min-height:38px; }
 
 @media (max-width:640px){
   .np-notif-template-select{

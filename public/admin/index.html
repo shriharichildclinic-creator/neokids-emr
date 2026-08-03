@@ -157,7 +157,6 @@
 
 <section id="dashboardView" class="tab-pane">
           <div id="statsGrid" class="np-kpi-grid"></div>
-          <div class="np-divider"></div>
           <div id="dashSecondGrid" class="np-dash-second">
             <div class="np-panel">
               <div class="np-panel__head">
@@ -434,7 +433,7 @@
                 <table class="np-table">
                   <thead>
                     <tr>
-                      <th>When</th>
+                      <th class="np-col-datetime">Date &amp; Time</th>
                       <th>Channel</th>
                       <th>Template</th>
                       <th>Recipient</th>
@@ -444,6 +443,13 @@
                   </thead>
                   <tbody id="notifTbody"></tbody>
                 </table>
+              </div>
+              <div class="np-pagination" id="notifPagination">
+                <div class="np-pagination__info" id="notifPaginationInfo"></div>
+                <div class="np-pagination__controls">
+                  <button type="button" id="notifPrevPage" class="np-pagination__btn" aria-label="Previous page">‹ Prev</button>
+                  <button type="button" id="notifNextPage" class="np-pagination__btn" aria-label="Next page">Next ›</button>
+                </div>
               </div>
             </div>
           </div>

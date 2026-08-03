@@ -353,54 +353,12 @@ html,body{
   .np-appt__actions{ grid-column: 1 / -1; justify-content:flex-start; }
 }
 
-.np-badge{
-  display:inline-flex; align-items:center; gap:.35rem;
-  font-size:.72rem; font-weight:600;
-  padding: .22rem .55rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  text-transform: uppercase; letter-spacing:.04em;
-}
-.np-badge__dot{ width:6px; height:6px; border-radius:50%; }
-.np-badge--green{ background:#E8F7EE; color:#166534; border-color:#BBE5C8; }
-.np-badge--green .np-badge__dot{ background:#22A559; }
-.np-badge--amber{ background:#FFF6E2; color:#92561A; border-color:#F4D9A3; }
-.np-badge--amber .np-badge__dot{ background:#E89B27; }
-.np-badge--red  { background:#FEECEC; color:#A91D1D; border-color:#F5BFBF; }
-.np-badge--red   .np-badge__dot{ background:#DC2F2F; }
-.np-badge--blue { background:#E6F0FB; color:#1B4F94; border-color:#BFD7F0; }
-.np-badge--blue  .np-badge__dot{ background:#89BCBD; }
-.np-badge--slate{ background:#EEF2F7; color:#334155; border-color:#D7DEE8; }
-.np-badge--slate .np-badge__dot{ background:#64748B; }
-.np-badge--mint { background:#E2F7F1; color:#0F5C4F; border-color:#B8E8DC; }
-.np-badge--mint  .np-badge__dot{ background:#26A693; }
-
-.np-btn{
-  display:inline-flex; align-items:center; gap:.4rem;
-  padding: .5rem .85rem;
-  font-size:.82rem; font-weight:600;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  cursor:pointer;
-  background: var(--nk-teal-50);
-  color: var(--np-primary-600);
-  transition: background .15s, color .15s, transform .05s, box-shadow .15s, border-color .15s;
-}
-.np-btn:hover{ background:#DCE9F7; }
-.np-btn:active{ transform: translateY(1px); }
-.np-btn--primary{
-  background: linear-gradient(135deg, #89BCBD, #6FAAAB);
-  color:#fff;
-  box-shadow: 0 6px 14px -6px rgba(137,188,189,.55);
-}
-.np-btn--primary:hover{ filter: brightness(1.05); }
-.np-btn--ghost{ background: transparent; color: var(--np-text); border-color: var(--np-border); }
-.np-btn--ghost:hover{ background: var(--nk-teal-50); }
-.np-btn--danger{ background:#FEECEC; color:#A91D1D; }
-.np-btn--danger:hover{ background:#FCD9D9; }
-.np-btn--success{ background:#E8F7EE; color:#166534; }
-.np-btn--success:hover{ background:#D1EFDB; }
-.np-btn--sm{ padding:.4rem .7rem; font-size:.78rem; }
+/* Button and badge/pill/chip base styling (sizing, color, radius, padding,
+   hover/focus states) is defined ONCE, for both panels, in
+   /assets/neokids-theme.css. Do not redeclare `.np-btn` / `.np-badge` here —
+   this duplication was the root cause of the Admin vs Doctor panel visual
+   mismatch (different padding, radius, uppercase text, colors, heights). */
+.np-btn:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); }
 
 .np-filterbar{
   display:flex; gap:.65rem; flex-wrap:wrap;
@@ -608,13 +566,7 @@ html,body{
 .np-login__title{ text-align:center; font-size: 1.35rem; font-weight:700; color: var(--np-ink); }
 .np-login__subtitle{ text-align:center; color: var(--np-muted); font-size:.88rem; margin-top:.25rem; margin-bottom:1.25rem; }
 
-.np-error{
-  background:#FEECEC; color:#A91D1D;
-  border:1px solid #F5BFBF;
-  border-radius: 10px;
-  padding: .6rem .8rem;
-  font-size:.85rem;
-}
+/* .np-error is defined once, for both panels, in neokids-theme.css. */
 
 .np-password-wrap{ position:relative; display:block; }
 .np-password-wrap .np-input,
@@ -695,7 +647,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-row{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
 .np-mut{ color: var(--np-muted); }
 .np-ink{ color: var(--np-ink); }
-.np-divider{ height:1px; background: var(--np-border); margin: 1rem 0; }
+/* .np-divider is defined once, for both panels, in neokids-theme.css. */
 
 .np-appt__namerow {
   display: flex;
@@ -739,11 +691,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   border-radius:999px;
   vertical-align:middle;
   white-space:nowrap;
-}
-
-.np-btn--disabled {
-  pointer-events: none;
-  opacity: .5;
 }
 
 .np-pm-tabs {
@@ -820,15 +767,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   border-radius: 12px;
   background: var(--np-surface, #fff);
   margin-bottom: .55rem;
-}
-
-.np-btn--disabled,
-.np-btn[disabled],
-.np-btn--disabled:hover {
-  opacity: .5;
-  pointer-events: none;
-  cursor: not-allowed;
-  filter: grayscale(.2);
 }
 
 #rxSuccessCard {
@@ -941,11 +879,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   border-bottom-color: var(--np-primary);
 }
 #consultWorkspace .np-pm-tab:hover{ color: var(--np-primary-600); }
-
-.np-btn--disabled{
-  opacity:.4 !important;
-  pointer-events:none !important;
-}
 
 .np-content code{
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1081,8 +1014,6 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   min-width:0;
   max-width:100%;
 }
-.np-filterbar--doctor > .np-btn,
-.np-filterbar--doctor .np-filter-control > .np-btn{ min-height:42px; }
 .np-appt{
   align-items:start;
   min-width:0;

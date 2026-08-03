@@ -312,13 +312,27 @@ exports.listNotifications = asyncHandler(async (req, res) => {
       { template:     { contains: term } }
     ];
   }
-  const take = Math.min(Math.max(parseInt(req.query.limit || '200', 10) || 200, 1), 500);
-  const [rows, totals] = await Promise.all([
-    prisma.notificationLog.findMany({ where, orderBy: { createdAt: 'desc' }, take }),
+  // ROOT CAUSE FIX (Notification Logs "older notifications disappear" bug):
+  // This endpoint used to always return only the most recent `take` rows
+  // with no `skip`/offset, so anything past that hard cap (max 500) was
+  // permanently unreachable — there was no way for the client to page past
+  // it. It now supports real page-based pagination and always reports the
+  // true total so the UI can show "Page X of Y" and a Next/Previous control.
+  const take = Math.min(Math.max(parseInt(req.query.limit || '50', 10) || 50, 1), 200);
+  const page = Math.max(parseInt(req.query.page || '1', 10) || 1, 1);
+  const skip = (page - 1) * take;
+  const [rows, totalCount, totals] = await Promise.all([
+    prisma.notificationLog.findMany({ where, orderBy: { createdAt: 'desc' }, take, skip }),
+    prisma.notificationLog.count({ where }),
     prisma.notificationLog.groupBy({ by: ['status'], where, _count: { _all: true } }).catch(() => [])
   ]);
   res.json({
     rows,
+    page,
+    limit: take,
+    total: totalCount,
+    totalPages: Math.max(Math.ceil(totalCount / take), 1),
+    hasMore: skip + rows.length < totalCount,
     counts: totals.reduce((acc, t) => { acc[t.status] = t._count._all; return acc; }, {})
   });
 });

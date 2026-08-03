@@ -295,10 +295,10 @@ function drawDailyChart(){
   const containerW = Math.max(240, Math.round(wrap.getBoundingClientRect().width) || 600);
   const isNarrow = containerW < 460;
   const W = containerW;
-  const H = isNarrow ? 210 : 240;
-  const marginTop = 26;
+  const H = isNarrow ? 220 : 260;
+  const marginTop = 28;
   const marginRight = isNarrow ? 8 : 14;
-  const marginBottom = isNarrow ? 30 : 34;
+  const marginBottom = isNarrow ? 34 : 38;
 
   const maxRaw = Math.max(0, ...data.map(d => Number(d.total) || 0));
   const stepsCount = 4;
@@ -310,7 +310,7 @@ function drawDailyChart(){
   const plotH = H - marginTop - marginBottom;
   const n = data.length;
   const band = plotW / n;
-  const barW = Math.max(isNarrow ? 4 : 6, Math.min(isNarrow ? 16 : 26, band * 0.5));
+  const barW = Math.max(isNarrow ? 4 : 6, Math.min(isNarrow ? 12 : 18, band * 0.38));
 
   const avg = data.reduce((s, d) => s + (Number(d.total) || 0), 0) / data.length;
   const peakIdx = data.reduce((best, d, i) => (Number(d.total) || 0) > (Number(data[best].total) || 0) ? i : best, 0);
@@ -334,6 +334,11 @@ function drawDailyChart(){
       <line class="np-chart__avgline" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${yAvg.toFixed(1)}" y2="${yAvg.toFixed(1)}"></line>
       <text class="np-chart__avglabel" x="${(W - marginRight).toFixed(1)}" y="${(yAvg - 5).toFixed(1)}" text-anchor="end">avg ${avgText}</text>`;
   }
+
+  // Fixed 14-day range means labels can overlap on narrower screens —
+  // show every other date once each column has less room than a label needs.
+  const minLabelBand = 34;
+  const labelEvery = band < minLabelBand ? 2 : 1;
 
   // bars + x-axis date labels
   let bars = '', xlabels = '';
@@ -364,7 +369,12 @@ function drawDailyChart(){
         ${isPeak ? `<text class="np-chart__peaklabel" x="${cx.toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="middle">${total}</text>` : ''}
       </g>`;
 
-    xlabels += `<text class="np-chart__xlabel${isToday ? ' np-chart__xlabel--today' : ''}" x="${cx.toFixed(1)}" y="${(H - marginBottom + 16).toFixed(1)}" text-anchor="middle">${showMonth ? escapeHtml(monthAbbr) + ' ' : ''}${dayNum}</text>`;
+    // Always label "today" and the first day of the range even when
+    // thinning labels, so the visible axis never looks arbitrary.
+    const forceShow = isToday || i === 0;
+    if (forceShow || i % labelEvery === 0) {
+      xlabels += `<text class="np-chart__xlabel${isToday ? ' np-chart__xlabel--today' : ''}" x="${cx.toFixed(1)}" y="${(H - marginBottom + 16).toFixed(1)}" text-anchor="middle">${showMonth ? escapeHtml(monthAbbr) + ' ' : ''}${dayNum}</text>`;
+    }
   });
 
   const peakDateLabel = escapeHtml(new Date(data[peakIdx].date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }));
@@ -1281,6 +1291,7 @@ function renderNotifTemplateOptions(){
   const stillVisible = [...sel.options].some(o => o.value === current && !o.disabled);
   sel.value = stillVisible ? current : '';
 }
+let __notifPage = 1;
 async function loadNotifications(){
   const tbody = $('#notifTbody');
   tbody.innerHTML = `<tr><td colspan="6" class="np-mut" style="padding:1.5rem; text-align:center;">Loading…</td></tr>`;
@@ -1297,6 +1308,8 @@ async function loadNotifications(){
   if (from)     qs.set('from', from);
   if (to)       qs.set('to', to);
   if (q.length >= 2) qs.set('q', q);
+  qs.set('page', String(__notifPage));
+  qs.set('limit', '50');
   try {
     const data = await api('/admin/notifications' + (qs.toString() ? '?' + qs.toString() : ''));
     const rows = data.rows || [];
@@ -1306,18 +1319,19 @@ async function loadNotifications(){
       `<span class="np-badge np-badge--red">${counts.FAILED || 0} Failed</span>`,
       counts.QUEUED ? `<span class="np-badge np-badge--amber">${counts.QUEUED} Queued</span>` : ''
     ].join('');
+    renderNotifPagination(data);
     if (!rows.length){
       tbody.innerHTML = `<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No notifications match</div><div class="np-empty__sub">Adjust filters or wait for the next event.</div></div></td></tr>`;
       return;
     }
   tbody.innerHTML = rows.map(n => `
   <tr class="np-notif-row" style="cursor:pointer;" data-id="${escapeHtml(n.id)}">
-    <td data-label="When">${escapeHtml(fmtDateTime(n.createdAt))}</td>
+    <td data-label="Date &amp; Time" class="np-col-datetime">${escapeHtml(fmtDateTime(n.createdAt))}</td>
     <td data-label="Channel">${channelBadge(n.channel)}</td>
     <td data-label="Template" title="${escapeHtml(n.template || '')}">${escapeHtml(__notifPrettyName(n.template) || '')}</td>
     <td data-label="Recipient" style="overflow-wrap:anywhere;">${escapeHtml(n.recipient || '')}</td>
-    <td data-label="Status">${notifStatusBadge(n.status)}${n.direction ? ` <span class="np-badge np-badge--slate" style="margin-left:.25rem;">${escapeHtml(n.direction)}</span>` : ''}</td>
-    ${n.errorMessage
+    <td data-label="Status"><span class="np-badge-group">${notifStatusBadge(n.status)}${n.direction ? `<span class="np-badge np-badge--slate">${escapeHtml(n.direction)}</span>` : ''}</span></td>
+    ${n.status === 'FAILED' && n.errorMessage
       ? `<td class="np-notif-error" data-label="Error" style="max-width:280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(n.errorMessage)}</td>`
       : `<td data-label="Error" class="np-mut">—</td>`}
   </tr>`).join('');
@@ -1330,10 +1344,29 @@ async function loadNotifications(){
     tbody.innerHTML = `<tr><td colspan="6"><div class="np-error">${escapeHtml(err.message)}</div></td></tr>`;
   }
 }
+function renderNotifPagination(data){
+  const info = $('#notifPaginationInfo');
+  const prevBtn = $('#notifPrevPage');
+  const nextBtn = $('#notifNextPage');
+  if (!info || !prevBtn || !nextBtn) return;
+  const total = data.total || 0;
+  const limit = data.limit || 50;
+  const page  = data.page || 1;
+  const totalPages = data.totalPages || 1;
+  if (!total){
+    info.textContent = '';
+  } else {
+    const start = (page - 1) * limit + 1;
+    const end   = Math.min(page * limit, total);
+    info.textContent = `Showing ${start}–${end} of ${total}`;
+  }
+  prevBtn.disabled = page <= 1;
+  nextBtn.disabled = !data.hasMore;
+}
 function openNotifModal(n){
   $('#notifModalBody').innerHTML = `
     <div class="np-grid-2">
-      <div class="np-field"><div class="np-field__label">When</div><div>${escapeHtml(fmtDateTime(n.createdAt))}</div></div>
+      <div class="np-field"><div class="np-field__label">Date &amp; Time</div><div>${escapeHtml(fmtDateTime(n.createdAt))}</div></div>
       <div class="np-field"><div class="np-field__label">Status</div><div>${notifStatusBadge(n.status)}</div></div>
       <div class="np-field"><div class="np-field__label">Channel</div><div>${channelBadge(n.channel)}</div></div>
       <div class="np-field"><div class="np-field__label">Direction</div><div>${escapeHtml(n.direction || '—')}</div></div>
@@ -1341,7 +1374,7 @@ function openNotifModal(n){
       <div class="np-field"><div class="np-field__label">Recipient</div><div>${escapeHtml(n.recipient || '—')}</div></div>
       <div class="np-field" style="grid-column: span 2;"><div class="np-field__label">Appointment</div><div>${escapeHtml(n.appointmentId || '—')}</div></div>
     </div>
-    ${n.errorMessage ? `
+    ${n.status === 'FAILED' && n.errorMessage ? `
       <div class="np-field">
         <div class="np-field__label">Error</div>
         <div class="np-error" style="font-family: ui-monospace, monospace; font-size:.78rem; white-space:pre-wrap; padding:.6rem .75rem;">${escapeHtml(n.errorMessage)}</div>
@@ -1362,20 +1395,30 @@ function openNotifModal(n){
 }
 function closeNotifModal(){ $('#notifModal').classList.add('hidden'); }
 
-$('#refreshNotifs').addEventListener('click', loadNotifications);
-$('#notifFilters').addEventListener('submit', (event) => { event.preventDefault(); loadNotifications(); });
+$('#refreshNotifs').addEventListener('click', () => { __notifPage = 1; loadNotifications(); });
+$('#notifFilters').addEventListener('submit', (event) => { event.preventDefault(); __notifPage = 1; loadNotifications(); });
 $('#clearNotifFilters').addEventListener('click', () => {
   ['notifStatus','notifChannel','notifAudience','notifTemplate','notifFrom','notifTo','notifSearch'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   renderNotifTemplateOptions();
+  __notifPage = 1;
+  loadNotifications();
+});
+$('#notifPrevPage').addEventListener('click', () => {
+  if (__notifPage <= 1) return;
+  __notifPage -= 1;
+  loadNotifications();
+});
+$('#notifNextPage').addEventListener('click', () => {
+  __notifPage += 1;
   loadNotifications();
 });
 const __audSel = document.getElementById('notifAudience');
-if (__audSel) __audSel.addEventListener('change', () => { renderNotifTemplateOptions(); loadNotifications(); });
+if (__audSel) __audSel.addEventListener('change', () => { renderNotifTemplateOptions(); __notifPage = 1; loadNotifications(); });
 $('#notifSearch').addEventListener('input', () => {
   clearTimeout(window.__notifSearchTimer);
-  window.__notifSearchTimer = setTimeout(loadNotifications, 280);
+  window.__notifSearchTimer = setTimeout(() => { __notifPage = 1; loadNotifications(); }, 280);
 });
 
 $('#passwordForm').addEventListener('submit', async (e) => {

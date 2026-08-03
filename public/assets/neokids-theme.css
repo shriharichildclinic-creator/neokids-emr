@@ -247,12 +247,45 @@ h1,h2,h3{
 
 .np-content{ background: transparent; }
 
+/* ==========================================================================
+   CANONICAL BUTTON COMPONENT
+   Single source of truth for every button across the Admin Panel and
+   Doctor Panel (primary/secondary/outline/filter/apply/clear/refresh/
+   save/cancel/modal actions). Page stylesheets must not redeclare size,
+   color, padding, radius or display for `.np-btn` — only layout placement
+   (e.g. "stack full-width inside this specific mobile card") belongs there.
+   ========================================================================== */
 .np-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  width: auto;
+  min-width: 96px;
+  min-height: 40px;
+  padding: .55rem 1rem;
   border-radius: 12px;
+  border: 1px solid var(--nk-border);
+  background: #fff;
+  color: var(--nk-text);
   font-weight: 600;
   font-size: .88rem;
   letter-spacing: .005em;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
   transition: background .15s ease, color .15s ease, border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.np-btn:active{ transform: translateY(1px); }
+.np-btn--sm{ min-height: 32px; min-width: 0; padding: .4rem .75rem; font-size: .8rem; }
+.np-btn--block{ width: 100%; }
+.np-tab{ min-height: 36px; }
+.np-btn:disabled, .np-btn--disabled, .np-btn[disabled]{
+  opacity: .5;
+  pointer-events: none;
+  cursor: not-allowed;
+  filter: grayscale(.15);
 }
 .np-btn--primary{
   background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
@@ -329,6 +362,12 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-error{
   background:#FFF1F3; border:1px solid #FCC7D2; color:#9F1E36;
   border-radius: 12px;
+  padding: .6rem .8rem;
+  font-size: .85rem;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  white-space: normal;
 }
 .np-search input{
   border-radius: 12px;
@@ -339,15 +378,135 @@ input.np-input, select.np-select, textarea.np-textarea{
   box-shadow: var(--nk-ring-primary);
 }
 
-.np-badge{ font-weight:600; padding:.22rem .65rem; border-radius:999px; font-size:.74rem; letter-spacing:.01em; }
-.np-badge--green{ background:#DCF5EE; color:#0F7A66; }
-.np-badge--mint{  background: var(--nk-teal-100); color: var(--nk-teal-700); }
-.np-badge--blue{  background: var(--nk-teal-100); color: var(--nk-teal-700); }
-.np-badge--violet{background:#F1E4F3; color:#7A3D85; }
-.np-badge--amber{ background:#FEF3CC; color:#8A5A0F; }
-.np-badge--red{   background:#FEE2E5; color:#9F1E36; }
-.np-badge--slate{ background:#EEF2F4; color:#475569; }
-.np-badge--pink{  background: var(--nk-pink-100); color: var(--nk-pink-700); }
+/* ==========================================================================
+   CANONICAL DIVIDER COMPONENT
+   A thin, intentional section rule — used inside forms/panels to separate
+   sub-sections. Previously redefined per-page (an invisible height-only
+   spacer on the Admin panel, a visible line with different color/margin on
+   the Doctor panel), which is why the same markup looked different in each
+   panel. It is no longer placed between the dashboard KPI grid and the
+   analytics card — that gap is handled by `.np-kpi-grid`'s own spacing
+   below, which is what actually produced the stray "blue line" there.
+   ========================================================================== */
+.np-divider{
+  height: 1px;
+  background: var(--nk-border-soft);
+  border: 0;
+  margin: 1rem 0;
+}
+
+/* Consistent vertical rhythm between the dashboard KPI grid and whatever
+   follows it (analytics/snapshot panels), on both panels — fixes "KPI
+   cards too close to analytics" / inconsistent section spacing at the
+   source instead of per-page margin patches. */
+.np-kpi-grid{ margin-bottom: 1.5rem; }
+
+/* ==========================================================================
+   CANONICAL BADGE / PILL / CHIP COMPONENT
+   Single source of truth for every status pill, chip and badge across the
+   Admin Panel and Doctor Panel. Do not redeclare `.np-badge`, `.np-pill` or
+   `.np-chip` base rules anywhere else — page stylesheets may only add
+   layout placement (e.g. margins relative to a specific container).
+   ========================================================================== */
+/* ==========================================================================
+   CANONICAL PAGINATION COMPONENT
+   Used anywhere a list can be paged (Notification Logs, tables, etc).
+   Dark-mode styling already existed for this component further below —
+   this is the missing light-mode base that makes it actually usable.
+   ========================================================================== */
+.np-pagination{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:.6rem;
+  padding-top: .85rem;
+  margin-top: .85rem;
+  border-top: 1px solid var(--nk-border-soft);
+}
+.np-pagination__info{ font-size:.8rem; color: var(--nk-muted); }
+.np-pagination__controls{ display:flex; align-items:center; gap:.35rem; }
+.np-pagination button,
+.np-pager button,
+.np-page-btn,
+.np-pagination__btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width: 34px; height: 34px;
+  padding: 0 .55rem;
+  border-radius: 9px;
+  border: 1px solid var(--nk-border);
+  background: #fff;
+  color: var(--nk-text);
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.np-pagination button:hover:not(:disabled),
+.np-pager button:hover:not(:disabled),
+.np-page-btn:hover:not(:disabled),
+.np-pagination__btn:hover:not(:disabled){
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-color: var(--nk-teal-200);
+}
+.np-pagination button.is-active,
+.np-pager button.is-active,
+.np-page-btn.is-active,
+.np-pagination__btn.is-active{
+  background: var(--nk-teal-400);
+  border-color: var(--nk-teal-400);
+  color: #fff;
+}
+.np-pagination button:disabled,
+.np-pager button:disabled,
+.np-page-btn:disabled,
+.np-pagination__btn:disabled{
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.np-badge, .np-pill, .np-chip{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  font-weight: 600;
+  padding: .22rem .65rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: .74rem;
+  line-height: 1.4;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.np-pill{ font-size:.8rem; }
+.np-badge__dot{ width:6px; height:6px; border-radius:999px; background: currentColor; flex: 0 0 auto; }
+
+.np-badge--green , .np-pill--green { background:#DCF5EE; color:#0F7A66; border-color:#BBE5C8; }
+.np-badge--mint  , .np-pill--mint  { background: var(--nk-teal-100); color: var(--nk-teal-700); border-color: var(--nk-teal-200); }
+.np-badge--blue  , .np-pill--blue  { background:#DBEAFE; color:#1E40AF; border-color:#BFD7F0; }
+.np-badge--violet, .np-pill--violet{ background:#F1E4F3; color:#7A3D85; border-color:#E4CBE9; }
+.np-badge--amber , .np-pill--amber { background:#FEF3CC; color:#8A5A0F; border-color:#F4D9A3; }
+.np-badge--red   , .np-pill--red   { background:#FEE2E5; color:#9F1E36; border-color:#F5BFBF; }
+.np-badge--slate , .np-pill--slate { background:#EEF2F4; color:#475569; border-color:#D7DEE8; }
+.np-badge--pink  , .np-pill--pink  { background: var(--nk-pink-100); color: var(--nk-pink-700); border-color: var(--nk-pink-200); }
+
+/* Badges/pills sitting next to each other (e.g. Status + audience pill in
+   the Notification Logs table) always keep a consistent, breathable gap —
+   never rely on a page-level inline margin. */
+.np-badge-group{ display:inline-flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+
+/* Prevent stretched pills inside cards/lists/table cells */
+.np-table td .np-badge, .np-table td .np-pill, .np-table td .np-chip,
+.np-appt__badges .np-badge, .np-appt__badges .np-pill{
+  flex: 0 0 auto;
+  width: auto;
+}
 
 .np-table-wrap{
   border:1px solid var(--nk-border-soft);
@@ -1246,13 +1405,8 @@ html[data-theme="dark"] .np-setting-card__hint{ color: var(--nk-muted); }
   align-items: center;
   flex-wrap: wrap;
 }
-.np-filter-actions .np-btn,
-.np-filter-actions--right .np-btn{
-  width: auto;
-  min-width: 96px;
-  padding: .55rem 1rem;
-  height: 40px;
-}
+/* Sizing here matches the canonical .np-btn base — this block only exists
+   to guarantee Apply/Clear never stretch full-width on wider viewports. */
 @media (max-width: 520px){
   .np-filter-actions,
   .np-filter-actions--right{ width: 100%; justify-content: flex-end; }
@@ -1305,38 +1459,12 @@ html[data-theme="dark"] .np-overflow-trigger:hover{
   border-color: rgba(137,188,189,.4);
 }
 
-/* ---------- Buttons: consistent heights & anti-stretch ---------- */
-.np-btn{
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-.np-btn--sm{ min-height: 32px; }
-.np-tab{ min-height: 36px; }
-.np-btn--block{ width: 100%; }
+/* Button sizing/anti-stretch rules live in one place only — see the
+   canonical .np-btn definition near the top of this file. */
 
-/* ---------- Badges / pills / chips ---------- */
-.np-badge,
-.np-pill,
-.np-chip{
-  display: inline-flex;
-  align-items: center;
-  gap: .35rem;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.np-badge{ font-size:.72rem; line-height: 1.1; }
-.np-pill{ font-size:.8rem; }
-
-/* Prevent stretched pills inside cards/lists */
-.np-appt__badges .np-badge,
-.np-appt__badges .np-pill{
-  flex: 0 0 auto;
-  width: auto;
-}
+/* Badge/pill/chip base rule lives in one place only — see the canonical
+   definition near the top of this file. (Duplicate block removed as part
+   of the Finance/Notifications UI consistency audit.) */
 
 /* ---------- Empty states dark polish ---------- */
 html[data-theme="dark"] .np-empty__icon{

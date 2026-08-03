@@ -143,6 +143,17 @@ function pickApproaching(scheduleExpanded, referenceDate = new Date()) {
 }
 
 // Logging + dedup
+//
+// ROOT CAUSE FIX (Notification Logs "Failed Vaccination Reminder" bug):
+// This used to stash the dedup key (e.g. "VACC:HepB-1:2026-07-29") in the
+// free-text `errorMessage` column even for successful ("SENT") sends. The
+// Admin Notification Logs UI renders whatever is in `errorMessage` as the
+// row's "Error", regardless of status — so a perfectly successful send
+// displayed what looked like a delivery failure. The counters were never
+// wrong (Failed really was 0), only the per-row "Error" display was
+// misleading. The dedup key is metadata, not an error, so it now lives in
+// the existing `payload` JSON column and `errorMessage` stays null on
+// success.
 async function alreadySentToday(patientId, code, dueDate) {
   const key = `VACC:${code}:${isoDay(dueDate)}`;
   const row = await prisma.notificationLog.findFirst({
@@ -150,7 +161,7 @@ async function alreadySentToday(patientId, code, dueDate) {
       template: 'neokids_vaccination_reminder',
       recipient: { contains: patientId },
       status: 'SENT',
-      errorMessage: key
+      payload: { path: ['dedupKey'], equals: key }
     }
   });
   return !!row;
@@ -166,10 +177,10 @@ async function logSent(patientId, phoneOrEmail, channel, code, dueDate, payload)
         template: 'neokids_vaccination_reminder',
         direction: 'PATIENT',
         status: 'SENT',
-        payload: payload || undefined,
-        // We stash the dedup key in errorMessage because it's a free-text
-        // column in the existing schema — no migration required.
-        errorMessage: key
+        // Dedup key travels with the payload (internal metadata), never in
+        // errorMessage — a successful send must never show up as an error.
+        payload: { ...(payload || {}), dedupKey: key },
+        errorMessage: null
       }
     });
   } catch (e) { logger.error('vaccine log failed', e); }
@@ -185,7 +196,10 @@ async function logFailed(patientId, phoneOrEmail, channel, code, dueDate, err) {
         template: 'neokids_vaccination_reminder',
         direction: 'PATIENT',
         status: 'FAILED',
-        errorMessage: `${key} | ${err?.message || 'unknown'} (code=${err?.code || '-'})`
+        payload: { dedupKey: key },
+        // The Error column should show a genuine, human-readable delivery
+        // error — not the internal dedup key.
+        errorMessage: `${err?.message || 'unknown error'}${err?.code ? ` (code=${err.code})` : ''}`
       }
     });
   } catch (e) { logger.error('vaccine log-fail failed', e); }
