@@ -295,7 +295,7 @@ function drawDailyChart(){
   const containerW = Math.max(240, Math.round(wrap.getBoundingClientRect().width) || 600);
   const isNarrow = containerW < 460;
   const W = containerW;
-  const H = isNarrow ? 220 : 260;
+  const H = isNarrow ? 220 : 290;
   const marginTop = 28;
   const marginRight = isNarrow ? 8 : 14;
   const marginBottom = isNarrow ? 34 : 38;

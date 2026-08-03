@@ -527,7 +527,21 @@ input.np-input, select.np-select, textarea.np-textarea{
 .np-table tr:hover td{ background: var(--nk-row-hover); }
 .np-table .np-empty{ background:#FBFDFD; }
 
+/* ==========================================================================
+   CANONICAL LOGIN SCREEN
+   One definition for both panels. This used to be split three ways —
+   theme.css set radius/shadow/logo size, while admin/styles.css and
+   doctor/styles.css each separately set width/padding/background (with
+   different values: 420px vs 440px card width, 56px vs 64px logo,
+   flat card vs glassmorphism) — which is why the two login pages looked
+   like different sizes and different designs.
+   ========================================================================== */
 .np-login{
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
   background:
     radial-gradient(1100px 600px at 85% -10%, rgba(137,188,189,.28), transparent 60%),
     radial-gradient(900px 600px at 0% 110%, rgba(254,132,164,.18), transparent 60%),
@@ -535,6 +549,9 @@ input.np-input, select.np-select, textarea.np-textarea{
     var(--nk-surface);
 }
 .np-login__card{
+  width: 100%;
+  max-width: 430px;
+  padding: 2rem;
   border-radius: 28px;
   box-shadow: var(--nk-shadow-lg);
   border:1px solid #E2EEEE;
@@ -547,11 +564,25 @@ input.np-input, select.np-select, textarea.np-textarea{
   background: linear-gradient(90deg, var(--nk-teal-400), var(--nk-pink-400), var(--nk-yellow-400));
 }
 .np-login__logo{
-  width: 64px; height: 64px;
-  border-radius: 22px;
+  width: 60px; height: 60px;
+  border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto .9rem;
+  color: #fff;
+  background: var(--nk-grad-primary);
+  box-shadow: 0 12px 26px -8px rgba(137,188,189,.5);
 }
-.np-login__title{ color: var(--nk-ink); font-weight: 700; letter-spacing:-.01em; }
-.np-login__subtitle{ color: var(--nk-muted); }
+.np-login__title{ color: var(--nk-ink); font-weight: 700; letter-spacing:-.01em; font-size:1.35rem; text-align:center; }
+.np-login__subtitle{ color: var(--nk-muted); font-size:.85rem; text-align:center; margin-top:.2rem; margin-bottom:1.25rem; }
+/* Real spacing for the login form's fields/buttons — replaces the
+   undefined `space-y-3` / `space-y-4` classes that used to be on the
+   <form>, which is why Sign in and Forgot password had no gap between
+   them at all. */
+#loginForm{ display:flex; flex-direction:column; gap:.85rem; }
+#loginForm .np-field{ margin-bottom:0; }
+@media (max-width:480px){
+  .np-login__card{ padding: 1.5rem; border-radius: 22px; }
+}
 
 .np-empty__icon{
   background: linear-gradient(135deg, rgba(137,188,189,.22), rgba(254,132,164,.16));

@@ -197,14 +197,14 @@ html,body{
 
 /* .np-divider is defined once, for both panels, in neokids-theme.css. */
 
+/* Stacked, not side-by-side: the chart panel is naturally much shorter
+   than the 10-row Recent Appointments list, so putting them in two grid
+   columns left a large empty area next to the shorter chart panel. Full
+   width also gives the chart more room to breathe. */
 .np-dash-second{
   display:grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 1.5rem;
-  align-items: start;
-}
-@media (max-width: 1024px){
-  .np-dash-second{ grid-template-columns: 1fr; gap: 1.25rem; }
 }
 @media (max-width: 640px){
   .np-dash-second{ gap: 1rem; }
@@ -354,6 +354,13 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   max-height: 70vh;
 }
 
+/* The Notification Logs table now paginates at 50 rows/page (see
+   loadNotifications()), so it no longer needs its own internal 70vh
+   scroll box — that inner scroll was clipping the last visible row right
+   above the pagination bar, making the pagination look "cut off". The
+   page itself scrolls instead, same as every other table. */
+#notifView .np-table-wrap{ max-height:none; overflow:visible; }
+
 .np-empty{
   text-align:center;
   padding: 2.5rem 1rem;
@@ -369,24 +376,9 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-empty__title{ font-weight:600; color: var(--np-text); margin-bottom:.25rem; }
 .np-empty__sub{ font-size:.85rem; }
 
-.np-login{
-  min-height:100vh;
-  display:flex; align-items:center; justify-content:center;
-  padding:1rem;
-}
-.np-login__card{
-  background: var(--nk-card); border-radius:24px;
-  box-shadow: 0 24px 48px -16px rgba(15,42,71,.20), 0 2px 4px rgba(15,42,71,.04);
-  width:100%; max-width:420px; padding:2rem;
-}
-.np-login__logo{
-  width:56px; height:56px; border-radius:18px;
-  background: linear-gradient(135deg, var(--np-primary), var(--np-blue));
-  color:#fff; display:flex; align-items:center; justify-content:center; margin: 0 auto .85rem;
-  box-shadow: 0 10px 22px -6px rgba(137,188,189,.45);
-}
-.np-login__title{ font-size:1.35rem; font-weight:700; color: var(--np-ink); text-align:center; }
-.np-login__subtitle{ font-size:.85rem; color: var(--np-muted); text-align:center; margin-bottom:1.25rem; }
+/* .np-login, .np-login__card, .np-login__logo, .np-login__title,
+   .np-login__subtitle are defined once, for both panels, in
+   neokids-theme.css. */
 
 .np-doc-grid{
   display:grid;
@@ -943,7 +935,7 @@ html[data-theme="dark"] #notifModal pre{
   #apptsView .np-table tr:hover td{ background:transparent; }
   html[data-theme="dark"] #apptsView .np-table tr{ background:var(--nk-card) !important; border-color:var(--nk-border) !important; }
 
-  #notifView .np-table-wrap{ overflow:visible; max-height:none; border:0; background:transparent; }
+  #notifView .np-table-wrap{ border:0; background:transparent; }
   #notifView .np-table, #notifView .np-table tbody{ display:block; width:100%; min-width:0; }
   #notifView .np-table thead{ position:absolute; width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0; }
   #notifView .np-table tr.np-notif-row{ display:block; width:100%; box-sizing:border-box; margin:0 0 .75rem; padding:.9rem 1rem; }
@@ -1046,22 +1038,34 @@ html[data-theme="dark"] #notifModal pre{
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+/* Root cause of "Apply/Clear stretched on Revenue/Settlements/Invoices":
+   this was `display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr))`.
+   auto-fit collapses unused track columns, so whenever the buttons landed
+   alone on a wrapped row, they'd stretch to fill the *entire* row width
+   (the classic auto-fit "lonely leftover item" bug) — mixing fixed-size
+   buttons with fluid dropdowns in the same grid tracks was the wrong
+   pattern. Flexbox fixes this at the source: selects are allowed to grow,
+   the actions group never does, regardless of how items wrap. */
 .np-filterbar--toolbar{
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+  display:flex;
+  flex-wrap:wrap;
   gap:.75rem;
   align-items:end;
   width:100%;
 }
 .np-filterbar--toolbar > .np-select,
 .np-filterbar--toolbar > input[type="date"],
-.np-filterbar--toolbar > .np-btn,
 .np-filterbar--toolbar > .np-search{
-  width:100%;
-  min-width:0;
-  max-width:100%;
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 100%;
 }
-.np-filterbar--toolbar > .np-btn{ min-width:0; }
+.np-filterbar--toolbar > .np-btn,
+.np-filterbar--toolbar > .np-filter-actions{
+  flex: 0 0 auto;
+  width: auto;
+}
+.np-filterbar--toolbar > .np-filter-actions{ margin-left: auto; }
 .np-filterbar--appointments,
 .np-filterbar--notifications{
   width:100%;
@@ -1137,7 +1141,8 @@ html[data-theme="dark"] #notifModal pre{
     right:0;
     max-width:min(280px, calc(100vw - 24px));
   }
-  .np-filterbar--toolbar{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .np-filterbar--toolbar > .np-select,
+  .np-filterbar--toolbar > input[type="date"]{ flex-basis: calc(50% - .4rem); }
   #settlementsView .np-table-wrap,
   #invoicesView .np-table-wrap,
   #revenueView .np-table-wrap,
@@ -1228,10 +1233,12 @@ html[data-theme="dark"] #notifModal pre{
   #revenueView .np-empty{ padding:1.25rem .75rem; }
 }
 @media (max-width:520px){
-  .np-filterbar--toolbar,
+  .np-filterbar--toolbar > .np-select,
+  .np-filterbar--toolbar > input[type="date"]{ flex-basis:100%; }
+  .np-filterbar--toolbar > .np-filter-actions{ flex-basis:100%; margin-left:0; width:100%; }
+  .np-filterbar--toolbar > .np-filter-actions > .np-btn{ flex:1 1 0; }
   .np-filterbar--appointments,
   .np-filterbar--notifications{ grid-template-columns:1fr; }
-  .np-filter-actions{ grid-template-columns:1fr 1fr; }
 }
 @media (max-width:420px){
   .np-header__inner{ min-height:60px; }
@@ -1466,9 +1473,4 @@ html, body{ max-width:100%; overflow-x:hidden; }
 
 @media (max-width:380px){
   .np-grid-2{ grid-template-columns:1fr; }
-}
-
-@media (max-width:360px){
-  .np-login{ padding:.75rem; }
-  .np-login__card{ padding:1.25rem; border-radius:18px; }
 }

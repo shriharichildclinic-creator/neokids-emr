@@ -537,34 +537,9 @@ html,body{
 @keyframes npFadeIn{ from{opacity:0} to{opacity:1} }
 @keyframes npPop{ from{opacity:0; transform: translateY(8px) scale(.98)} to{opacity:1; transform: translateY(0) scale(1)} }
 
-.np-login{
-  min-height:100vh;
-  display:flex; align-items:center; justify-content:center;
-  padding: 1.5rem;
-  background:
-    radial-gradient(60% 60% at 10% 10%, rgba(184,242,230,.45) 0%, transparent 60%),
-    radial-gradient(50% 50% at 95% 0%, rgba(255,181,167,.32) 0%, transparent 60%),
-    radial-gradient(60% 60% at 90% 100%, rgba(77,168,255,.35) 0%, transparent 60%),
-    linear-gradient(180deg, #FFFFFF 0%, #F4F8FB 100%);
-}
-.np-login__card{
-  width: 100%; max-width: 440px;
-  background: rgba(255,255,255,.92);
-  border:1px solid rgba(255,255,255,.7);
-  border-radius: 22px;
-  padding: 2rem;
-  box-shadow: 0 30px 60px -20px rgba(15,42,71,.18), 0 0 0 1px rgba(255,255,255,.5) inset;
-  backdrop-filter: blur(8px);
-}
-.np-login__logo{
-  width:56px; height:56px; border-radius:16px;
-  background: linear-gradient(135deg, var(--np-primary), var(--np-blue));
-  display:flex; align-items:center; justify-content:center;
-  color:#fff; box-shadow: 0 14px 30px -10px rgba(137,188,189,.55);
-  margin: 0 auto 1rem;
-}
-.np-login__title{ text-align:center; font-size: 1.35rem; font-weight:700; color: var(--np-ink); }
-.np-login__subtitle{ text-align:center; color: var(--np-muted); font-size:.88rem; margin-top:.25rem; margin-bottom:1.25rem; }
+/* .np-login, .np-login__card, .np-login__logo, .np-login__title,
+   .np-login__subtitle are defined once, for both panels, in
+   neokids-theme.css. */
 
 /* .np-error is defined once, for both panels, in neokids-theme.css. */
 

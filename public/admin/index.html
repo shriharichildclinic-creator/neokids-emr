@@ -32,7 +32,7 @@
     </div>
     <h1 class="np-login__title">NeoKidsPro Admin</h1>
     <p class="np-login__subtitle">Pediatric clinic management</p>
-    <form id="loginForm" class="space-y-3" novalidate>
+    <form id="loginForm" novalidate>
       <div class="np-field">
         <label class="np-field__label" for="email">Email</label>
         <input id="email" type="email" required class="np-input" placeholder="admin@neokidspro.in" autocomplete="username"/>
@@ -285,7 +285,9 @@
                   <option value="ONLINE">Online</option>
                   <option value="OFFLINE">In-person</option>
                 </select>
-                <button id="applyRevenue" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                <div class="np-filter-actions">
+                  <button id="applyRevenue" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                </div>
               </div>
 
               <div id="revKpiGrid" class="np-kpi-grid" style="margin-bottom:1rem;"></div>
@@ -336,8 +338,10 @@
                   <option value="GENERATED">Generated (awaiting payment)</option>
                   <option value="PAID">Paid</option>
                 </select>
-                <button id="applySettlements" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
-                <button id="clearSettlements" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                <div class="np-filter-actions">
+                  <button id="applySettlements" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                  <button id="clearSettlements" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                </div>
               </div>
               <div class="np-table-wrap np-table-wrap--responsive">
                 <table class="np-table">
@@ -376,8 +380,10 @@
                 <select id="invDoctor" class="np-select">
                   <option value="">All doctors</option>
                 </select>
-                <button id="applyInvoices" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
-                <button id="clearInvoices" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                <div class="np-filter-actions">
+                  <button id="applyInvoices" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                  <button id="clearInvoices" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                </div>
               </div>
               <div class="np-table-wrap np-table-wrap--responsive">
                 <table class="np-table">

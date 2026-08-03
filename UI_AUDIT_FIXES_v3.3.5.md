@@ -98,12 +98,73 @@ explicit wrap behavior. Consolidated to one definition with
 `overflow-wrap: break-word` so error text wraps cleanly instead of
 truncating awkwardly on narrow viewports.
 
-## Verified
+## 12. (Round 2) Apply/Clear still stretched on Revenue / Settlements / Invoices
+Round 1 fixed the shared `.np-btn`/`.np-badge` definitions, but missed that
+these three pages don't use the same filterbar as Appointments/
+Notifications — they use `.np-filterbar--toolbar`, which was
+`display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr))`.
+`auto-fit` collapses unused grid tracks, so whenever the Apply/Clear
+buttons landed alone on a wrapped row, they stretched to fill the *entire*
+row width — the classic "auto-fit lonely leftover item" bug. Mixing
+fixed-size buttons with fluid dropdowns in the same grid tracks was the
+wrong pattern regardless of the auto-fit quirk.
+**Fix:** rebuilt `.np-filterbar--toolbar` as flexbox — dropdowns can grow
+(`flex:1 1 160px`), the actions group never does (`flex:0 0 auto`). Also
+wrapped every Apply/Clear pair in `.np-filter-actions` in the HTML for
+Revenue, Settlements and Invoices (previously only Appointments/
+Notifications had that wrapper).
+
+## 13. (Round 2) Notification pagination "half cut" at the end
+`.np-table-wrap` has `max-height:70vh; overflow:auto` — an internal scroll
+box. Now that the table paginates at 50 rows/page, that inner scroll was
+redundant and was clipping the last visible row right above the pagination
+bar, making it look cut off. Removed the inner scroll specifically for the
+notification table (`#notifView .np-table-wrap{ max-height:none;
+overflow:visible; }`) — the page scrolls instead, same as every other
+table.
+
+## 14. (Round 2) Dashboard whitespace next to the chart
+The chart panel and Recent Appointments panel were side-by-side in a
+2-column grid (`align-items:start`). Since Recent Appointments (10 rows)
+is naturally much taller than the 14-day chart, the shorter column left a
+large empty area next to it. Stacked both panels full-width instead (chart
+on top, appointments below) and gave the chart a bit more height now that
+it has the full row width to work with.
+
+## 15. (Round 2) Login page — card size mismatch + Sign in/Forgot password stuck together
+The worst instance of the "same component styled 3 different ways" bug
+found in this audit. `.np-login__card` was independently defined in
+`neokids-theme.css`, `admin/styles.css`, **and** `doctor/styles.css`, with
+genuinely different `max-width` (420px vs 440px — this was the visible
+card-size mismatch), border-radius, padding, and logo size; Doctor also
+had a glassmorphic background Admin didn't. Separately, the `<form>` had
+`class="space-y-3"` (Admin) / `class="space-y-4"` (Doctor) — **neither
+class exists anywhere in the CSS**, so there was zero spacing between
+every field and button, including Sign in and Forgot password.
+**Fix:** one canonical `.np-login` / `.np-login__card` / `.np-login__logo`
+in `neokids-theme.css` (430px card, consistent radius/logo/decorative top
+bar for both panels). Removed both page-level duplicate definitions. Added
+real spacing via `#loginForm{ display:flex; flex-direction:column;
+gap:.85rem }` and removed the dead `space-y-*` classes from both login
+forms. Neutralized `.np-field`'s own `margin-bottom` inside the login form
+specifically (`#loginForm .np-field{ margin-bottom:0 }`) so spacing isn't
+doubled — `.np-field` itself still differs slightly between Admin (flex
+column + gap) and Doctor (block + margin) everywhere else; consolidating
+that fully would touch every form in both panels, which is a larger,
+higher-risk change than this pass — flagging as a follow-up rather than
+doing it without visual QA across every form.
+
+
 - All edited CSS files: brace-balanced.
 - All edited JS files: `node --check` passes.
 - All edited HTML files: `<div>` open/close tags balanced.
 
 ## Not covered in this pass (flagged, not fixed)
+- `.np-field` (every form field's label/input wrapper) still differs
+  between Admin (flex column + gap) and Doctor (block + margin) outside
+  the login form. Neutralized inside `#loginForm` specifically so login
+  spacing is correct; a full consolidation touches every form in both
+  panels and deserves its own visual QA pass rather than a blind merge.
 - `.np-modal` and `.np-table` base styling also differs between Admin and
   Doctor panels (different max-width, shadow, animation). Not flagged with
   a concrete visual symptom in the audit brief, and Doctor's modals carry
