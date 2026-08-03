@@ -1472,22 +1472,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-dash-grid{ gap: 1rem; }
 }
 
-/* ===================================================================
-   Admin dashboard bar/table grid — same spacing rhythm
-   =================================================================== */
-.np-dash-second{
-  display:grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 1.5rem;
-  align-items: start;
-}
-@media (max-width: 1024px){
-  .np-dash-second{ grid-template-columns: 1fr; gap: 1.25rem; }
-}
-@media (max-width: 640px){
-  .np-dash-second{ gap: 1rem; }
-}
-
 @media (max-width:1023px){
   img, svg, video, canvas, iframe{ max-width:100%; height:auto; }
   .np-content, .np-panel, .np-panel__body, .np-panel__head,

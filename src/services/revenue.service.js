@@ -228,21 +228,9 @@ async function getMonthlyRevenueReport({ year, month, doctorId, paymentType }) {
     const liveTotals = aggregate(myAppts.map(a => ({ amount: a.feeAtBooking, cfg })));
     const settlement = settlementByDoc.get(doc.id) || null;
 
-    // Only a PAID settlement is an immutable, historical audit record —
-    // that's the one case where we must freeze the display so it can
-    // never drift after money has actually moved.
-    //
-    // A merely-GENERATED settlement is just a snapshot-in-progress (the
-    // admin can still re-generate it before marking it paid), so the
-    // live report must keep reflecting real-time appointment data until
-    // that snapshot is paid. Bug fix: this used to check
-    // `status !== 'DRAFT'`, but 'DRAFT' is never assigned anywhere in
-    // this codebase, so that condition was true for ANY settlement
-    // (including a zero-total GENERATED one created before any
-    // appointments existed for the period) — permanently freezing the
-    // Revenue Report at stale zero totals even as real, paid
-    // consultations came in afterward that same month.
-    const useFrozen = settlement && settlement.status === 'PAID';
+    // If a frozen settlement exists, prefer those numbers for display so
+    // the historical record stays immutable.
+    const useFrozen = settlement && settlement.status !== 'DRAFT';
     const totals = useFrozen
       ? {
           consultations: settlement.totalConsultations,

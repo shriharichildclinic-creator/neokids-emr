@@ -249,6 +249,219 @@ function setupProfileMenu(){
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.remove('is-open'); });
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Dashboard: "Appointments — last 14 days" chart
+// Responsive SVG bar chart with gridlines, axis labels, an average
+// reference line, a highlighted peak day, and hover/tap/keyboard
+// tooltips showing exact counts, completions, and revenue per day.
+// ─────────────────────────────────────────────────────────────────
+let _dailyChartData = null;
+let _dailyChartResizeObs = null;
+
+function renderDailyChart(data){
+  _dailyChartData = Array.isArray(data) ? data : [];
+  const wrap = $('#dailyChart');
+  if (!wrap) return;
+
+  drawDailyChart();
+
+  if (!_dailyChartResizeObs) {
+    if ('ResizeObserver' in window) {
+      let lastW = Math.round(wrap.getBoundingClientRect().width);
+      _dailyChartResizeObs = new ResizeObserver(entries => {
+        const w = Math.round(entries[0].contentRect.width);
+        if (Math.abs(w - lastW) < 4) return;
+        lastW = w;
+        drawDailyChart();
+      });
+      _dailyChartResizeObs.observe(wrap);
+    } else {
+      _dailyChartResizeObs = true; // sentinel so we don't re-bind
+      window.addEventListener('resize', () => drawDailyChart());
+    }
+  }
+}
+
+function drawDailyChart(){
+  const wrap = $('#dailyChart');
+  const data = _dailyChartData || [];
+  if (!wrap) return;
+
+  if (!data.length){
+    wrap.innerHTML = `<div class="np-empty" style="padding:2rem 0;"><div class="np-empty__sub">No appointment data yet.</div></div>`;
+    return;
+  }
+
+  const containerW = Math.max(240, Math.round(wrap.getBoundingClientRect().width) || 600);
+  const isNarrow = containerW < 460;
+  const W = containerW;
+  const H = isNarrow ? 210 : 240;
+  const marginTop = 26;
+  const marginRight = isNarrow ? 8 : 14;
+  const marginBottom = isNarrow ? 30 : 34;
+
+  const maxRaw = Math.max(0, ...data.map(d => Number(d.total) || 0));
+  const stepsCount = 4;
+  const niceMax = Math.max(stepsCount, Math.ceil(maxRaw / stepsCount) * stepsCount);
+  const stepVal = niceMax / stepsCount;
+  const marginLeft = Math.min(50, Math.max(24, 14 + String(niceMax).length * 8));
+
+  const plotW = Math.max(10, W - marginLeft - marginRight);
+  const plotH = H - marginTop - marginBottom;
+  const n = data.length;
+  const band = plotW / n;
+  const barW = Math.max(isNarrow ? 4 : 6, Math.min(isNarrow ? 16 : 26, band * 0.5));
+
+  const avg = data.reduce((s, d) => s + (Number(d.total) || 0), 0) / data.length;
+  const peakIdx = data.reduce((best, d, i) => (Number(d.total) || 0) > (Number(data[best].total) || 0) ? i : best, 0);
+  const peakVal = Number(data[peakIdx].total) || 0;
+
+  // gridlines + y-axis labels
+  let gridLines = '', yLabels = '';
+  for (let s = 0; s <= stepsCount; s++){
+    const val = Math.round(stepVal * s);
+    const y = marginTop + plotH - (val / niceMax) * plotH;
+    gridLines += `<line class="np-chart__grid" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"></line>`;
+    yLabels   += `<text class="np-chart__ylabel" x="${marginLeft - 8}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${val}</text>`;
+  }
+
+  // average reference line
+  let avgLine = '';
+  if (peakVal > 0 && avg > 0.15) {
+    const yAvg = marginTop + plotH - (avg / niceMax) * plotH;
+    const avgText = avg % 1 === 0 ? String(avg) : avg.toFixed(1);
+    avgLine = `
+      <line class="np-chart__avgline" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${yAvg.toFixed(1)}" y2="${yAvg.toFixed(1)}"></line>
+      <text class="np-chart__avglabel" x="${(W - marginRight).toFixed(1)}" y="${(yAvg - 5).toFixed(1)}" text-anchor="end">avg ${avgText}</text>`;
+  }
+
+  // bars + x-axis date labels
+  let bars = '', xlabels = '';
+  let lastMonth = null;
+  data.forEach((d, i) => {
+    const total = Number(d.total) || 0;
+    const cx = marginLeft + band * i + band / 2;
+    const h = total > 0 ? Math.max(3, (total / niceMax) * plotH) : 2;
+    const y = marginTop + plotH - h;
+    const isPeak = i === peakIdx && total > 0;
+    const isToday = i === data.length - 1;
+    const barCls = total === 0
+      ? 'np-chart__bar np-chart__bar--muted'
+      : (isPeak ? 'np-chart__bar np-chart__bar--peak' : 'np-chart__bar');
+
+    const dt = new Date(d.date + 'T00:00:00');
+    const dayNum = dt.getDate();
+    const monthAbbr = dt.toLocaleDateString('en-IN', { month: 'short' });
+    const weekday = dt.toLocaleDateString('en-IN', { weekday: 'short' });
+    const showMonth = lastMonth !== monthAbbr;
+    lastMonth = monthAbbr;
+
+    bars += `
+      <g class="np-chart__col${isToday ? ' np-chart__col--today' : ''}" data-i="${i}" tabindex="0"
+         role="img" aria-label="${escapeHtml(weekday)}, ${dayNum} ${escapeHtml(monthAbbr)}: ${total} appointment${total === 1 ? '' : 's'}${isToday ? ' (today)' : ''}">
+        <rect class="np-chart__hit" x="${(cx - band / 2).toFixed(1)}" y="${marginTop}" width="${band.toFixed(1)}" height="${plotH.toFixed(1)}"></rect>
+        <rect class="${barCls}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(4, barW / 2).toFixed(1)}"></rect>
+        ${isPeak ? `<text class="np-chart__peaklabel" x="${cx.toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="middle">${total}</text>` : ''}
+      </g>`;
+
+    xlabels += `<text class="np-chart__xlabel${isToday ? ' np-chart__xlabel--today' : ''}" x="${cx.toFixed(1)}" y="${(H - marginBottom + 16).toFixed(1)}" text-anchor="middle">${showMonth ? escapeHtml(monthAbbr) + ' ' : ''}${dayNum}</text>`;
+  });
+
+  const peakDateLabel = escapeHtml(new Date(data[peakIdx].date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }));
+
+  wrap.innerHTML = `
+    <svg class="np-chart__svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Daily appointment volume for the last 14 days">
+      <g class="np-chart__grid-group">${gridLines}</g>
+      ${avgLine}
+      <g class="np-chart__bars">${bars}</g>
+      <g class="np-chart__ylabels">${yLabels}</g>
+      <g class="np-chart__xlabels">${xlabels}</g>
+      <line class="np-chart__axis" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${(marginTop + plotH).toFixed(1)}" y2="${(marginTop + plotH).toFixed(1)}"></line>
+    </svg>
+    <div class="np-chart__tooltip" id="dailyChartTooltip" role="tooltip" aria-hidden="true"></div>
+    <div class="np-chart__legend">
+      <span class="np-chart__legend-item"><i class="np-chart__legend-swatch"></i>Appointments</span>
+      ${peakVal > 0 ? `<span class="np-chart__legend-item"><i class="np-chart__legend-swatch np-chart__legend-swatch--peak"></i>Busiest day</span>
+      <span class="np-chart__legend-item np-chart__legend-note">Peak: ${peakVal} on ${peakDateLabel}</span>` : ''}
+    </div>
+  `;
+
+  bindDailyChartInteractions(wrap, data);
+}
+
+function bindDailyChartInteractions(wrap, data){
+  const svg = wrap.querySelector('.np-chart__svg');
+  const tooltip = wrap.querySelector('#dailyChartTooltip');
+  if (!svg || !tooltip) return;
+  let pinned = null;
+
+  function contentFor(i){
+    const d = data[i]; if (!d) return '';
+    const dt = new Date(d.date + 'T00:00:00');
+    const label = dt.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const total = Number(d.total) || 0, completed = Number(d.completed) || 0, revenue = Number(d.revenue) || 0;
+    return `
+      <div class="np-chart__tooltip-date">${escapeHtml(label)}</div>
+      <div class="np-chart__tooltip-main">${total} appointment${total === 1 ? '' : 's'}</div>
+      <div class="np-chart__tooltip-sub">${completed} completed${revenue > 0 ? ' · ' + fmtCurrency(revenue) + ' revenue' : ''}</div>
+    `;
+  }
+
+  function show(i, col){
+    const rect = col.querySelector('rect:nth-child(2)');
+    if (!rect) return;
+    tooltip.innerHTML = contentFor(i);
+    tooltip.classList.add('is-visible');
+    tooltip.setAttribute('aria-hidden', 'false');
+
+    const barBox = rect.getBoundingClientRect();
+    const wrapBox = wrap.getBoundingClientRect();
+    let left = barBox.left - wrapBox.left + barBox.width / 2;
+    const top = barBox.top - wrapBox.top;
+
+    const ttWidth = tooltip.offsetWidth || 160;
+    const minLeft = ttWidth / 2 + 4;
+    const maxLeft = wrapBox.width - ttWidth / 2 - 4;
+    left = Math.max(minLeft, Math.min(maxLeft, left));
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+
+    $$('.np-chart__col', svg).forEach(c => c.classList.toggle('is-active', c === col));
+  }
+  function hide(){
+    tooltip.classList.remove('is-visible');
+    tooltip.setAttribute('aria-hidden', 'true');
+    $$('.np-chart__col', svg).forEach(c => c.classList.remove('is-active'));
+    pinned = null;
+  }
+
+  svg.addEventListener('pointermove', (e) => {
+    if (pinned != null || e.pointerType === 'touch') return;
+    const col = e.target.closest('.np-chart__col');
+    if (col) show(Number(col.dataset.i), col); else hide();
+  });
+  svg.addEventListener('pointerleave', () => { if (pinned == null) hide(); });
+  svg.addEventListener('click', (e) => {
+    const col = e.target.closest('.np-chart__col');
+    if (!col) { hide(); return; }
+    const i = Number(col.dataset.i);
+    if (pinned === i) { hide(); return; }
+    pinned = i;
+    show(i, col);
+  });
+  svg.addEventListener('focusin', (e) => {
+    const col = e.target.closest('.np-chart__col');
+    if (col) show(Number(col.dataset.i), col);
+  });
+  svg.addEventListener('focusout', (e) => {
+    if (pinned == null && !svg.contains(e.relatedTarget)) hide();
+  });
+  document.addEventListener('click', (e) => {
+    if (pinned != null && !wrap.contains(e.target)) hide();
+  });
+}
+
 async function loadDashboard() {
   try {
     if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsGrid'), 6);
@@ -283,18 +496,7 @@ async function loadDashboard() {
         ${c.extra || ''}
       </div>`).join('');
 
-    const max = Math.max(1, ...(a.daily || []).map(d => d.total));
-    $('#dailyBars').innerHTML = (a.daily || []).map(d => {
-      const h = Math.max(2, Math.round((d.total / max) * 80));
-      const cls = d.total === 0 ? 'np-bars__bar np-bars__bar--muted' : 'np-bars__bar';
-      return `<div class="${cls}" style="height:${h}px" title="${d.date}: ${d.total} appts, ${d.completed} completed, ${fmtCurrency(d.revenue)}"></div>`;
-    }).join('');
-    $('#dailyLabels').innerHTML = (a.daily || []).map((d, i) => {
-      if (i === 0 || i === a.daily.length - 1 || i === Math.floor(a.daily.length / 2)) {
-        return `<span>${d.date.slice(5)}</span>`;
-      }
-      return '<span></span>';
-    }).join('');
+    renderDailyChart(a.daily || []);
 
     const fail = a.notificationsFailed || 0;
     const badge = $('#navBadgeFailed');

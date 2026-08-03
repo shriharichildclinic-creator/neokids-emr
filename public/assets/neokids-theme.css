@@ -1680,8 +1680,6 @@ html[data-theme="dark"] .np-search input{
 }
 html[data-theme="dark"] .np-search svg{ color: var(--nk-muted); }
 
-html[data-theme="dark"] .np-divider{ background: var(--nk-border); }
-
 html[data-theme="dark"] ::-webkit-scrollbar-track{ background: transparent; }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb{
   background: #2C4A56;
