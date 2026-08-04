@@ -642,7 +642,7 @@
 
             <div id="kycUploadError" class="np-error hidden" style="margin-top:.4rem;"></div>
 
-            <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">
+            <div class="np-modal__actions">
               <button type="button" class="np-btn np-btn--sm" onclick="uploadKycDocs()">Upload selected files</button>
             </div>
           </div>
@@ -660,7 +660,7 @@
         <div class="np-field" style="font-size:.75rem; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; padding:.55rem .75rem; border-radius:8px;">
           Best practice: leave the temporary password blank and let the doctor set their own via the email invite.
         </div>
-        <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">
+        <div class="np-modal__actions">
           <button type="button" class="np-btn" onclick="closeDoctorModal()">Cancel</button>
           <button type="submit" class="np-btn np-btn--primary">Save</button>
         </div>
@@ -729,7 +729,7 @@
           <textarea name="paymentNotes" class="np-textarea" placeholder="Any internal notes"></textarea>
         </div>
         <div id="markPaidError" class="np-error hidden"></div>
-        <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">
+        <div class="np-modal__actions">
           <button type="button" class="np-btn" onclick="closeMarkPaidModal()">Cancel</button>
           <button type="submit" class="np-btn np-btn--primary">Mark Paid &amp; Generate Invoice</button>
         </div>
