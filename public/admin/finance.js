@@ -312,7 +312,7 @@ async function openSettlement(id) {
           <tbody>${tableRows}</tbody>
         </table>
       </div>
-      <div class="np-modal__actions">
+      <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.75rem;">
         <button class="np-btn np-btn--ghost np-btn--sm" onclick="Finance.closeSettlementModal()">Close</button>
         ${actionButtons}
       </div>

@@ -380,8 +380,19 @@ html,body{
 .np-search input:focus{ outline:none; border-color: var(--np-primary); box-shadow: 0 0 0 4px rgba(137,188,189,.12); }
 .np-search svg{ position:absolute; left:.85rem; top:50%; transform:translateY(-50%); color: var(--np-muted); width:18px; height:18px; }
 
-/* .np-select is defined once, for both panels, in neokids-theme.css
-   (including the calendar-icon fix for input[type=date]). */
+.np-select{
+  padding: .65rem .85rem;
+  border:1px solid var(--np-border);
+  border-radius:12px;
+  background: var(--nk-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right .85rem center;
+  background-size: 12px;
+  padding-right: 2.2rem;
+  font-size:.88rem; color: var(--np-text);
+  appearance:none; -webkit-appearance:none;
+  cursor:pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.np-select:focus{ outline:none; border-color: var(--np-primary); box-shadow: 0 0 0 4px rgba(137,188,189,.12); }
 
 .np-field{ display:block; margin-bottom: .95rem; }
 .np-field__label{
@@ -389,9 +400,26 @@ html,body{
   margin-bottom: .35rem; letter-spacing:.01em;
 }
 .np-field__hint{ font-size:.72rem; color: var(--np-muted); margin-top:.25rem; }
-/* .np-input, .np-textarea, .np-select-native (incl. --error variant and
-   [type=file] spacing) are defined once, for both panels, in
-   neokids-theme.css. */
+.np-input, .np-textarea, .np-select-native{
+  width:100%;
+  padding: .65rem .85rem;
+  font-size:.9rem;
+  background: var(--nk-card);
+  border:1px solid var(--np-border);
+  border-radius: 12px;
+  color: var(--np-text);
+  font-family: inherit;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.np-input:focus, .np-textarea:focus, .np-select-native:focus{
+  outline:none; border-color: var(--np-primary);
+  box-shadow: 0 0 0 4px rgba(137,188,189,.12);
+  background: var(--nk-card);
+}
+.np-textarea{ min-height: 90px; resize: vertical; }
+.np-input[type="file"]{ padding: .5rem; }
+.np-input--error{ border-color:#DC2F2F; }
+.np-input--error:focus{ box-shadow: 0 0 0 4px rgba(220,47,47,.12); }
 
 .np-grid-2{ display:grid; grid-template-columns: repeat(2,1fr); gap:.85rem; }
 .np-grid-3{ display:grid; grid-template-columns: repeat(3,1fr); gap:.85rem; }
@@ -499,7 +527,12 @@ html,body{
 }
 .np-modal__close:hover{ background: var(--nk-teal-50); color: var(--np-ink); }
 .np-modal__body{ padding: 1.25rem; overflow-y:auto; }
-/* .np-modal__foot is defined once, for both panels, in neokids-theme.css. */
+.np-modal__foot{
+  padding: .85rem 1.25rem;
+  border-top: 1px solid var(--np-border);
+  display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap;
+  background: rgba(244,248,251,.7);
+}
 
 @keyframes npFadeIn{ from{opacity:0} to{opacity:1} }
 @keyframes npPop{ from{opacity:0; transform: translateY(8px) scale(.98)} to{opacity:1; transform: translateY(0) scale(1)} }
@@ -1447,6 +1480,11 @@ html, body{ max-width:100%; overflow-x:hidden; }
   }
   .np-modal__head{ padding:.85rem 1rem; }
   .np-modal__body{ padding:1rem; }
+  .np-modal__foot{
+    padding:.75rem 1rem;
+    flex-direction: column-reverse;
+  }
+  .np-modal__foot .np-btn{ width:100%; justify-content:center; }
   
   #cancelModal .np-modal__card{
     background: var(--nk-card);

@@ -293,39 +293,28 @@ function drawDailyChart(){
   }
 
   const containerW = Math.max(240, Math.round(wrap.getBoundingClientRect().width) || 600);
-  // Three responsive tiers instead of a single narrow/wide split — each
-  // tier gets margins, grid density, and type sized for it, rather than
-  // just shrinking the same layout down.
-  const tier = containerW < 340 ? 'xs' : containerW < 460 ? 'sm' : containerW < 720 ? 'md' : 'lg';
+  const isNarrow = containerW < 460;
   const W = containerW;
-  const H = tier === 'xs' ? 200 : tier === 'sm' ? 220 : tier === 'md' ? 260 : 290;
-  const marginTop = tier === 'xs' ? 24 : 28;
-  const marginRight = tier === 'xs' ? 4 : tier === 'sm' ? 8 : 14;
-  const marginBottom = tier === 'xs' ? 30 : tier === 'sm' ? 34 : 38;
-  // Fewer horizontal gridlines on very small screens — less visual noise
-  // competing with the bars for the same limited vertical space.
-  const stepsCount = tier === 'xs' ? 3 : 4;
+  const H = isNarrow ? 220 : 290;
+  const marginTop = 28;
+  const marginRight = isNarrow ? 8 : 14;
+  const marginBottom = isNarrow ? 34 : 38;
 
   const maxRaw = Math.max(0, ...data.map(d => Number(d.total) || 0));
+  const stepsCount = 4;
   const niceMax = Math.max(stepsCount, Math.ceil(maxRaw / stepsCount) * stepsCount);
   const stepVal = niceMax / stepsCount;
-  const marginLeft = Math.min(tier === 'xs' ? 30 : 50, Math.max(tier === 'xs' ? 18 : 24, (tier === 'xs' ? 10 : 14) + String(niceMax).length * (tier === 'xs' ? 6 : 8)));
+  const marginLeft = Math.min(50, Math.max(24, 14 + String(niceMax).length * 8));
 
   const plotW = Math.max(10, W - marginLeft - marginRight);
   const plotH = H - marginTop - marginBottom;
   const n = data.length;
   const band = plotW / n;
-  // Purely proportional to the available band — no oversized minimum, so
-  // bars never look disproportionately thick relative to short columns
-  // on small screens. A small max cap keeps them from ballooning on wide
-  // screens instead.
-  const barW = Math.max(2.5, Math.min(tier === 'lg' ? 18 : 14, band * 0.34));
+  const barW = Math.max(isNarrow ? 4 : 6, Math.min(isNarrow ? 12 : 18, band * 0.38));
 
   const avg = data.reduce((s, d) => s + (Number(d.total) || 0), 0) / data.length;
   const peakIdx = data.reduce((best, d, i) => (Number(d.total) || 0) > (Number(data[best].total) || 0) ? i : best, 0);
   const peakVal = Number(data[peakIdx].total) || 0;
-
-  const yFontSize = tier === 'xs' ? 9 : 10;
 
   // gridlines + y-axis labels
   let gridLines = '', yLabels = '';
@@ -333,33 +322,23 @@ function drawDailyChart(){
     const val = Math.round(stepVal * s);
     const y = marginTop + plotH - (val / niceMax) * plotH;
     gridLines += `<line class="np-chart__grid" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"></line>`;
-    yLabels   += `<text class="np-chart__ylabel" x="${marginLeft - 8}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" style="font-size:${yFontSize}px">${val}</text>`;
+    yLabels   += `<text class="np-chart__ylabel" x="${marginLeft - 8}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${val}</text>`;
   }
 
-  // Average reference line. Anchored on the LEFT, next to the y-axis —
-  // not the right edge — because the right edge is exactly where the
-  // tallest/"today" bar usually is, which is what was hiding this label
-  // behind the bars. A background pill guarantees legibility regardless
-  // of what gridline or bar the line happens to cross.
+  // average reference line
   let avgLine = '';
   if (peakVal > 0 && avg > 0.15) {
     const yAvg = marginTop + plotH - (avg / niceMax) * plotH;
-    const avgText = `avg ${avg % 1 === 0 ? avg : avg.toFixed(1)}`;
-    const labelX = marginLeft + 6;
-    const labelW = Math.max(34, avgText.length * 6.2 + 12);
-    const labelY = Math.max(marginTop - 14, yAvg - 18);
+    const avgText = avg % 1 === 0 ? String(avg) : avg.toFixed(1);
     avgLine = `
       <line class="np-chart__avgline" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${yAvg.toFixed(1)}" y2="${yAvg.toFixed(1)}"></line>
-      <rect class="np-chart__avgpill" x="${labelX.toFixed(1)}" y="${(labelY - 12).toFixed(1)}" width="${labelW.toFixed(1)}" height="16" rx="8"></rect>
-      <text class="np-chart__avglabel" x="${(labelX + labelW / 2).toFixed(1)}" y="${(labelY - 1).toFixed(1)}" text-anchor="middle">${avgText}</text>`;
+      <text class="np-chart__avglabel" x="${(W - marginRight).toFixed(1)}" y="${(yAvg - 5).toFixed(1)}" text-anchor="end">avg ${avgText}</text>`;
   }
 
   // Fixed 14-day range means labels can overlap on narrower screens —
-  // thin them out based on how much horizontal room each label actually
-  // needs (wider on xs since "Aug 3"-style month labels take more room
-  // than a bare day number).
-  const minLabelBand = tier === 'xs' ? 40 : 34;
-  const labelEvery = band < minLabelBand ? (band < minLabelBand * 0.6 ? 3 : 2) : 1;
+  // show every other date once each column has less room than a label needs.
+  const minLabelBand = 34;
+  const labelEvery = band < minLabelBand ? 2 : 1;
 
   // bars + x-axis date labels
   let bars = '', xlabels = '';
@@ -394,7 +373,7 @@ function drawDailyChart(){
     // thinning labels, so the visible axis never looks arbitrary.
     const forceShow = isToday || i === 0;
     if (forceShow || i % labelEvery === 0) {
-      xlabels += `<text class="np-chart__xlabel${isToday ? ' np-chart__xlabel--today' : ''}" x="${cx.toFixed(1)}" y="${(H - marginBottom + 16).toFixed(1)}" text-anchor="middle" style="font-size:${yFontSize}px">${showMonth ? escapeHtml(monthAbbr) + ' ' : ''}${dayNum}</text>`;
+      xlabels += `<text class="np-chart__xlabel${isToday ? ' np-chart__xlabel--today' : ''}" x="${cx.toFixed(1)}" y="${(H - marginBottom + 16).toFixed(1)}" text-anchor="middle">${showMonth ? escapeHtml(monthAbbr) + ' ' : ''}${dayNum}</text>`;
     }
   });
 
@@ -403,8 +382,8 @@ function drawDailyChart(){
   wrap.innerHTML = `
     <svg class="np-chart__svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Daily appointment volume for the last 14 days">
       <g class="np-chart__grid-group">${gridLines}</g>
-      <g class="np-chart__bars">${bars}</g>
       ${avgLine}
+      <g class="np-chart__bars">${bars}</g>
       <g class="np-chart__ylabels">${yLabels}</g>
       <g class="np-chart__xlabels">${xlabels}</g>
       <line class="np-chart__axis" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${(marginTop + plotH).toFixed(1)}" y2="${(marginTop + plotH).toFixed(1)}"></line>

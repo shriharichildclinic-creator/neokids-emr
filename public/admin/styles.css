@@ -253,8 +253,24 @@ html,body{
 .np-field{ display:flex; flex-direction:column; gap:.35rem; margin-bottom:.85rem; }
 .np-field__label{ font-size:.78rem; font-weight:600; color:var(--np-ink); }
 .np-field__hint{ font-size:.72rem; color:var(--np-muted); }
-/* .np-input, .np-select, .np-textarea (including date/time picker
-   styling) are defined once, for both panels, in neokids-theme.css. */
+.np-input, .np-select, .np-textarea, input.np-input, select.np-select, textarea.np-textarea{
+  width:100%;
+  padding:.6rem .8rem;
+  border-radius:10px;
+  border:1px solid var(--np-border);
+  background: var(--nk-card);
+  font-size:.88rem;
+  color: var(--np-text);
+  font-family: inherit;
+}
+
+select.np-select, .np-select{ padding-right:2rem; appearance:auto; }
+.np-textarea{ min-height: 70px; resize: vertical; }
+.np-input:focus, .np-select:focus, .np-textarea:focus{
+  outline:none;
+  border-color: var(--np-primary);
+  box-shadow: 0 0 0 3px rgba(137,188,189,.15);
+}
 /* .np-error is defined once, for both panels, in neokids-theme.css. */
 
 .np-password-wrap{ position:relative; display:block; }
@@ -589,8 +605,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 .np-chart__avgline{
   stroke: var(--np-coral); stroke-width:1; stroke-dasharray:4 3; opacity:.55;
 }
-.np-chart__avgpill{ fill: var(--nk-card, #fff); opacity:.92; }
-.np-chart__avglabel{ fill: var(--np-coral); font-size:10px; font-weight:700; }
+.np-chart__avglabel{ fill: var(--np-coral); font-size:10px; font-weight:600; opacity:.85; }
 
 .np-chart__ylabel{ fill: var(--np-muted); font-size:10px; }
 .np-chart__xlabel{ fill: var(--np-muted); font-size:10px; }
