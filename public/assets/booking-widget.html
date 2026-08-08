@@ -56,6 +56,25 @@ body {
 }
 .hidden { display: none !important; }
 
+/* ── Step-to-step layout stability ─────────────────────────────────────
+   Root cause of "footer jumps / page shifts between steps": each step
+   section is a different natural height (Consultation is short, Patient
+   Details is tall, Slot picker is medium, Confirmation is different
+   again), and swapping which one has display:none changes the height of
+   .bw-card, and the iframe resize this triggers is visible as a page-wide
+   jump. We track the tallest step height seen so far in this session in
+   --bw-min-step-height and apply it as a floor on every step, so the
+   container never shrinks again once we've seen the tallest content —
+   only a one-time initial settle instead of a jump on every step change.
+   Transition uses only transform/opacity (GPU-accelerated, matches the
+   Services page's teleconsultation animation pattern), never layout
+   properties, so it never triggers extra reflow/repaint cost. ── */
+:root { --bw-min-step-height: 0px; }
+.bw-body, .bw-success, .bw-failure { min-height: var(--bw-min-step-height); }
+@keyframes bwStepIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.bw-step-entering { animation: bwStepIn .28s cubic-bezier(.22,.9,.32,1) both; }
+@media (prefers-reduced-motion: reduce) { .bw-step-entering { animation: none !important; } }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
@@ -429,13 +448,25 @@ body {
 }
 
 /* ── Buttons ── */
-.bw-btn-row { display: flex; gap: 10px; margin-top: 20px; }
+.bw-btn-row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
 .bw-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font-family: 'Inter', sans-serif; font-size: 14.5px; font-weight: 600;
   border-radius: var(--bw-radius-pill); padding: 13px 24px;
   border: none; cursor: pointer; transition: transform .15s, box-shadow .15s, background .15s, opacity .15s;
-  text-decoration: none; white-space: nowrap; width: 100%;
+  text-decoration: none; white-space: nowrap;
+  width: auto; min-height: 46px;
+}
+/* Buttons that share a row (e.g. Back / Confirm) split the row evenly
+   instead of each independently claiming 100% width, which is what made
+   widths inconsistent depending on how many buttons were in a row. A
+   single button in its own centered row still sizes to its content. */
+.bw-btn-row .bw-btn { flex: 1 1 0; min-width: 0; max-width: 280px; }
+@media (max-width: 400px) {
+  /* Below this width two side-by-side buttons get too cramped for their
+     labels — stack instead of squeezing text. */
+  .bw-btn-row { flex-direction: column; }
+  .bw-btn-row .bw-btn { flex: 1 1 auto; width: 100%; }
 }
 .bw-btn:hover { transform: translateY(-1px); }
 .bw-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
@@ -1630,7 +1661,13 @@ function goTo(step){
   [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
   $('#successScreen').classList.add('hidden');
   $('#failureScreen').classList.add('hidden');
-  $('#step'+step).classList.remove('hidden');
+  const activeEl = $('#step'+step);
+  activeEl.classList.remove('hidden');
+  activeEl.classList.remove('bw-step-entering');
+  // Force reflow so the entering animation restarts even if the same
+  // step is re-shown back-to-back.
+  void activeEl.offsetWidth;
+  activeEl.classList.add('bw-step-entering');
 
   // Update old step labels (for JS compat)
   [1,2,3,4].forEach(i => {
@@ -1647,6 +1684,26 @@ function goTo(step){
   if (step === 3) { initSlotPicker(); }
   if (step === 4) { renderSummary(); }
   reportHeightSoon();
+  growStableStepHeight();
+}
+
+let stableStepHeight = 0;
+function growStableStepHeight(){
+  // Re-measure shortly after step content (incl. async doctor/slot data)
+  // has had a chance to render, and only ever grow the floor — never
+  // shrink it — so once the tallest step has been seen, every step
+  // (including shorter ones like Consultation or Confirmation) holds
+  // that same minimum height and the page never jumps again.
+  setTimeout(() => {
+    const active = document.querySelector('.bw-body:not(.hidden), .bw-success:not(.hidden), .bw-failure:not(.hidden)');
+    if (!active) return;
+    const h = active.scrollHeight;
+    if (h > stableStepHeight) {
+      stableStepHeight = h;
+      document.documentElement.style.setProperty('--bw-min-step-height', stableStepHeight + 'px');
+      reportHeightSoon();
+    }
+  }, 220);
 }
 
 function validateStep2(){
@@ -1751,6 +1808,64 @@ function renderSummary(){
   tnc.onchange = () => { $('#btnSubmit').disabled = !tnc.checked; };
 }
 
+/* ── Cashfree checkout modal hardening ──────────────────────────────────
+   Cashfree's `_modal` target injects its own overlay/iframe directly into
+   <body> at runtime, using `position: fixed`. Inside an embedded iframe,
+   `position: fixed` is fixed to *this* iframe's own viewport box, not the
+   parent window's — so if the iframe element in the parent page is
+   shorter than the full window (a likely state right as checkout opens,
+   before this widget's own height has caught up), the modal can render
+   partially off-screen, too low, or under other content. We can't control
+   the parent page's iframe-resize handler from here, but we can: (1) ask
+   for a generous height a beat *before* opening checkout instead of only
+   reactively after, and (2) once Cashfree's own elements appear, force
+   them to unambiguous full-viewport fixed coverage with a top-of-stack
+   z-index, regardless of any stacking-context quirk elsewhere on the
+   page. This never touches Cashfree's own DOM structure/content, only
+   its outer positioning. ── */
+let cashfreeObserver = null;
+function armCashfreeModalHardening(){
+  if (cashfreeObserver) return;
+  cashfreeObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      m.addedNodes.forEach(node => {
+        if (!(node instanceof HTMLElement)) return;
+        const looksLikeCashfreeOverlay =
+          node.tagName === 'IFRAME' ||
+          (node.style && (node.style.position === 'fixed' || (parseInt(node.style.zIndex) || 0) > 100));
+        if (!looksLikeCashfreeOverlay || node.closest('.bw-page')) return;
+        let target = node;
+        // Find the actual fixed-position wrapper (the iframe itself is
+        // usually nested a level or two inside the positioned overlay).
+        while (target && target !== document.body) {
+          const cs = window.getComputedStyle(target);
+          if (cs.position === 'fixed') break;
+          target = target.parentElement;
+        }
+        if (target && target !== document.body) {
+          target.style.position = 'fixed';
+          target.style.top = '0';
+          target.style.left = '0';
+          target.style.right = '0';
+          target.style.bottom = '0';
+          target.style.width = '100%';
+          target.style.height = '100dvh';
+          target.style.margin = '0';
+          target.style.zIndex = '2147483647';
+          document.documentElement.style.overflow = 'hidden';
+          document.body.style.overflow = 'hidden';
+        }
+      });
+    }
+  });
+  cashfreeObserver.observe(document.body, { childList: true });
+}
+function disarmCashfreeModalHardening(){
+  if (cashfreeObserver) { cashfreeObserver.disconnect(); cashfreeObserver = null; }
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
+}
+
 function nukeCashfreeOverlay() {
   document.querySelectorAll('iframe').forEach(el => {
     let p = el.parentElement;
@@ -1768,6 +1883,7 @@ function nukeCashfreeOverlay() {
   document.body.style.overflow = '';
   document.body.style.backdropFilter = '';
   document.documentElement.style.overflow = '';
+  disarmCashfreeModalHardening();
 }
 
 async function confirmPaymentWithServer(appointmentId){
@@ -1807,6 +1923,14 @@ async function submitBooking(){
       const orderId  = res.cashfree.orderId;
       const appt     = res.appointment;
 
+      // Give the parent iframe a generous target height and normalize
+      // whatever Cashfree injects *before* checkout() runs, rather than
+      // reacting after the modal may already be mispositioned.
+      try {
+        window.parent.postMessage({ type: 'nkp-booking-widget-height', height: Math.max(measureWidgetHeight(), window.innerHeight || 900) }, '*');
+      } catch (_) {}
+      armCashfreeModalHardening();
+
       cashfree.checkout({ paymentSessionId: res.cashfree.paymentSessionId, redirectTarget: '_modal' })
         .then(async r => {
           const paid = await confirmPaymentWithServer(appt.id);
@@ -1816,7 +1940,7 @@ async function submitBooking(){
             showSuccess(appt, true, '✅ Payment confirmed! Consultation booked.');
           }
         })
-        .catch(e => console.warn('[Cashfree] checkout rejected:', e));
+        .catch(e => { console.warn('[Cashfree] checkout rejected:', e); nukeCashfreeOverlay(); reportHeightSoon(); });
 
       startPaymentPolling(appt, orderId);
 
@@ -1891,6 +2015,7 @@ function showSuccess(appt, isOnline, customMessage=''){
   document.querySelector('.bw-stepper').classList.add('is-hidden');
   const s = $('#successScreen');
   s.classList.remove('hidden');
+  s.classList.remove('bw-step-entering'); void s.offsetWidth; s.classList.add('bw-step-entering');
 
   const _ref = shortRef(appt.id);
 
@@ -1905,6 +2030,7 @@ function showSuccess(appt, isOnline, customMessage=''){
     <p style="margin-top:10px;font-size:12px;color:var(--bw-muted);">A reminder will be sent ~30 minutes before your appointment via WhatsApp.</p>`;
   s.focus();
   reportHeightSoon();
+  growStableStepHeight();
 }
 
 function showFailure(appt, cashfreeStatus, message){
@@ -1915,6 +2041,7 @@ function showFailure(appt, cashfreeStatus, message){
   document.querySelector('.bw-stepper').classList.add('is-hidden');
   const f = $('#failureScreen');
   f.classList.remove('hidden');
+  f.classList.remove('bw-step-entering'); void f.offsetWidth; f.classList.add('bw-step-entering');
   $('#failureMsg').textContent = message || 'Your payment could not be confirmed.';
   $('#failureDetails').innerHTML =
     (appt ? `<p><strong>Booking ref:</strong> NK-${escapeHtml(shortRef(appt.id))}</p>` : '') +
@@ -1924,6 +2051,7 @@ function showFailure(appt, cashfreeStatus, message){
   $('#btnSubmitText').textContent = 'Confirm Booking';
   f.focus();
   reportHeightSoon();
+  growStableStepHeight();
 }
 
 function resetWidget(){
