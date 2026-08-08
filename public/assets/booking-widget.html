@@ -56,25 +56,6 @@ body {
 }
 .hidden { display: none !important; }
 
-/* ── Step-to-step layout stability ─────────────────────────────────────
-   Root cause of "footer jumps / page shifts between steps": each step
-   section is a different natural height (Consultation is short, Patient
-   Details is tall, Slot picker is medium, Confirmation is different
-   again), and swapping which one has display:none changes the height of
-   .bw-card, and the iframe resize this triggers is visible as a page-wide
-   jump. We track the tallest step height seen so far in this session in
-   --bw-min-step-height and apply it as a floor on every step, so the
-   container never shrinks again once we've seen the tallest content —
-   only a one-time initial settle instead of a jump on every step change.
-   Transition uses only transform/opacity (GPU-accelerated, matches the
-   Services page's teleconsultation animation pattern), never layout
-   properties, so it never triggers extra reflow/repaint cost. ── */
-:root { --bw-min-step-height: 0px; }
-.bw-body, .bw-success, .bw-failure { min-height: var(--bw-min-step-height); }
-@keyframes bwStepIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.bw-step-entering { animation: bwStepIn .28s cubic-bezier(.22,.9,.32,1) both; }
-@media (prefers-reduced-motion: reduce) { .bw-step-entering { animation: none !important; } }
-
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
@@ -246,9 +227,22 @@ body {
 .bw-step-item.is-done + .bw-step-item .bw-step-line,
 .bw-step-line.is-done { background: var(--bw-teal); }
 
-/* ── Section body ── */
-.bw-body { padding: 28px; }
-@media (max-width: 480px) { .bw-body { padding: 20px 16px; } }
+/* ── Section body ──
+   Fix for Part 4 "layout instability": a min-height floor stops short
+   steps (e.g. Patient Details) from collapsing to a tiny box next to a
+   tall step (e.g. Doctor list), which is what was causing the footer
+   to visibly jump between steps. Steps taller than the floor still grow
+   naturally — this only sets a floor, never a ceiling. */
+.bw-body { padding: 28px; min-height: 480px; box-sizing: border-box; }
+@media (max-width: 480px) { .bw-body { padding: 20px 16px; min-height: 420px; } }
+
+/* Fix for Part 4 "footer jumps / entire page shifts": every step now
+   fades and lifts in on entry instead of hard-cutting from display:none
+   to visible. Only opacity + transform animate (GPU-composited), so this
+   never triggers layout/paint thrashing per Part 3's requirement. */
+.bw-body.bw-step-enter { animation: bwStepEnter .32s cubic-bezier(.22,1,.36,1) both; }
+@keyframes bwStepEnter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .bw-body.bw-step-enter { animation: none; } }
 
 /* ── Section heading ── */
 .bw-section-head { margin-bottom: 20px; }
@@ -448,25 +442,13 @@ body {
 }
 
 /* ── Buttons ── */
-.bw-btn-row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.bw-btn-row { display: flex; gap: 10px; margin-top: 20px; }
 .bw-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font-family: 'Inter', sans-serif; font-size: 14.5px; font-weight: 600;
   border-radius: var(--bw-radius-pill); padding: 13px 24px;
   border: none; cursor: pointer; transition: transform .15s, box-shadow .15s, background .15s, opacity .15s;
-  text-decoration: none; white-space: nowrap;
-  width: auto; min-height: 46px;
-}
-/* Buttons that share a row (e.g. Back / Confirm) split the row evenly
-   instead of each independently claiming 100% width, which is what made
-   widths inconsistent depending on how many buttons were in a row. A
-   single button in its own centered row still sizes to its content. */
-.bw-btn-row .bw-btn { flex: 1 1 0; min-width: 0; max-width: 280px; }
-@media (max-width: 400px) {
-  /* Below this width two side-by-side buttons get too cramped for their
-     labels — stack instead of squeezing text. */
-  .bw-btn-row { flex-direction: column; }
-  .bw-btn-row .bw-btn { flex: 1 1 auto; width: 100%; }
+  text-decoration: none; white-space: nowrap; width: 100%;
 }
 .bw-btn:hover { transform: translateY(-1px); }
 .bw-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
@@ -697,40 +679,129 @@ body {
   position: absolute; right: 28px; top: 48px; width: 136px; border-radius: 24px; padding: 18px 16px; text-align: center;
 }
 
-/* ── Booking-flow phone mockup (adapted from the NeoKidsPro Services page
-      teleconsultation animation) — shows the same guided steps this widget
-      actually walks the parent through, cycling automatically. ── */
-@keyframes bwPhoneFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-@keyframes bwPhoneSlide { 0%{opacity:0;transform:translateX(14px);} 6%{opacity:1;transform:translateX(0);} 30%{opacity:1;transform:translateX(0);} 36%{opacity:0;transform:translateX(-14px);} 100%{opacity:0;transform:translateX(-14px);} }
-.bw-phone-wrap { position: relative; z-index: 1; display: flex; justify-content: center; }
-.bw-phone {
+/* ── Booking-flow phone mockup — REBUILT (Part 3)
+      Old version: a passive 4-step autoplay that never actually showed
+      an online/clinic toggle, animated `transform: translateX` on FOUR
+      always-present absolutely-positioned panels simultaneously (each
+      panel keeps animating even while invisible — wasted paint work),
+      and had no user interaction at all.
+
+      New version: a real, tappable Online/Clinic segmented toggle.
+      Only `opacity` + `transform` are ever animated (GPU-composited,
+      per Part 3's explicit requirement) and only two panels exist
+      instead of four, both the same fixed size and absolutely
+      positioned in the same box — so switching between them can never
+      shift layout. Auto-cycles for anyone who doesn't touch it, and
+      pauses after a manual tap so it doesn't fight the user. ── */
+.bwpt-wrap { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+.bwpt-toggle {
+  position: relative; display: inline-flex; padding: 4px; border-radius: var(--bw-radius-pill);
+  background: #fff; border: 1.5px solid var(--bw-border); box-shadow: var(--bw-shadow-sm);
+}
+.bwpt-toggle-thumb {
+  position: absolute; top: 4px; left: 4px; width: calc(50% - 4px); height: calc(100% - 8px);
+  border-radius: var(--bw-radius-pill); background: linear-gradient(135deg, var(--bw-teal), var(--bw-teal-dark));
+  transition: transform .38s cubic-bezier(.65,0,.35,1), background .38s ease; will-change: transform;
+}
+.bwpt[data-mode="clinic"] .bwpt-toggle-thumb {
+  transform: translateX(100%); background: linear-gradient(135deg, var(--bw-pink), var(--bw-pink-hover));
+}
+.bwpt-toggle-btn {
+  position: relative; z-index: 1; border: none; background: transparent; cursor: pointer;
+  font-family: 'Inter', sans-serif; font-weight: 700; font-size: 12.5px; color: var(--bw-muted);
+  padding: 9px 18px; border-radius: var(--bw-radius-pill); display: inline-flex; align-items: center; gap: 6px;
+  transition: color .3s ease; white-space: nowrap; min-height: 40px;
+}
+.bwpt[data-mode="online"] .bwpt-toggle-btn.b-online,
+.bwpt[data-mode="clinic"] .bwpt-toggle-btn.b-clinic { color: #fff; }
+
+.bwpt-phone {
   width: 190px; height: 388px; border-radius: 30px; background: #fff;
   border: 5px solid var(--bw-ink); box-shadow: 0 24px 52px rgba(46,85,86,.22);
   overflow: hidden; position: relative; animation: bwPhoneFloat 5s ease-in-out infinite;
 }
-.bw-phone::before {
+@keyframes bwPhoneFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+.bwpt-phone::before {
   content: ''; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
   width: 46px; height: 9px; background: var(--bw-ink); border-radius: 8px; z-index: 5;
 }
-.bw-phone-screen { position: absolute; inset: 0; background: #f8f9fa; padding: 26px 9px 9px; }
-.bw-phone-panel { position: absolute; inset: 0; padding: 14px; opacity: 0; transform: translateX(14px); animation: bwPhoneSlide 10s infinite; display: flex; flex-direction: column; gap: 7px; }
-.bw-phone-panel.d0 { animation-delay: 0s; }
-.bw-phone-panel.d1 { animation-delay: 2.5s; }
-.bw-phone-panel.d2 { animation-delay: 5s; }
-.bw-phone-panel.d3 { animation-delay: 7.5s; }
-.bw-phone-title { font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 11px; color: var(--bw-ink); margin-bottom: 2px; }
-.bw-phone-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: #fafafa; border-radius: 9px; padding: 7px 9px; font-size: 9.5px; font-weight: 600; color: var(--bw-ink); }
-.bw-phone-card { background: #fff; border-radius: 9px; padding: 7px; border: 1.5px solid var(--bw-border); display: flex; gap: 6px; align-items: center; font-size: 8.5px; font-weight: 700; color: var(--bw-ink); }
-.bw-phone-card.act { border-color: var(--bw-pink); background: var(--bw-pink-50); }
-.bw-phone-slots { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
-.bw-phone-slot { background: #fff; border-radius: 999px; padding: 4px 2px; border: 1.5px solid var(--bw-border); font-size: 7px; font-weight: 600; color: var(--bw-body); text-align: center; }
-.bw-phone-slot.act { background: var(--bw-pink); color: #fff; border-color: var(--bw-pink); }
-.bw-phone-confirm { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding-top: 20px; }
-.bw-phone-check { width: 38px; height: 38px; border-radius: 50%; background: var(--bw-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; }
-.bw-phone-dots { display: flex; gap: 5px; justify-content: center; margin-top: 12px; }
-.bw-phone-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(46,85,86,.15); }
-@media (prefers-reduced-motion: reduce) { .bw-phone, .bw-phone-panel { animation: none !important; } }
-@media (max-width: 980px) { .bw-phone-wrap { margin-top: 8px; } }
+.bwpt-screen { position: absolute; inset: 0; background: #f8f9fa; padding: 26px 10px 10px; }
+
+.bwpt-panel {
+  position: absolute; inset: 26px 10px 10px; opacity: 0; transform: scale(.96);
+  transition: opacity .4s ease, transform .4s cubic-bezier(.34,1.2,.64,1);
+  pointer-events: none; display: flex; flex-direction: column; gap: 9px; will-change: opacity, transform;
+}
+.bwpt[data-mode="online"] .bwpt-panel.online,
+.bwpt[data-mode="clinic"] .bwpt-panel.clinic { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+.bwpt-badge {
+  align-self: flex-start; font-family: 'Inter', sans-serif; font-weight: 800; font-size: 9.5px;
+  padding: 5px 10px; border-radius: var(--bw-radius-pill);
+}
+.bwpt-panel.online .bwpt-badge { background: var(--bw-teal-50); color: var(--bw-teal-dark); }
+.bwpt-panel.clinic .bwpt-badge { background: var(--bw-pink-50); color: var(--bw-pink-hover); }
+
+.bwpt-video {
+  flex: 1; border-radius: 18px; background: linear-gradient(150deg, var(--bw-ink) 0%, #1F3A4A 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+  position: relative; overflow: hidden;
+}
+.bwpt-avatar {
+  width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 24px; background: linear-gradient(135deg, var(--bw-teal), var(--bw-teal-dark));
+  box-shadow: 0 0 0 6px rgba(137,188,189,.28); animation: bwptPulseRing 2.4s ease-out infinite;
+}
+@keyframes bwptPulseRing {
+  0%   { box-shadow: 0 0 0 6px rgba(137,188,189,.32); }
+  70%  { box-shadow: 0 0 0 14px rgba(137,188,189,0); }
+  100% { box-shadow: 0 0 0 6px rgba(137,188,189,0); }
+}
+.bwpt-video-name { color: #fff; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 11.5px; }
+.bwpt-video-sub { color: rgba(255,255,255,.62); font-size: 9.5px; font-weight: 500; display: flex; align-items: center; gap: 5px; }
+.bwpt-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bw-pink); animation: bwptBlink 1.4s ease-in-out infinite; }
+@keyframes bwptBlink { 0%,100%{ opacity: 1; } 50%{ opacity: .3; } }
+
+.bwpt-map {
+  flex: 1; border-radius: 18px; background: var(--bw-surface); position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.bwpt-map::before {
+  content:''; position:absolute; inset:0;
+  background-image: linear-gradient(rgba(254,132,164,.14) 1px, transparent 1px), linear-gradient(90deg, rgba(254,132,164,.14) 1px, transparent 1px);
+  background-size: 17px 17px;
+}
+.bwpt-pin {
+  position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 50% 50% 50% 0;
+  background: var(--bw-pink); transform: rotate(-45deg); display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--bw-shadow-sm); animation: bwptDrop .6s cubic-bezier(.34,1.4,.64,1);
+}
+@keyframes bwptDrop { 0%{ transform: rotate(-45deg) translateY(-14px); opacity: 0; } 100%{ transform: rotate(-45deg) translateY(0); opacity: 1; } }
+.bwpt-pin span { transform: rotate(45deg); font-size: 12px; }
+.bwpt-clinic-card { background: #fff; border-radius: 12px; padding: 8px 10px; border: 1.5px solid var(--bw-border); display: flex; flex-direction: column; gap: 2px; }
+.bwpt-clinic-name { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 10px; color: var(--bw-ink); }
+.bwpt-clinic-addr { font-size: 8.5px; color: var(--bw-muted); }
+.bwpt-chip { align-self: flex-start; margin-top: 4px; font-size: 8px; font-weight: 700; color: var(--bw-teal-dark); background: var(--bw-teal-50); padding: 3px 8px; border-radius: var(--bw-radius-pill); }
+.bwpt-panel.clinic .bwpt-chip { color: var(--bw-pink-hover); background: var(--bw-pink-50); }
+
+.bwpt-cta {
+  text-align: center; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 10.5px; color: #fff;
+  padding: 9px; border-radius: 12px; background: linear-gradient(135deg, var(--bw-teal), var(--bw-teal-dark));
+}
+.bwpt-panel.clinic .bwpt-cta { background: linear-gradient(135deg, var(--bw-pink), var(--bw-pink-hover)); }
+
+.bwpt-dots { display: flex; gap: 6px; justify-content: center; }
+.bwpt-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(46,85,86,.15); transition: background .3s ease, transform .3s ease; }
+.bwpt[data-mode="online"] .bwpt-dot.d-online,
+.bwpt[data-mode="clinic"] .bwpt-dot.d-clinic { background: var(--bw-teal); transform: scale(1.3); }
+.bwpt[data-mode="clinic"] .bwpt-dot.d-clinic { background: var(--bw-pink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .bwpt-phone, .bwpt-avatar, .bwpt-live-dot, .bwpt-pin { animation: none !important; }
+  .bwpt-panel, .bwpt-toggle-thumb { transition-duration: .01ms !important; }
+}
+@media (max-width: 980px) { .bwpt-wrap { margin-top: 8px; } }
 .bw-hero-stat-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--bw-muted);
 }
@@ -901,40 +972,48 @@ body {
           </div>
           <div class="bw-hero-visual">
             <div class="bw-hero-panel">
-              <!-- Booking-flow phone mockup, adapted from the NeoKidsPro
-                   Services page teleconsultation animation. Purely decorative
-                   (aria-hidden) — mirrors the four real steps below it. -->
-              <div class="bw-phone-wrap" aria-hidden="true">
-                <div class="bw-phone">
-                  <div class="bw-phone-screen">
-                    <div class="bw-phone-panel d0">
-                      <div class="bw-phone-title">Step 1 · Consultation Type</div>
-                      <div class="bw-phone-card act"><span>🎥</span>Online Teleconsultation</div>
-                      <div class="bw-phone-card"><span>🏥</span>Clinic Visit</div>
-                    </div>
-                    <div class="bw-phone-panel d1">
-                      <div class="bw-phone-title">Step 2 · Doctor &amp; Slot</div>
-                      <div class="bw-phone-row">👩‍⚕️ Dr. Parmar <span>selected</span></div>
-                      <div class="bw-phone-slots">
-                        <div class="bw-phone-slot">10:00</div><div class="bw-phone-slot act">11:30</div><div class="bw-phone-slot">1:00</div>
-                        <div class="bw-phone-slot">3:00</div><div class="bw-phone-slot">4:30</div><div class="bw-phone-slot">6:00</div>
+              <!-- Booking-flow phone mockup — REBUILT (Part 3). Real,
+                   tappable Online/Clinic toggle instead of a passive
+                   autoplay; keyboard-accessible tabs; the phone itself
+                   stays aria-hidden since it's a visual echo of the
+                   real controls in the steps below it. -->
+              <div class="bwpt" id="bwptRoot" data-mode="online">
+                <div class="bwpt-wrap">
+
+                  <div class="bwpt-toggle" role="tablist" aria-label="Preview: online consultation or clinic visit">
+                    <div class="bwpt-toggle-thumb" aria-hidden="true"></div>
+                    <button type="button" class="bwpt-toggle-btn b-online" role="tab" aria-selected="true" data-bwpt-mode="online">🎥 Online</button>
+                    <button type="button" class="bwpt-toggle-btn b-clinic" role="tab" aria-selected="false" data-bwpt-mode="clinic">🏥 Clinic</button>
+                  </div>
+
+                  <div class="bwpt-phone" aria-hidden="true">
+                    <div class="bwpt-screen">
+                      <div class="bwpt-panel online">
+                        <div class="bwpt-badge">🎥 Video Consultation</div>
+                        <div class="bwpt-video">
+                          <div class="bwpt-avatar">👩‍⚕️</div>
+                          <div class="bwpt-video-name">Dr. Vishal Parmar</div>
+                          <div class="bwpt-video-sub"><span class="bwpt-live-dot"></span>Call connecting…</div>
+                        </div>
+                        <div class="bwpt-cta">Join Video Call</div>
                       </div>
-                    </div>
-                    <div class="bw-phone-panel d2">
-                      <div class="bw-phone-title">Step 3 · Patient Details</div>
-                      <div class="bw-phone-row">Child Name <span>Aanya S.</span></div>
-                      <div class="bw-phone-row">Age <span>3 yrs</span></div>
-                    </div>
-                    <div class="bw-phone-panel d3">
-                      <div class="bw-phone-confirm">
-                        <div class="bw-phone-check">✓</div>
-                        <div class="bw-phone-title">Booking Confirmed!</div>
+                      <div class="bwpt-panel clinic">
+                        <div class="bwpt-badge">🏥 Clinic Visit</div>
+                        <div class="bwpt-map"><div class="bwpt-pin"><span>🩺</span></div></div>
+                        <div class="bwpt-clinic-card">
+                          <div class="bwpt-clinic-name">Shri Hari Child Clinic</div>
+                          <div class="bwpt-clinic-addr">Borivali East, Mumbai</div>
+                          <div class="bwpt-chip">Today · 4:30 PM</div>
+                        </div>
+                        <div class="bwpt-cta">Get Directions</div>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div class="bw-phone-dots" aria-hidden="true">
-                  <span class="bw-phone-dot"></span><span class="bw-phone-dot"></span><span class="bw-phone-dot"></span><span class="bw-phone-dot"></span>
+
+                  <div class="bwpt-dots" aria-hidden="true">
+                    <span class="bwpt-dot d-online"></span><span class="bwpt-dot d-clinic"></span>
+                  </div>
+
                 </div>
               </div>
               <div class="bw-hero-panel-title" style="text-align:center;margin-top:16px;">Gentle, guided booking</div>
@@ -1045,45 +1124,110 @@ body {
         <div class="bw-shell">
           <div class="bw-landing-head">
             <div class="bw-landing-badge"><span class="bw-landing-badge-dot" aria-hidden="true"></span>FAQ</div>
-            <h2 class="bw-landing-h2">Booking questions, answered clearly</h2>
+            <h2 class="bw-landing-h2">Questions parents ask before they book a child specialist appointment</h2>
           </div>
           <div class="bw-faq-list" id="bwFaqList">
+
             <div class="bw-faq-card">
               <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel1" id="bwFaqBtn1">
-                <span>Can I book both online and clinic appointments here?</span>
+                <span>How does an online consultation work?</span>
                 <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
               </button>
               <div class="bw-faq-panel" id="bwFaqPanel1" role="region" aria-labelledby="bwFaqBtn1">
-                <div class="bw-faq-content">Yes. The same booking widget supports both consultation types. Choose the option that suits your child and continue through the same guided flow.</div>
+                <div class="bw-faq-content">Pick "Online Consultation," choose a doctor and a live time slot, and pay securely to confirm. You'll get a video call link by WhatsApp and email before your appointment, so you can consult a pediatrician from home.</div>
               </div>
             </div>
+
             <div class="bw-faq-card">
               <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel2" id="bwFaqBtn2">
-                <span>Will I see live appointment slots?</span>
+                <span>How does a clinic visit work?</span>
                 <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
               </button>
               <div class="bw-faq-panel" id="bwFaqPanel2" role="region" aria-labelledby="bwFaqBtn2">
-                <div class="bw-faq-content">Yes. Slots are loaded live from the EMR, so only currently available times are shown after you choose a doctor and date.</div>
+                <div class="bw-faq-content">Choose "Clinic Visit," pick a doctor and time, and add your child's details. There's no advance payment for clinic visits: you pay at the clinic on the day, and your slot is confirmed by WhatsApp.</div>
               </div>
             </div>
+
             <div class="bw-faq-card">
               <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel3" id="bwFaqBtn3">
-                <span>How does payment work?</span>
+                <span>How long does an appointment take?</span>
                 <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
               </button>
               <div class="bw-faq-panel" id="bwFaqPanel3" role="region" aria-labelledby="bwFaqBtn3">
-                <div class="bw-faq-content">Online consultations require secure Cashfree payment to confirm the booking. Clinic visits remain pay-at-clinic.</div>
+                <div class="bw-faq-content">Most consultations run 15 to 20 minutes, both online and in clinic. Booking itself takes about 2 minutes once you know your preferred doctor and time.</div>
               </div>
             </div>
+
             <div class="bw-faq-card">
               <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel4" id="bwFaqBtn4">
-                <span>Can I start from a doctor profile page?</span>
+                <span>What payment methods are accepted?</span>
                 <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
               </button>
               <div class="bw-faq-panel" id="bwFaqPanel4" role="region" aria-labelledby="bwFaqBtn4">
-                <div class="bw-faq-content">Yes. Doctor profile buttons can open this widget with the doctor and consultation type already selected using safe query-parameter deep links.</div>
+                <div class="bw-faq-content">Online consultations are paid through Cashfree, which supports UPI, debit and credit cards, and net banking. Clinic visits are pay-at-clinic, with no advance payment required through this widget.</div>
               </div>
             </div>
+
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel5" id="bwFaqBtn5">
+                <span>Can I reschedule my appointment?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel5" role="region" aria-labelledby="bwFaqBtn5">
+                <div class="bw-faq-content">Yes. You can reschedule once at no charge if you let us know at least 4 hours before your appointment. Just contact us with your appointment details and we'll move you to a new slot.</div>
+              </div>
+            </div>
+
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel6" id="bwFaqBtn6">
+                <span>What if I need to cancel?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel6" role="region" aria-labelledby="bwFaqBtn6">
+                <div class="bw-faq-content">Cancellations made more than 24 hours before your online consultation are fully refunded. Cancellations between 4 and 24 hours get a partial refund. Clinic visits can be cancelled any time with no charge, since payment happens at the clinic.</div>
+              </div>
+            </div>
+
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel7" id="bwFaqBtn7">
+                <span>Will I get a prescription after the consultation?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel7" role="region" aria-labelledby="bwFaqBtn7">
+                <div class="bw-faq-content">Yes, when clinically appropriate. Our pediatricians issue a digital prescription, sent as a PDF by WhatsApp and email, with the same legal validity as a handwritten one.</div>
+              </div>
+            </div>
+
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel8" id="bwFaqBtn8">
+                <span>Do I need to book a new appointment for a follow-up?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel8" role="region" aria-labelledby="bwFaqBtn8">
+                <div class="bw-faq-content">Yes, follow-up visits are booked the same way as a first appointment. Choosing the same doctor helps keep your child's care consistent, since they'll already have your child's history.</div>
+              </div>
+            </div>
+
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel9" id="bwFaqBtn9">
+                <span>What age groups do NeoKidsPro doctors treat?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel9" role="region" aria-labelledby="bwFaqBtn9">
+                <div class="bw-faq-content">Our pediatricians and neonatologists see children from birth through age 18, including newborn care, vaccination, growth and development checks, and everyday childhood illnesses.</div>
+              </div>
+            </div>
+
+            <div class="bw-faq-card">
+              <button type="button" class="bw-faq-btn" data-action="toggleFaq" aria-expanded="false" aria-controls="bwFaqPanel10" id="bwFaqBtn10">
+                <span>Should I choose online or clinic for my child?</span>
+                <span class="bw-faq-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </button>
+              <div class="bw-faq-panel" id="bwFaqPanel10" role="region" aria-labelledby="bwFaqBtn10">
+                <div class="bw-faq-content">Online works well for follow-ups, vaccination guidance, growth questions, and everyday concerns that don't need a physical exam. Choose a clinic visit for a first-time evaluation, or if your child needs to be examined in person. If you're not sure, our doctors can tell you during a quick online consultation whether an in-person exam is needed.</div>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
@@ -1661,13 +1805,14 @@ function goTo(step){
   [1,2,3,4].forEach(i => $('#step'+i).classList.add('hidden'));
   $('#successScreen').classList.add('hidden');
   $('#failureScreen').classList.add('hidden');
-  const activeEl = $('#step'+step);
-  activeEl.classList.remove('hidden');
-  activeEl.classList.remove('bw-step-entering');
-  // Force reflow so the entering animation restarts even if the same
-  // step is re-shown back-to-back.
-  void activeEl.offsetWidth;
-  activeEl.classList.add('bw-step-entering');
+  const stepEl = $('#step'+step);
+  stepEl.classList.remove('hidden');
+  // Force the fade-in to replay on every step change (Part 3/4 fix):
+  // remove-reflow-add is required because re-adding an already-present
+  // animation class is a no-op in the browser without a forced reflow.
+  stepEl.classList.remove('bw-step-enter');
+  void stepEl.offsetWidth;
+  stepEl.classList.add('bw-step-enter');
 
   // Update old step labels (for JS compat)
   [1,2,3,4].forEach(i => {
@@ -1684,26 +1829,6 @@ function goTo(step){
   if (step === 3) { initSlotPicker(); }
   if (step === 4) { renderSummary(); }
   reportHeightSoon();
-  growStableStepHeight();
-}
-
-let stableStepHeight = 0;
-function growStableStepHeight(){
-  // Re-measure shortly after step content (incl. async doctor/slot data)
-  // has had a chance to render, and only ever grow the floor — never
-  // shrink it — so once the tallest step has been seen, every step
-  // (including shorter ones like Consultation or Confirmation) holds
-  // that same minimum height and the page never jumps again.
-  setTimeout(() => {
-    const active = document.querySelector('.bw-body:not(.hidden), .bw-success:not(.hidden), .bw-failure:not(.hidden)');
-    if (!active) return;
-    const h = active.scrollHeight;
-    if (h > stableStepHeight) {
-      stableStepHeight = h;
-      document.documentElement.style.setProperty('--bw-min-step-height', stableStepHeight + 'px');
-      reportHeightSoon();
-    }
-  }, 220);
 }
 
 function validateStep2(){
@@ -1808,65 +1933,62 @@ function renderSummary(){
   tnc.onchange = () => { $('#btnSubmit').disabled = !tnc.checked; };
 }
 
-/* ── Cashfree checkout modal hardening ──────────────────────────────────
-   Cashfree's `_modal` target injects its own overlay/iframe directly into
-   <body> at runtime, using `position: fixed`. Inside an embedded iframe,
-   `position: fixed` is fixed to *this* iframe's own viewport box, not the
-   parent window's — so if the iframe element in the parent page is
-   shorter than the full window (a likely state right as checkout opens,
-   before this widget's own height has caught up), the modal can render
-   partially off-screen, too low, or under other content. We can't control
-   the parent page's iframe-resize handler from here, but we can: (1) ask
-   for a generous height a beat *before* opening checkout instead of only
-   reactively after, and (2) once Cashfree's own elements appear, force
-   them to unambiguous full-viewport fixed coverage with a top-of-stack
-   z-index, regardless of any stacking-context quirk elsewhere on the
-   page. This never touches Cashfree's own DOM structure/content, only
-   its outer positioning. ── */
+/* Fix for Part 5 "Cashfree popup appears too low / off screen / behind
+   content": this widget's iframe is auto-resized to its FULL content
+   height (see reportHeightSoon below) so there is no internal iframe
+   scrollbar. That means `position: fixed` inside this document is fixed
+   relative to the IFRAME's own layout box, not the browser's visible
+   viewport — so if a parent has scrolled deep into the page (e.g. down
+   at the payment step), a "fixed" Cashfree modal pinned at iframe-local
+   top:0 can render far above what's currently visible. This cannot be
+   fully solved from inside the iframe alone; it needs one small
+   addition on the WordPress embed side:
+
+     window.addEventListener('message', (e) => {
+       if (e.data && e.data.type === 'nkp-scroll-to-widget-top') {
+         const rect = document.getElementById('booking-widget-container')
+                        .getBoundingClientRect();
+         window.scrollTo({ top: rect.top + window.scrollY - 16, behavior: 'smooth' });
+       }
+     });
+
+   With that listener in place, the widget now (a) asks the parent to
+   scroll the iframe to the top of the viewport right before opening
+   checkout, so "fixed" content lines up with what's actually visible,
+   and (b) force-corrects the z-index/position of whatever Cashfree
+   injects, in case it collides with anything else on the page. */
 let cashfreeObserver = null;
-function armCashfreeModalHardening(){
-  if (cashfreeObserver) return;
+function armCashfreeModalFix() {
+  window.parent.postMessage({ type: 'nkp-scroll-to-widget-top', behavior: 'smooth' }, PARENT_ORIGIN);
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+  if (cashfreeObserver) cashfreeObserver.disconnect();
   cashfreeObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
+    mutations.forEach(m => {
       m.addedNodes.forEach(node => {
-        if (!(node instanceof HTMLElement)) return;
-        const looksLikeCashfreeOverlay =
-          node.tagName === 'IFRAME' ||
-          (node.style && (node.style.position === 'fixed' || (parseInt(node.style.zIndex) || 0) > 100));
-        if (!looksLikeCashfreeOverlay || node.closest('.bw-page')) return;
-        let target = node;
-        // Find the actual fixed-position wrapper (the iframe itself is
-        // usually nested a level or two inside the positioned overlay).
-        while (target && target !== document.body) {
-          const cs = window.getComputedStyle(target);
-          if (cs.position === 'fixed') break;
-          target = target.parentElement;
-        }
-        if (target && target !== document.body) {
-          target.style.position = 'fixed';
-          target.style.top = '0';
-          target.style.left = '0';
-          target.style.right = '0';
-          target.style.bottom = '0';
-          target.style.width = '100%';
-          target.style.height = '100dvh';
-          target.style.margin = '0';
-          target.style.zIndex = '2147483647';
-          document.documentElement.style.overflow = 'hidden';
-          document.body.style.overflow = 'hidden';
+        if (node.nodeType !== 1) return;
+        const s = window.getComputedStyle(node);
+        if (s.position === 'fixed' || s.position === 'absolute') {
+          node.style.setProperty('z-index', '2147483000', 'important');
+          node.style.setProperty('position', 'fixed', 'important');
+          node.style.setProperty('top', '0', 'important');
+          node.style.setProperty('left', '0', 'important');
+          node.style.setProperty('right', '0', 'important');
+          node.style.setProperty('bottom', '0', 'important');
         }
       });
-    }
+    });
   });
   cashfreeObserver.observe(document.body, { childList: true });
 }
-function disarmCashfreeModalHardening(){
+function disarmCashfreeModalFix() {
   if (cashfreeObserver) { cashfreeObserver.disconnect(); cashfreeObserver = null; }
   document.documentElement.style.overflow = '';
   document.body.style.overflow = '';
 }
 
 function nukeCashfreeOverlay() {
+  disarmCashfreeModalFix();
   document.querySelectorAll('iframe').forEach(el => {
     let p = el.parentElement;
     while (p && p !== document.body) {
@@ -1883,7 +2005,6 @@ function nukeCashfreeOverlay() {
   document.body.style.overflow = '';
   document.body.style.backdropFilter = '';
   document.documentElement.style.overflow = '';
-  disarmCashfreeModalHardening();
 }
 
 async function confirmPaymentWithServer(appointmentId){
@@ -1923,14 +2044,7 @@ async function submitBooking(){
       const orderId  = res.cashfree.orderId;
       const appt     = res.appointment;
 
-      // Give the parent iframe a generous target height and normalize
-      // whatever Cashfree injects *before* checkout() runs, rather than
-      // reacting after the modal may already be mispositioned.
-      try {
-        window.parent.postMessage({ type: 'nkp-booking-widget-height', height: Math.max(measureWidgetHeight(), window.innerHeight || 900) }, '*');
-      } catch (_) {}
-      armCashfreeModalHardening();
-
+      armCashfreeModalFix();
       cashfree.checkout({ paymentSessionId: res.cashfree.paymentSessionId, redirectTarget: '_modal' })
         .then(async r => {
           const paid = await confirmPaymentWithServer(appt.id);
@@ -1938,9 +2052,11 @@ async function submitBooking(){
             nukeCashfreeOverlay();
             const bar = document.getElementById('payStatusBar'); if (bar) bar.style.display = 'none';
             showSuccess(appt, true, '✅ Payment confirmed! Consultation booked.');
+          } else {
+            disarmCashfreeModalFix();
           }
         })
-        .catch(e => { console.warn('[Cashfree] checkout rejected:', e); nukeCashfreeOverlay(); reportHeightSoon(); });
+        .catch(e => { disarmCashfreeModalFix(); console.warn('[Cashfree] checkout rejected:', e); });
 
       startPaymentPolling(appt, orderId);
 
@@ -2015,7 +2131,6 @@ function showSuccess(appt, isOnline, customMessage=''){
   document.querySelector('.bw-stepper').classList.add('is-hidden');
   const s = $('#successScreen');
   s.classList.remove('hidden');
-  s.classList.remove('bw-step-entering'); void s.offsetWidth; s.classList.add('bw-step-entering');
 
   const _ref = shortRef(appt.id);
 
@@ -2030,7 +2145,6 @@ function showSuccess(appt, isOnline, customMessage=''){
     <p style="margin-top:10px;font-size:12px;color:var(--bw-muted);">A reminder will be sent ~30 minutes before your appointment via WhatsApp.</p>`;
   s.focus();
   reportHeightSoon();
-  growStableStepHeight();
 }
 
 function showFailure(appt, cashfreeStatus, message){
@@ -2041,7 +2155,6 @@ function showFailure(appt, cashfreeStatus, message){
   document.querySelector('.bw-stepper').classList.add('is-hidden');
   const f = $('#failureScreen');
   f.classList.remove('hidden');
-  f.classList.remove('bw-step-entering'); void f.offsetWidth; f.classList.add('bw-step-entering');
   $('#failureMsg').textContent = message || 'Your payment could not be confirmed.';
   $('#failureDetails').innerHTML =
     (appt ? `<p><strong>Booking ref:</strong> NK-${escapeHtml(shortRef(appt.id))}</p>` : '') +
@@ -2051,7 +2164,6 @@ function showFailure(appt, cashfreeStatus, message){
   $('#btnSubmitText').textContent = 'Confirm Booking';
   f.focus();
   reportHeightSoon();
-  growStableStepHeight();
 }
 
 function resetWidget(){
@@ -2165,9 +2277,58 @@ function toggleFaq(btn) {
   reportHeightSoon();
 }
 
+// ── Hero phone mockup: Online/Clinic toggle (Part 3 rebuild) ──
+(function () {
+  var root = document.getElementById('bwptRoot');
+  if (!root) return;
+  var btns = root.querySelectorAll('[data-bwpt-mode]');
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var autoTimer = null, pauseTimer = null;
+  var order = ['online', 'clinic'];
+
+  function setMode(mode, opts) {
+    opts = opts || {};
+    root.setAttribute('data-mode', mode);
+    btns.forEach(function (b) {
+      b.setAttribute('aria-selected', b.getAttribute('data-bwpt-mode') === mode ? 'true' : 'false');
+    });
+    if (opts.manual) {
+      clearTimeout(pauseTimer);
+      stopAuto();
+      pauseTimer = setTimeout(startAuto, 6000);
+    }
+  }
+  function startAuto() {
+    if (reduceMotion) return;
+    stopAuto();
+    autoTimer = setInterval(function () {
+      var current = root.getAttribute('data-mode');
+      setMode(order[(order.indexOf(current) + 1) % order.length]);
+    }, 3400);
+  }
+  function stopAuto() { clearInterval(autoTimer); }
+
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () { setMode(b.getAttribute('data-bwpt-mode'), { manual: true }); });
+  });
+  startAuto();
+})();
+
 bootFromQueryString();
 
 let heightFrame = 0;
+let heightDebounce = 0;
+// Fix for Part 6 "iframe integration": the parent origin is known and
+// fixed (this widget only ever gets embedded on neokidspro.in), so we
+// stop broadcasting the widget's height to '*' (any origin can read
+// postMessage payloads sent with '*') and target the real origin instead.
+// document.referrer is used as a safe fallback for staging/preview domains.
+const PARENT_ORIGIN = (function () {
+  try {
+    const ref = document.referrer ? new URL(document.referrer).origin : '';
+    return ref || 'https://neokidspro.in';
+  } catch (_) { return 'https://neokidspro.in'; }
+})();
 function measureWidgetHeight() {
   const root = document.querySelector('.bw-page');
   if (!root) return 0;
@@ -2175,14 +2336,18 @@ function measureWidgetHeight() {
   return Math.ceil(Math.max(rect.height, root.offsetHeight));
 }
 function reportHeightSoon() {
-  if (heightFrame) cancelAnimationFrame(heightFrame);
-  heightFrame = requestAnimationFrame(() => {
-    const height = measureWidgetHeight();
-    try {
-      window.parent.postMessage({ type: 'nkp-booking-widget-height', height }, '*');
-    } catch (_) {}
-  });
+  clearTimeout(heightDebounce);
+  heightDebounce = setTimeout(() => {
+    if (heightFrame) cancelAnimationFrame(heightFrame);
+    heightFrame = requestAnimationFrame(() => {
+      const height = measureWidgetHeight();
+      try {
+        window.parent.postMessage({ type: 'nkp-booking-widget-height', height }, PARENT_ORIGIN);
+      } catch (_) {}
+    });
+  }, 40);
 }
+
 window.addEventListener('load', reportHeightSoon);
 window.addEventListener('resize', reportHeightSoon);
 document.addEventListener('click', () => setTimeout(reportHeightSoon, 60));
