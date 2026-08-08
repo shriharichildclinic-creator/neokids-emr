@@ -2183,7 +2183,6 @@ function reportHeightSoon() {
     } catch (_) {}
   });
 }
-
 window.addEventListener('load', reportHeightSoon);
 window.addEventListener('resize', reportHeightSoon);
 document.addEventListener('click', () => setTimeout(reportHeightSoon, 60));
