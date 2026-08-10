@@ -436,7 +436,7 @@ body {
 }
 
 /* ── Buttons ── */
-.bw-btn-row { display: flex; gap: 10px; margin-top: 20px; }
+.bw-btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 .bw-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font-family: 'Inter', sans-serif; font-size: 14.5px; font-weight: 600;
@@ -479,6 +479,20 @@ body {
 .bw-btn-sm {
   width: auto; flex: 1 1 0; min-width: 0;
   padding: 9px 16px; font-size: 12.5px; white-space: nowrap;
+}
+
+/* .bw-btn-cta — for standalone CTA buttons outside the step flow
+   (e.g. the landing "Ready to Book" section). The base .bw-btn is
+   width:100% by design for full-width flow buttons; a lone button in
+   a centered .bw-btn-row inherits that and stretches edge-to-edge.
+   This opts it back out to a normal, centered pill size. */
+.bw-btn-cta {
+  width: auto;
+  min-width: 240px;
+  padding: 15px 36px;
+}
+@media (max-width: 480px) {
+  .bw-btn-cta { width: 100%; min-width: 0; }
 }
 
 /* ── Summary card ── */
@@ -688,39 +702,103 @@ body {
   position: absolute; right: 28px; top: 48px; width: 136px; border-radius: 24px; padding: 18px 16px; text-align: center;
 }
 
-/* ── Booking-flow phone mockup (adapted from the NeoKidsPro Services page
-      teleconsultation animation) — shows the same guided steps this widget
-      actually walks the parent through, cycling automatically. ── */
-@keyframes bwPhoneFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-@keyframes bwPhoneSlide { 0%{opacity:0;transform:translateX(14px);} 6%{opacity:1;transform:translateX(0);} 30%{opacity:1;transform:translateX(0);} 36%{opacity:0;transform:translateX(-14px);} 100%{opacity:0;transform:translateX(-14px);} }
-.bw-phone-wrap { position: relative; z-index: 1; display: flex; justify-content: center; }
+/* ── Booking-flow phone toggle (replaces the old autoplay-only mockup) ──
+   Real interactive Online/Clinic toggle: tap either pill to preview that
+   mode, auto-cycles for anyone who doesn't touch it, pauses 6s after a
+   manual tap. Both mode-panels are the same fixed size and absolutely
+   positioned inside a fixed-height frame, so switching only ever animates
+   opacity/transform — it never reflows the hero and can't cause layout
+   shift ("jumping") in the page around it. Re-tokenized onto this file's
+   own --bw-* variables — no new colors introduced. Respects
+   prefers-reduced-motion (autoplay stops; toggle still works; crossfade
+   becomes instant). */
+.bw-phone-wrap { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+.bw-ptoggle {
+  position: relative; display: inline-flex; padding: 4px; border-radius: 999px;
+  background: #fff; border: 1.5px solid var(--bw-border); box-shadow: var(--bw-shadow-sm);
+}
+.bw-ptoggle-thumb {
+  position: absolute; top: 4px; left: 4px; width: calc(50% - 4px); height: calc(100% - 8px);
+  border-radius: 999px; background: linear-gradient(135deg, var(--bw-teal), var(--bw-teal-dark));
+  transition: transform .38s cubic-bezier(.65,0,.35,1), background .38s ease; will-change: transform;
+}
+.bw-phone-wrap[data-mode="clinic"] .bw-ptoggle-thumb {
+  transform: translateX(100%);
+  background: linear-gradient(135deg, var(--bw-pink), var(--bw-pink-hover));
+}
+.bw-ptoggle-btn {
+  position: relative; z-index: 1; border: none; background: transparent; cursor: pointer;
+  font-family: 'Inter', sans-serif; font-weight: 700; font-size: 12.5px; color: var(--bw-muted);
+  padding: 9px 18px; border-radius: 999px; transition: color .3s ease; white-space: nowrap;
+}
+.bw-phone-wrap[data-mode="online"] .bw-ptoggle-btn.online,
+.bw-phone-wrap[data-mode="clinic"] .bw-ptoggle-btn.clinic { color: #fff; }
+.bw-ptoggle-btn:focus-visible { outline: 2px solid var(--bw-teal); outline-offset: 3px; }
+
 .bw-phone {
   width: 190px; height: 388px; border-radius: 30px; background: #fff;
   border: 5px solid var(--bw-ink); box-shadow: 0 24px 52px rgba(46,85,86,.22);
   overflow: hidden; position: relative; animation: bwPhoneFloat 5s ease-in-out infinite;
 }
+@keyframes bwPhoneFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
 .bw-phone::before {
   content: ''; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
   width: 46px; height: 9px; background: var(--bw-ink); border-radius: 8px; z-index: 5;
 }
-.bw-phone-screen { position: absolute; inset: 0; background: #f8f9fa; padding: 26px 9px 9px; }
-.bw-phone-panel { position: absolute; inset: 0; padding: 14px; opacity: 0; transform: translateX(14px); animation: bwPhoneSlide 10s infinite; display: flex; flex-direction: column; gap: 7px; }
-.bw-phone-panel.d0 { animation-delay: 0s; }
-.bw-phone-panel.d1 { animation-delay: 2.5s; }
-.bw-phone-panel.d2 { animation-delay: 5s; }
-.bw-phone-panel.d3 { animation-delay: 7.5s; }
-.bw-phone-title { font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 11px; color: var(--bw-ink); margin-bottom: 2px; }
-.bw-phone-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: #fafafa; border-radius: 9px; padding: 7px 9px; font-size: 9.5px; font-weight: 600; color: var(--bw-ink); }
-.bw-phone-card { background: #fff; border-radius: 9px; padding: 7px; border: 1.5px solid var(--bw-border); display: flex; gap: 6px; align-items: center; font-size: 8.5px; font-weight: 700; color: var(--bw-ink); }
-.bw-phone-card.act { border-color: var(--bw-pink); background: var(--bw-pink-50); }
-.bw-phone-slots { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
-.bw-phone-slot { background: #fff; border-radius: 999px; padding: 4px 2px; border: 1.5px solid var(--bw-border); font-size: 7px; font-weight: 600; color: var(--bw-body); text-align: center; }
-.bw-phone-slot.act { background: var(--bw-pink); color: #fff; border-color: var(--bw-pink); }
-.bw-phone-confirm { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding-top: 20px; }
-.bw-phone-check { width: 38px; height: 38px; border-radius: 50%; background: var(--bw-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; }
-.bw-phone-dots { display: flex; gap: 5px; justify-content: center; margin-top: 12px; }
-.bw-phone-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(46,85,86,.15); }
-@media (prefers-reduced-motion: reduce) { .bw-phone, .bw-phone-panel { animation: none !important; } }
+.bw-phone-screen { position: absolute; inset: 0; background: linear-gradient(180deg, #fff 0%, #f8f9fa 100%); padding: 26px 9px 9px; }
+
+.bw-phone-panel {
+  position: absolute; inset: 26px 9px 9px; opacity: 0; transform: scale(.96);
+  transition: opacity .42s ease, transform .42s cubic-bezier(.34,1.2,.64,1);
+  pointer-events: none; display: flex; flex-direction: column; gap: 8px; will-change: opacity, transform;
+}
+.bw-phone-wrap[data-mode="online"] .bw-phone-panel.online,
+.bw-phone-wrap[data-mode="clinic"] .bw-phone-panel.clinic { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+.bw-phone-badge { align-self: flex-start; font-family: 'Inter', sans-serif; font-weight: 800; font-size: 9px; padding: 5px 9px; border-radius: 999px; }
+.bw-phone-panel.online .bw-phone-badge { background: var(--bw-teal-50); color: var(--bw-teal-dark); }
+.bw-phone-panel.clinic .bw-phone-badge { background: var(--bw-pink-50); color: var(--bw-pink-hover); }
+
+.bw-phone-video {
+  flex: 1; border-radius: 16px; background: linear-gradient(150deg, var(--bw-ink) 0%, #1F3A4A 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; position: relative; overflow: hidden;
+}
+.bw-phone-video::before { content:''; position:absolute; inset:0; background-image: radial-gradient(circle, rgba(255,255,255,.06) 1px, transparent 1px); background-size: 16px 16px; }
+.bw-phone-avatar {
+  width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 23px; background: linear-gradient(135deg, var(--bw-teal), var(--bw-teal-dark));
+  box-shadow: 0 0 0 6px rgba(137,188,189,.22); position: relative; z-index: 1; animation: bwPulseRing 2.4s ease-out infinite;
+}
+@keyframes bwPulseRing { 0%{box-shadow:0 0 0 6px rgba(137,188,189,.30);} 70%{box-shadow:0 0 0 13px rgba(137,188,189,0);} 100%{box-shadow:0 0 0 6px rgba(137,188,189,0);} }
+.bw-phone-video-name { position: relative; z-index: 1; color: #fff; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 11.5px; }
+.bw-phone-video-sub { position: relative; z-index: 1; color: rgba(255,255,255,.62); font-size: 9px; font-weight: 500; display: flex; align-items: center; gap: 5px; }
+.bw-phone-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bw-pink); animation: bwBlink 1.4s ease-in-out infinite; }
+@keyframes bwBlink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+.bw-phone-map { flex: 1; border-radius: 16px; background: var(--bw-surface); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.bw-phone-map::before { content:''; position:absolute; inset:0; background-image: linear-gradient(rgba(254,132,164,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(254,132,164,.16) 1px, transparent 1px); background-size: 18px 18px; }
+.bw-phone-pin { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; background: var(--bw-pink); transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: var(--bw-shadow-sm); animation: bwDrop .6s cubic-bezier(.34,1.4,.64,1); }
+@keyframes bwDrop { 0%{transform:rotate(-45deg) translateY(-14px);opacity:0;} 100%{transform:rotate(-45deg) translateY(0);opacity:1;} }
+.bw-phone-pin span { transform: rotate(45deg); font-size: 12px; }
+.bw-phone-clinic-card { background: #fff; border-radius: 10px; padding: 7px 9px; border: 1.5px solid var(--bw-border); display: flex; flex-direction: column; gap: 2px; }
+.bw-phone-clinic-name { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 9.5px; color: var(--bw-ink); }
+.bw-phone-clinic-addr { font-size: 8px; color: var(--bw-muted); }
+.bw-phone-chip { align-self: flex-start; margin-top: 4px; font-size: 7.5px; font-weight: 700; color: var(--bw-pink-hover); background: var(--bw-pink-50); padding: 3px 7px; border-radius: 999px; }
+
+.bw-phone-cta { text-align: center; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 10px; color: #fff; padding: 9px; border-radius: 11px; background: linear-gradient(135deg, var(--bw-teal), var(--bw-teal-dark)); }
+.bw-phone-panel.clinic .bw-phone-cta { background: linear-gradient(135deg, var(--bw-pink), var(--bw-pink-hover)); }
+
+.bw-phone-dots { display: flex; gap: 6px; justify-content: center; }
+.bw-phone-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(46,85,86,.15); transition: background .3s ease, transform .3s ease; }
+.bw-phone-wrap[data-mode="online"] .bw-phone-dot.online,
+.bw-phone-wrap[data-mode="clinic"] .bw-phone-dot.clinic { background: var(--bw-teal); transform: scale(1.3); }
+.bw-phone-wrap[data-mode="clinic"] .bw-phone-dot.clinic { background: var(--bw-pink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .bw-phone, .bw-phone-avatar, .bw-phone-live-dot, .bw-phone-pin { animation: none !important; }
+  .bw-phone-panel, .bw-ptoggle-thumb { transition-duration: .01ms !important; }
+}
 @media (max-width: 980px) { .bw-phone-wrap { margin-top: 8px; } }
 .bw-hero-stat-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--bw-muted);
@@ -886,46 +964,54 @@ body {
               <span class="bw-trust-chip">💗 Trusted by 5000+ Families</span>
             </div>
             <div class="bw-btn-row">
-              <button type="button" data-action="startBooking" class="bw-btn bw-btn-primary">Book Appointment</button>
-              <a href="https://neokidspro.in/our-doctors/" target="_top" class="bw-btn bw-btn-secondary">Meet Our Doctors</a>
+              <button type="button" data-action="startBooking" class="bw-btn bw-btn-primary bw-btn-cta">Book Appointment</button>
+              <a href="https://neokidspro.in/our-doctors/" target="_top" class="bw-btn bw-btn-secondary bw-btn-cta">Meet Our Doctors</a>
             </div>
           </div>
           <div class="bw-hero-visual">
             <div class="bw-hero-panel">
-              <!-- Booking-flow phone mockup, adapted from the NeoKidsPro
-                   Services page teleconsultation animation. Purely decorative
-                   (aria-hidden) — mirrors the four real steps below it. -->
-              <div class="bw-phone-wrap" aria-hidden="true">
-                <div class="bw-phone">
+              <!-- Booking-flow phone toggle — real Online/Clinic switcher,
+                   not a passive autoplay. Tapping either pill previews that
+                   mode; it still auto-cycles for anyone who doesn't touch
+                   it. Purely decorative for screen readers (the toggle
+                   pills themselves stay reachable/labelled since they're
+                   real interactive controls), the phone graphic is hidden
+                   from assistive tech. -->
+              <div class="bw-phone-wrap" id="bwPhoneWrap" data-mode="online">
+                <div class="bw-ptoggle" role="tablist" aria-label="Preview consultation type">
+                  <div class="bw-ptoggle-thumb" aria-hidden="true"></div>
+                  <button type="button" class="bw-ptoggle-btn online" role="tab" aria-selected="true" data-set-phone-mode="online">🎥 Online</button>
+                  <button type="button" class="bw-ptoggle-btn clinic" role="tab" aria-selected="false" data-set-phone-mode="clinic">🏥 Clinic</button>
+                </div>
+
+                <div class="bw-phone" aria-hidden="true">
                   <div class="bw-phone-screen">
-                    <div class="bw-phone-panel d0">
-                      <div class="bw-phone-title">Step 1 · Consultation Type</div>
-                      <div class="bw-phone-card act"><span>🎥</span>Online Teleconsultation</div>
-                      <div class="bw-phone-card"><span>🏥</span>Clinic Visit</div>
-                    </div>
-                    <div class="bw-phone-panel d1">
-                      <div class="bw-phone-title">Step 2 · Doctor &amp; Slot</div>
-                      <div class="bw-phone-row">👩‍⚕️ Dr. Parmar <span>selected</span></div>
-                      <div class="bw-phone-slots">
-                        <div class="bw-phone-slot">10:00</div><div class="bw-phone-slot act">11:30</div><div class="bw-phone-slot">1:00</div>
-                        <div class="bw-phone-slot">3:00</div><div class="bw-phone-slot">4:30</div><div class="bw-phone-slot">6:00</div>
+
+                    <div class="bw-phone-panel online">
+                      <div class="bw-phone-badge">🎥 Video Consultation</div>
+                      <div class="bw-phone-video">
+                        <div class="bw-phone-avatar">👩‍⚕️</div>
+                        <div class="bw-phone-video-name">Dr. Vishal Parmar</div>
+                        <div class="bw-phone-video-sub"><span class="bw-phone-live-dot"></span>Call connecting…</div>
                       </div>
+                      <div class="bw-phone-cta">Join Video Call</div>
                     </div>
-                    <div class="bw-phone-panel d2">
-                      <div class="bw-phone-title">Step 3 · Patient Details</div>
-                      <div class="bw-phone-row">Child Name <span>Aanya S.</span></div>
-                      <div class="bw-phone-row">Age <span>3 yrs</span></div>
-                    </div>
-                    <div class="bw-phone-panel d3">
-                      <div class="bw-phone-confirm">
-                        <div class="bw-phone-check">✓</div>
-                        <div class="bw-phone-title">Booking Confirmed!</div>
+
+                    <div class="bw-phone-panel clinic">
+                      <div class="bw-phone-badge">🏥 Clinic Visit</div>
+                      <div class="bw-phone-map"><div class="bw-phone-pin"><span>🩺</span></div></div>
+                      <div class="bw-phone-clinic-card">
+                        <div class="bw-phone-clinic-name">Shri Hari Child Clinic</div>
+                        <div class="bw-phone-clinic-addr">Borivali East, Mumbai</div>
+                        <div class="bw-phone-chip">Today · 4:30 PM</div>
                       </div>
+                      <div class="bw-phone-cta">Get Directions</div>
                     </div>
+
                   </div>
                 </div>
                 <div class="bw-phone-dots" aria-hidden="true">
-                  <span class="bw-phone-dot"></span><span class="bw-phone-dot"></span><span class="bw-phone-dot"></span><span class="bw-phone-dot"></span>
+                  <span class="bw-phone-dot online"></span><span class="bw-phone-dot clinic"></span>
                 </div>
               </div>
               <div class="bw-hero-panel-title" style="text-align:center;margin-top:16px;">Gentle, guided booking</div>
@@ -1086,7 +1172,7 @@ body {
             <h2 class="bw-landing-h2">Start your appointment booking now</h2>
             <p class="bw-landing-copy">Continue into the existing NeoKidsPro booking flow without leaving this page.</p>
             <div class="bw-btn-row" style="justify-content:center;">
-              <button type="button" data-action="startBooking" class="bw-btn bw-btn-primary">Book Appointment</button>
+              <button type="button" data-action="startBooking" class="bw-btn bw-btn-primary bw-btn-cta">Book Appointment</button>
             </div>
           </div>
         </div>
@@ -1467,6 +1553,7 @@ function showBookingShell() {
 }
 async function startBooking(options = {}) {
   showBookingShell();
+  reportScrollIntoView();
   const hadExplicitMode = !!normalizeMode(options.mode);
   await setMode(options.mode || state.mode, { explicit: hadExplicitMode });
   if (options.doctorId) {
@@ -1669,6 +1756,7 @@ function goTo(step){
   if (step === 3) { initSlotPicker(); }
   if (step === 4) { renderSummary(); }
   reportHeightSoon();
+  reportScrollIntoView();
 }
 
 function validateStep2(){
@@ -1960,6 +2048,7 @@ function showSuccess(appt, isOnline, customMessage=''){
     <p style="margin-top:10px;font-size:12px;color:var(--bw-muted);">A reminder will be sent ~30 minutes before your appointment via WhatsApp.</p>`;
   s.focus();
   reportHeightSoon();
+  reportScrollIntoView();
 }
 
 function showFailure(appt, cashfreeStatus, message){
@@ -1979,6 +2068,7 @@ function showFailure(appt, cashfreeStatus, message){
   $('#btnSubmitText').textContent = 'Confirm Booking';
   f.focus();
   reportHeightSoon();
+  reportScrollIntoView();
 }
 
 function resetWidget(){
@@ -1993,12 +2083,25 @@ async function bootFromQueryString(){
   const requestedMode = normalizeMode(qs.get('consultation') || qs.get('mode') || qs.get('type'));
   const doctorId = qs.get('doctor');
   const recallId = qs.get('recall');
+  // `start=1` — the embedding page has already covered the "what is this /
+  // why book" marketing job itself (hero, comparison, trust, FAQ), so the
+  // widget should skip its own duplicate landing page/hero/CTA and open
+  // straight on Step 1 (consultation type + doctor). No mode is forced;
+  // the user still picks Online/Clinic and a doctor, they just don't have
+  // to click a second "Book Appointment" button to get there.
+  const skipLanding = qs.get('start') === '1';
   try {
     await loadLandingDoctors();
   } catch (_) {}
   syncModeUI(requestedMode || state.mode);
 
   if (!doctorId && !recallId && !requestedMode) {
+    if (skipLanding) {
+      showBookingShell();
+      await setMode(state.mode, { explicit: false });
+      goTo(1);
+      return;
+    }
     showLanding();
     return;
   }
@@ -2092,6 +2195,38 @@ function toggleFaq(btn) {
   reportHeightSoon();
 }
 
+// ── Hero phone toggle (Online / Clinic preview) ──
+// Real interactive control: tap a pill to jump to that mode; otherwise it
+// auto-cycles, pausing 6s after a manual tap so the user's choice sticks.
+(function initHeroPhoneToggle() {
+  const wrap = document.getElementById('bwPhoneWrap');
+  if (!wrap) return;
+  const btns = wrap.querySelectorAll('[data-set-phone-mode]');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const order = ['online', 'clinic'];
+  let autoTimer = null, pauseTimer = null;
+
+  function setPhoneMode(mode, manual) {
+    wrap.setAttribute('data-mode', mode);
+    btns.forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-set-phone-mode') === mode ? 'true' : 'false'));
+    if (manual) {
+      clearTimeout(pauseTimer);
+      clearInterval(autoTimer);
+      pauseTimer = setTimeout(startPhoneAuto, 6000);
+    }
+  }
+  function startPhoneAuto() {
+    if (reduceMotion) return;
+    clearInterval(autoTimer);
+    autoTimer = setInterval(() => {
+      const current = wrap.getAttribute('data-mode');
+      setPhoneMode(order[(order.indexOf(current) + 1) % order.length], false);
+    }, 3400);
+  }
+  btns.forEach(b => b.addEventListener('click', () => setPhoneMode(b.getAttribute('data-set-phone-mode'), true)));
+  startPhoneAuto();
+})();
+
 bootFromQueryString();
 
 let heightFrame = 0;
@@ -2109,6 +2244,16 @@ function reportHeightSoon() {
       window.parent.postMessage({ type: 'nkp-booking-widget-height', height }, '*');
     } catch (_) {}
   });
+}
+
+// Tells the parent page "the step/screen just changed, please make sure
+// I'm in view" — the parent decides whether/how far to scroll (see the
+// nkp-scroll-into-view listener in the page wrapper). Kept separate from
+// the height ping so the parent can debounce/scroll-lock independently.
+function reportScrollIntoView() {
+  try {
+    window.parent.postMessage({ type: 'nkp-scroll-into-view' }, '*');
+  } catch (_) {}
 }
 
 window.addEventListener('load', reportHeightSoon);
