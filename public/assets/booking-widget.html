@@ -1426,7 +1426,7 @@ body {
 'use strict';
 
 const API_BASE = window.location.origin + '/api';
-const state = { mode: 'ONLINE', doctor: null, date: null, slot: null, landingDoctors: [], modePreselected: false };
+const state = { mode: 'ONLINE', doctor: null, date: null, slot: null, landingDoctors: [], modePreselected: false, skipLanding: false };
 
 function formatINR(v) {
   const n = Number(v || 0);
@@ -1535,6 +1535,7 @@ function clearFormErrors(scope) {
   (scope || document).querySelectorAll('.bw-field-error').forEach(el => el.remove());
 }
 function showLanding() {
+  if (state.skipLanding) { goTo(1); return; }
   $('#landingPage').classList.remove('hidden');
   $('#bookingTop').classList.add('hidden');
   document.querySelector('.bw-stepper').classList.add('is-hidden');
@@ -1545,7 +1546,11 @@ function showLanding() {
 }
 function showBookingShell() {
   $('#landingPage').classList.add('hidden');
-  $('#bookingTop').classList.remove('hidden');
+  if (state.skipLanding) {
+    $('#bookingTop').classList.add('hidden');
+  } else {
+    $('#bookingTop').classList.remove('hidden');
+  }
   document.querySelector('.bw-stepper').classList.remove('is-hidden');
   renderFlowSummary();
   reportHeightSoon();
@@ -2074,7 +2079,7 @@ function resetWidget(){
   state.slot = null;
   $('#failureScreen').classList.add('hidden');
   $('#successScreen').classList.add('hidden');
-  showLanding();
+  if (state.skipLanding) { goTo(1); } else { showLanding(); }
 }
 
 async function bootFromQueryString(){
@@ -2089,6 +2094,7 @@ async function bootFromQueryString(){
   // the user still picks Online/Clinic and a doctor, they just don't have
   // to click a second "Book Appointment" button to get there.
   const skipLanding = qs.get('start') === '1';
+  state.skipLanding = skipLanding;
   try {
     await loadLandingDoctors();
   } catch (_) {}
