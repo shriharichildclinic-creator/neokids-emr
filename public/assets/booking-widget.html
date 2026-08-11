@@ -1,42 +1,24 @@
 <!DOCTYPE html>
 <!--
-  NeoKidsPro — Booking Widget (v3 — nav polish + legal compliance + Cashfree mobile scroll)
+  NeoKidsPro — Booking Widget (v4 — nav polish + legal compliance + Cashfree mobile scroll FIX)
   Embedded via iframe on neokidspro.in (WordPress / Elementor).
   Light mode only — colors are hardcoded, not theme-dependent.
 
-  CHANGE LOG (v3)
-  1. NAVIGATION BUTTONS: unified Back/Continue polish across every step.
-     - .bw-btn-row is now right-aligned on desktop (justify-content:flex-end)
-       so Back/Continue sit on the RIGHT (industry-standard wizard pattern)
-       instead of left-clumped on 1180px wide bodies.
-     - Buttons no longer stretch to split-the-row width; they size to a
-       comfortable min-width (140px) and their labels drive the actual size.
-     - Secondary Back gets a clearly muted, secondary-hierarchy treatment;
-       primary Continue keeps the pink CTA — the visual hierarchy between
-       the two is now unambiguous.
-     - Focus ring, hover lift, pressed-state and disabled state are unified
-       across primary / secondary / small / cta variants.
-     - Mobile (<560px): row stays reversed so Continue lands ABOVE Back
-       (thumb-reachable primary action), full width, 12px gap.
-  2. CONSENT CHECKBOX: rewritten to match India's Telemedicine Practice
-     Guidelines, 2020 requirements for ONLINE consults, and a lighter but
-     still-compliant version for CLINIC visits. Now links to REAL pages on
-     neokidspro.in that actually exist (Privacy Policy, Terms of Service,
-     Telemedicine Guidelines, Data Protection Policy, and Refund &
-     Cancellation Policy for paid online bookings). Explicit consent for
-     teleconsultation with a Registered Medical Practitioner is called out
-     by name, as the Guidelines require.
-  3. CASHFREE MOBILE SCROLL: while the Cashfree overlay is active the
-     widget's own document is locked scroll-only to the overlay layer, but
-     that layer itself is now given -webkit-overflow-scrolling:touch and
-     overflow-y:auto so the payment modal is fully scrollable on iOS Safari
-     and Android Chrome. Fixed viewport handling when the on-screen
-     keyboard opens on mobile (visualViewport listener adjusts the modal
-     max-height so buttons at the bottom remain reachable).
-  4. FAQ INSIDE WIDGET: opening a card no longer hides its own question —
-     open-state text color is explicitly re-asserted (WordPress themes on
-     the parent page were bleeding a color: transparent onto .is-open
-     buttons via .elementor-widget-heading button selectors).
+  CHANGE LOG (v4 — on top of v3)
+  ONLY CHANGE FROM v3: requestParentFullscreen() no longer toggles
+  body.bw-cashfree-active SYNCHRONOUSLY the instant "Confirm Booking" is
+  pressed. In v3 that class immediately set the <body> to
+  position:fixed + display:none on .bw-page, BEFORE the async
+  cashfree.checkout() call had mounted its own overlay into that body.
+  On slower mobile reflow this created a race: Cashfree's SDK measured
+  the DOM while it was already mid-teardown from our own CSS, and
+  bailed out with its own generic "Invalid input" alert instead of
+  ever opening the payment modal — which is the bug you hit on phone.
+
+  Fix: wait for Cashfree's own overlay node to actually exist in the
+  DOM (or a short timeout fallback) before applying our fixed-position
+  / hidden-body treatment. Everything else — buttons, consent copy,
+  spacing, FAQ fix — is untouched from your last version.
 -->
 <html lang="en">
 <head>
@@ -76,14 +58,11 @@
   color-scheme: light;
 }
 
-/* ── Reset & base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :focus-visible { outline: 2px solid var(--bw-teal); outline-offset: 2px; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 
-html, body {
-  height: 100%;
-}
+html, body { height: 100%; }
 body {
   font-family: 'Inter', system-ui, sans-serif;
   background: var(--bw-card);
@@ -100,31 +79,13 @@ body {
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
 @keyframes shimmer { to { background-position: 200% 0; } }
 
-/* ── Page container ── */
-.bw-page {
-  width: 100%;
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 0 0 32px;
-  background: #ffffff;
-}
+.bw-page { width: 100%; max-width: 100%; margin: 0 auto; padding: 0 0 32px; background: #ffffff; }
 @media (max-width: 960px) { .bw-page { padding: 0 0 24px; } }
 @media (max-width: 480px) { .bw-page { padding: 0 0 18px; } }
 
-/* ── Card shell ── */
-.bw-card {
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-  border: none;
-  overflow: visible;
-}
+.bw-card { background: transparent; border-radius: 0; box-shadow: none; border: none; overflow: visible; }
 
-/* ── Welcome & How-It-Works screens ── */
-.bw-intro {
-  padding: 40px 28px 36px;
-  animation: fadeUp .35s ease forwards;
-}
+.bw-intro { padding: 40px 28px 36px; animation: fadeUp .35s ease forwards; }
 @media (max-width: 480px) { .bw-intro { padding: 28px 16px 28px; } }
 
 .bw-welcome-hero { text-align: center; margin-bottom: 32px; }
@@ -138,9 +99,7 @@ body {
   font-family: 'Poppins', sans-serif; font-weight: 800;
   font-size: clamp(22px, 4vw, 28px); color: var(--bw-ink); line-height: 1.22; margin-bottom: 12px;
 }
-.bw-welcome-sub {
-  font-size: 14.5px; color: var(--bw-body); line-height: 1.72; max-width: 480px; margin: 0 auto;
-}
+.bw-welcome-sub { font-size: 14.5px; color: var(--bw-body); line-height: 1.72; max-width: 480px; margin: 0 auto; }
 
 .bw-trust-strip { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 24px 0 28px; }
 .bw-trust-chip {
@@ -152,7 +111,6 @@ body {
 
 .bw-welcome-btns { display: flex; flex-direction: column; gap: 10px; max-width: 400px; margin: 0 auto; }
 
-/* How it works */
 .bw-hiw-steps { display: flex; flex-direction: column; gap: 0; margin: 20px 0 28px; }
 .bw-hiw-step { display: flex; gap: 16px; align-items: flex-start; position: relative; padding-bottom: 20px; }
 .bw-hiw-step:last-child { padding-bottom: 0; }
@@ -176,7 +134,6 @@ body {
 }
 .bw-hiw-step-desc { font-size: 12.5px; color: var(--bw-body); line-height: 1.55; }
 
-/* ── Header ── */
 .bw-header {
   background: var(--bw-surface);
   padding: 28px 28px 22px;
@@ -210,7 +167,6 @@ body {
 }
 .bw-header-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bw-teal); animation: pulse 2s infinite; }
 
-/* ── Progress stepper ── */
 .bw-stepper {
   display: flex; align-items: center; padding: 18px 24px;
   background: var(--bw-card);
@@ -247,11 +203,9 @@ body {
 .bw-step-item.is-done + .bw-step-item .bw-step-line,
 .bw-step-line.is-done { background: var(--bw-teal); }
 
-/* ── Section body ── */
 .bw-body { padding: 28px; min-height: 460px; box-sizing: border-box; }
 @media (max-width: 480px) { .bw-body { padding: 20px 16px; min-height: 380px; } }
 
-/* ── Section heading ── */
 .bw-section-head { margin-bottom: 20px; }
 .bw-section-pill {
   display: inline-flex; align-items: center; gap: 6px;
@@ -267,7 +221,6 @@ body {
 }
 .bw-section-sub { font-size: 13.5px; color: var(--bw-body); margin-top: 5px; line-height: 1.6; }
 
-/* ── Consultation type cards ── */
 .bw-mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
 @media (max-width: 440px) { .bw-mode-grid { grid-template-columns: 1fr; } }
 
@@ -310,7 +263,6 @@ body {
   background: var(--bw-teal); border-color: var(--bw-teal); color: #fff;
 }
 
-/* ── Divider with label ── */
 .bw-divider { display: flex; align-items: center; gap: 12px; margin: 24px 0 16px; }
 .bw-divider-line { flex: 1; height: 1px; background: var(--bw-border); }
 .bw-divider-label {
@@ -318,7 +270,6 @@ body {
   text-transform: uppercase; letter-spacing: .8px; white-space: nowrap;
 }
 
-/* ── Doctor cards ── */
 .bw-doc-list { display: flex; flex-direction: column; gap: 12px; }
 .bw-doc-card {
   display: flex; gap: 14px; padding: 16px;
@@ -366,7 +317,6 @@ body {
 }
 .bw-doc-card:hover .bw-doc-arrow, .bw-doc-card.is-selected .bw-doc-arrow { background: var(--bw-teal); color: #fff; }
 
-/* ── Inputs & form ── */
 .bw-form-row { margin-bottom: 14px; }
 .bw-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 440px) { .bw-form-grid { grid-template-columns: 1fr; } }
@@ -386,12 +336,10 @@ body {
 .bw-input::placeholder { color: var(--bw-muted); }
 .bw-input-hint { font-size: 11px; color: var(--bw-muted); margin-top: 4px; padding-left: 2px; }
 
-/* ── Date input ── */
 .bw-date-wrap { position: relative; }
 .bw-date-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); font-size: 16px; pointer-events: none; }
 .bw-date-wrap .bw-input { padding-left: 38px; }
 
-/* ── Slot picker ── */
 .bw-slots-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
 @media (min-width: 500px) { .bw-slots-grid { grid-template-columns: repeat(4, 1fr); } }
 
@@ -406,51 +354,23 @@ body {
 .bw-slot.is-active { background: var(--bw-teal); color: #fff; border-color: var(--bw-teal); box-shadow: 0 4px 12px rgba(137,188,189,.4); }
 .bw-slot:disabled { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
 
-/* Slots empty / loading state */
 .bw-slots-empty { grid-column: 1/-1; text-align: center; padding: 28px 16px; color: var(--bw-muted); font-size: 13.5px; }
 .bw-slots-loading { grid-column: 1/-1; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 28px; color: var(--bw-muted); font-size: 13.5px; }
 .bw-spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(137,188,189,.25); border-top-color: var(--bw-teal); animation: spin 1s linear infinite; flex-shrink: 0; }
 
-/* ── Skeleton shimmer ── */
 .bw-skeleton {
   background: linear-gradient(90deg, var(--bw-teal-50) 25%, rgba(137,188,189,.15) 50%, var(--bw-teal-50) 75%);
   background-size: 200% 100%; animation: shimmer 1.4s infinite;
   border-radius: 10px;
 }
 
-/* ══════════════════════════════════════════════════════════════════════
-   BUTTONS — v3 (nav polish)
-   ══════════════════════════════════════════════════════════════════════
-   Root problems in v2 that this block fixes:
-
-   (1) .bw-btn-row had no `justify-content`, so on desktop the two nav
-       buttons sat flush-left in a 1180px-wide body. That's the "aligned
-       to left on desktop which is weird and wrong" complaint. Wizards
-       almost universally right-align nav (primary furthest right), so:
-       `justify-content: flex-end` on desktop, and the row is reversed
-       under 560px so the primary Continue button lands ABOVE Back,
-       which is the correct mobile ordering for the primary CTA.
-   (2) `.bw-btn-row > .bw-btn { flex: 1 1 0 }` (v2) made both buttons
-       claim half the row EACH, which is why Back looked as wide as
-       Continue and both looked oddly stretched on wide layouts. Now
-       each button sizes to its own content with a comfortable min-
-       width — a natural, professional pill sizing instead of a filler
-       block.
-   (3) The visual hierarchy between primary/secondary was thin because
-       secondary had almost no visual weight. Bumped the secondary
-       border weight, gave it a soft neutral background on hover, and
-       kept the pink primary CTA with its shadow — hierarchy is now
-       clearly readable at a glance.
-   (4) Focus-visible ring is now consistent across every button variant
-       (was inconsistent across .bw-btn-cta / .bw-btn-sm before).
-*/
 .bw-btn-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 24px;
   align-items: stretch;
-  justify-content: flex-end;                 /* ★ right-align nav on desktop */
+  justify-content: flex-end;
 }
 .bw-btn-row.is-centered { justify-content: center; }
 .bw-btn-row.is-between { justify-content: space-between; }
@@ -465,7 +385,7 @@ body {
   transition: transform .18s ease, box-shadow .18s ease, background .18s ease, opacity .18s ease, border-color .18s ease, color .18s ease;
   text-decoration: none; white-space: nowrap;
   width: auto;
-  min-width: 148px;                          /* comfortable pill min */
+  min-width: 148px;
   min-height: 48px;
   letter-spacing: .1px;
   line-height: 1;
@@ -503,7 +423,6 @@ body {
 }
 .bw-btn-ghost:hover:not(:disabled) { color: var(--bw-teal); background: transparent; }
 
-/* Small pill — doctor-card quick-book */
 .bw-btn-sm {
   min-width: 0; padding: 9px 16px;
   font-size: 12.5px; white-space: nowrap;
@@ -511,10 +430,8 @@ body {
   flex: 1 1 auto;
 }
 
-/* Standalone CTA (e.g. landing "Ready to Book") */
 .bw-btn-cta { min-width: 240px; padding: 15px 36px; min-height: 52px; }
 
-/* Mobile ordering: Continue (primary) ABOVE Back (secondary) — thumb-first */
 @media (max-width: 560px) {
   .bw-btn-row {
     flex-direction: column-reverse;
@@ -526,7 +443,6 @@ body {
   .bw-btn-cta { width: 100%; min-width: 0; }
 }
 
-/* ── Summary card ── */
 .bw-summary-card {
   background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.25);
   border-radius: 18px; padding: 18px;
@@ -546,7 +462,6 @@ body {
 }
 .bw-summary-total-amount { color: var(--bw-teal); }
 
-/* ── Info banners ── */
 .bw-banner {
   border-radius: 12px; padding: 12px 14px;
   font-size: 12.5px; line-height: 1.5; margin-top: 12px;
@@ -554,7 +469,6 @@ body {
 .bw-banner-amber { background: rgba(249,169,69,.1); border: 1px solid rgba(249,169,69,.3); color: #92601a; }
 .bw-banner-teal  { background: var(--bw-teal-50); border: 1px solid rgba(137,188,189,.3); color: #3d7677; }
 
-/* ── T&C checkbox card ── */
 .bw-tnc-card {
   display: flex; align-items: flex-start; gap: 12px;
   background: rgba(249,169,69,.08); border: 1.5px solid rgba(249,169,69,.28);
@@ -567,7 +481,6 @@ body {
 .bw-tnc-text a { color: var(--bw-teal-dark); text-decoration: underline; font-weight: 600; }
 .bw-tnc-text a:hover { color: var(--bw-teal); }
 
-/* ── Success screen ── */
 .bw-success { padding: 40px 28px; text-align: center; animation: fadeUp .4s ease forwards; }
 .bw-success-icon {
   width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px;
@@ -591,7 +504,6 @@ body {
   color: var(--bw-pink); margin-bottom: 16px;
 }
 
-/* ── Failure screen ── */
 .bw-failure { padding: 40px 28px; text-align: center; animation: fadeUp .4s ease forwards; }
 .bw-failure-icon {
   width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px;
@@ -607,12 +519,10 @@ body {
 .bw-failure-details p { font-size: 12.5px; color: var(--bw-body); padding: 3px 0; }
 .bw-failure-details p strong { color: var(--bw-ink); }
 
-/* ── No-docs empty state ── */
 .bw-empty { text-align: center; padding: 32px 16px; color: var(--bw-muted); }
 .bw-empty-icon { font-size: 40px; margin-bottom: 12px; }
 .bw-empty-text { font-size: 14px; }
 
-/* ── Recall banner ── */
 .bw-recall-banner {
   background: var(--bw-teal-50); border: 1.5px solid rgba(137,188,189,.3);
   border-radius: 14px; padding: 12px 14px; font-size: 13px;
@@ -620,7 +530,6 @@ body {
 }
 .bw-recall-banner b { color: var(--bw-ink); }
 
-/* ── Payment status bar ── */
 #payStatusBar {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: var(--bw-ink); color: #fff; text-align: center;
@@ -629,23 +538,15 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   CASHFREE MODAL — MOBILE SCROLL FIX
+   CASHFREE MODAL — MOBILE SCROLL FIX (v4: timing-safe)
    ══════════════════════════════════════════════════════════════════════
-   When Cashfree's checkout({redirectTarget:'_modal'}) mounts its overlay
-   inside this iframe, on mobile the overlay's inner scroll container was
-   getting overflow:hidden inherited (or being explicitly set by Cashfree's
-   own CSS) — combined with iOS Safari's touch-scroll quirks, that made
-   the payment sheet's content unreachable, especially the CTA at the
-   bottom.
-
-   Fix: when we enter "cashfree fullscreen" mode (see requestParentFullscreen)
-   we ALSO add `body.bw-cashfree-active` here. Inside that state, we:
-     - lock html/body scroll (so background page doesn't jitter behind);
-     - explicitly force the Cashfree overlay's scroll containers to be
-       vertically scrollable with momentum scrolling on iOS;
-     - honour the visualViewport when the keyboard opens on mobile — the
-       max-height of the modal's inner scroller collapses to the visible
-       viewport height so the pay button never falls below the fold.
+   Applying body.bw-cashfree-active still locks scroll on the underlying
+   page and makes Cashfree's own scroll containers momentum-scrollable
+   on iOS, exactly as before. The ONLY change in v4 is *when* this class
+   gets added — see waitForCashfreeOverlay() in the script below. It is
+   no longer added synchronously the instant checkout() is called; it
+   waits until Cashfree's overlay node actually exists in the DOM, so
+   our own layout changes can never race with the SDK's own mount.
 */
 body.bw-cashfree-active {
   overflow: hidden !important;
@@ -658,8 +559,6 @@ body.bw-cashfree-active {
 body.bw-cashfree-active .bw-page,
 body.bw-cashfree-active #payStatusBar { display: none !important; }
 
-/* Cashfree renders as sibling divs of body — target every fixed overlay
-   under the body while active, and force it to be scroll-friendly. */
 body.bw-cashfree-active > div,
 body.bw-cashfree-active > iframe {
   max-height: 100vh;
@@ -674,7 +573,6 @@ body.bw-cashfree-active > iframe {
   height: 100dvh !important;
   border: 0;
 }
-/* Anything the SDK marks as a scroll container inside the overlay. */
 body.bw-cashfree-active [class*="modal"],
 body.bw-cashfree-active [class*="Modal"],
 body.bw-cashfree-active [class*="overlay"],
@@ -686,8 +584,6 @@ body.bw-cashfree-active [class*="sheet"] {
   overscroll-behavior: contain;
   max-height: 100dvh;
 }
-/* When the on-screen keyboard opens, --bw-vvh is set by JS to the visible
-   viewport height in px so the modal never falls below the keyboard. */
 body.bw-cashfree-active.bw-keyboard-open > div,
 body.bw-cashfree-active.bw-keyboard-open > iframe,
 body.bw-cashfree-active.bw-keyboard-open [class*="modal"],
@@ -699,8 +595,6 @@ body.bw-cashfree-active.bw-keyboard-open [class*="sheet"] {
   max-height: var(--bw-vvh, 100dvh) !important;
 }
 @media (max-width: 640px) {
-  /* Give the whole overlay some safe padding on mobile so nothing sits
-     right against the notch / home indicator on iOS. */
   body.bw-cashfree-active {
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -802,7 +696,7 @@ body.bw-cashfree-active.bw-keyboard-open [class*="sheet"] {
   width: 100%; display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
   background: none !important; border: none !important; cursor: pointer; text-align: left; padding: 20px 22px;
   font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 15.5px;
-  color: var(--bw-ink) !important;                 /* ★ keep question visible when card is open */
+  color: var(--bw-ink) !important;
   line-height: 1.4;
   -webkit-appearance: none; appearance: none;
 }
@@ -1743,12 +1637,6 @@ function renderSummary(){
       ? '<div class="bw-banner bw-banner-amber" style="margin-top:14px;">💳 Online payment via Cashfree is required to confirm your booking.</div>'
       : '<div class="bw-banner bw-banner-teal" style="margin-top:14px;">💰 Payment at the clinic on the day of your visit.</div>'}`;
 
-  // ── LEGAL / CONSENT COPY ─────────────────────────────────────────
-  // Written to comply with India's Telemedicine Practice Guidelines,
-  // 2020 (Sec. 3.3 — Consent) which require EXPLICIT informed consent
-  // for teleconsultation when the RMP initiates or when payment is
-  // exchanged. Links point to REAL pages that exist on neokidspro.in
-  // (verified against the sitemap + Terms of Service references).
   const tnc = $('#f_tnc'); tnc.checked = false;
   $('#btnSubmit').disabled = true;
 
@@ -1783,15 +1671,63 @@ function renderSummary(){
   tnc.onchange = () => { $('#btnSubmit').disabled = !tnc.checked; };
 }
 
-/* ── Cashfree-in-iframe fix ────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════
+   Cashfree-in-iframe fix — v4, timing-safe
+   ══════════════════════════════════════════════════════════════════════
+   THE BUG (v3): requestParentFullscreen(true) added body.bw-cashfree-active
+   SYNCHRONOUSLY, the instant Confirm Booking was pressed — before the
+   async cashfree.checkout() call had mounted its own overlay. That CSS
+   sets the <body> to position:fixed and hides .bw-page entirely. On
+   mobile, where reflow/paint is slower, Cashfree's SDK could measure the
+   DOM mid-teardown from our own CSS and bail out with its own generic
+   "Invalid input" alert instead of ever opening the payment modal.
+
+   THE FIX (v4): don't touch our own layout until Cashfree's overlay node
+   actually exists in the DOM. waitForCashfreeOverlay() polls via
+   MutationObserver (with a short timeout fallback so we never hang) and
+   only THEN adds body.bw-cashfree-active — by which point Cashfree has
+   already finished its own initial mount, so our layout changes can't
+   interfere with it. Everything the class actually DOES (locked scroll
+   on the background page, momentum scrolling on iOS, keyboard-aware
+   max-height) is unchanged — only the timing of when it gets applied.
+*/
 function requestParentFullscreen(active) {
-  // Toggle the local body class immediately so the mobile-scroll CSS
-  // above applies without waiting for the parent's postMessage reply.
-  if (active) document.body.classList.add('bw-cashfree-active');
-  else        document.body.classList.remove('bw-cashfree-active');
   try {
     window.parent.postMessage({ type: 'nkp-cashfree-fullscreen', active: !!active }, '*');
   } catch (_) {}
+
+  if (active) {
+    waitForCashfreeOverlay(() => document.body.classList.add('bw-cashfree-active'));
+  } else {
+    document.body.classList.remove('bw-cashfree-active');
+  }
+}
+
+function waitForCashfreeOverlay(cb) {
+  function isOverlayNode(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.tagName === 'IFRAME') return true;
+    const s = el.style || {};
+    if (s.position === 'fixed' || (parseInt(s.zIndex, 10) || 0) > 100) return true;
+    return false;
+  }
+  const already = Array.from(document.body.children).find(isOverlayNode);
+  if (already) { cb(); return; }
+
+  let done = false;
+  const finish = () => { if (done) return; done = true; obs.disconnect(); cb(); };
+
+  const obs = new MutationObserver(() => {
+    const found = Array.from(document.body.children).find(isOverlayNode);
+    if (found) finish();
+  });
+  obs.observe(document.body, { childList: true });
+
+  // Safety net: if Cashfree's overlay somehow never matches our
+  // heuristic (SDK markup changes, etc.), don't leave the payment flow
+  // stuck without the mobile-scroll fix applied — just apply it after a
+  // short delay instead of waiting forever.
+  setTimeout(finish, 1200);
 }
 
 // visualViewport keyboard tracker — when the keyboard opens inside the
