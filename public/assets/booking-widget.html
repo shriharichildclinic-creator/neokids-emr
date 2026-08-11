@@ -653,7 +653,7 @@ body {
     linear-gradient(180deg, #fff 0%, #fff8f8 56%, #fff 100%);
 }
 .bw-hero-grid {
-  display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: 28px; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: 28px; align-items: start;
 }
 .bw-hero-title {
   font-family: 'Poppins', sans-serif; font-weight: 800;
@@ -663,8 +663,8 @@ body {
   max-width: 620px; margin-top: 16px; color: var(--bw-body); line-height: 1.8; font-size: 15px;
 }
 .bw-hero-visual {
-  position: relative; min-height: 400px; overflow: hidden;
-  padding: 32px; border-radius: 32px; border: 1.5px solid var(--bw-border);
+  position: relative; overflow: hidden;
+  padding: 26px; border-radius: 32px; border: 1.5px solid var(--bw-border);
   background: linear-gradient(145deg, rgba(255,238,239,.94) 0%, #fff 58%, rgba(234,244,244,.95) 100%);
   box-shadow: var(--bw-shadow-md);
 }
@@ -699,8 +699,11 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
 }
 .bw-hero-stat {
-  position: absolute; right: 28px; top: 48px; width: 136px; border-radius: 24px; padding: 18px 16px; text-align: center;
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 999px; padding: 8px 16px; margin-top: 16px;
 }
+.bw-hero-stat-label, .bw-hero-stat-value { display: inline; margin: 0; }
+.bw-hero-stat-value::before { content: '·'; margin-right: 8px; color: var(--bw-muted); font-weight: 400; }
 
 /* ── Booking-flow phone toggle (replaces the old autoplay-only mockup) ──
    Real interactive Online/Clinic toggle: tap either pill to preview that
@@ -804,7 +807,7 @@ body {
   font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--bw-muted);
 }
 .bw-hero-stat-value {
-  margin-top: 8px; font-family: 'Poppins', sans-serif; font-size: 28px; font-weight: 800; color: var(--bw-ink);
+  font-family: 'Poppins', sans-serif; font-size: 13.5px; font-weight: 800; color: var(--bw-ink);
 }
 .bw-grid-2, .bw-grid-3, .bw-grid-6 { display: grid; gap: 18px; }
 .bw-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -931,7 +934,7 @@ body {
   .bw-hero-grid, .bw-grid-3 { grid-template-columns: 1fr; }
   .bw-grid-2 { grid-template-columns: 1fr; }
   .bw-grid-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bw-hero-stat { position: static; width: 136px; margin-top: 18px; }
+
 }
 @media (max-width: 640px) {
   .bw-hero { padding-top: 28px; }
@@ -1014,19 +1017,15 @@ body {
                   <span class="bw-phone-dot online"></span><span class="bw-phone-dot clinic"></span>
                 </div>
               </div>
-              <div class="bw-hero-panel-title" style="text-align:center;margin-top:16px;">Gentle, guided booking</div>
-              <p class="bw-hero-panel-copy" style="text-align:center;">
-                Choose consultation type, select your doctor, pick a slot, add patient details, and confirm in minutes.
+              <p class="bw-hero-panel-copy" style="text-align:center;margin-top:14px;">
+                Choose your mode, pick a doctor and slot, then confirm — same guided flow either way.
               </p>
-              <div class="bw-hero-list">
-                <div class="bw-hero-list-item"><span class="bw-hero-list-icon" aria-hidden="true">1</span>Choose consultation</div>
-                <div class="bw-hero-list-item"><span class="bw-hero-list-icon" aria-hidden="true">2</span>Select doctor and slot</div>
-                <div class="bw-hero-list-item"><span class="bw-hero-list-icon" aria-hidden="true">3</span>Confirm and pay</div>
+              <div style="display:flex;justify-content:center;">
+                <div class="bw-hero-stat">
+                  <span class="bw-hero-stat-label">Booking Time</span>
+                  <span class="bw-hero-stat-value">2 min</span>
+                </div>
               </div>
-            </div>
-            <div class="bw-hero-stat">
-              <div class="bw-hero-stat-label">Booking Time</div>
-              <div class="bw-hero-stat-value">2 min</div>
             </div>
           </div>
         </div>
@@ -2245,7 +2244,6 @@ function reportHeightSoon() {
     } catch (_) {}
   });
 }
-<!-- TEST -->
 
 // Tells the parent page "the step/screen just changed, please make sure
 // I'm in view" — the parent decides whether/how far to scroll (see the
