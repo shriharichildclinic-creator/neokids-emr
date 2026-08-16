@@ -1583,40 +1583,109 @@ html[data-theme="dark"] [style*="color: black"]{
   color: var(--nk-text) !important;
 }
 
-/* The signature drawing pad is a functional input surface, not themed
-   chrome — it must always stay white with a black pen so the doctor can
-   see their own strokes, regardless of theme. Placed after the "hard
-   kill hardcoded white surfaces" rule above so it wins the cascade. */
-html[data-theme="dark"] #sigDrawWrap,
-html[data-theme="dark"] #sigCanvas,
-html[data-theme="dark"] #sigLiveWrap > div{
-  background: #fff !important;
-  color: #000 !important;
+/* Signature surfaces (preview box, draw pad, live preview) live in
+   .np-sig-surface, defined once near the other v3.3.7 signature rules
+   below. That component is never themed in the first place — it does
+   not use inline `style="background:#fff"` and is not matched by the
+   "hard kill hardcoded white surfaces" rule above — so no dark-mode
+   override, and no duplicate copy of one, is needed here at all. This
+   replaces the old #sigDrawWrap / #sigCanvas / #sigLiveWrap override
+   chain (and its previously-hidden bug: `color: var(--nk-ink)` resolves
+   to a near-white color in dark mode, so the "Clear drawing" button was
+   rendering near-invisible light text on the forced-white surface). */
+
+/* ===================================================================
+   Signature surfaces (v3.3.7)
+   The signature preview box, the draw pad, and the live preview are
+   all functional white-paper-and-ink surfaces, not themed chrome — a
+   saved signature PNG is dark ink on a transparent background, so it
+   must always sit on a light backdrop to stay visible, and a doctor
+   drawing a signature needs a light page with a dark pen regardless of
+   which theme the rest of the app is in. Defined ONCE, unscoped by
+   `html[data-theme]`, so it can never drift from the other and never
+   needs a dark-mode override (see removed #sigDrawWrap rules above).
+   =================================================================== */
+.np-sig-surface{
+  background:#fff;
+  border:1px solid #D9E6E6;
+  border-radius:12px;
+  padding:.6rem;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:72px;
+  box-sizing:border-box;
 }
-/* The "Clear drawing" ghost button's dark-mode style relies on a
-   transparent background over a dark parent, with light text meant to
-   sit on that dark parent. Now that #sigDrawWrap is forced white above,
-   that combination becomes near-invisible light-on-white text. Since
-   #sigDrawWrap is a permanently light surface, its buttons must use the
-   same light-mode button styling here too. */
-html[data-theme="dark"] #sigDrawWrap .np-btn{
-  background:#fff !important;
-  color: var(--nk-ink) !important;
-  border-color: #D9E6E6 !important;
+.np-sig-empty{ color:#64748B; font-size:.85rem; }
+/* Buttons inside this surface always use light-mode coloring, hardcoded
+   rather than via theme variables — var(--nk-ink) resolves to a
+   near-white color in dark mode, which is unreadable on this
+   permanently-white surface. */
+.np-sig-surface .np-btn{
+  background:#fff;
+  color:#0F2E3A;
+  border-color:#D9E6E6;
 }
-html[data-theme="dark"] #sigDrawWrap .np-btn:hover{
-  background: var(--nk-teal-50) !important;
-  color: var(--nk-teal-700) !important;
-  border-color: var(--nk-teal-200) !important;
+.np-sig-surface .np-btn:hover{
+  background:#EAF4F4;
+  color:#1F6E6E;
+  border-color:#BFDCDC;
 }
-html[data-theme="dark"] #sigDrawWrap .np-btn--primary{
-  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%) !important;
-  border-color: var(--nk-teal-600) !important;
-  color:#fff !important;
+.np-sig-surface .np-btn--primary{
+  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
+  border-color: var(--nk-teal-600);
+  color:#fff;
 }
-html[data-theme="dark"] #sigDrawWrap .np-btn--primary:hover{
-  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%) !important;
-  border-color: var(--nk-teal-700) !important;
+.np-sig-surface .np-btn--primary:hover{
+  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%);
+  border-color: var(--nk-teal-700);
+}
+/* The base html[data-theme="dark"] .np-btn rule (an element + attribute +
+   class selector) outranks the plain two-class .np-sig-surface .np-btn
+   rule above, so it would otherwise still win in dark mode. One explicit,
+   non-duplicated override here beats it — using hardcoded light colors,
+   not a theme variable, since this surface never actually changes with
+   the theme. */
+html[data-theme="dark"] .np-sig-surface .np-btn{
+  background:#fff;
+  color:#0F2E3A;
+  border-color:#D9E6E6;
+}
+html[data-theme="dark"] .np-sig-surface .np-btn:hover{
+  background:#EAF4F4;
+  color:#1F6E6E;
+  border-color:#BFDCDC;
+}
+html[data-theme="dark"] .np-sig-surface .np-btn--primary{
+  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
+  border-color: var(--nk-teal-600);
+  color:#fff;
+}
+html[data-theme="dark"] .np-sig-surface .np-btn--primary:hover{
+  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%);
+  border-color: var(--nk-teal-700);
+}
+/* Signature preview images — one rule, reused for the saved-signature
+   preview, the file-upload live preview, and (via object-fit) any
+   future preview state, so scaling can never drift between them. Fixed
+   height + object-fit:contain preserves the source aspect ratio and
+   never stretches, squashes, or crops. */
+.np-sig-img{
+  display:block;
+  height:56px;
+  width:auto;
+  max-width:100%;
+  object-fit:contain;
+}
+#sigCanvas{
+  background:#fff;
+  width:100%;
+  max-width:640px;
+  height:180px;
+  border:1px solid #D9E6E6;
+  border-radius:10px;
+  touch-action:none;
+  display:block;
 }
 
 /* ---------- Focus rings visible in both themes ---------- */
@@ -2124,30 +2193,9 @@ html[data-theme="dark"] textarea{
     background: var(--nk-card) !important;
     color: var(--nk-text) !important;
   }
-  /* Same signature-pad exception, mobile-scoped copy — must also win
-     here since this block is deliberately kept after the mobile media
-     queries to win the cascade at <1024px widths. */
-  html[data-theme="dark"] #sigDrawWrap,
-  html[data-theme="dark"] #sigCanvas,
-  html[data-theme="dark"] #sigLiveWrap > div{
-    background: #fff !important;
-    color: #000 !important;
-  }
-  html[data-theme="dark"] #sigDrawWrap .np-btn{
-    background:#fff !important;
-    color: var(--nk-ink) !important;
-    border-color: #D9E6E6 !important;
-  }
-  html[data-theme="dark"] #sigDrawWrap .np-btn:hover{
-    background: var(--nk-teal-50) !important;
-    color: var(--nk-teal-700) !important;
-    border-color: var(--nk-teal-200) !important;
-  }
-  html[data-theme="dark"] #sigDrawWrap .np-btn--primary{
-    background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%) !important;
-    border-color: var(--nk-teal-600) !important;
-    color:#fff !important;
-  }
+  /* No mobile-scoped copy of the signature-surface override needed —
+     .np-sig-surface (defined once, below) is unthemed at every
+     viewport width, so there is nothing for this block to fight. */
 }
 
 /* --- 9. Sticky sidebar reaffirmed at all sizes ------------------- */

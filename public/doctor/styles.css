@@ -468,6 +468,13 @@ html,body{
 
 .np-settings-grid{
   display:grid; grid-template-columns: repeat(2,1fr); gap:1rem;
+  /* Root-cause fix (v3.3.7): default grid behavior (align-items:stretch)
+     forces every card in a row to match the height of its tallest
+     sibling. The Signature card grew tall (canvas + upload + draw pad),
+     which stretched whatever card it was paired with (Appearance) into
+     a mostly-empty box, and Clinic Location did the same to
+     Consultation Fees. Cards should size to their own content. */
+  align-items: start;
 }
 @media (max-width:900px){ .np-settings-grid{ grid-template-columns: 1fr; } }
 

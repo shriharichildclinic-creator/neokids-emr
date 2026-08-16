@@ -618,9 +618,9 @@
   </div>
   <div style="margin-bottom:.75rem;">
     <div class="np-field__label">Current signature</div>
-    <div id="sigPreviewWrap" style="border:1px dashed var(--np-border); border-radius:10px; padding:.6rem; min-height:60px; display:flex; align-items:center; justify-content:center; background:var(--np-surface);">
-      <span id="sigPreviewEmpty" class="np-mut" style="font-size:.85rem;">No signature uploaded</span>
-      <img id="sigPreviewImg" alt="Signature preview" style="max-height:56px; max-width:220px; display:none;">
+    <div id="sigPreviewWrap" class="np-sig-surface">
+      <span id="sigPreviewEmpty" class="np-sig-empty">No signature uploaded</span>
+      <img id="sigPreviewImg" class="np-sig-img" alt="Signature preview" style="display:none;">
     </div>
   </div>
   <form id="signatureForm" enctype="multipart/form-data" novalidate>
@@ -632,8 +632,8 @@
     <div class="np-divider"></div>
     <div class="np-field">
       <label class="np-field__label">Draw signature</label>
-      <div id="sigDrawWrap" style="border:1px dashed var(--np-border); border-radius:12px; padding:.75rem; background:#fff;">
-        <canvas id="sigCanvas" width="640" height="180" style="width:100%; max-width:640px; height:180px; border:1px solid var(--np-border); border-radius:10px; background:#fff; touch-action:none;"></canvas>
+      <div id="sigDrawWrap" class="np-sig-surface" style="flex-direction:column; align-items:stretch; justify-content:flex-start; min-height:0;">
+        <canvas id="sigCanvas" width="640" height="180"></canvas>
         <div class="np-field__hint">Sign inside the box, then save it as your digital signature.</div>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.6rem;">
           <button type="button" id="sigClearBtn" class="np-btn np-btn--ghost np-btn--sm">Clear drawing</button>
@@ -643,8 +643,8 @@
     </div>
     <div id="sigLiveWrap" class="hidden" style="margin-bottom:.75rem;">
       <div class="np-field__label">Live preview</div>
-      <div style="border:1px dashed var(--np-border); border-radius:10px; padding:.6rem; display:flex; align-items:center; justify-content:center; background:#fff;">
-        <img id="sigLiveImg" alt="Preview" style="max-height:56px; max-width:220px;">
+      <div class="np-sig-surface">
+        <img id="sigLiveImg" class="np-sig-img" alt="Preview">
       </div>
     </div>
     <div style="display:flex; gap:.5rem; flex-wrap:wrap;">

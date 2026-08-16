@@ -80,56 +80,62 @@ function resolveSignaturePath(doctor) {
 // We now compute the exact raster height, clamp the whole block so it
 // fits on one page, and use flowing relative y offsets (never absolute).
 function drawSignatureBlock(doc, doctor, opts = {}) {
-  const sigPath = resolveSignaturePath(doctor);
-  const rightX  = doc.page.width - 240;
-  const hasReg  = !!(doctor && doctor.registrationNumber);
+  const sigPath   = resolveSignaturePath(doctor);
+  const leftX     = doc.page.width - 240;   // block's left edge — every element shares this x
+  const blockW    = 220;                    // shared width for text wrapping + image box
+  const sigMaxH   = 42;                     // signature image never exceeds this height
+  const hasReg    = !!(doctor && doctor.registrationNumber);
 
-  // Total block height: image/line (44) + name (14) + qualification (12)
-  // + optional reg. no (11) + caption (10).
-  const blockH  = 44 + 14 + 12 + (hasReg ? 11 : 0) + 10;
+  // Required layout is name-first, signature-last, everything left-aligned
+  // to `leftX`:
+  //   Doctor Name
+  //   Qualifications
+  //   [Signature Image]
+  // Total block height: name (14) + qualification (12) + optional reg. no
+  // (11) + image (sigMaxH, with a small gap above it) + caption (10).
+  const blockH = 14 + 12 + (hasReg ? 11 : 0) + 6 + sigMaxH + 4 + 10;
   const bottomLimit = doc.page.height - 48;   // keep clear of the footer band
-  // The ENTIRE block (image + every text line) must end above bottomLimit,
-  // otherwise PDFKit auto page-breaks mid-block (the reported bug).
+  // The ENTIRE block (every text line + the image) must end above
+  // bottomLimit, otherwise PDFKit auto page-breaks mid-block.
   const maxY = bottomLimit - blockH;
   let y = Math.min(opts.y || maxY, maxY);
   if (y < 40) y = 40;                          // never collide with the header
 
-  // ── Signature image (fixed-height box so the lines below never move) ──
-  if (sigPath) {
-    try {
-      // Fixed height + fit keeps the image inside the box regardless of the
-      // source aspect ratio, so the name line below is always at y+44.
-      // Root cause of "signature saves but never appears in PDFs": this
-      // pdfkit version throws "unsupported number: NaN" when `fit` and
-      // `height` are passed together — the redundant height conflicts
-      // with fit's own aspect-ratio math. That exception was being
-      // silently swallowed by the catch below, which is why the doctor
-      // saw a signature preview and a generated PDF, but never the
-      // actual image — it always silently fell back to the blank
-      // underline. `fit: [200, 40]` alone already caps the image to a
-      // max height of 40, so the block's fixed-height layout is unaffected.
-      doc.image(sigPath, rightX, y, { fit: [200, 40], align: 'center', valign: 'bottom' });
-    } catch (e) {
-      doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 26);
-    }
-  } else {
-    doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 26);
-  }
-
-  // ── Text lines: relative flowing offsets, never past the page bottom ──
-  let ty = y + 44;
+  // ── Text lines first, all left-aligned to `leftX` ──
+  let ty = y;
   doc.font('Helvetica-Bold').fillColor('#000').fontSize(11)
-     .text(`Dr. ${doctor.name}`, rightX, ty, { width: 220, lineBreak: false, ellipsis: true });
+     .text(`Dr. ${doctor.name}`, leftX, ty, { width: blockW, lineBreak: false, ellipsis: true });
   ty += 14;
   doc.font('Helvetica').fillColor('#555').fontSize(9)
-     .text(doctor.qualification || 'MBBS, MD (Pediatrics)', rightX, ty, { width: 220, lineBreak: false, ellipsis: true });
+     .text(doctor.qualification || 'MBBS, MD (Pediatrics)', leftX, ty, { width: blockW, lineBreak: false, ellipsis: true });
   ty += 12;
   if (hasReg) {
-    doc.text(`Reg. No: ${doctor.registrationNumber}`, rightX, ty, { width: 220, lineBreak: false, ellipsis: true });
+    doc.text(`Reg. No: ${doctor.registrationNumber}`, leftX, ty, { width: blockW, lineBreak: false, ellipsis: true });
     ty += 11;
   }
+  ty += 6; // small gap before the signature image
+
+  // ── Signature image, left-aligned under the text (same leftX) ──
+  if (sigPath) {
+    try {
+      // `fit` alone (no `height` passed alongside it) — passing both throws
+      // "unsupported number: NaN" in this pdfkit version because the
+      // redundant height conflicts with fit's own aspect-ratio math. `fit`
+      // already preserves the source aspect ratio and never crops.
+      // `align: 'left'` keeps the image's left edge flush with the text
+      // above it instead of centering it inside the fit box, which is what
+      // made the block look inconsistently aligned.
+      doc.image(sigPath, leftX, ty, { fit: [blockW, sigMaxH], align: 'left', valign: 'top' });
+    } catch (e) {
+      doc.fontSize(10).fillColor('#555').text('___________________________', leftX, ty);
+    }
+  } else {
+    doc.fontSize(10).fillColor('#555').text('___________________________', leftX, ty);
+  }
+  ty += sigMaxH + 4;
+
   doc.fillColor('#888').fontSize(8)
-     .text('Digital Signature', rightX, ty, { width: 220, lineBreak: false });
+     .text('Digital Signature', leftX, ty, { width: blockW, lineBreak: false });
 }
 
 async function generateInvoice(appointment) {
