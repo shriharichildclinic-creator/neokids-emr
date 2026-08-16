@@ -382,7 +382,7 @@
                 <div class="np-panel__title">Medical Certificates</div>
                 <div class="np-panel__subtitle">Every certificate issued across all doctors</div>
               </div>
-              <button class="np-btn np-btn--primary np-btn--sm" type="button" id="admNewCertBtn">+ New certificate</button>
+              <button class="np-btn np-btn--sm" type="button" id="admNewCertBtn" disabled title="Admins can review certificates but cannot issue them.">Read-only in admin panel</button>
             </div>
             <div class="np-panel__body">
               <div id="admCertList"><div class="np-empty"><div class="np-empty__title">Loading…</div></div></div>
@@ -754,6 +754,13 @@
               <input name="tdsPercent" type="number" min="0" max="100" step="0.01" class="np-input" placeholder="10"/>
             </div>
           </div>
+        </div>
+        <div class="np-field" style="margin-top:.75rem;">
+          <label class="np-row" style="gap:.55rem; align-items:flex-start;">
+            <input type="checkbox" name="canAddPreviousRecords" id="docCanAddPreviousRecords" style="margin-top:.2rem;">
+            <span>Allow this doctor to use the Previous Records tab in the doctor panel</span>
+          </label>
+          <div class="np-field__hint">Admins only toggle access. Doctors create, edit and delete previous records inside their own panel.</div>
         </div>
         <div class="np-field" style="margin-top:.75rem;">
           <label class="np-field__label">Bio</label>

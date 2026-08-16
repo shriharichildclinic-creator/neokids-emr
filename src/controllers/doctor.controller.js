@@ -47,6 +47,16 @@ function withSignedUrls(appt, userId) {
   };
 }
 
+function signPreviousRecordAttachment(record, userId) {
+  if (!record || !record.attachmentUrl) return null;
+  return buildSignedFileUrl({
+    kind: 'previous-record',
+    appointmentId: record.id,
+    userId,
+    role: 'DOCTOR'
+  });
+}
+
 // ────────────────────────────────────────────────────────────────────
 // PROFILE
 // ────────────────────────────────────────────────────────────────────
@@ -240,6 +250,18 @@ exports.patientHistory = asyncHandler(async (req, res) => {
     select: { id: true, name: true, dateOfBirth: true, gender: true }
   });
 
+  const doctorMeta = await prisma.doctor.findUnique({
+    where: { id: req.user.id },
+    select: { canAddPreviousRecords: true }
+  });
+
+  const previousRecords = doctorMeta?.canAddPreviousRecords
+    ? await prisma.previousRecord.findMany({
+        where: { patientId, doctorId: req.user.id },
+        orderBy: [{ recordDate: 'desc' }, { createdAt: 'desc' }]
+      })
+    : [];
+
   const prescriptions = visits
     .filter(v => v.prescription)
     .map(v => ({
@@ -323,7 +345,21 @@ exports.patientHistory = asyncHandler(async (req, res) => {
     prescriptions,
     diagnoses,
     notes,
-    openFollowUps
+    openFollowUps,
+    previousRecords: previousRecords.map(r => ({
+      id: r.id,
+      recordDate: r.recordDate,
+      diagnosis: r.diagnosis,
+      notes: r.notes,
+      treatment: r.treatment,
+      medications: r.medications,
+      attachmentUrl: signPreviousRecordAttachment(r, req.user.id),
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt
+    })),
+    permissions: {
+      canAddPreviousRecords: !!doctorMeta?.canAddPreviousRecords
+    }
   });
 });
 

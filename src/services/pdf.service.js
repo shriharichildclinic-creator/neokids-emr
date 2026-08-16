@@ -9,6 +9,10 @@ const BRAND_BLUE = '#4DA8FF';
 const BRAND_MINT = '#B8F2E6';
 const BRAND_DARK = '#0F2E3A';
 
+function appointmentModeLabel(type) {
+  return type === 'ONLINE' ? 'Online Consultation' : type === 'OFFLINE' ? 'Clinic Visit' : (type || '—');
+}
+
 function publicUrlForAppointmentPdf(kind, appointmentId) {
   const segment = kind === 'invoice' ? 'invoices' : 'prescriptions';
   return `/api/files/${segment}/${appointmentId}.pdf`;
@@ -197,18 +201,22 @@ async function generatePrescription(appointment, prescription) {
 
     doc.font('Helvetica-Bold').text('Date: ', 320, py, { continued: true })
        .font('Helvetica').text(dayjs(appointment.date).format('DD MMM YYYY'));
+    doc.font('Helvetica-Bold').text('Time: ', 320, py + 15, { continued: true })
+       .font('Helvetica').text(appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—');
+    doc.font('Helvetica-Bold').text('Mode: ', 320, py + 30, { continued: true })
+       .font('Helvetica').text(appointmentModeLabel(appointment.consultationType));
 
     // Vitals row (if recorded)
     if (prescription.weight || prescription.height) {
-      doc.font('Helvetica-Bold').text('Weight: ', 320, py + 15, { continued: true })
+      doc.font('Helvetica-Bold').text('Weight: ', 320, py + 45, { continued: true })
          .font('Helvetica').text(prescription.weight ? `${prescription.weight} kg` : '—');
-      doc.font('Helvetica-Bold').text('Height: ', 320, py + 30, { continued: true })
+      doc.font('Helvetica-Bold').text('Height: ', 320, py + 60, { continued: true })
          .font('Helvetica').text(prescription.height);
     }
 
-    doc.moveTo(50, py + 70).lineTo(doc.page.width - 50, py + 70).strokeColor(BRAND_BLUE).stroke();
+    doc.moveTo(50, py + 95).lineTo(doc.page.width - 50, py + 95).strokeColor(BRAND_BLUE).stroke();
 
-    let cursorY = py + 85;
+    let cursorY = py + 110;
     const section = (label, value) => {
       if (!value) return;
       doc.fontSize(11).font('Helvetica-Bold').fillColor(BRAND_BLUE).text(label, 50, cursorY);

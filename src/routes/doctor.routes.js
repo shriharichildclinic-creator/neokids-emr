@@ -3,6 +3,7 @@ const c      = require('../controllers/doctor.controller');
 const earn   = require('../controllers/earnings.controller');
 const kyc    = require('../controllers/kyc.controller');
 const hist   = require('../controllers/historical.controller');
+const prev   = require('../controllers/previous.controller');
 const cert   = require('../controllers/certificate.controller');
 const sig    = require('../controllers/signature.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
@@ -26,6 +27,7 @@ router.delete('/profile-image',                             c.removeProfileImage
 // ─── Feature 3 — Doctor digital signature ───
 router.get('/signature',                                    sig.get);
 router.post('/signature', uploadSignature.single('signature'), sig.upload);
+router.post('/signature/drawn',                             sig.uploadDrawn);
 router.delete('/signature',                                 sig.remove);
 router.put('/registration-number',                          sig.updateRegistration);
 
@@ -43,12 +45,22 @@ router.post('/appointments/:id/cancel',                     c.cancelAppointment)
 router.post('/appointments/:id/complete',                   c.toggleComplete);
 router.post('/appointments/:id/toggle-complete',            c.toggleComplete);
 
-// ─── Feature 1 — Historical / Manual appointment records ───
+// ─── Legacy historical-appointment flow retained for backward compatibility ───
 router.post(
   '/historical-appointments',
   uploadHistoricalPrescription.single('prescriptionFile'),
   hist.create
 );
+
+// ─── Previous Records (doctor-only feature flag) ───
+router.get('/previous-records/permission',                  prev.permission);
+router.get('/patients/:patientId/previous-records',         prev.listForPatient);
+router.post('/patients/:patientId/previous-records', uploadHistoricalPrescription.single('attachment'), (req, _res, next) => {
+  req.body = { ...(req.body || {}), patientId: req.params.patientId };
+  next();
+}, prev.create);
+router.put('/previous-records/:id', uploadHistoricalPrescription.single('attachment'), prev.update);
+router.delete('/previous-records/:id',                      prev.remove);
 
 // ─── Prescription endpoints ───
 router.post('/appointments/:id/prescription',               c.createPrescription);

@@ -740,6 +740,7 @@ function openEditDoctor(id) {
   if (f.clinicSharePercent) f.clinicSharePercent.value = d.clinicSharePercent ?? 25;
   if (f.doctorSharePercent) f.doctorSharePercent.value = d.doctorSharePercent ?? 75;
   if (f.tdsPercent)         f.tdsPercent.value         = d.tdsPercent ?? 10;
+  if (f.canAddPreviousRecords) f.canAddPreviousRecords.checked = !!d.canAddPreviousRecords;
   loadKycForDoctor(id);
   $('#doctorModal').classList.remove('hidden');
 }
@@ -772,7 +773,8 @@ $('#doctorForm').addEventListener('submit', async (e) => {
     bio: (raw.bio || '').trim() || undefined,
     consultationModes: raw.consultationModes || 'BOTH',
     onlineConsultFee: raw.onlineConsultFee === '' ? 0 : Number(raw.onlineConsultFee),
-    physicalConsultFee: raw.physicalConsultFee === '' ? 0 : Number(raw.physicalConsultFee)
+    physicalConsultFee: raw.physicalConsultFee === '' ? 0 : Number(raw.physicalConsultFee),
+    canAddPreviousRecords: !!f.canAddPreviousRecords?.checked
   };
   if (raw.clinicSharePercent !== undefined && raw.clinicSharePercent !== '') {
     payload.clinicSharePercent = Number(raw.clinicSharePercent);
@@ -2057,3 +2059,18 @@ function setupAdmFeatureUI(){
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupAdmFeatureUI);
 else setupAdmFeatureUI();
+
+
+(function(){
+  var btn = document.getElementById('admNewCertBtn');
+  if (btn && !btn.__readOnlyWired){
+    btn.__readOnlyWired = true;
+    btn.addEventListener('click', function(){
+      if (typeof NPModal !== 'undefined' && NPModal.alert) {
+        NPModal.alert({ title:'Read-only in admin', message:'Admins can review, download and audit certificates here. Doctors must create or edit certificates from the doctor panel.' });
+      } else {
+        alert('Admins can review, download and audit certificates here. Doctors must create or edit certificates from the doctor panel.');
+      }
+    });
+  }
+})();

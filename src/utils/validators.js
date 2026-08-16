@@ -114,6 +114,10 @@ const doctorShape = {
   tdsPercent: z.preprocess(
     v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
     z.number().min(0).max(100)
+  ).optional(),
+  canAddPreviousRecords: z.preprocess(
+    v => (typeof v === 'string' ? ['true','1','yes','on'].includes(v.toLowerCase()) : !!v),
+    z.boolean()
   ).optional()
 };
 
@@ -296,6 +300,24 @@ const historicalAppointmentSchema = z.object({
 );
 
 // ─────────────────────────────────────────────────────────────────────
+// Feature 1B — Previous Records (doctor-only clinical history entries)
+// ─────────────────────────────────────────────────────────────────────
+const previousRecordSchema = z.object({
+  patientId: z.string().uuid(),
+  recordDate: dateSchema,
+  diagnosis: safeOptStr('diagnosis'),
+  notes: safeOptStr('notes'),
+  treatment: safeOptStr('treatment'),
+  medications: safeOptStr('medications')
+});
+
+const drawnSignatureSchema = z.object({
+  dataUrl: z.string().min(50).max(2_000_000).refine(v => /^data:image\/(png|svg\+xml);base64,/i.test(v), {
+    message: 'dataUrl must be a base64 PNG or SVG image'
+  })
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // Feature 2 — Medical Certificate
 // ─────────────────────────────────────────────────────────────────────
 const medicalCertificateSchema = z.object({
@@ -341,5 +363,7 @@ module.exports = {
   resetPasswordSchema,
   changePasswordSchema,
   historicalAppointmentSchema,
+  previousRecordSchema,
+  drawnSignatureSchema,
   medicalCertificateSchema
 };

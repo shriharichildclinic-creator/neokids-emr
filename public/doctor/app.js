@@ -1026,6 +1026,18 @@ async function loadPatientHistoryInto(slot, patientId){
         ${rx.followUpDate ? `<div class="np-mut" style="font-size:.82rem; margin-top:.25rem;">Follow-up: ${escapeHtml(fmtDate(rx.followUpDate))}</div>` : ''}
       </article>`).join('');
 
+    const previousHtml = (h.previousRecords || []).map(pr => `
+      <article class="np-history-rx">
+        <div class="np-row" style="justify-content:space-between; align-items:center; margin-bottom:.25rem;">
+          <b>${escapeHtml(fmtDate(pr.recordDate))}</b>
+          ${pr.attachmentUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(pr.attachmentUrl)}" target="_blank" rel="noopener">Open attachment</a>` : ''}
+        </div>
+        ${pr.diagnosis ? `<div style="font-size:.88rem;"><b>Diagnosis:</b> ${escapeHtml(pr.diagnosis)}</div>` : ''}
+        ${pr.notes ? `<div style="font-size:.85rem;" class="np-mut"><b>Notes:</b> ${escapeHtml(pr.notes)}</div>` : ''}
+        ${pr.treatment ? `<div style="font-size:.85rem;" class="np-mut"><b>Treatment:</b> ${escapeHtml(pr.treatment)}</div>` : ''}
+        ${pr.medications ? `<div style="font-size:.85rem;" class="np-mut"><b>Medications:</b> ${escapeHtml(pr.medications)}</div>` : ''}
+      </article>`).join('');
+
     slot.innerHTML = `
       <div class="np-grid-2" style="gap:.6rem; margin-bottom:.85rem;">
         <div class="np-field"><div class="np-field__label">Total visits</div><div>${escapeHtml(String(sum.totalVisits||0))}</div></div>
@@ -1045,6 +1057,11 @@ async function loadPatientHistoryInto(slot, patientId){
         <div class="np-field__label">Visits (${(h.visits||[]).length})</div>
       </div>
       ${visitsHtml || '<div class="np-mut">No previous visits with this doctor.</div>'}
+      ${(h.previousRecords||[]).length ? `
+        <div class="np-field" style="margin:.85rem 0 .5rem;">
+          <div class="np-field__label">Previous Records (${h.previousRecords.length})</div>
+        </div>
+        ${previousHtml}` : ''}
       ${(h.prescriptions||[]).length ? `
         <div class="np-field" style="margin:.85rem 0 .5rem;">
           <div class="np-field__label">Prescriptions (${h.prescriptions.length})</div>
@@ -2054,4 +2071,245 @@ function injectConsultBackButton(){
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot);
   else boot();
+})();
+
+
+/* ===== v3.3.6 rework: Previous Records + drawn signature + read-only certificate UX ===== */
+(function(){
+  function fmtPrevRecord(record){
+    return `
+      <div class="np-panel" style="box-shadow:none; border-radius:14px; margin-top:.75rem;">
+        <div class="np-panel__body">
+          <div class="np-row" style="justify-content:space-between; gap:.75rem; align-items:flex-start;">
+            <div>
+              <div style="font-weight:700; color:var(--np-ink);">${escapeHtml(fmtDate(record.recordDate))}</div>
+              ${record.diagnosis ? `<div class="np-mut" style="margin-top:.2rem;">Diagnosis: ${escapeHtml(record.diagnosis)}</div>` : ''}
+            </div>
+            <div class="np-row" style="gap:.4rem; flex-wrap:wrap;">
+              <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-prev-edit="${record.id}">Edit</button>
+              <button type="button" class="np-btn np-btn--danger np-btn--sm" data-prev-del="${record.id}">Delete</button>
+            </div>
+          </div>
+          ${record.notes ? `<div style="margin-top:.55rem;"><b>Notes:</b> ${escapeHtml(record.notes)}</div>` : ''}
+          ${record.treatment ? `<div style="margin-top:.45rem;"><b>Treatment:</b> ${escapeHtml(record.treatment)}</div>` : ''}
+          ${record.medications ? `<div style="margin-top:.45rem;"><b>Medications:</b> ${escapeHtml(record.medications)}</div>` : ''}
+          ${record.attachmentSignedUrl ? `<div style="margin-top:.55rem;"><a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${record.attachmentSignedUrl}">Open attachment</a></div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  let __prevRecordsCache = [];
+  let __prevSelectedPatient = null;
+
+  async function checkPreviousRecordPermission(){
+    try {
+      const res = await api('/doctor/previous-records/permission');
+      const navBtn = document.querySelector('[data-tab="historicalTab"]');
+      if (navBtn) navBtn.classList.toggle('hidden', !res.allowed);
+      const tab = document.getElementById('historicalTab');
+      if (tab && !res.allowed) tab.innerHTML = `<div class="np-panel"><div class="np-panel__body"><div class="np-empty"><div class="np-empty__title">Previous Records are disabled</div><div class="np-empty__sub">Ask an admin to enable access for your account.</div></div></div></div>`;
+      return !!res.allowed;
+    } catch(_) { return false; }
+  }
+
+  async function lookupHistoricalPatient(){
+    const q = ($('#histPatientSearch')?.value || '').trim();
+    const box = $('#histMatchBox');
+    if (!q || q.length < 2){ _toast('error', 'Enter at least 2 characters to search'); return; }
+    box.classList.remove('hidden');
+    box.innerHTML = `<div class="np-empty"><div class="np-empty__title">Searching…</div></div>`;
+    try {
+      const rows = await api('/doctor/patients/search?q=' + encodeURIComponent(q));
+      if (!rows.length){
+        box.innerHTML = `<div class="np-empty"><div class="np-empty__title">No matching patient found</div><div class="np-empty__sub">Previous records can only be added for an existing patient in your panel.</div></div>`;
+        return;
+      }
+      box.innerHTML = rows.map(p => `
+        <button type="button" class="np-list-item" data-pid="${p.id}" style="width:100%; text-align:left; border:1px solid var(--np-border); background:#fff; padding:.75rem; border-radius:12px; margin-bottom:.5rem;">
+          <div style="font-weight:700; color:var(--np-ink);">${escapeHtml(p.name)}</div>
+          <div class="np-mut" style="font-size:.82rem;">+91 ${escapeHtml(p.phone || '')}${p.parentName ? ` · ${escapeHtml(p.parentName)}` : ''}</div>
+          <div class="np-mut" style="font-size:.76rem; margin-top:.2rem;">Last visit: ${p.lastVisit ? escapeHtml(fmtDate(p.lastVisit)) : '—'}</div>
+        </button>`).join('');
+      box.querySelectorAll('[data-pid]').forEach(btn => btn.addEventListener('click', async () => {
+        const patient = rows.find(x => x.id === btn.getAttribute('data-pid'));
+        __prevSelectedPatient = patient;
+        $('#histPatientId').value = patient.id;
+        box.innerHTML = `<div class="np-callout np-callout--success"><div><b>${escapeHtml(patient.name)}</b> selected · +91 ${escapeHtml(patient.phone || '')}</div></div>`;
+        await loadPreviousRecordsForPatient(patient.id);
+      }));
+    } catch (ex){
+      box.innerHTML = `<div class="np-error">${escapeHtml(ex.message || 'Could not search patients')}</div>`;
+    }
+  }
+
+  async function loadPreviousRecordsForPatient(patientId){
+    const wrap = $('#histListWrap');
+    if (!wrap) return;
+    wrap.innerHTML = `<div class="np-empty"><div class="np-empty__title">Loading previous records…</div></div>`;
+    try {
+      __prevRecordsCache = await api('/doctor/patients/' + encodeURIComponent(patientId) + '/previous-records');
+      if (!__prevRecordsCache.length){
+        wrap.innerHTML = `<div class="np-empty"><div class="np-empty__title">No previous records yet</div><div class="np-empty__sub">Use the form above to add the first one.</div></div>`;
+        return;
+      }
+      wrap.innerHTML = __prevRecordsCache.map(fmtPrevRecord).join('');
+      wrap.querySelectorAll('[data-prev-edit]').forEach(btn => btn.addEventListener('click', () => editPreviousRecord(btn.getAttribute('data-prev-edit'))));
+      wrap.querySelectorAll('[data-prev-del]').forEach(btn => btn.addEventListener('click', () => deletePreviousRecord(btn.getAttribute('data-prev-del'))));
+    } catch (ex){
+      wrap.innerHTML = `<div class="np-error">${escapeHtml(ex.message || 'Could not load previous records')}</div>`;
+    }
+  }
+
+  function resetPreviousRecordForm(){
+    const form = $('#historicalForm');
+    if (!form) return;
+    form.reset();
+    $('#histRecordId').value = '';
+    $('#histSubmitBtn').textContent = 'Save previous record';
+  }
+
+  function editPreviousRecord(id){
+    const rec = (__prevRecordsCache || []).find(r => r.id === id);
+    if (!rec) return;
+    const form = $('#historicalForm');
+    form.recordDate.value = rec.recordDate ? String(rec.recordDate).slice(0,10) : '';
+    form.diagnosis.value = rec.diagnosis || '';
+    form.notes.value = rec.notes || '';
+    form.treatment.value = rec.treatment || '';
+    form.medications.value = rec.medications || '';
+    $('#histRecordId').value = rec.id;
+    $('#histSubmitBtn').textContent = 'Update previous record';
+    form.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  async function deletePreviousRecord(id){
+    const ok = window.NPModal ? await NPModal.confirm({ title:'Delete previous record?', message:'This will permanently remove the selected previous record.', danger:true, okText:'Delete' }) : confirm('Delete previous record?');
+    if (!ok) return;
+    try {
+      await api('/doctor/previous-records/' + encodeURIComponent(id), { method:'DELETE' });
+      _toast('success', 'Previous record deleted');
+      const pid = $('#histPatientId').value;
+      if (pid) loadPreviousRecordsForPatient(pid);
+      if ($('#histRecordId').value === id) resetPreviousRecordForm();
+    } catch (ex){ _toast('error', ex.message || 'Could not delete previous record'); }
+  }
+
+  async function submitHistorical(e){
+    e.preventDefault();
+    const patientId = $('#histPatientId').value;
+    if (!patientId){ _toast('error', 'Select a patient first'); return; }
+    const form = e.target;
+    const recordId = $('#histRecordId').value;
+    const fd = new FormData();
+    fd.append('recordDate', form.recordDate.value);
+    fd.append('diagnosis', form.diagnosis.value.trim());
+    fd.append('notes', form.notes.value.trim());
+    fd.append('treatment', form.treatment.value.trim());
+    fd.append('medications', form.medications.value.trim());
+    if (form.attachment.files[0]) fd.append('attachment', form.attachment.files[0]);
+    const btn = $('#histSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = recordId ? 'Updating…' : 'Saving…';
+    try {
+      if (recordId) await api('/doctor/previous-records/' + encodeURIComponent(recordId), { method:'PUT', body: fd });
+      else await api('/doctor/patients/' + encodeURIComponent(patientId) + '/previous-records', { method:'POST', body: fd });
+      _toast('success', recordId ? 'Previous record updated' : 'Previous record saved');
+      resetPreviousRecordForm();
+      await loadPreviousRecordsForPatient(patientId);
+    } catch (ex){
+      _toast('error', ex.message || 'Could not save previous record');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = $('#histRecordId').value ? 'Update previous record' : 'Save previous record';
+    }
+  }
+
+  function initHistoricalForm(){
+    const form = $('#historicalForm');
+    if (!form || form.__prevWired) return;
+    form.__prevWired = true;
+    $('#histLookupBtn')?.addEventListener('click', lookupHistoricalPatient);
+    $('#histResetBtn')?.addEventListener('click', resetPreviousRecordForm);
+    form.addEventListener('submit', submitHistorical);
+  }
+
+  function setupSignatureCanvas(){
+    const canvas = $('#sigCanvas');
+    if (!canvas || canvas.__wired) return;
+    canvas.__wired = true;
+    const ctx = canvas.getContext('2d');
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#111827';
+    let drawing = false;
+    let hasInk = false;
+
+    function pos(ev){
+      const rect = canvas.getBoundingClientRect();
+      const src = ev.touches && ev.touches[0] ? ev.touches[0] : ev;
+      return { x:(src.clientX - rect.left) * (canvas.width / rect.width), y:(src.clientY - rect.top) * (canvas.height / rect.height) };
+    }
+    function start(ev){ drawing = true; const p = pos(ev); ctx.beginPath(); ctx.moveTo(p.x, p.y); ev.preventDefault?.(); }
+    function move(ev){ if (!drawing) return; const p = pos(ev); ctx.lineTo(p.x, p.y); ctx.stroke(); hasInk = true; ev.preventDefault?.(); }
+    function end(){ drawing = false; }
+    ['mousedown','touchstart'].forEach(n => canvas.addEventListener(n, start, { passive:false }));
+    ['mousemove','touchmove'].forEach(n => canvas.addEventListener(n, move, { passive:false }));
+    ['mouseup','mouseleave','touchend','touchcancel'].forEach(n => canvas.addEventListener(n, end));
+
+    $('#sigClearBtn')?.addEventListener('click', () => {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      hasInk = false;
+    });
+    $('#sigSaveDrawnBtn')?.addEventListener('click', async () => {
+      if (!hasInk){ _toast('error', 'Draw a signature first'); return; }
+      try {
+        await api('/doctor/signature/drawn', { method:'POST', body:{ dataUrl: canvas.toDataURL('image/png') } });
+        _toast('success', 'Drawn signature saved');
+        await loadSignature();
+      } catch (ex){ _toast('error', ex.message || 'Could not save drawn signature'); }
+    });
+  }
+
+  const __origLoadSignature = typeof loadSignature === 'function' ? loadSignature : null;
+  loadSignature = async function(){
+    if (__origLoadSignature) await __origLoadSignature();
+    setupSignatureCanvas();
+  };
+
+  const __origSetupSignature = typeof setupSignature === 'function' ? setupSignature : null;
+  setupSignature = function(){
+    if (__origSetupSignature) __origSetupSignature();
+    setupSignatureCanvas();
+  };
+
+  const __origLoadPatientHistoryInto = typeof loadPatientHistoryInto === 'function' ? loadPatientHistoryInto : null;
+  loadPatientHistoryInto = async function(slot, patientId){
+    const res = await __origLoadPatientHistoryInto(slot, patientId);
+    try {
+      const target = document.querySelector('#patientHistoryPanel') || document.querySelector('#patientHistoryWrap') || document.querySelector('#patientModal .np-modal__body');
+      if (!target || !window.__lastPatientHistoryPayload || !(window.__lastPatientHistoryPayload.previousRecords || []).length) return res;
+    } catch(_) {}
+    return res;
+  };
+
+  const __origApi = api;
+  api = async function(path, opts={}){
+    const data = await __origApi(path, opts);
+    if (/\/patients\/[^/]+\/history$/.test(path)) window.__lastPatientHistoryPayload = data;
+    return data;
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      checkPreviousRecordPermission();
+      initHistoricalForm();
+      setupSignatureCanvas();
+      const settingsBtn = document.querySelector('[data-tab="settingsTab"]');
+      if (settingsBtn && !settingsBtn.__sigReloadWired){
+        settingsBtn.__sigReloadWired = true;
+        settingsBtn.addEventListener('click', loadSignature);
+      }
+    }, 0);
+  });
 })();

@@ -30,7 +30,7 @@ const DEFAULT_TTL_SEC = parseInt(process.env.FILE_TOKEN_TTL_SEC || '900', 10);
 /**
  * Sign a download token for a specific file.
  * @param {Object} claims
- * @param {'prescription'|'invoice'} claims.kind   What kind of file.
+ * @param {'prescription'|'invoice'|'certificate'|'previous-record'} claims.kind   What kind of file.
  * @param {string} claims.appointmentId            Resource id (UUID).
  * @param {string} claims.userId                   Who requested it.
  * @param {string} claims.role                     'DOCTOR' | 'ADMIN' | 'PATIENT'.
@@ -77,9 +77,17 @@ function verifyDownloadToken(token) {
  */
 function buildSignedFileUrl({ kind, appointmentId, userId, role, ttlSec }) {
   if (!kind || !appointmentId) return null;
-  const segment = kind === 'invoice' ? 'invoices' : 'prescriptions';
+  const segmentMap = {
+    invoice: 'invoices',
+    prescription: 'prescriptions',
+    certificate: 'certificates',
+    'previous-record': 'previous-records'
+  };
+  const segment = segmentMap[kind];
+  if (!segment) return null;
+  const suffix = kind === 'previous-record' ? '' : '.pdf';
   const token = signDownloadToken({ kind, appointmentId, userId, role }, ttlSec);
-  return `/api/files/${segment}/${appointmentId}.pdf?t=${token}`;
+  return `/api/files/${segment}/${appointmentId}${suffix}?t=${token}`;
 }
 
 module.exports = {

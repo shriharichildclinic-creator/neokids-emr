@@ -132,7 +132,7 @@
         </button>
         <button class="np-nav-item tab-btn" data-tab="historicalTab" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Historical Records
+          Previous Records
         </button>
         <button class="np-nav-item tab-btn" data-tab="certificatesTab" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
@@ -628,6 +628,18 @@
       <input id="sigInput" name="signature" type="file" accept="image/png,image/jpeg" class="np-input" required>
       <div class="np-field__hint">PNG with transparent background preferred. Max 1 MB.</div>
     </div>
+    <div class="np-divider"></div>
+    <div class="np-field">
+      <label class="np-field__label">Draw signature</label>
+      <div id="sigDrawWrap" style="border:1px dashed var(--np-border); border-radius:12px; padding:.75rem; background:#fff;">
+        <canvas id="sigCanvas" width="640" height="180" style="width:100%; max-width:640px; height:180px; border:1px solid var(--np-border); border-radius:10px; background:#fff; touch-action:none;"></canvas>
+        <div class="np-field__hint">Sign inside the box, then save it as your digital signature.</div>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.6rem;">
+          <button type="button" id="sigClearBtn" class="np-btn np-btn--ghost np-btn--sm">Clear drawing</button>
+          <button type="button" id="sigSaveDrawnBtn" class="np-btn np-btn--primary np-btn--sm">Save drawn signature</button>
+        </div>
+      </div>
+    </div>
     <div id="sigLiveWrap" class="hidden" style="margin-bottom:.75rem;">
       <div class="np-field__label">Live preview</div>
       <div style="border:1px dashed var(--np-border); border-radius:10px; padding:.6rem; display:flex; align-items:center; justify-content:center; background:#fff;">
@@ -713,98 +725,62 @@
   <div class="np-panel">
     <div class="np-panel__head">
       <div style="flex:1">
-        <div class="np-panel__title">Add Historical / Manual Appointment</div>
-        <div class="np-panel__subtitle">Record a past or offline visit that was never booked through NeoKidsPro</div>
+        <div class="np-panel__title">Previous Records</div>
+        <div class="np-panel__subtitle">Add old clinical notes for an existing patient. Only doctors with permission can access this area.</div>
       </div>
     </div>
     <div class="np-panel__body">
       <div class="np-callout np-callout--info" style="margin-bottom:1rem;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <div>Historical records are marked <b>Manual Record</b> and kept separate from NeoKidsPro bookings. They appear in the patient's timeline and medical history.</div>
+        <div>Previous records live inside the patient history timeline. Admins only control access; creation, editing and deletion happen here in the doctor panel.</div>
       </div>
       <form id="historicalForm" enctype="multipart/form-data" novalidate>
         <div class="np-field">
-          <label class="np-field__label">Patient mobile number <span class="np-req">*</span></label>
+          <label class="np-field__label">Find patient <span class="np-req">*</span></label>
           <div style="display:flex; gap:.5rem;">
-            <input name="phone" id="histPhone" class="np-input" placeholder="10-digit mobile" inputmode="numeric" maxlength="10" style="flex:1;">
-            <button type="button" id="histLookupBtn" class="np-btn np-btn--ghost np-btn--sm">Find patient</button>
+            <input id="histPatientSearch" class="np-input" placeholder="Search by patient name or phone" style="flex:1;">
+            <button type="button" id="histLookupBtn" class="np-btn np-btn--ghost np-btn--sm">Search</button>
           </div>
-          <div class="np-field__hint">We'll auto-link to an existing patient with this number.</div>
+          <div class="np-field__hint">Select an existing patient from your panel first.</div>
         </div>
         <div id="histMatchBox" class="hidden" style="margin-bottom:.75rem;"></div>
         <input type="hidden" name="patientId" id="histPatientId">
-        <input type="hidden" name="linkConfirmed" id="histLinkConfirmed" value="false">
+        <input type="hidden" name="recordId" id="histRecordId">
 
         <div class="np-grid-2">
           <div class="np-field">
-            <label class="np-field__label">Patient name <span class="np-req">*</span></label>
-            <input name="patientName" id="histName" class="np-input" placeholder="Full name">
+            <label class="np-field__label">Record date <span class="np-req">*</span></label>
+            <input name="recordDate" type="date" class="np-input" required>
           </div>
           <div class="np-field">
-            <label class="np-field__label">Parent / guardian name</label>
-            <input name="parentName" class="np-input" placeholder="Parent name">
+            <label class="np-field__label">Diagnosis</label>
+            <input name="diagnosis" class="np-input" placeholder="e.g. Acute viral pharyngitis">
           </div>
-          <div class="np-field">
-            <label class="np-field__label">Date of birth</label>
-            <input name="dateOfBirth" type="date" class="np-input">
-          </div>
-          <div class="np-field">
-            <label class="np-field__label">Gender</label>
-            <select name="gender" class="np-select-native">
-              <option value="">—</option>
-              <option value="MALE">Male</option>
-              <option value="FEMALE">Female</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </div>
-          <div class="np-field">
-            <label class="np-field__label">Email (optional)</label>
-            <input name="email" type="email" class="np-input" placeholder="parent@email.com">
-          </div>
-        </div>
-
-        <div class="np-divider"></div>
-
-        <div class="np-grid-2">
-          <div class="np-field">
-            <label class="np-field__label">Appointment date <span class="np-req">*</span></label>
-            <input name="date" type="date" class="np-input" required>
-          </div>
-          <div class="np-field">
-            <label class="np-field__label">Appointment type <span class="np-req">*</span></label>
-            <select name="consultationType" class="np-select-native" required>
-              <option value="OFFLINE">Clinic Visit</option>
-              <option value="ONLINE">Online Consultation</option>
-            </select>
-          </div>
-        </div>
-        <div class="np-field">
-          <label class="np-field__label">Reason for visit <span class="np-req">*</span></label>
-          <input name="reasonForVisit" class="np-input" placeholder="e.g. Fever and cough" required minlength="2">
-        </div>
-        <div class="np-field">
-          <label class="np-field__label">Diagnosis</label>
-          <input name="diagnosis" class="np-input" placeholder="e.g. Acute viral pharyngitis">
         </div>
         <div class="np-field">
           <label class="np-field__label">Notes</label>
-          <textarea name="notes" class="np-textarea" rows="2" placeholder="Any additional notes"></textarea>
+          <textarea name="notes" class="np-textarea" rows="3" placeholder="Clinical notes"></textarea>
         </div>
-        <div class="np-grid-2">
-          <div class="np-field">
-            <label class="np-field__label">Follow-up date (optional)</label>
-            <input name="followUpDate" type="date" class="np-input">
-          </div>
-          <div class="np-field">
-            <label class="np-field__label">Upload prescription (PDF / JPG / PNG)</label>
-            <input name="prescriptionFile" id="histRxFile" type="file" accept=".pdf,.jpg,.jpeg,.png" class="np-input">
-            <div class="np-field__hint">Scanned / handwritten prescription from the original visit.</div>
-          </div>
+        <div class="np-field">
+          <label class="np-field__label">Treatment</label>
+          <textarea name="treatment" class="np-textarea" rows="2" placeholder="Treatment given"></textarea>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Medications</label>
+          <textarea name="medications" class="np-textarea" rows="2" placeholder="Medicines from the old visit"></textarea>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Attachment</label>
+          <input name="attachment" id="histRxFile" type="file" accept=".pdf,.jpg,.jpeg,.png" class="np-input">
+          <div class="np-field__hint">Optional prescription scan or supporting file.</div>
         </div>
         <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
-          <button type="submit" id="histSubmitBtn" class="np-btn np-btn--primary">Save historical record</button>
+          <button type="button" id="histResetBtn" class="np-btn np-btn--ghost">Reset</button>
+          <button type="submit" id="histSubmitBtn" class="np-btn np-btn--primary">Save previous record</button>
         </div>
       </form>
+      <div class="np-divider"></div>
+      <div id="histListWrap"><div class="np-empty"><div class="np-empty__title">Select a patient to load previous records</div></div></div>
     </div>
   </div>
 </section>

@@ -22,6 +22,7 @@ const { parseDateOnlyOrNull, calcAge } = require('../utils/date');
 const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
 const dayjs = require('dayjs');
+const { buildSignedFileUrl } = require('../utils/fileTokens');
 
 const TEMPLATES = [
   { key: 'GENERAL',       label: 'General Medical Certificate' },
@@ -35,6 +36,20 @@ function nextCertNumber() {
   const rnd = Math.random().toString(36).slice(2, 8).toUpperCase();
   const ts  = Date.now().toString().slice(-4);
   return `NKP-CERT-${yr}-${ts}${rnd}`;
+}
+
+
+function withSignedPdfUrl(cert, user) {
+  if (!cert) return cert;
+  return {
+    ...cert,
+    pdfUrl: buildSignedFileUrl({
+      kind: 'certificate',
+      appointmentId: cert.id,
+      userId: user && user.id,
+      role: user && user.role
+    })
+  };
 }
 
 exports.listTemplates = asyncHandler(async (req, res) => {
@@ -68,7 +83,7 @@ exports.list = asyncHandler(async (req, res) => {
     orderBy: { issuedAt: 'desc' },
     take: Math.min(Math.max(parseInt(req.query.limit || '100', 10) || 100, 1), 500)
   });
-  res.json(rows);
+  res.json(rows.map(row => withSignedPdfUrl(row, req.user)));
 });
 
 exports.detail = asyncHandler(async (req, res) => {
@@ -83,7 +98,7 @@ exports.detail = asyncHandler(async (req, res) => {
     }
   });
   if (!cert) return res.status(404).json({ error: 'Certificate not found' });
-  res.json(cert);
+  res.json(withSignedPdfUrl(cert, req.user));
 });
 
 exports.create = asyncHandler(async (req, res) => {
@@ -162,7 +177,7 @@ exports.create = asyncHandler(async (req, res) => {
     logger.error('generateMedicalCertificate failed', { id: cert.id, err: e.message });
   }
 
-  res.status(201).json(cert);
+  res.status(201).json(withSignedPdfUrl(cert, req.user));
 });
 
 // Convenience endpoint: POST /appointments/:id/certificate

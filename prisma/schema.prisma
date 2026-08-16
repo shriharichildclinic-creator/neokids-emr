@@ -58,7 +58,9 @@ model Doctor {
   clinicSharePercent Decimal @default(25.00) @db.Decimal(5, 2)
   doctorSharePercent Decimal @default(75.00) @db.Decimal(5, 2)
   tdsPercent         Decimal @default(10.00) @db.Decimal(5, 2)
+  canAddPreviousRecords Boolean @default(false)
   appointments Appointment[]
+  previousRecords PreviousRecord[]
   settlements  DoctorSettlement[]
   kyc          DoctorKyc?
   certificates MedicalCertificate[]
@@ -80,6 +82,7 @@ model Patient {
   parentName   String?
   address      String?       @db.Text
   appointments Appointment[]
+  previousRecords PreviousRecord[]
   certificates MedicalCertificate[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -187,6 +190,27 @@ model Prescription {
   updatedAt      DateTime    @updatedAt
 
   @@map("prescriptions")
+}
+
+model PreviousRecord {
+  id            String   @id @default(uuid())
+  doctorId      String
+  patientId     String
+  recordDate    DateTime @db.Date
+  diagnosis     String?  @db.Text
+  notes         String?  @db.Text
+  treatment     String?  @db.Text
+  medications   String?  @db.Text
+  attachmentUrl String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  doctor  Doctor  @relation(fields: [doctorId], references: [id])
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([doctorId, patientId, recordDate])
+  @@index([patientId, recordDate])
+  @@map("previous_records")
 }
 
 // ─────────────────────────────────────────────────────────────────────
