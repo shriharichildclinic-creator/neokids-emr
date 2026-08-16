@@ -197,4 +197,106 @@ router.get('/invoices/:idAndExt', asyncHandler(async (req, res) => {
   return sendPdf(res, filepath, `invoice_${apptId}.pdf`);
 }));
 
+
+/* ─────────────────────────────────────────────────────────────────────
+   GET /api/files/certificates/:idAndExt   (Feature 2)
+   Streams a generated medical certificate PDF. Bearer (doctor/admin)
+   or signed download token.
+   ───────────────────────────────────────────────────────────────────── */
+router.get('/certificates/:idAndExt', asyncHandler(async (req, res) => {
+  const rawId = String(req.params.idAndExt || '').replace(/\.pdf$/i, '');
+  if (!UUID_RE.test(rawId)) {
+    return res.status(400).json({ error: 'Invalid certificate id' });
+  }
+
+  const cred = readCredential(req);
+  if (!cred) return res.status(401).json({ error: 'Authentication required' });
+
+  // Load certificate to enforce ownership.
+  const cert = await prisma.medicalCertificate.findUnique({
+    where: { id: rawId },
+    select: { id: true, doctorId: true, patientId: true }
+  });
+  if (!cert) return res.status(404).json({ error: 'Certificate not found' });
+
+  let allowed = false;
+  if (cred.mode === 'fileToken') {
+    allowed = cred.claims.kind === 'certificate' &&
+              cred.claims.appointmentId === rawId;
+  } else {
+    const role = cred.user && cred.user.role;
+    if (role === 'ADMIN') allowed = true;
+    if (role === 'DOCTOR' && cred.user.id === cert.doctorId) allowed = true;
+  }
+  if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+  // Lazily generate if the PDF is missing (ephemeral disk).
+  const filepath = path.join(STORAGE, 'certificates', `certificate_${rawId}.pdf`);
+  if (!fs.existsSync(filepath)) {
+    try {
+      const full = await prisma.medicalCertificate.findUnique({
+        where: { id: rawId },
+        include: { doctor: true, patient: true }
+      });
+      if (full) {
+        const pdfSvc = require('../services/pdf.service');
+        await pdfSvc.generateMedicalCertificate({
+          certificate: full, doctor: full.doctor, patient: full.patient
+        });
+      }
+    } catch (e) {
+      logger.error('certificate regenerate failed', { id: rawId, err: e.message });
+    }
+  }
+  return sendPdf(res, filepath, `certificate_${rawId}.pdf`);
+}));
+
+/* ─────────────────────────────────────────────────────────────────────
+   GET /api/files/historical-rx/:filename   (Feature 1)
+   Streams an uploaded historical prescription (PDF/JPG/PNG).
+   Bearer (doctor who owns the appointment, or admin) or signed token.
+   ───────────────────────────────────────────────────────────────────── */
+router.get('/historical-rx/:filename', asyncHandler(async (req, res) => {
+  const fname = path.basename(String(req.params.filename || ''));
+  // Allow only safe filenames (uuid + ext).
+  if (!/^[0-9a-f-]{36}\.(pdf|jpg|jpeg|png)$/i.test(fname)) {
+    return res.status(400).json({ error: 'Invalid file id' });
+  }
+
+  const cred = readCredential(req);
+  if (!cred) return res.status(401).json({ error: 'Authentication required' });
+
+  // Find which appointment references this file.
+  const rel = `/files/historical-rx/${fname}`;
+  const appt = await prisma.appointment.findFirst({
+    where: { manualPrescriptionUrl: rel },
+    select: { id: true, doctorId: true }
+  });
+  if (!appt) return res.status(404).json({ error: 'File not found' });
+
+  let allowed = false;
+  if (cred.mode === 'fileToken') {
+    allowed = cred.claims.kind === 'historical-rx' &&
+              cred.claims.appointmentId === appt.id;
+  } else {
+    const role = cred.user && cred.user.role;
+    if (role === 'ADMIN') allowed = true;
+    if (role === 'DOCTOR' && cred.user.id === appt.doctorId) allowed = true;
+  }
+  if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+  const filepath = path.join(STORAGE, 'historical-rx', fname);
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  const ext = fname.split('.').pop().toLowerCase();
+  const mime = ext === 'pdf' ? 'application/pdf'
+             : ext === 'png' ? 'image/png'
+             : 'image/jpeg';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `inline; filename="${fname}"`);
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  fs.createReadStream(filepath).pipe(res);
+}));
+
 module.exports = router;

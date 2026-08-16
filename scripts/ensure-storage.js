@@ -25,7 +25,10 @@ const SUBDIRS = [
   'prescriptions',
   'invoices',
   'profile-images',
-  'kyc-documents'
+  'kyc-documents',
+  'signatures',
+  'historical-rx',
+  'certificates'
 ];
 
 const DIR_MODE = 0o755;

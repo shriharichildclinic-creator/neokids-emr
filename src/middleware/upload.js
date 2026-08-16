@@ -30,10 +30,7 @@ const uploadProfileImage = multer({
   }
 });
 
-// ───── KYC documents (NEW) ─────
-// Admin uploads four onboarding documents per doctor:
-//   aadhaar, pan, cancelledCheque, medicalRegCert
-// Accept images + PDF. 5MB per file. Each saved as {uuid}{ext} in storage/kyc-documents/.
+// ───── KYC documents (unchanged) ─────
 const kycDir = path.join(storageRoot, 'kyc-documents');
 fs.mkdirSync(kycDir, { recursive: true });
 
@@ -52,7 +49,7 @@ const allowedKycTypes = new Set([
 
 const uploadKycDocuments = multer({
   storage: kycStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per file
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!allowedKycTypes.has(file.mimetype)) {
       return cb(Object.assign(
@@ -64,7 +61,6 @@ const uploadKycDocuments = multer({
   }
 });
 
-// Field config the controller will pass to .fields([...])
 const KYC_FIELDS = [
   { name: 'aadhaar',         maxCount: 1 },
   { name: 'pan',             maxCount: 1 },
@@ -72,8 +68,75 @@ const KYC_FIELDS = [
   { name: 'medicalRegCert',  maxCount: 1 }
 ];
 
+// ───── Feature 3 — Doctor digital signature ─────
+// PNG (transparent PNG preferred). Max 1 MB. Stored in
+// storage/signatures/<uuid>.<ext>. The stored URL is served through the
+// same signed-file mechanism as the other private assets so a stray
+// signature file can't be linked publicly.
+const signatureDir = path.join(storageRoot, 'signatures');
+fs.mkdirSync(signatureDir, { recursive: true });
+
+const signatureStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, signatureDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.png';
+    cb(null, `${randomUUID()}${ext}`);
+  }
+});
+
+// Signatures MUST be PNG (transparent PNG preferred). We also accept
+// JPEG as a fallback for doctors who don't have a transparent asset.
+const allowedSignatureTypes = new Set(['image/png', 'image/jpeg']);
+
+const uploadSignature = multer({
+  storage: signatureStorage,
+  limits: { fileSize: 1 * 1024 * 1024 }, // 1 MB
+  fileFilter: (req, file, cb) => {
+    if (!allowedSignatureTypes.has(file.mimetype)) {
+      return cb(Object.assign(
+        new Error('Only PNG (transparent preferred) or JPEG images are allowed for signatures'),
+        { statusCode: 400 }
+      ));
+    }
+    cb(null, true);
+  }
+});
+
+// ───── Feature 1 — Manual/Historical prescription uploads ─────
+// PDF, JPG or PNG. Max 5 MB. Stored in storage/historical-rx/.
+const historicalRxDir = path.join(storageRoot, 'historical-rx');
+fs.mkdirSync(historicalRxDir, { recursive: true });
+
+const historicalRxStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, historicalRxDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.bin';
+    cb(null, `${randomUUID()}${ext}`);
+  }
+});
+
+const allowedHistoricalRxTypes = new Set([
+  'image/jpeg', 'image/png', 'application/pdf'
+]);
+
+const uploadHistoricalPrescription = multer({
+  storage: historicalRxStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!allowedHistoricalRxTypes.has(file.mimetype)) {
+      return cb(Object.assign(
+        new Error('Only PDF, JPG, or PNG files are allowed for historical prescriptions'),
+        { statusCode: 400 }
+      ));
+    }
+    cb(null, true);
+  }
+});
+
 module.exports = {
   uploadProfileImage,
   uploadKycDocuments,
-  KYC_FIELDS
+  KYC_FIELDS,
+  uploadSignature,
+  uploadHistoricalPrescription
 };

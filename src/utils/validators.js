@@ -4,23 +4,12 @@ const { getTodayDateString } = require('./date');
 const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number (10 digits, starts 6-9, no +91)');
 const strongPassword = z.string().min(8).regex(/^(?=.*[A-Za-z])(?=.*\d).+$/, 'Password must contain letters and numbers');
 
-// Issue #16 — the old regex /^\d{2}:\d{2}$/ happily accepted '25:99', '99:99',
-// even '00:60'. We now constrain HH to 00-23 and MM to 00-59. Anything else
-// is rejected by the validator, so PUT /api/doctor/availability with a junk
-// time can't slip into the DB any more.
 const timeSchema = z.string().regex(
   /^([01]\d|2[0-3]):[0-5]\d$/,
   'Time must be HH:MM (00:00–23:59)'
 );
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-// Issue #17 — workingDays was z.string().optional() with no enum check.
-// We now:
-//   1. accept comma-separated string OR array of day codes
-//   2. validate every token against the canonical 3-letter enum
-//   3. normalize: trim, uppercase, dedupe, preserve weekly order
-// Bad input ("FAKEDAY,MON" or typo "MOM") is rejected with a clear error
-// instead of being saved as-is and silently breaking the slot generator.
 const DAY_CODES = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const DAY_ORDER = Object.fromEntries(DAY_CODES.map((d, i) => [d, i]));
 
@@ -36,22 +25,14 @@ const workingDaysSchema = z.preprocess(
    .min(1, 'workingDays cannot be empty')
    .max(7, 'workingDays has at most 7 entries')
    .transform((arr) => {
-     // dedupe + weekly order; emit as comma string for backwards compat
-     // with the existing slot.service which splits on ','.
      const uniq = Array.from(new Set(arr));
      uniq.sort((a, b) => DAY_ORDER[a] - DAY_ORDER[b]);
      return uniq.join(',');
    })
 ).optional();
 
-// Helper: treat empty strings & whitespace-only as undefined so .optional() really works
 const optStr = z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string());
 
-// ── Issue 10 — stored-XSS hardening ──
-// Reject any string that contains HTML tags or unsafe sequences. This is
-// the server-side defense in depth; the WordPress widget escapes too.
-// We block angle brackets and the javascript: URL scheme outright — a
-// doctor's name has no legitimate reason to contain either.
 const HTML_TAG_RE = /<[^>]*>|<\/?[a-z][\s\S]*?>/i;
 const NUL_RE      = /\u0000/;
 const safeText = (label = 'field') =>
@@ -74,10 +55,6 @@ const loginSchema = z.object({
   password: z.string().min(6)
 });
 
-// Issues 5 & 6 — strict validation for GET /api/public/slots query string.
-// - doctorId must be a UUID (not just any non-empty string)
-// - date must be YYYY-MM-DD AND not in the past
-// - type must be exactly 'ONLINE' or 'OFFLINE' (was silently coerced before)
 const slotQuerySchema = z.object({
   doctorId: z.string().uuid({ message: 'doctorId must be a valid UUID' }),
   date: dateSchema,
@@ -90,11 +67,7 @@ const slotQuerySchema = z.object({
 });
 
 
-// Base shape (no cross-field refinement) so `.partial()` stays composable.
 const doctorShape = {
-  // Issue 10 — name is rendered verbatim into the WordPress widget HTML.
-  // Refuse HTML tags / script URLs at the validator layer so the public
-  // listing can never contain executable markup, regardless of frontend bugs.
   name: z.string()
     .trim()
     .min(2)
@@ -116,6 +89,8 @@ const doctorShape = {
     z.number().int().min(0)
   ).optional(),
   bio: safeOptStr('bio'),
+  // Feature 3 — doctor registration number (used on medical certificates)
+  registrationNumber: safeOptStr('registrationNumber'),
   consultationModes: z.enum(['ONLINE', 'OFFLINE', 'BOTH']).optional(),
   onlineConsultFee: z.preprocess(
     v => (v === '' || v === null || v === undefined ? 0 : Number(v)),
@@ -126,7 +101,6 @@ const doctorShape = {
     z.number().nonnegative()
   ).optional(),
 
-  // Revenue Management
   clinicSharePercent: z.preprocess(
     v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
     z.number().min(0).max(100)
@@ -143,15 +117,12 @@ const doctorShape = {
   ).optional()
 };
 
-// Shared cross-field rule
 const shareSumRule = (d) => {
   if (d.clinicSharePercent == null && d.doctorSharePercent == null) {
     return true;
   }
-
   const c = Number(d.clinicSharePercent ?? 0);
   const x = Number(d.doctorSharePercent ?? 0);
-
   return Math.abs((c + x) - 100) < 0.01;
 };
 
@@ -163,8 +134,6 @@ const shareSumErr = {
 const createDoctorSchema =
   z.object(doctorShape).refine(shareSumRule, shareSumErr);
 
-// Bug 2 — Admin Update Doctor uses .partial(), so omitting email entirely
-// is valid. The share-sum rule is re-applied separately.
 const updateDoctorByAdminSchema = z
   .object(doctorShape)
   .partial()
@@ -172,22 +141,13 @@ const updateDoctorByAdminSchema = z
     isAvailable: z.boolean().optional()
   })
   .refine(shareSumRule, shareSumErr);
-// Issue #16 helper — minutes-since-midnight, used for start-before-end.
+
 const _toMin = (t) => {
   if (!t) return null;
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
 };
 
-// Issue #16 — strict availability validator:
-//   * times must be real HH:MM (timeSchema is now tight)
-//   * start must be strictly before end (per consultation mode)
-//   * if only one side of a pair is provided, that's still accepted
-//     (a partial update legitimately changes one bound at a time)
-//
-// Issue #17 — workingDays now uses the workingDaysSchema enum validator,
-// so 'FAKEDAY,MON' or a typo'd 'MOM' is rejected here, before it can
-// dirty the DB or silently break the slot generator.
 const updateDoctorAvailabilitySchema = z.object({
   availableFromOnline:  timeSchema.optional().or(z.literal('')),
   availableToOnline:    timeSchema.optional().or(z.literal('')),
@@ -273,8 +233,6 @@ const prescriptionSchema = z.object({
   followUpDate: dateSchema.optional().or(z.literal(''))
 });
 
-// Additional Issue 3 — reject reschedules into the past at the validator
-// layer as well as the controller (defense in depth).
 const rescheduleSchema = z.object({
   date: dateSchema,
   startTime: timeSchema,
@@ -296,6 +254,78 @@ const changePasswordSchema = z.object({
   confirmPassword: strongPassword
 }).refine(d => d.newPassword === d.confirmPassword, { message: 'Passwords do not match', path: ['confirmPassword'] });
 
+// ─────────────────────────────────────────────────────────────────────
+// Feature 1 — Historical Appointment
+//
+// Distinct from bookAppointmentSchema because:
+//   - date MAY be in the past (that's the entire point)
+//   - startTime is optional (older paper records may not have one)
+//   - patientId may be supplied directly to link to an existing patient
+//     (Smart Patient Matching flow)
+//   - tncAccepted / cashfree fields don't apply
+// ─────────────────────────────────────────────────────────────────────
+const historicalAppointmentSchema = z.object({
+  // Link mode 1: supply existing patient id.
+  patientId: z.string().uuid().optional(),
+
+  // Link mode 2: identify patient by demographics (fallback / new record).
+  patientName: z.string().min(2).optional(),
+  phone: phoneSchema.optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  parentName: safeOptStr('parentName'),
+  dateOfBirth: dateSchema.optional().or(z.literal('')),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
+
+  // Confirmation flag — set by client after resolving a phone/name conflict.
+  // If phone matches existing patient with different name and this is
+  // false, the endpoint returns 409 with matching candidates.
+  linkConfirmed: z.boolean().optional(),
+
+  // Historical appointment fields.
+  doctorId: z.string().uuid(),
+  date: dateSchema,
+  startTime: timeSchema.optional().or(z.literal('')),
+  consultationType: z.enum(['ONLINE', 'OFFLINE']),
+  reasonForVisit: z.string().min(2).max(2000),
+  diagnosis: safeOptStr('diagnosis'),
+  notes: safeOptStr('notes'),
+  followUpDate: dateSchema.optional().or(z.literal(''))
+}).refine(
+  d => !!d.patientId || (!!d.patientName && !!d.phone),
+  { message: 'Either patientId or (patientName + phone) is required', path: ['patientId'] }
+);
+
+// ─────────────────────────────────────────────────────────────────────
+// Feature 2 — Medical Certificate
+// ─────────────────────────────────────────────────────────────────────
+const medicalCertificateSchema = z.object({
+  // If issued from an appointment, we snapshot patient info from it.
+  appointmentId: z.string().uuid().optional(),
+
+  // If issued standalone, caller must pass patientId directly.
+  patientId: z.string().uuid().optional(),
+
+  templateKey: z.enum(['GENERAL', 'SCHOOL_LEAVE', 'FITNESS', 'MEDICAL_REST']).optional(),
+  diagnosis: safeOptStr('diagnosis'),
+  reason: z.string().min(2, 'Reason for certificate is required').max(2000),
+  restDays: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().int().min(0).max(365).optional()
+  ),
+  fromDate: dateSchema.optional().or(z.literal('')),
+  toDate: dateSchema.optional().or(z.literal('')),
+  additionalNotes: safeOptStr('additionalNotes')
+}).refine(
+  d => !!d.appointmentId || !!d.patientId,
+  { message: 'Either appointmentId or patientId is required', path: ['patientId'] }
+).refine(
+  d => {
+    if (!d.fromDate || !d.toDate) return true;
+    return d.fromDate <= d.toDate;
+  },
+  { message: 'fromDate must be on or before toDate', path: ['toDate'] }
+);
+
 module.exports = {
   loginSchema,
   slotQuerySchema,
@@ -309,5 +339,7 @@ module.exports = {
   rescheduleSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
-  changePasswordSchema
+  changePasswordSchema,
+  historicalAppointmentSchema,
+  medicalCertificateSchema
 };

@@ -1,9 +1,14 @@
 const router = require('express').Router();
-const c   = require('../controllers/admin.controller');
-const fin = require('../controllers/finance.controller');
-const kyc = require('../controllers/kyc.controller');
+const c    = require('../controllers/admin.controller');
+const fin  = require('../controllers/finance.controller');
+const kyc  = require('../controllers/kyc.controller');
+const hist = require('../controllers/historical.controller');
+const cert = require('../controllers/certificate.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { uploadKycDocuments, KYC_FIELDS } = require('../middleware/upload');
+const {
+  uploadKycDocuments, KYC_FIELDS,
+  uploadHistoricalPrescription
+} = require('../middleware/upload');
 
 router.use(authenticate, requireRole('ADMIN'));
 
@@ -17,13 +22,26 @@ router.put('/doctors/:id', c.updateDoctor);
 router.delete('/doctors/:id', c.deleteDoctor);
 router.delete('/doctors/:id/hard', c.hardDeleteDoctor);
 
-// KYC (Know Your Customer) — admin-managed onboarding documents
+// KYC
 router.post('/doctors/:id/kyc',         uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);
 router.get('/doctors/:id/kyc',          kyc.getKyc);
 router.patch('/doctors/:id/kyc/status', kyc.updateKycStatus);
 
 // Appointments
 router.get('/appointments', c.listAppointments);
+
+// Feature 1 — Historical appointments (admin can add for any doctor)
+router.get('/appointments/lookup-patient', hist.lookupPatient);
+router.post(
+  '/historical-appointments',
+  uploadHistoricalPrescription.single('prescriptionFile'),
+  hist.create
+);
+
+// Feature 2 — Medical certificates (admin can view all)
+router.get('/certificates/templates', cert.listTemplates);
+router.get('/certificates',           cert.list);
+router.get('/certificates/:id',       cert.detail);
 
 // Notifications
 router.get('/notifications', c.listNotifications);

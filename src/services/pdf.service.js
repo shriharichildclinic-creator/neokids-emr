@@ -7,18 +7,13 @@ const { calcAge } = require('../utils/date');
 const STORAGE = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage');
 const BRAND_BLUE = '#4DA8FF';
 const BRAND_MINT = '#B8F2E6';
+const BRAND_DARK = '#0F2E3A';
 
-// Stored URLs live in the DB — we keep the SAME canonical shape
-//   /api/files/{kind}/{appointmentId}.pdf
-// so consumers can later mint a short-lived `?t=<token>` to download.
 function publicUrlForAppointmentPdf(kind, appointmentId) {
   const segment = kind === 'invoice' ? 'invoices' : 'prescriptions';
   return `/api/files/${segment}/${appointmentId}.pdf`;
 }
 
-// Robust mkdir — if the directory exists but isn't writable, try to
-// chmod it. This guards against the original "storage shipped with mode
-// 0555" bug so PDF generation can't fail silently after this point.
 function ensureDir(p) {
   if (!fs.existsSync(p)) {
     fs.mkdirSync(p, { recursive: true, mode: 0o755 });
@@ -38,6 +33,63 @@ function drawHeader(doc, title) {
   doc.fontSize(16).font('Helvetica-Bold').fillColor('white')
      .text(title, 0, 32, { align: 'right', width: doc.page.width - 50 });
   doc.fillColor('black').moveDown(3);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Feature 3 — Doctor Digital Signature helper
+//
+// Given a doctor row, resolves the local disk path for their uploaded
+// signature PNG (if any) and returns it, or null. The signature is
+// stored under storage/signatures/<uuid>.<ext>; the doctor row keeps
+// only the public/relative URL fragment, so we re-derive the disk path
+// here without hitting the auth layer.
+// ─────────────────────────────────────────────────────────────────────
+function resolveSignaturePath(doctor) {
+  if (!doctor || !doctor.signatureUrl) return null;
+  try {
+    // signatureUrl is stored as e.g. "/files/signatures/<uuid>.png"
+    // OR just "<uuid>.png" — we tolerate both.
+    const marker = 'signatures/';
+    const idx = doctor.signatureUrl.indexOf(marker);
+    const filename = idx >= 0
+      ? doctor.signatureUrl.slice(idx + marker.length)
+      : doctor.signatureUrl;
+    const fp = path.join(STORAGE, 'signatures', path.basename(filename));
+    if (fs.existsSync(fp)) return fp;
+  } catch (_) { /* ignore */ }
+  return null;
+}
+
+// Draw the doctor's signature block at the bottom-right of the current
+// page. If an uploaded signature PNG exists, it's placed above the
+// name line; otherwise we fall back to the legacy "line + name" style
+// so unsigned doctors still get a valid-looking document.
+function drawSignatureBlock(doc, doctor, opts = {}) {
+  const y = opts.y || (doc.page.height - 120);
+  const rightX = doc.page.width - 220;
+  const sigPath = resolveSignaturePath(doctor);
+
+  if (sigPath) {
+    try {
+      // Fit inside a 180x50 box, preserve aspect ratio.
+      doc.image(sigPath, rightX, y, { fit: [180, 50], align: 'center' });
+    } catch (e) {
+      // If image decoding fails for any reason, fall back silently.
+      doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 30);
+    }
+  } else {
+    doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 30);
+  }
+
+  doc.font('Helvetica-Bold').fillColor('#000').fontSize(11)
+     .text(`Dr. ${doctor.name}`, rightX, y + 55, { width: 200 });
+  doc.font('Helvetica').fillColor('#555').fontSize(9)
+     .text(doctor.qualification || 'MBBS, MD (Pediatrics)', rightX, y + 70, { width: 200 });
+  if (doctor.registrationNumber) {
+    doc.text(`Reg. No: ${doctor.registrationNumber}`, rightX, y + 82, { width: 200 });
+  }
+  doc.fillColor('#888').fontSize(8)
+     .text('Digital Signature', rightX, y + (doctor.registrationNumber ? 96 : 84), { width: 200 });
 }
 
 async function generateInvoice(appointment) {
@@ -87,9 +139,12 @@ async function generateInvoice(appointment) {
     doc.text('Total Paid:', 380, rowY + 45);
     doc.text(`₹ ${Number(appointment.feeAtBooking).toFixed(2)}`, 460, rowY + 45);
 
+    // Optional signature on invoice.
+    drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 200 });
+
     doc.fontSize(9).font('Helvetica').fillColor('#888');
     doc.text('Thank you for choosing NeoKidsPro. This is a computer-generated invoice.',
-             50, doc.page.height - 80, { align: 'center', width: doc.page.width - 100 });
+             50, doc.page.height - 60, { align: 'center', width: doc.page.width - 100 });
 
     doc.end();
     stream.on('finish', () => resolve({
@@ -118,6 +173,9 @@ async function generatePrescription(appointment, prescription) {
     if (appointment.doctor.clinicName) {
       doc.fontSize(9).fillColor('#777').text(`${appointment.doctor.clinicName}`);
     }
+    if (appointment.doctor.registrationNumber) {
+      doc.fontSize(9).fillColor('#777').text(`Reg. No: ${appointment.doctor.registrationNumber}`);
+    }
 
     const py = 160;
     const dobObj = appointment.patient.dateOfBirth;
@@ -139,14 +197,12 @@ async function generatePrescription(appointment, prescription) {
 
     doc.font('Helvetica-Bold').text('Date: ', 320, py, { continued: true })
        .font('Helvetica').text(dayjs(appointment.date).format('DD MMM YYYY'));
-    doc.font('Helvetica-Bold').text('Type: ', 320, py + 15, { continued: true })
-       .font('Helvetica').text(appointment.consultationType);
-    if (prescription.weight) {
-      doc.font('Helvetica-Bold').text('Weight: ', 320, py + 30, { continued: true })
-         .font('Helvetica').text(prescription.weight);
-    }
-    if (prescription.height) {
-      doc.font('Helvetica-Bold').text('Height: ', 320, py + 45, { continued: true })
+
+    // Vitals row (if recorded)
+    if (prescription.weight || prescription.height) {
+      doc.font('Helvetica-Bold').text('Weight: ', 320, py + 15, { continued: true })
+         .font('Helvetica').text(prescription.weight ? `${prescription.weight} kg` : '—');
+      doc.font('Helvetica-Bold').text('Height: ', 320, py + 30, { continued: true })
          .font('Helvetica').text(prescription.height);
     }
 
@@ -197,10 +253,8 @@ async function generatePrescription(appointment, prescription) {
     section('Advice', prescription.advice);
     if (prescription.followUpDate) section('Follow-up', dayjs(prescription.followUpDate).format('DD MMM YYYY'));
 
-    const sigY = doc.page.height - 110;
-    doc.fontSize(10).fillColor('#555').text('___________________________', doc.page.width - 220, sigY);
-    doc.font('Helvetica-Bold').fillColor('#000').text(`Dr. ${appointment.doctor.name}`, doc.page.width - 220, sigY + 12);
-    doc.font('Helvetica').fillColor('#555').fontSize(9).text('Digital Signature', doc.page.width - 220, sigY + 26);
+    // Signature block (uploaded signature image when available).
+    drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 110 });
 
     doc.fontSize(8).fillColor('#888')
        .text('This is a digitally generated prescription from NeoKidsPro EMR. neokidspro.in',
@@ -351,8 +405,183 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Feature 2 — Medical Certificate Generator
+// ─────────────────────────────────────────────────────────────────────
+
+const CERT_TEMPLATES = {
+  GENERAL: {
+    title: 'MEDICAL CERTIFICATE',
+    body: ({ name, age, gender, examDate, reason }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, was examined at our clinic on ${examDate}. ${reason}`
+  },
+  SCHOOL_LEAVE: {
+    title: 'SCHOOL LEAVE CERTIFICATE',
+    body: ({ name, age, gender, examDate, reason, fromDate, toDate, restDays }) => {
+      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}, was examined at our clinic on ${examDate}. ${reason}`;
+      if (fromDate && toDate) {
+        s += ` ${cap(name)} is advised to remain absent from school from ${fromDate} to ${toDate}${restDays ? ` (${restDays} day${restDays === 1 ? '' : 's'})` : ''}.`;
+      }
+      return s;
+    }
+  },
+  FITNESS: {
+    title: 'FITNESS CERTIFICATE',
+    body: ({ name, age, gender, examDate, reason }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, was examined at our clinic on ${examDate} and is found to be medically fit. ${reason}`
+  },
+  MEDICAL_REST: {
+    title: 'MEDICAL REST CERTIFICATE',
+    body: ({ name, age, gender, examDate, reason, fromDate, toDate, restDays }) => {
+      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, was examined at our clinic on ${examDate}. ${reason}`;
+      if (restDays || (fromDate && toDate)) {
+        s += ` ${cap(name)} is advised complete medical rest${restDays ? ` for ${restDays} day${restDays === 1 ? '' : 's'}` : ''}${fromDate && toDate ? ` from ${fromDate} to ${toDate}` : ''}.`;
+      }
+      return s;
+    }
+  }
+};
+
+function cap(s) {
+  const str = String(s || '').trim();
+  if (!str) return 'The patient';
+  return str;
+}
+
+function fmtCertDate(d) {
+  return d ? dayjs(d).format('DD MMM YYYY') : null;
+}
+
+/**
+ * Generate a professional medical certificate PDF.
+ *
+ * @param {Object} args
+ * @param {Object} args.certificate  MedicalCertificate row (with certificateNumber, templateKey, etc.)
+ * @param {Object} args.doctor       Doctor row (name, qualification, registrationNumber, clinicName, clinicAddress, signatureUrl)
+ * @param {Object} args.patient      Patient row
+ * @returns {{ filepath, filename, url }}
+ */
+async function generateMedicalCertificate({ certificate, doctor, patient }) {
+  ensureDir(path.join(STORAGE, 'certificates'));
+  const filename = `certificate_${certificate.id}.pdf`;
+  const filepath = path.join(STORAGE, 'certificates', filename);
+
+  const tpl = CERT_TEMPLATES[certificate.templateKey] || CERT_TEMPLATES.GENERAL;
+  const examDate = fmtCertDate(certificate.issuedAt);
+  const name = certificate.patientNameSnapshot || (patient && patient.name) || 'the patient';
+  const age = certificate.patientAgeSnapshot || (patient ? calcAge(patient.dateOfBirth) : '') || null;
+  const gender = certificate.patientGenderSnapshot || (patient && patient.gender) || null;
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const stream = fs.createWriteStream(filepath);
+    doc.pipe(stream);
+
+    // ── Letterhead ──────────────────────────────────────────────────
+    drawHeader(doc, tpl.title);
+
+    // Clinic block under the band (left) + certificate meta (right).
+    let ly = 100;
+    doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
+       .text(doctor.clinicName || 'NeoKidsPro Pediatric Clinic', 50, ly);
+    doc.fontSize(9).font('Helvetica').fillColor('#555');
+    if (doctor.clinicAddress) {
+      doc.text(String(doctor.clinicAddress), 50, ly + 16, { width: 260 });
+    }
+    doc.text('neokidspro.in', 50, ly + (doctor.clinicAddress ? 16 + Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11 : 16), { width: 260 });
+
+    doc.fontSize(9).fillColor('#555')
+       .text(`Certificate ID: ${certificate.certificateNumber}`, 320, ly, { width: 225, align: 'right' });
+    doc.text(`Date of Issue: ${examDate}`, 320, ly + 14, { width: 225, align: 'right' });
+
+    // ── Title ────────────────────────────────────────────────────────
+    const titleY = 185;
+    doc.fontSize(18).font('Helvetica-Bold').fillColor(BRAND_DARK)
+       .text(tpl.title, 50, titleY, { align: 'center', width: doc.page.width - 100 });
+    doc.moveTo(doc.page.width / 2 - 90, titleY + 26)
+       .lineTo(doc.page.width / 2 + 90, titleY + 26)
+       .strokeColor(BRAND_BLUE).lineWidth(1.5).stroke();
+
+    // ── Patient summary line ─────────────────────────────────────────
+    let cy = titleY + 48;
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('Patient: ', 50, cy, { continued: true })
+       .font('Helvetica').text(name);
+    cy += 16;
+    if (age || gender) {
+      doc.font('Helvetica-Bold').text('Age / Gender: ', 50, cy, { continued: true })
+         .font('Helvetica').text(`${age || 'N/A'}${gender ? ' / ' + gender : ''}`);
+      cy += 16;
+    }
+    if (patient && patient.phone) {
+      doc.font('Helvetica-Bold').text('Phone: ', 50, cy, { continued: true })
+         .font('Helvetica').text(`+91 ${patient.phone}`);
+      cy += 16;
+    }
+
+    // ── Certificate body ─────────────────────────────────────────────
+    cy += 12;
+    const bodyText = tpl.body({
+      name, age, gender, examDate,
+      reason: certificate.reason,
+      fromDate: fmtCertDate(certificate.fromDate),
+      toDate: fmtCertDate(certificate.toDate),
+      restDays: certificate.restDays
+    });
+    doc.fontSize(12).font('Helvetica').fillColor('#222')
+       .text(bodyText, 50, cy, {
+         width: doc.page.width - 100,
+         lineGap: 4,
+         align: 'left'
+       });
+    cy = doc.y + 14;
+
+    if (certificate.diagnosis) {
+      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Diagnosis', 50, cy);
+      doc.font('Helvetica').fillColor('#222').fontSize(11)
+         .text(certificate.diagnosis, 50, cy + 14, { width: doc.page.width - 100 });
+      cy = doc.y + 12;
+    }
+
+    if (certificate.restDays && certificate.fromDate && certificate.toDate) {
+      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Recommended Rest', 50, cy);
+      doc.font('Helvetica').fillColor('#222').fontSize(11)
+         .text(`${certificate.restDays} day${certificate.restDays === 1 ? '' : 's'} — from ${fmtCertDate(certificate.fromDate)} to ${fmtCertDate(certificate.toDate)}`,
+               50, cy + 14, { width: doc.page.width - 100 });
+      cy = doc.y + 12;
+    }
+
+    if (certificate.additionalNotes) {
+      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Additional Notes', 50, cy);
+      doc.font('Helvetica').fillColor('#222').fontSize(11)
+         .text(certificate.additionalNotes, 50, cy + 14, { width: doc.page.width - 100 });
+    }
+
+    // ── Signature block ──────────────────────────────────────────────
+    drawSignatureBlock(doc, doctor, { y: doc.page.height - 170 });
+
+    // ── Footer ───────────────────────────────────────────────────────
+    doc.fontSize(8).fillColor('#888')
+       .text(
+         `This certificate was issued electronically by ${doctor.clinicName || 'NeoKidsPro Pediatric Clinic'} and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`,
+         50, doc.page.height - 60, { align: 'center', width: doc.page.width - 100 }
+       );
+
+    doc.end();
+    stream.on('finish', () => resolve({
+      filepath,
+      filename,
+      url: `/api/files/certificates/${certificate.id}.pdf`
+    }));
+    stream.on('error', reject);
+  });
+}
+
 module.exports = {
   generateInvoice,
   generatePrescription,
-  generateSettlementInvoice
+  generateSettlementInvoice,
+  generateMedicalCertificate,
+  // exported for tests / future document types
+  resolveSignaturePath,
+  drawSignatureBlock
 };

@@ -115,6 +115,17 @@ function paymentBadge(p){
   const m = map[p]; if (!m) return '';
   return `<span class="np-badge ${m.cls}"><span class="np-badge__dot"></span>${m.txt}</span>`;
 }
+// Feature 1 — visual distinction for manually added (historical) records.
+function sourceBadge(source){
+  if (source === 'MANUAL')
+    return `<span class="np-badge np-badge--purple" title="Added manually by clinic staff"><span class="np-badge__dot"></span>Manual Record</span>`;
+  return '';
+}
+function rxSourceBadge(source){
+  if (source === 'MANUAL')
+    return `<span class="np-badge np-badge--purple" title="Uploaded by clinic staff (not generated in NeoKidsPro)"><span class="np-badge__dot"></span>Historical Rx</span>`;
+  return '';
+}
 
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -176,6 +187,7 @@ async function init(){
     populateClinic(me);
     populateFees(me);
     populateDoctorUuid(me);
+    try { loadSignature(); } catch(_){}
   } catch (ex){
     if (ex.status === 401){ logout(); return; }
     console.warn('doctor/me failed', ex);
@@ -202,6 +214,7 @@ async function init(){
   setupRescheduleModal();
   setupCancelModal();
   setupPatientModalTabs();
+  setupFeatureUI();
   captureRxFormTemplate();
 
   const bridgeBtn = $('#modalOpenWorkspaceBtn');
@@ -302,6 +315,8 @@ const TAB_META = {
   consultTab:    { title:'Consultation',        sub:'Active patient consultation workspace' },
   rxArchiveTab:  { title:'Prescription Archive',sub:'All prescriptions you have issued' },
   earningsTab:   { title:'My Earnings',         sub:'Monthly revenue split, TDS, and settlement status' },
+  historicalTab: { title:'Historical Records',  sub:'Add a past or offline visit to a patient timeline' },
+  certificatesTab:{ title:'Medical Certificates', sub:'Certificates you have issued' },
   settingsTab:   { title:'Settings',            sub:'Manage your profile, availability, and clinic' }
 };
 function setActiveTab(tabId){
@@ -318,6 +333,8 @@ function setActiveTab(tabId){
   else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); }
   else if (tabId === 'rxArchiveTab') loadRxArchive();
   else if (tabId === 'earningsTab' && window.Earnings) Earnings.load();
+  else if (tabId === 'certificatesTab') loadCertificates();
+  else if (tabId === 'historicalTab') initHistoricalForm();
 }
 function setupTabs(){
   $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
@@ -504,6 +521,13 @@ function apptCard(a){
       View prescription
     </a>`);
   }
+  // Feature 2 — medical certificate from this appointment (completed or manual records).
+  if (a.status === 'COMPLETED' || a.source === 'MANUAL') {
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); openCertModal(__apptById('${escapeHtml(a.id)}'))">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
+      Medical certificate
+    </button>`);
+  }
 
   const overflow = overflowItems.length ? `
     <div class="np-overflow">
@@ -528,6 +552,7 @@ function apptCard(a){
         ${statusBadge(a.status)}
         ${typeBadge(a.consultationType)}
         ${paymentBadge(a.paymentStatus)}
+        ${sourceBadge(a.source)}
       </div>
       <div class="np-appt__meta">
         ${p.phone ? `<span>📞 ${escapeHtml(p.phone)}</span>` : ''}
@@ -548,6 +573,15 @@ function apptCard(a){
 
 function goToConsult(id){
   location.hash = '#consult/' + id;
+}
+
+// Resolve an appointment object from whichever cache holds it (all-list,
+// waiting room, or the currently open consultation) for modal pre-fill.
+function __apptById(id){
+  if (currentAppointment && currentAppointment.id === id) return currentAppointment;
+  const fromAll = (allAppointmentsCache || []).find(x => x.id === id);
+  if (fromAll) return fromAll;
+  return { id };
 }
 
 function closeOverflowMenus(except){
@@ -806,8 +840,9 @@ function renderConsultBody(root, a, compact){
   root.innerHTML = `
     <div class="np-pm-scope">
       <div class="np-row" style="gap:.6rem; margin-bottom:.5rem;">
-        ${statusBadge(a.status)} ${typeBadge(a.consultationType)} ${paymentBadge(a.paymentStatus)}
+        ${statusBadge(a.status)} ${typeBadge(a.consultationType)} ${paymentBadge(a.paymentStatus)} ${sourceBadge(a.source)}
       </div>
+      ${a.source === 'MANUAL' ? `<div class="np-callout np-callout--info" style="margin-bottom:.6rem; font-size:.82rem;">Added manually by clinic staff${a.addedByRole ? ' (' + escapeHtml(String(a.addedByRole).toLowerCase()) + ')' : ''}. This is not a NeoKidsPro booking.</div>` : ''}
       <div style="font-size:1.15rem; font-weight:700; color:var(--np-ink);">${escapeHtml(p.name || 'Patient')}</div>
       <div class="np-mut" style="font-size:.85rem; margin-bottom:.75rem;">
         ${p.dateOfBirth
@@ -835,6 +870,26 @@ function renderConsultBody(root, a, compact){
               ${escapeHtml(a.primaryProblem)}
             </div>
           </div>` : ''}
+        ${a.source === 'MANUAL' && a.diagnosis ? `
+          <div class="np-field"><div class="np-field__label">Diagnosis</div>
+            <div style="background:var(--np-surface); padding:.7rem .85rem; border-radius:10px; border:1px solid var(--np-border); font-size:.9rem;">
+              ${escapeHtml(a.diagnosis)}
+            </div>
+          </div>` : ''}
+        ${a.source === 'MANUAL' && a.manualPrescriptionUrl ? `
+          <div class="np-field"><div class="np-field__label">Uploaded prescription</div>
+            <a class="np-btn np-btn--ghost np-btn--sm" href="${escapeHtml(a.manualPrescriptionUrl)}" target="_blank" rel="noopener">📎 View uploaded file</a>
+          </div>` : ''}
+        ${a.source === 'MANUAL' && a.followUpDate ? `
+          <div class="np-field"><div class="np-field__label">Follow-up date</div>
+            <div>${escapeHtml(fmtDate(a.followUpDate))}</div>
+          </div>` : ''}
+        <div class="np-row" style="gap:.5rem; margin-top:.85rem; flex-wrap:wrap;">
+          ${(a.status === 'COMPLETED' || a.source === 'MANUAL') ? `<button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="openCertModal(__apptById('${escapeHtml(a.id)}'))">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
+            Generate Medical Certificate
+          </button>` : ''}
+        </div>
       </div>
 
       <div id="pm-prescription" class="np-pm-pane hidden" data-pm-pane-id="prescription">
@@ -944,12 +999,13 @@ async function loadPatientHistoryInto(slot, patientId){
         </div>
         <div class="np-history-row__body">
           <div class="np-row" style="gap:.4rem; margin-bottom:.25rem;">
-            ${statusBadge(v.status)} ${typeBadge(v.consultationType)}
+            ${statusBadge(v.status)} ${typeBadge(v.consultationType)} ${sourceBadge(v.source)}
           </div>
           ${v.primaryProblem ? `<div style="font-size:.88rem; margin-bottom:.25rem;"><b>Complaint:</b> ${escapeHtml(v.primaryProblem)}</div>` : ''}
           ${v.notes ? `<div style="font-size:.85rem;" class="np-mut"><b>Notes:</b> ${escapeHtml(v.notes)}</div>` : ''}
           <div class="np-row" style="gap:.5rem; margin-top:.4rem; flex-wrap:wrap;">
             ${v.hasPrescription && v.prescriptionUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(v.prescriptionUrl)}" target="_blank" rel="noopener">📄 Prescription PDF</a>` : ''}
+            ${v.manualPrescriptionUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(v.manualPrescriptionUrl)}" target="_blank" rel="noopener">📎 Uploaded Rx</a>` : ''}
             ${v.meetLink ? `<a class="np-btn np-btn--ghost np-btn--sm" href="${escapeHtml(v.meetLink)}" target="_blank" rel="noopener">Meet</a>` : ''}
           </div>
         </div>
@@ -958,8 +1014,9 @@ async function loadPatientHistoryInto(slot, patientId){
     const rxHtml = (h.prescriptions || []).map(rx => `
       <article class="np-history-rx">
         <div class="np-row" style="justify-content:space-between; align-items:center; margin-bottom:.25rem;">
-          <b>${escapeHtml(fmtDate(rx.visitDate))}</b>
+          <b>${escapeHtml(fmtDate(rx.visitDate))}</b> ${rxSourceBadge(rx.source)}
           ${rx.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(rx.pdfUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
+          ${rx.manualUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(rx.manualUrl)}" target="_blank" rel="noopener">View uploaded file</a>` : ''}
         </div>
         <div style="font-size:.88rem;"><b>Diagnosis:</b> ${escapeHtml(rx.diagnosis || '—')}</div>
         ${rx.chiefComplaint ? `<div style="font-size:.85rem;" class="np-mut"><b>Complaint:</b> ${escapeHtml(rx.chiefComplaint)}</div>` : ''}
@@ -1508,6 +1565,367 @@ async function removePhoto(){
     NPToast.success('Profile photo removed');
     loadSettings();
   } catch (ex){ NPToast.error(ex.message || 'Could not remove photo'); }
+}
+
+
+
+/* =====================================================================
+   Feature 1/1A — Historical / Manual Appointments
+   Feature 2    — Medical Certificates
+   Feature 3    — Digital Signature
+   ===================================================================== */
+
+let _histFormWired = false;
+let _certState = { patient: null, templates: [], editingAppt: null };
+
+function _toast(kind, msg){
+  if (window.NPToast && NPToast[kind]) NPToast[kind](msg);
+  else alert(msg);
+}
+
+/* ---------- Feature 1: Historical appointment form ---------- */
+function initHistoricalForm(){
+  const form = $('#historicalForm');
+  if (!form) return;
+  if (_histFormWired) return;
+  _histFormWired = true;
+
+  const lookupBtn = $('#histLookupBtn');
+  if (lookupBtn) lookupBtn.addEventListener('click', lookupHistoricalPatient);
+  const phoneEl = $('#histPhone');
+  if (phoneEl) phoneEl.addEventListener('change', () => {
+    // Reset link state whenever phone changes.
+    $('#histPatientId').value = '';
+    $('#histLinkConfirmed').value = 'false';
+    const box = $('#histMatchBox'); if (box) box.classList.add('hidden');
+  });
+
+  form.addEventListener('submit', submitHistorical);
+}
+
+async function lookupHistoricalPatient(){
+  const phone = ($('#histPhone').value || '').replace(/\D/g, '');
+  const box = $('#histMatchBox');
+  if (!/^[6-9]\d{9}$/.test(phone)) { _toast('error', 'Enter a valid 10-digit Indian mobile number'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="np-mut" style="font-size:.85rem;">Searching…</div>';
+  try {
+    const res = await api('/doctor/appointments/lookup-patient?phone=' + encodeURIComponent(phone));
+    const rows = (res && res.matches) || [];
+    if (!rows.length){
+      box.innerHTML = '<div class="np-mut" style="font-size:.85rem;">No existing patient with this number. A new patient will be created.</div>';
+      $('#histPatientId').value = '';
+      return;
+    }
+    box.innerHTML = rows.map(p => `
+      <label style="display:flex; align-items:center; gap:.5rem; padding:.5rem; border:1px solid var(--np-border); border-radius:10px; cursor:pointer;">
+        <input type="radio" name="histMatch" value="${escapeHtml(p.id)}">
+        <span>
+          <b>${escapeHtml(p.name)}</b>
+          <span class="np-mut" style="font-size:.8rem;"> · ${p.dateOfBirth ? escapeHtml(fmtDate(p.dateOfBirth)) : 'DOB —'} · ${escapeHtml(p.gender||'')}</span>
+        </span>
+      </label>`).join('');
+    box.querySelectorAll('input[name="histMatch"]').forEach(r => {
+      r.addEventListener('change', () => {
+        $('#histPatientId').value = r.value;
+        const sel = rows.find(x => x.id === r.value);
+        if (sel){
+          if (!$('#histName').value) $('#histName').value = sel.name || '';
+          if (sel.dateOfBirth && !form_dob().value) form_dob().value = String(sel.dateOfBirth).slice(0,10);
+          const g = $('#historicalForm [name="gender"]');
+          if (g && sel.gender && !g.value) g.value = sel.gender;
+        }
+      });
+    });
+    _toast('info', rows.length + ' patient(s) found. Select one to link, or leave unselected to create new.');
+  } catch (ex){
+    box.innerHTML = '<div class="np-error">' + escapeHtml(ex.message || 'Lookup failed') + '</div>';
+  }
+}
+function form_dob(){ return $('#historicalForm [name="dateOfBirth"]'); }
+
+async function submitHistorical(e){
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData();
+  const g = (n) => (form.querySelector('[name="'+n+'"]') || {}).value || '';
+  const file = ($('#histRxFile') && $('#histRxFile').files[0]) || null;
+
+  fd.append('phone', g('phone').replace(/\D/g,''));
+  fd.append('patientName', g('patientName').trim());
+  if (g('parentName')) fd.append('parentName', g('parentName').trim());
+  if (g('dateOfBirth')) fd.append('dateOfBirth', g('dateOfBirth'));
+  if (g('gender')) fd.append('gender', g('gender'));
+  if (g('email')) fd.append('email', g('email').trim());
+  if (g('patientId') || $('#histPatientId').value) fd.append('patientId', $('#histPatientId').value);
+  fd.append('linkConfirmed', $('#histLinkConfirmed').value || 'false');
+  fd.append('date', g('date'));
+  fd.append('consultationType', g('consultationType'));
+  fd.append('reasonForVisit', g('reasonForVisit').trim());
+  if (g('diagnosis')) fd.append('diagnosis', g('diagnosis').trim());
+  if (g('notes')) fd.append('notes', g('notes').trim());
+  if (g('followUpDate')) fd.append('followUpDate', g('followUpDate'));
+  if (file) fd.append('prescriptionFile', file);
+
+  const btn = $('#histSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await api('/doctor/historical-appointments', { method:'POST', body: fd });
+    _toast('success', 'Historical record added to ' + (res.patient ? res.patient.name : 'patient') + "'s timeline.");
+    form.reset();
+    $('#histPatientId').value = ''; $('#histLinkConfirmed').value = 'false';
+    const box = $('#histMatchBox'); if (box) box.classList.add('hidden');
+    if (typeof loadAll === 'function') loadAll();
+  } catch (ex){
+    // Smart-match conflict → show resolver.
+    if (ex.status === 409 && ex.data && ex.data.code === 'PATIENT_LINK_REQUIRED'){
+      showLinkConflict(ex.data.candidates || []);
+    } else if (ex.status === 409 && ex.data && ex.data.code === 'SLOT_CONFLICT'){
+      _toast('error', ex.data.error || 'A record for this date/time already exists.');
+    } else {
+      _toast('error', ex.message || 'Could not save historical record');
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save historical record';
+  }
+}
+
+/* ---------- Smart-match conflict resolver ---------- */
+let _linkCandidates = [];
+function showLinkConflict(candidates){
+  _linkCandidates = candidates;
+  const list = $('#linkConflictList');
+  list.innerHTML = candidates.map((p, i) => `
+    <label style="display:flex; align-items:center; gap:.5rem; padding:.55rem; border:1px solid var(--np-border); border-radius:10px; cursor:pointer;">
+      <input type="radio" name="linkCand" value="${escapeHtml(p.id)}" ${i===0?'checked':''}>
+      <span>
+        <b>${escapeHtml(p.name)}</b>
+        <span class="np-mut" style="font-size:.8rem;"> · ${p.dateOfBirth ? escapeHtml(fmtDate(p.dateOfBirth)) : 'DOB —'} · ${escapeHtml(p.gender||'')}</span>
+      </span>
+    </label>`).join('');
+  $('#linkConflictModal').classList.remove('hidden');
+}
+function closeLinkConflict(){ $('#linkConflictModal').classList.add('hidden'); }
+function resolveLinkConflict(choice){
+  if (choice === 'link'){
+    const sel = document.querySelector('input[name="linkCand"]:checked');
+    if (sel){ $('#histPatientId').value = sel.value; }
+    $('#histLinkConfirmed').value = 'true';
+  } else {
+    $('#histPatientId').value = '';
+    $('#histLinkConfirmed').value = 'true'; // user acknowledged conflict, wants separate
+  }
+  closeLinkConflict();
+  // Auto-resubmit.
+  const form = $('#historicalForm');
+  if (form) form.requestSubmit();
+}
+
+/* ---------- Feature 2: Medical Certificates ---------- */
+async function loadCertificates(){
+  const wrap = $('#certList');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
+  try {
+    const rows = await api('/doctor/certificates');
+    if (!rows.length){
+      wrap.innerHTML = '<div class="np-empty"><div class="np-empty__title">No certificates yet</div><div class="np-empty__sub">Generate one from an appointment or click "+ New certificate".</div></div>';
+    } else {
+      wrap.innerHTML = rows.map(c => `
+        <article class="np-history-row">
+          <div class="np-history-row__date">
+            <div><b>${escapeHtml(fmtDate(c.issuedAt))}</b></div>
+            <div class="np-mut" style="font-size:.78rem;">${escapeHtml(c.certificateNumber)}</div>
+          </div>
+          <div class="np-history-row__body">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; flex-wrap:wrap;">
+              <div>
+                <b>${escapeHtml(c.patientNameSnapshot || (c.patient && c.patient.name) || '—')}</b>
+                <span class="np-badge np-badge--mint" style="margin-left:.4rem;">${escapeHtml((c.templateKey||'GENERAL').replace(/_/g,' '))}</span>
+              </div>
+              ${c.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(c.pdfUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
+            </div>
+            ${c.diagnosis ? `<div style="font-size:.85rem; margin-top:.25rem;"><b>Diagnosis:</b> ${escapeHtml(c.diagnosis)}</div>` : ''}
+            <div class="np-mut" style="font-size:.82rem; margin-top:.15rem;">${escapeHtml(c.reason || '')}</div>
+          </div>
+        </article>`).join('');
+    }
+  } catch (ex){
+    wrap.innerHTML = '<div class="np-error">' + escapeHtml(ex.message || 'Failed to load') + '</div>';
+  }
+  // wire "+ New certificate"
+  const nb = $('#newCertBtn');
+  if (nb && !nb.__wired){ nb.__wired = true; nb.addEventListener('click', () => openCertModal(null)); }
+}
+
+async function openCertModal(appointment){
+  _certState.patient = null;
+  _certState.editingAppt = appointment || null;
+  $('#certApptId').value = appointment ? appointment.id : '';
+  $('#certPatientId').value = '';
+  $('#certPatientChosen').classList.add('hidden');
+  $('#certPatientSearch').value = '';
+  $('#certPatientResults').classList.add('hidden');
+  $('#certReason').value = '';
+  $('#certDiagnosis').value = appointment ? (appointment.diagnosis || appointment.primaryProblem || '') : '';
+  $('#certRestDays').value = '';
+  $('#certFrom').value = ''; $('#certTo').value = ''; $('#certNotes').value = '';
+
+  // Load templates once.
+  if (!_certState.templates.length){
+    try { _certState.templates = await api('/doctor/certificates/templates'); }
+    catch(_){ _certState.templates = [{key:'GENERAL',label:'General Medical Certificate'}]; }
+  }
+  $('#certTemplate').innerHTML = _certState.templates.map(t =>
+    `<option value="${escapeHtml(t.key)}">${escapeHtml(t.label)}</option>`).join('');
+
+  // If from an appointment, pre-fill the patient.
+  if (appointment && appointment.patient){
+    setCertPatient(appointment.patient);
+  }
+  $('#certModal').classList.remove('hidden');
+}
+function closeCertModal(){ $('#certModal').classList.add('hidden'); }
+
+function setCertPatient(p){
+  _certState.patient = p;
+  $('#certPatientId').value = p.id;
+  const box = $('#certPatientChosen');
+  box.classList.remove('hidden');
+  box.innerHTML = `<span class="np-badge np-badge--blue">${escapeHtml(p.name)}${p.phone ? ' · +91 ' + escapeHtml(p.phone) : ''}</span>
+    <button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="clearCertPatient()" style="margin-left:.4rem;">Change</button>`;
+  $('#certPatientResults').classList.add('hidden');
+  $('#certPatientSearch').value = '';
+}
+function clearCertPatient(){
+  _certState.patient = null; $('#certPatientId').value = '';
+  $('#certPatientChosen').classList.add('hidden');
+}
+
+// Patient search (debounced)
+let _certSearchTimer = null;
+function setupCertPatientSearch(){
+  const inp = $('#certPatientSearch');
+  if (!inp || inp.__wired) return; inp.__wired = true;
+  inp.addEventListener('input', () => {
+    clearTimeout(_certSearchTimer);
+    const q = inp.value.trim();
+    if (q.length < 2){ $('#certPatientResults').classList.add('hidden'); return; }
+    _certSearchTimer = setTimeout(async () => {
+      try {
+        const rows = await api('/doctor/patients/search?q=' + encodeURIComponent(q));
+        const box = $('#certPatientResults');
+        if (!rows.length){ box.classList.add('hidden'); return; }
+        box.classList.remove('hidden');
+        box.innerHTML = rows.slice(0,8).map(p =>
+          `<button type="button" class="np-autocomplete__item" onclick='setCertPatient(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+             <b>${escapeHtml(p.name)}</b> <span class="np-mut" style="font-size:.8rem;">+91 ${escapeHtml(p.phone||'')}</span>
+           </button>`).join('');
+      } catch(_){}
+    }, 300);
+  });
+}
+
+async function submitCert(e){
+  e.preventDefault();
+  const btn = $('#certSubmitBtn');
+  const patientId = $('#certPatientId').value;
+  const appointmentId = $('#certApptId').value;
+  if (!patientId && !appointmentId){ _toast('error', 'Select a patient first'); return; }
+  const body = {
+    templateKey: $('#certTemplate').value,
+    reason: $('#certReason').value.trim(),
+    diagnosis: $('#certDiagnosis').value.trim() || undefined,
+    restDays: $('#certRestDays').value ? Number($('#certRestDays').value) : undefined,
+    fromDate: $('#certFrom').value || undefined,
+    toDate: $('#certTo').value || undefined,
+    additionalNotes: $('#certNotes').value.trim() || undefined
+  };
+  if (appointmentId) body.appointmentId = appointmentId;
+  else body.patientId = patientId;
+
+  btn.disabled = true; btn.textContent = 'Generating…';
+  try {
+    const cert = await api('/doctor/certificates', { method:'POST', body });
+    _toast('success', 'Certificate ' + cert.certificateNumber + ' generated.');
+    closeCertModal();
+    if (cert.pdfUrl) window.open(cert.pdfUrl, '_blank', 'noopener');
+    loadCertificates();
+  } catch (ex){
+    _toast('error', ex.message || 'Could not generate certificate');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Generate certificate PDF';
+  }
+}
+
+/* ---------- Feature 3: Digital Signature ---------- */
+async function loadSignature(){
+  try {
+    const s = await api('/doctor/signature');
+    const img = $('#sigPreviewImg'), empty = $('#sigPreviewEmpty');
+    if (s.signatureUrl){
+      img.src = s.signatureUrl + '?t=' + Date.now();
+      img.style.display = 'block'; empty.style.display = 'none';
+    } else {
+      img.style.display = 'none'; empty.style.display = 'block';
+    }
+    if (s.registrationNumber) $('#regNumInput').value = s.registrationNumber;
+  } catch(_){}
+}
+
+function setupSignature(){
+  const form = $('#signatureForm');
+  if (!form || form.__wired) return; form.__wired = true;
+  const input = $('#sigInput');
+  // Live preview before save.
+  input.addEventListener('change', () => {
+    const f = input.files[0];
+    const wrap = $('#sigLiveWrap'), img = $('#sigLiveImg');
+    if (!f){ wrap.classList.add('hidden'); return; }
+    if (f.size > 1024*1024){ _toast('error', 'Signature image must be under 1 MB'); input.value=''; wrap.classList.add('hidden'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => { img.src = ev.target.result; wrap.classList.remove('hidden'); };
+    reader.readAsDataURL(f);
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = input.files[0];
+    if (!f){ _toast('error', 'Choose a signature image first'); return; }
+    const fd = new FormData(); fd.append('signature', f);
+    try {
+      await api('/doctor/signature', { method:'POST', body: fd });
+      _toast('success', 'Signature saved. It will appear on new documents.');
+      $('#sigLiveWrap').classList.add('hidden'); input.value='';
+      loadSignature();
+    } catch (ex){ _toast('error', ex.message || 'Upload failed'); }
+  });
+  $('#sigRemoveBtn').addEventListener('click', async () => {
+    const ok = window.NPModal ? await NPModal.confirm({ title:'Remove signature?', message:'Your signature will be removed from future documents.', danger:true, okText:'Remove' }) : confirm('Remove signature?');
+    if (!ok) return;
+    try { await api('/doctor/signature', { method:'DELETE' }); _toast('success','Signature removed'); loadSignature(); }
+    catch (ex){ _toast('error', ex.message || 'Could not remove'); }
+  });
+  $('#regNumForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/doctor/registration-number', { method:'PUT', body:{ registrationNumber: $('#regNumInput').value.trim() } });
+      _toast('success', 'Registration number saved.');
+    } catch (ex){ _toast('error', ex.message || 'Could not save'); }
+  });
+}
+
+/* ---------- Wire-up on init ---------- */
+function setupFeatureUI(){
+  setupCertPatientSearch();
+  setupSignature();
+  const certForm = $('#certForm');
+  if (certForm && !certForm.__wired){ certForm.__wired = true; certForm.addEventListener('submit', submitCert); }
+  // Refresh signature preview when entering settings.
+  const settingsBtn = document.querySelector('[data-tab="settingsTab"]');
+  if (settingsBtn && !settingsBtn.__sigWired){
+    settingsBtn.__sigWired = true;
+    settingsBtn.addEventListener('click', loadSignature);
+  }
 }
 
 (async function bootstrap(){

@@ -255,6 +255,9 @@ exports.patientHistory = asyncHandler(async (req, res) => {
       advice: v.prescription.advice,
       investigations: v.prescription.investigations,
       followUpDate: v.prescription.followUpDate,
+      // Feature 1A — flag + uploaded-file link for historical prescriptions
+      source: v.prescription.source || 'NEOKIDSPRO',
+      manualUrl: v.manualPrescriptionUrl || null,
       pdfUrl: signApptFileUrl(v, 'prescription', req.user.id)   // ← signed
     }));
 
@@ -310,7 +313,12 @@ exports.patientHistory = asyncHandler(async (req, res) => {
       meetLink: v.meetLink,
       prescriptionUrl: signApptFileUrl(v, 'prescription', req.user.id),  // ← signed
       hasPrescription: !!v.prescription,
-      doctorName: v.doctor.name
+      doctorName: v.doctor.name,
+      // Feature 1 — surface historical-record fields for UI badges/links
+      source: v.source || 'NEOKIDSPRO',
+      diagnosis: v.diagnosis || null,
+      followUpDate: v.followUpDate || null,
+      manualPrescriptionUrl: v.manualPrescriptionUrl || null
     })),
     prescriptions,
     diagnoses,

@@ -117,6 +117,8 @@ app.use('/files/profile-images',
   express.static(path.join(__dirname, '..', 'storage', 'profile-images')));
 app.use('/files/kyc-documents',
   express.static(path.join(__dirname, '..', 'storage', 'kyc-documents')));
+app.use('/files/signatures',
+  express.static(path.join(__dirname, '..', 'storage', 'signatures')));
 
 const staticOpts = {
   maxAge: '1h',

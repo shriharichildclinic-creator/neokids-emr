@@ -1759,3 +1759,301 @@ async function verifyKyc(targetStatus){
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', bootAdminExtras);
   else bootAdminExtras();
 })();
+
+
+/* =====================================================================
+   Feature 1/1A — Historical / Manual Appointments (admin)
+   Feature 2    — Medical Certificates (admin oversight)
+   Appended module — defensive: delegates to existing helpers when present.
+   ===================================================================== */
+
+function _adm$(sel, root){ return (root || document).querySelector(sel); }
+function _admEsc(s){
+  if (typeof escapeHtml === 'function') return escapeHtml(s);
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function _admFmtDate(d){
+  if (typeof fmtDate === 'function') return fmtDate(d);
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }); }
+  catch(e){ return String(d); }
+}
+function _admToast(kind, msg){
+  if (window.NPToast && NPToast[kind]) { NPToast[kind](msg); return; }
+  try { alert(msg); } catch(e){}
+}
+function _admToken(){
+  try {
+    if (typeof TOKEN !== 'undefined' && TOKEN) return TOKEN;
+  } catch(e){}
+  try {
+    var keys = ['np_admin_token','nkp_admin_token','np_token','token','auth_token'];
+    for (var i = 0; i < keys.length; i++){
+      var v = localStorage.getItem(keys[i]);
+      if (v) return v;
+    }
+  } catch(e){}
+  return null;
+}
+async function _admApi(path, opts){
+  opts = opts || {};
+  if (typeof api === 'function') return api(path, opts);
+  var headers = Object.assign({}, opts.headers || {});
+  var tok = _admToken();
+  if (tok) headers['Authorization'] = 'Bearer ' + tok;
+  if (!(opts.body instanceof FormData) && opts.body && typeof opts.body === 'object'){
+    headers['Content-Type'] = 'application/json';
+    opts = Object.assign({}, opts, { body: JSON.stringify(opts.body) });
+  }
+  var res = await fetch('/api' + path, Object.assign({}, opts, { headers: headers }));
+  var data = null;
+  try { data = await res.json(); } catch(e){}
+  if (!res.ok){
+    var err = new Error((data && (data.message || data.error)) || ('HTTP ' + res.status));
+    err.status = res.status; err.data = data; throw err;
+  }
+  return data;
+}
+
+var _admHistWired = false;
+var _admLinkCandidates = [];
+
+/* ---------- Feature 1: admin historical appointment form ---------- */
+function initAdmHistoricalForm(){
+  var form = _adm$('#admHistForm');
+  if (!form || _admHistWired) return;
+  _admHistWired = true;
+
+  _admPopulateAdmDoctors();
+
+  var lookupBtn = _adm$('#admHistLookupBtn');
+  if (lookupBtn) lookupBtn.addEventListener('click', admLookupPatient);
+  var phoneEl = _adm$('#admHistPhone');
+  if (phoneEl) phoneEl.addEventListener('change', function(){
+    _adm$('#admHistPatientId').value = '';
+    _adm$('#admHistLinkConfirmed').value = 'false';
+    var box = _adm$('#admHistMatchBox'); if (box) box.classList.add('hidden');
+  });
+  form.addEventListener('submit', submitAdmHistorical);
+}
+
+async function _admPopulateAdmDoctors(){
+  var sel = _adm$('#admHistDoctor');
+  if (!sel) return;
+  try {
+    var res = await _admApi('/admin/doctors');
+    var rows = Array.isArray(res) ? res : (res.doctors || res.items || res.rows || []);
+    sel.innerHTML = '<option value="">Select doctor…</option>' + rows.map(function(d){
+      return '<option value="' + _admEsc(d.id) + '">Dr. ' + _admEsc(d.name) + (d.specialization ? ' · ' + _admEsc(d.specialization) : '') + '</option>';
+    }).join('');
+  } catch(ex){
+    sel.innerHTML = '<option value="">(could not load doctors)</option>';
+  }
+}
+
+async function admLookupPatient(){
+  var phone = (_adm$('#admHistPhone').value || '').replace(/\D/g, '');
+  var box = _adm$('#admHistMatchBox');
+  if (!/^[6-9]\d{9}$/.test(phone)) { _admToast('error', 'Enter a valid 10-digit Indian mobile number'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="np-mut" style="font-size:.85rem;">Searching…</div>';
+  try {
+    var res = await _admApi('/admin/appointments/lookup-patient?phone=' + encodeURIComponent(phone));
+    var rows = (res && res.matches) || (Array.isArray(res) ? res : []);
+    if (!rows.length){
+      box.innerHTML = '<div class="np-mut" style="font-size:.85rem;">No existing patient with this number. A new patient will be created.</div>';
+      _adm$('#admHistPatientId').value = '';
+      return;
+    }
+    box.innerHTML = rows.map(function(p){
+      return '<label style="display:flex; align-items:center; gap:.5rem; padding:.5rem; border:1px solid var(--np-border); border-radius:10px; cursor:pointer;">'
+        + '<input type="radio" name="admHistMatch" value="' + _admEsc(p.id) + '">'
+        + '<span><b>' + _admEsc(p.name) + '</b> '
+        + '<span class="np-mut" style="font-size:.8rem;">· ' + (p.dateOfBirth ? _admEsc(_admFmtDate(p.dateOfBirth)) : 'DOB —') + ' · ' + _admEsc(p.gender || '') + '</span>'
+        + '</span></label>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('input[name="admHistMatch"]'), function(r){
+      r.addEventListener('change', function(){
+        _adm$('#admHistPatientId').value = r.value;
+        var sel = rows.find(function(x){ return x.id === r.value; });
+        if (sel){
+          var nameEl = _adm$('#admHistName');
+          if (nameEl && !nameEl.value) nameEl.value = sel.name || '';
+          var dobEl = _adm$('#admHistForm [name="dateOfBirth"]');
+          if (dobEl && sel.dateOfBirth && !dobEl.value) dobEl.value = String(sel.dateOfBirth).slice(0, 10);
+          var g = _adm$('#admHistForm [name="gender"]');
+          if (g && sel.gender && !g.value) g.value = sel.gender;
+        }
+      });
+    });
+    _admToast('info', rows.length + ' patient(s) found. Select one to link, or leave unselected to create new.');
+  } catch(ex){
+    box.innerHTML = '<div class="np-error">' + _admEsc(ex.message || 'Lookup failed') + '</div>';
+  }
+}
+
+async function submitAdmHistorical(e){
+  e.preventDefault();
+  var form = e.target;
+  var g = function(n){ var el = form.querySelector('[name="' + n + '"]'); return el ? el.value : ''; };
+  var fileEl = _adm$('#admHistRxFile');
+  var file = (fileEl && fileEl.files && fileEl.files[0]) || null;
+
+  if (!g('doctorId')){ _admToast('error', 'Please select a doctor'); return; }
+
+  var fd = new FormData();
+  fd.append('doctorId', g('doctorId'));
+  fd.append('phone', g('phone').replace(/\D/g, ''));
+  fd.append('patientName', g('patientName').trim());
+  if (g('parentName')) fd.append('parentName', g('parentName').trim());
+  if (g('dateOfBirth')) fd.append('dateOfBirth', g('dateOfBirth'));
+  if (g('gender')) fd.append('gender', g('gender'));
+  if (g('email')) fd.append('email', g('email').trim());
+  var pid = _adm$('#admHistPatientId').value;
+  if (pid) fd.append('patientId', pid);
+  fd.append('linkConfirmed', _adm$('#admHistLinkConfirmed').value || 'false');
+  fd.append('date', g('date'));
+  fd.append('consultationType', g('consultationType'));
+  fd.append('reasonForVisit', g('reasonForVisit').trim());
+  if (g('diagnosis')) fd.append('diagnosis', g('diagnosis').trim());
+  if (g('notes')) fd.append('notes', g('notes').trim());
+  if (g('followUpDate')) fd.append('followUpDate', g('followUpDate'));
+  if (file) fd.append('prescriptionFile', file);
+
+  var btn = _adm$('#admHistSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    var res = await _admApi('/admin/historical-appointments', { method:'POST', body: fd });
+    _admToast('success', 'Historical record added to ' + ((res.patient && res.patient.name) || 'patient') + "'s timeline.");
+    form.reset();
+    _adm$('#admHistPatientId').value = ''; _adm$('#admHistLinkConfirmed').value = 'false';
+    var box = _adm$('#admHistMatchBox'); if (box) box.classList.add('hidden');
+    if (typeof loadAppointments === 'function') { try { loadAppointments(); } catch(e){} }
+  } catch(ex){
+    if (ex.status === 409 && ex.data && ex.data.code === 'PATIENT_LINK_REQUIRED'){
+      showAdmLink(ex.data.candidates || []);
+    } else if (ex.status === 409 && ex.data && ex.data.code === 'SLOT_CONFLICT'){
+      _admToast('error', ex.data.error || 'A record for this date/time already exists.');
+    } else {
+      _admToast('error', ex.message || 'Could not save historical record');
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save historical record';
+  }
+}
+
+/* ---------- Smart-match conflict resolver (admin) ---------- */
+function showAdmLink(candidates){
+  _admLinkCandidates = candidates;
+  var list = _adm$('#admLinkList');
+  list.innerHTML = candidates.map(function(p, i){
+    return '<label style="display:flex; align-items:center; gap:.5rem; padding:.55rem; border:1px solid var(--np-border); border-radius:10px; cursor:pointer;">'
+      + '<input type="radio" name="admLinkCand" value="' + _admEsc(p.id) + '"' + (i === 0 ? ' checked' : '') + '>'
+      + '<span><b>' + _admEsc(p.name) + '</b> '
+      + '<span class="np-mut" style="font-size:.8rem;">· ' + (p.dateOfBirth ? _admEsc(_admFmtDate(p.dateOfBirth)) : 'DOB —') + ' · ' + _admEsc(p.gender || '') + '</span>'
+      + '</span></label>';
+  }).join('');
+  _adm$('#admLinkModal').classList.remove('hidden');
+}
+function closeAdmLink(){ _adm$('#admLinkModal').classList.add('hidden'); }
+function resolveAdmLink(choice){
+  if (choice === 'link'){
+    var sel = document.querySelector('input[name="admLinkCand"]:checked');
+    if (sel) _adm$('#admHistPatientId').value = sel.value;
+    _adm$('#admHistLinkConfirmed').value = 'true';
+  } else {
+    _adm$('#admHistPatientId').value = '';
+    _adm$('#admHistLinkConfirmed').value = 'true';
+  }
+  closeAdmLink();
+  var form = _adm$('#admHistForm');
+  if (form) form.requestSubmit();
+}
+
+/* ---------- Feature 2: admin certificates oversight ---------- */
+async function loadAdmCertificates(){
+  var wrap = _adm$('#admCertList');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
+  try {
+    var res = await _admApi('/admin/certificates');
+    var rows = Array.isArray(res) ? res : (res.certificates || res.items || []);
+    if (!rows.length){
+      wrap.innerHTML = '<div class="np-empty"><div class="np-empty__title">No certificates yet</div><div class="np-empty__sub">Certificates issued by doctors will appear here.</div></div>';
+      return;
+    }
+    wrap.innerHTML = rows.map(function(c){
+      var patientName = c.patientNameSnapshot || (c.patient && c.patient.name) || '—';
+      var doctorName = c.doctorName || (c.doctor && c.doctor.name) || '';
+      var tpl = (c.templateKey || 'GENERAL').replace(/_/g, ' ');
+      return '<article class="np-history-row">'
+        + '<div class="np-history-row__date"><div><b>' + _admEsc(_admFmtDate(c.issuedAt || c.createdAt)) + '</b></div>'
+        + '<div class="np-mut" style="font-size:.78rem;">' + _admEsc(c.certificateNumber || '') + '</div></div>'
+        + '<div class="np-history-row__body">'
+        + '<div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; flex-wrap:wrap;">'
+        + '<div><b>' + _admEsc(patientName) + '</b>'
+        + '<span class="np-badge np-badge--mint" style="margin-left:.4rem;">' + _admEsc(tpl) + '</span>'
+        + (doctorName ? '<div class="np-mut" style="font-size:.8rem;">Dr. ' + _admEsc(doctorName) + '</div>' : '')
+        + '</div>'
+        + '<button type="button" class="np-btn np-btn--sm" onclick="viewAdmCert(\'' + _admEsc(c.id) + '\')">View</button>'
+        + '</div>'
+        + (c.reason ? '<div class="np-mut" style="font-size:.82rem; margin-top:.15rem;">' + _admEsc(c.reason) + '</div>' : '')
+        + '</div></article>';
+    }).join('');
+  } catch(ex){
+    wrap.innerHTML = '<div class="np-error">' + _admEsc(ex.message || 'Failed to load certificates') + '</div>';
+  }
+}
+
+async function viewAdmCert(id){
+  var modal = _adm$('#admCertModal');
+  var body = _adm$('#admCertDetail');
+  body.innerHTML = '<div class="np-mut">Loading…</div>';
+  modal.classList.remove('hidden');
+  try {
+    var d = await _admApi('/admin/certificates/' + encodeURIComponent(id));
+    var c = d.certificate || d;
+    var pdfUrl = c.pdfUrl || d.pdfUrl || null;
+    var rows = [
+      ['Certificate ID', c.certificateNumber],
+      ['Patient', c.patientNameSnapshot || (c.patient && c.patient.name)],
+      ['Doctor', c.doctor ? ('Dr. ' + c.doctor.name) : c.doctorName],
+      ['Template', (c.templateKey || '').replace(/_/g, ' ')],
+      ['Issued', _admFmtDate(c.issuedAt || c.createdAt)],
+      ['Reason', c.reason],
+      ['Diagnosis', c.diagnosis],
+      ['Rest', c.restDays ? (c.restDays + ' day(s)') : null],
+      ['Notes', c.additionalNotes]
+    ].filter(function(r){ return r[1]; });
+    body.innerHTML = rows.map(function(r){
+      return '<div style="display:flex; gap:.75rem; padding:.35rem 0; border-bottom:1px solid var(--np-border);">'
+        + '<div class="np-mut" style="width:130px; flex:none; font-size:.85rem;">' + _admEsc(r[0]) + '</div>'
+        + '<div style="font-size:.9rem;">' + _admEsc(r[1]) + '</div></div>';
+    }).join('')
+    + (pdfUrl ? '<div style="margin-top:.9rem;"><a class="np-btn np-btn--primary np-btn--sm" href="' + _admEsc(pdfUrl) + '" target="_blank" rel="noopener">Open PDF</a></div>' : '');
+  } catch(ex){
+    body.innerHTML = '<div class="np-error">' + _admEsc(ex.message || 'Could not load certificate') + '</div>';
+  }
+}
+function closeAdmCertModal(){ _adm$('#admCertModal').classList.add('hidden'); }
+
+function openAdmCertInfo(){
+  var modal = _adm$('#admCertModal');
+  _adm$('#admCertDetail').innerHTML =
+    '<p class="np-mut" style="font-size:.9rem;">Certificates are signed with the issuing doctor\'s digital signature, so they must be generated from the <b>Doctor Panel</b> (Appointments → Medical certificate, or the Certificates tab). This view gives admins read-only oversight of every issued certificate.</p>';
+  modal.classList.remove('hidden');
+}
+
+/* ---------- Wire-up ---------- */
+function setupAdmFeatureUI(){
+  var hbtn = document.querySelector('[data-view="historicalView"]');
+  if (hbtn && !hbtn.__admFeat){ hbtn.__admFeat = true; hbtn.addEventListener('click', initAdmHistoricalForm); }
+  var cbtn = document.querySelector('[data-view="certsView"]');
+  if (cbtn && !cbtn.__admFeat){ cbtn.__admFeat = true; cbtn.addEventListener('click', loadAdmCertificates); }
+  var nb = _adm$('#admNewCertBtn');
+  if (nb && !nb.__wired){ nb.__wired = true; nb.addEventListener('click', openAdmCertInfo); }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupAdmFeatureUI);
+else setupAdmFeatureUI();

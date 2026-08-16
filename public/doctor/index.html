@@ -130,6 +130,14 @@
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Prescription Archive
         </button>
+        <button class="np-nav-item tab-btn" data-tab="historicalTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Historical Records
+        </button>
+        <button class="np-nav-item tab-btn" data-tab="certificatesTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
+          Certificates
+        </button>
 
         <div class="np-sidebar__section">Finance</div>
         <button class="np-nav-item tab-btn" data-tab="earningsTab" type="button">
@@ -596,6 +604,51 @@
               </form>
             </div>
 
+
+<div class="np-setting-card" id="setting-signature">
+  <div class="np-setting-card__head">
+    <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#0ea5a4,#4cc2c0);">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <div>
+      <div class="np-setting-card__title">Digital Signature</div>
+      <div class="np-setting-card__sub">Auto-applied to prescriptions, certificates &amp; invoices</div>
+    </div>
+  </div>
+  <div style="margin-bottom:.75rem;">
+    <div class="np-field__label">Current signature</div>
+    <div id="sigPreviewWrap" style="border:1px dashed var(--np-border); border-radius:10px; padding:.6rem; min-height:60px; display:flex; align-items:center; justify-content:center; background:var(--np-surface);">
+      <span id="sigPreviewEmpty" class="np-mut" style="font-size:.85rem;">No signature uploaded</span>
+      <img id="sigPreviewImg" alt="Signature preview" style="max-height:56px; max-width:220px; display:none;">
+    </div>
+  </div>
+  <form id="signatureForm" enctype="multipart/form-data" novalidate>
+    <div class="np-field">
+      <label class="np-field__label" for="sigInput">Upload signature image</label>
+      <input id="sigInput" name="signature" type="file" accept="image/png,image/jpeg" class="np-input" required>
+      <div class="np-field__hint">PNG with transparent background preferred. Max 1 MB.</div>
+    </div>
+    <div id="sigLiveWrap" class="hidden" style="margin-bottom:.75rem;">
+      <div class="np-field__label">Live preview</div>
+      <div style="border:1px dashed var(--np-border); border-radius:10px; padding:.6rem; display:flex; align-items:center; justify-content:center; background:#fff;">
+        <img id="sigLiveImg" alt="Preview" style="max-height:56px; max-width:220px;">
+      </div>
+    </div>
+    <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+      <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save signature</button>
+      <button type="button" id="sigRemoveBtn" class="np-btn np-btn--danger np-btn--sm">Remove</button>
+    </div>
+  </form>
+  <div class="np-divider"></div>
+  <form id="regNumForm" novalidate>
+    <div class="np-field">
+      <label class="np-field__label">Medical registration number</label>
+      <input name="registrationNumber" id="regNumInput" class="np-input" placeholder="e.g. KMC 12345">
+      <div class="np-field__hint">Shown on medical certificates.</div>
+    </div>
+    <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save registration number</button>
+  </form>
+</div>
 <div class="np-setting-card" id="setting-appearance">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#0F2E3A,#345B5B);">
@@ -655,6 +708,121 @@
   </div>
 </div>
 
+
+<section id="historicalTab" class="tab-pane hidden">
+  <div class="np-panel">
+    <div class="np-panel__head">
+      <div style="flex:1">
+        <div class="np-panel__title">Add Historical / Manual Appointment</div>
+        <div class="np-panel__subtitle">Record a past or offline visit that was never booked through NeoKidsPro</div>
+      </div>
+    </div>
+    <div class="np-panel__body">
+      <div class="np-callout np-callout--info" style="margin-bottom:1rem;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div>Historical records are marked <b>Manual Record</b> and kept separate from NeoKidsPro bookings. They appear in the patient's timeline and medical history.</div>
+      </div>
+      <form id="historicalForm" enctype="multipart/form-data" novalidate>
+        <div class="np-field">
+          <label class="np-field__label">Patient mobile number <span class="np-req">*</span></label>
+          <div style="display:flex; gap:.5rem;">
+            <input name="phone" id="histPhone" class="np-input" placeholder="10-digit mobile" inputmode="numeric" maxlength="10" style="flex:1;">
+            <button type="button" id="histLookupBtn" class="np-btn np-btn--ghost np-btn--sm">Find patient</button>
+          </div>
+          <div class="np-field__hint">We'll auto-link to an existing patient with this number.</div>
+        </div>
+        <div id="histMatchBox" class="hidden" style="margin-bottom:.75rem;"></div>
+        <input type="hidden" name="patientId" id="histPatientId">
+        <input type="hidden" name="linkConfirmed" id="histLinkConfirmed" value="false">
+
+        <div class="np-grid-2">
+          <div class="np-field">
+            <label class="np-field__label">Patient name <span class="np-req">*</span></label>
+            <input name="patientName" id="histName" class="np-input" placeholder="Full name">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Parent / guardian name</label>
+            <input name="parentName" class="np-input" placeholder="Parent name">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Date of birth</label>
+            <input name="dateOfBirth" type="date" class="np-input">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Gender</label>
+            <select name="gender" class="np-select-native">
+              <option value="">—</option>
+              <option value="MALE">Male</option>
+              <option value="FEMALE">Female</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Email (optional)</label>
+            <input name="email" type="email" class="np-input" placeholder="parent@email.com">
+          </div>
+        </div>
+
+        <div class="np-divider"></div>
+
+        <div class="np-grid-2">
+          <div class="np-field">
+            <label class="np-field__label">Appointment date <span class="np-req">*</span></label>
+            <input name="date" type="date" class="np-input" required>
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Appointment type <span class="np-req">*</span></label>
+            <select name="consultationType" class="np-select-native" required>
+              <option value="OFFLINE">Clinic Visit</option>
+              <option value="ONLINE">Online Consultation</option>
+            </select>
+          </div>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Reason for visit <span class="np-req">*</span></label>
+          <input name="reasonForVisit" class="np-input" placeholder="e.g. Fever and cough" required minlength="2">
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Diagnosis</label>
+          <input name="diagnosis" class="np-input" placeholder="e.g. Acute viral pharyngitis">
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Notes</label>
+          <textarea name="notes" class="np-textarea" rows="2" placeholder="Any additional notes"></textarea>
+        </div>
+        <div class="np-grid-2">
+          <div class="np-field">
+            <label class="np-field__label">Follow-up date (optional)</label>
+            <input name="followUpDate" type="date" class="np-input">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Upload prescription (PDF / JPG / PNG)</label>
+            <input name="prescriptionFile" id="histRxFile" type="file" accept=".pdf,.jpg,.jpeg,.png" class="np-input">
+            <div class="np-field__hint">Scanned / handwritten prescription from the original visit.</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
+          <button type="submit" id="histSubmitBtn" class="np-btn np-btn--primary">Save historical record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section id="certificatesTab" class="tab-pane hidden">
+  <div class="np-panel">
+    <div class="np-panel__head">
+      <div style="flex:1">
+        <div class="np-panel__title">Medical Certificates</div>
+        <div class="np-panel__subtitle">Certificates you have issued</div>
+      </div>
+      <button class="np-btn np-btn--primary np-btn--sm" type="button" id="newCertBtn">+ New certificate</button>
+    </div>
+    <div class="np-panel__body">
+      <div id="certList"><div class="np-empty"><div class="np-empty__title">Loading…</div></div></div>
+    </div>
+  </div>
+</section>
 <div id="patientModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="patientModalTitle">
   <div class="np-modal__panel np-modal__panel--lg">
     <div class="np-modal__head">
@@ -746,6 +914,87 @@
   </div>
 </div>
 
+
+<div id="certModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="certModalTitle">
+  <div class="np-modal__panel np-modal__panel--lg">
+    <div class="np-modal__head">
+      <div id="certModalTitle" class="np-modal__title">Generate Medical Certificate</div>
+      <button type="button" class="np-modal__close" onclick="closeCertModal()" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="np-modal__body">
+      <form id="certForm" novalidate>
+        <input type="hidden" id="certApptId">
+        <input type="hidden" id="certPatientId">
+        <div class="np-field">
+          <label class="np-field__label">Patient <span class="np-req">*</span></label>
+          <div style="display:flex; gap:.5rem;">
+            <input id="certPatientSearch" class="np-input" placeholder="Search patient by name or phone" autocomplete="off" style="flex:1;">
+          </div>
+          <div id="certPatientResults" class="np-autocomplete hidden"></div>
+          <div id="certPatientChosen" class="hidden" style="margin-top:.4rem;"></div>
+        </div>
+        <div class="np-grid-2">
+          <div class="np-field">
+            <label class="np-field__label">Certificate template <span class="np-req">*</span></label>
+            <select id="certTemplate" name="templateKey" class="np-select-native"></select>
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Recommended rest (days)</label>
+            <input name="restDays" id="certRestDays" type="number" min="0" max="365" class="np-input" placeholder="e.g. 3">
+          </div>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Reason for certificate <span class="np-req">*</span></label>
+          <textarea name="reason" id="certReason" class="np-textarea" rows="2" placeholder="e.g. Suffering from viral fever and advised rest" required minlength="2"></textarea>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Diagnosis (optional)</label>
+          <input name="diagnosis" id="certDiagnosis" class="np-input" placeholder="e.g. Acute viral fever">
+        </div>
+        <div class="np-grid-2">
+          <div class="np-field">
+            <label class="np-field__label">Rest from date</label>
+            <input name="fromDate" id="certFrom" type="date" class="np-input">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Rest to date</label>
+            <input name="toDate" id="certTo" type="date" class="np-input">
+          </div>
+        </div>
+        <div class="np-field">
+          <label class="np-field__label">Additional notes</label>
+          <textarea name="additionalNotes" id="certNotes" class="np-textarea" rows="2" placeholder="Any extra remarks"></textarea>
+        </div>
+        <div style="display:flex; gap:.5rem; justify-content:flex-end;">
+          <button type="button" class="np-btn np-btn--ghost" onclick="closeCertModal()">Cancel</button>
+          <button type="submit" id="certSubmitBtn" class="np-btn np-btn--primary">Generate certificate PDF</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="linkConflictModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="linkConflictTitle">
+  <div class="np-modal__backdrop" onclick="closeLinkConflict()"></div>
+  <div class="np-modal__card" style="max-width:520px;">
+    <header class="np-modal__head">
+      <h3 id="linkConflictTitle">Existing patient found</h3>
+      <button type="button" class="np-modal__close" onclick="closeLinkConflict()" aria-label="Close">×</button>
+    </header>
+    <div class="np-modal__body">
+      <p class="np-mut" style="font-size:.9rem; margin-bottom:.75rem;">
+        An existing patient with this mobile number already exists. Please verify before creating a new patient.
+      </p>
+      <div id="linkConflictList" style="display:grid; gap:.5rem; margin-bottom:1rem;"></div>
+      <footer style="display:flex; gap:.5rem; justify-content:flex-end;">
+        <button type="button" class="np-btn" onclick="resolveLinkConflict('new')">Create separate patient</button>
+        <button type="button" id="linkConflictUseBtn" class="np-btn np-btn--primary" onclick="resolveLinkConflict('link')">Link to selected patient</button>
+      </footer>
+    </div>
+  </div>
+</div>
 <div id="rescheduleModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rescheduleModalTitle">
   <div class="np-modal__panel">
     <div class="np-modal__head">
