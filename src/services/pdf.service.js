@@ -99,7 +99,16 @@ function drawSignatureBlock(doc, doctor, opts = {}) {
     try {
       // Fixed height + fit keeps the image inside the box regardless of the
       // source aspect ratio, so the name line below is always at y+44.
-      doc.image(sigPath, rightX, y, { fit: [200, 40], height: 40, align: 'center', valign: 'bottom' });
+      // Root cause of "signature saves but never appears in PDFs": this
+      // pdfkit version throws "unsupported number: NaN" when `fit` and
+      // `height` are passed together — the redundant height conflicts
+      // with fit's own aspect-ratio math. That exception was being
+      // silently swallowed by the catch below, which is why the doctor
+      // saw a signature preview and a generated PDF, but never the
+      // actual image — it always silently fell back to the blank
+      // underline. `fit: [200, 40]` alone already caps the image to a
+      // max height of 40, so the block's fixed-height layout is unaffected.
+      doc.image(sigPath, rightX, y, { fit: [200, 40], align: 'center', valign: 'bottom' });
     } catch (e) {
       doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 26);
     }

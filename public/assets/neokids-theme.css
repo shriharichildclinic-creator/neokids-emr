@@ -1593,6 +1593,31 @@ html[data-theme="dark"] #sigLiveWrap > div{
   background: #fff !important;
   color: #000 !important;
 }
+/* The "Clear drawing" ghost button's dark-mode style relies on a
+   transparent background over a dark parent, with light text meant to
+   sit on that dark parent. Now that #sigDrawWrap is forced white above,
+   that combination becomes near-invisible light-on-white text. Since
+   #sigDrawWrap is a permanently light surface, its buttons must use the
+   same light-mode button styling here too. */
+html[data-theme="dark"] #sigDrawWrap .np-btn{
+  background:#fff !important;
+  color: var(--nk-ink) !important;
+  border-color: #D9E6E6 !important;
+}
+html[data-theme="dark"] #sigDrawWrap .np-btn:hover{
+  background: var(--nk-teal-50) !important;
+  color: var(--nk-teal-700) !important;
+  border-color: var(--nk-teal-200) !important;
+}
+html[data-theme="dark"] #sigDrawWrap .np-btn--primary{
+  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%) !important;
+  border-color: var(--nk-teal-600) !important;
+  color:#fff !important;
+}
+html[data-theme="dark"] #sigDrawWrap .np-btn--primary:hover{
+  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%) !important;
+  border-color: var(--nk-teal-700) !important;
+}
 
 /* ---------- Focus rings visible in both themes ---------- */
 .np-btn:focus-visible,
@@ -2107,6 +2132,21 @@ html[data-theme="dark"] textarea{
   html[data-theme="dark"] #sigLiveWrap > div{
     background: #fff !important;
     color: #000 !important;
+  }
+  html[data-theme="dark"] #sigDrawWrap .np-btn{
+    background:#fff !important;
+    color: var(--nk-ink) !important;
+    border-color: #D9E6E6 !important;
+  }
+  html[data-theme="dark"] #sigDrawWrap .np-btn:hover{
+    background: var(--nk-teal-50) !important;
+    color: var(--nk-teal-700) !important;
+    border-color: var(--nk-teal-200) !important;
+  }
+  html[data-theme="dark"] #sigDrawWrap .np-btn--primary{
+    background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%) !important;
+    border-color: var(--nk-teal-600) !important;
+    color:#fff !important;
   }
 }
 
