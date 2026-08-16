@@ -61,10 +61,44 @@ block always fits above the footer band on one page — never crops the
 image, never overflows, never spawns an extra page. Verified with a
 rendered test PDF (image below, from `pdftoppm`):
 
+## 4. v3.3.8 follow-up — draw pad "one giant white rectangle", PDF signature order & crop
+
+**Root cause of the draw pad looking like a single white blob with buttons
+stuck to it:** the canvas already draws its own always-white bordered box
+(`#sigCanvas`). v3.3.7 additionally wrapped the *entire* draw pad — canvas
++ hint text + buttons — in a second white `.np-sig-surface` box. Two white
+boxes with barely-visible `#D9E6E6` borders sitting directly against each
+other read as one continuous white rectangle, with the hint and buttons
+squeezed into whatever sliver of that white area was left. This is also
+why "Clear drawing" looked faint — it wasn't a contrast bug this time, it
+was two nested white boxes eating the visual separation a button needs to
+read clearly.
+
+**Fix:** `#sigDrawWrap` is no longer a `.np-sig-surface`. It's a plain
+container holding the canvas (which is white on its own) followed by the
+hint and the button row on the normal themed card background — where the
+existing base `.np-btn` styles already have correct contrast in both
+themes, with no override needed. `.np-sig-surface` is now used only where
+it was actually needed: the two image-only preview boxes (saved signature,
+live preview), which have no buttons to lose. Removed the now-dead
+`.np-sig-surface .np-btn` override block entirely (~40 lines) since
+nothing renders a button inside `.np-sig-surface` anymore.
+
+**PDF signature order (per doctor sign-off):** flipped to the conventional
+layout — signature image **above** the printed name, not below:
 ```
-Dr. Juhainah Nasir
-MBBS, MD (Pediatrics)
-Reg. No: KMC 12345
-[signature image, left-aligned, full aspect ratio, not cropped]
-Digital Signature
+[Signature Image]
+Doctor Name
+Qualifications
 ```
+
+**PDF signature "cut at edges":** the image is now fit into a box inset by
+6pt on every side (rather than flush to the block's outer edges), so ink
+that runs close to the source PNG's own edges still renders with visible
+margin instead of looking clipped. Re-verified by rendering a deliberately
+edge-touching test signature — full strokes visible, clean margin, no
+crop.
+
+**Cache:** bumped `styles.css` / `neokids-theme.css` links to `?v=3.3.8`
+so this update can't be masked by a stale cached stylesheet on redeploy.
+

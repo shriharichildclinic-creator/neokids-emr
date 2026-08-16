@@ -39,9 +39,9 @@
     }
   }
 </script>
-<link rel="stylesheet" href="/doctor/styles.css"/>
+<link rel="stylesheet" href="/doctor/styles.css?v=3.3.8"/>
 
-<link rel="stylesheet" href="/assets/neokids-theme.css"/>
+<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.3.8"/>
 <script>
   try {
     var t = localStorage.getItem('np-theme');
@@ -632,9 +632,9 @@
     <div class="np-divider"></div>
     <div class="np-field">
       <label class="np-field__label">Draw signature</label>
-      <div id="sigDrawWrap" class="np-sig-surface" style="flex-direction:column; align-items:stretch; justify-content:flex-start; min-height:0;">
+      <div id="sigDrawWrap">
         <canvas id="sigCanvas" width="640" height="180"></canvas>
-        <div class="np-field__hint">Sign inside the box, then save it as your digital signature.</div>
+        <div class="np-field__hint" style="margin-top:.6rem;">Sign inside the box, then save it as your digital signature.</div>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.6rem;">
           <button type="button" id="sigClearBtn" class="np-btn np-btn--ghost np-btn--sm">Clear drawing</button>
           <button type="button" id="sigSaveDrawnBtn" class="np-btn np-btn--primary np-btn--sm">Save drawn signature</button>

@@ -1617,54 +1617,6 @@ html[data-theme="dark"] [style*="color: black"]{
   box-sizing:border-box;
 }
 .np-sig-empty{ color:#64748B; font-size:.85rem; }
-/* Buttons inside this surface always use light-mode coloring, hardcoded
-   rather than via theme variables — var(--nk-ink) resolves to a
-   near-white color in dark mode, which is unreadable on this
-   permanently-white surface. */
-.np-sig-surface .np-btn{
-  background:#fff;
-  color:#0F2E3A;
-  border-color:#D9E6E6;
-}
-.np-sig-surface .np-btn:hover{
-  background:#EAF4F4;
-  color:#1F6E6E;
-  border-color:#BFDCDC;
-}
-.np-sig-surface .np-btn--primary{
-  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
-  border-color: var(--nk-teal-600);
-  color:#fff;
-}
-.np-sig-surface .np-btn--primary:hover{
-  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%);
-  border-color: var(--nk-teal-700);
-}
-/* The base html[data-theme="dark"] .np-btn rule (an element + attribute +
-   class selector) outranks the plain two-class .np-sig-surface .np-btn
-   rule above, so it would otherwise still win in dark mode. One explicit,
-   non-duplicated override here beats it — using hardcoded light colors,
-   not a theme variable, since this surface never actually changes with
-   the theme. */
-html[data-theme="dark"] .np-sig-surface .np-btn{
-  background:#fff;
-  color:#0F2E3A;
-  border-color:#D9E6E6;
-}
-html[data-theme="dark"] .np-sig-surface .np-btn:hover{
-  background:#EAF4F4;
-  color:#1F6E6E;
-  border-color:#BFDCDC;
-}
-html[data-theme="dark"] .np-sig-surface .np-btn--primary{
-  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
-  border-color: var(--nk-teal-600);
-  color:#fff;
-}
-html[data-theme="dark"] .np-sig-surface .np-btn--primary:hover{
-  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%);
-  border-color: var(--nk-teal-700);
-}
 /* Signature preview images — one rule, reused for the saved-signature
    preview, the file-upload live preview, and (via object-fit) any
    future preview state, so scaling can never drift between them. Fixed

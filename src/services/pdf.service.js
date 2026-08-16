@@ -83,26 +83,50 @@ function drawSignatureBlock(doc, doctor, opts = {}) {
   const sigPath   = resolveSignaturePath(doctor);
   const leftX     = doc.page.width - 240;   // block's left edge — every element shares this x
   const blockW    = 220;                    // shared width for text wrapping + image box
-  const sigMaxH   = 42;                     // signature image never exceeds this height
+  const sigMaxH   = 46;                     // signature image never exceeds this height
+  const sigInset  = 6;                      // margin inside the image's box on every side, so
+                                             // ink that runs close to the source PNG's own edges
+                                             // still reads with breathing room, never "cut off"
   const hasReg    = !!(doctor && doctor.registrationNumber);
 
-  // Required layout is name-first, signature-last, everything left-aligned
-  // to `leftX`:
+  // Required layout (per doctor sign-off): signature image ABOVE the
+  // printed name, everything left-aligned to `leftX`:
+  //   [Signature Image]
   //   Doctor Name
   //   Qualifications
-  //   [Signature Image]
-  // Total block height: name (14) + qualification (12) + optional reg. no
-  // (11) + image (sigMaxH, with a small gap above it) + caption (10).
-  const blockH = 14 + 12 + (hasReg ? 11 : 0) + 6 + sigMaxH + 4 + 10;
+  // Total block height: image (sigMaxH) + gap (6) + name (14) +
+  // qualification (12) + optional reg. no (11) + caption (10).
+  const blockH = sigMaxH + 6 + 14 + 12 + (hasReg ? 11 : 0) + 10;
   const bottomLimit = doc.page.height - 48;   // keep clear of the footer band
-  // The ENTIRE block (every text line + the image) must end above
-  // bottomLimit, otherwise PDFKit auto page-breaks mid-block.
+  // The ENTIRE block (image + every text line) must end above bottomLimit,
+  // otherwise PDFKit auto page-breaks mid-block.
   const maxY = bottomLimit - blockH;
   let y = Math.min(opts.y || maxY, maxY);
   if (y < 40) y = 40;                          // never collide with the header
 
-  // ── Text lines first, all left-aligned to `leftX` ──
+  // ── Signature image first, left-aligned at `leftX` ──
   let ty = y;
+  if (sigPath) {
+    try {
+      // `fit` alone (no `height` passed alongside it) — passing both throws
+      // "unsupported number: NaN" in this pdfkit version because the
+      // redundant height conflicts with fit's own aspect-ratio math. `fit`
+      // preserves the source aspect ratio and never crops on its own.
+      // The image is fit into a box inset by `sigInset` on every side
+      // (rather than the full block width/height) so it never visually
+      // touches the block's outer edges, and `align:'left'` keeps that
+      // inset consistent with the text below instead of centering it.
+      doc.image(sigPath, leftX + sigInset, ty + sigInset,
+        { fit: [blockW - sigInset * 2, sigMaxH - sigInset * 2], align: 'left', valign: 'top' });
+    } catch (e) {
+      doc.fontSize(10).fillColor('#555').text('___________________________', leftX, ty + sigMaxH - 16);
+    }
+  } else {
+    doc.fontSize(10).fillColor('#555').text('___________________________', leftX, ty + sigMaxH - 16);
+  }
+  ty += sigMaxH + 6;
+
+  // ── Text lines below the image, all left-aligned to the same `leftX` ──
   doc.font('Helvetica-Bold').fillColor('#000').fontSize(11)
      .text(`Dr. ${doctor.name}`, leftX, ty, { width: blockW, lineBreak: false, ellipsis: true });
   ty += 14;
@@ -113,26 +137,6 @@ function drawSignatureBlock(doc, doctor, opts = {}) {
     doc.text(`Reg. No: ${doctor.registrationNumber}`, leftX, ty, { width: blockW, lineBreak: false, ellipsis: true });
     ty += 11;
   }
-  ty += 6; // small gap before the signature image
-
-  // ── Signature image, left-aligned under the text (same leftX) ──
-  if (sigPath) {
-    try {
-      // `fit` alone (no `height` passed alongside it) — passing both throws
-      // "unsupported number: NaN" in this pdfkit version because the
-      // redundant height conflicts with fit's own aspect-ratio math. `fit`
-      // already preserves the source aspect ratio and never crops.
-      // `align: 'left'` keeps the image's left edge flush with the text
-      // above it instead of centering it inside the fit box, which is what
-      // made the block look inconsistently aligned.
-      doc.image(sigPath, leftX, ty, { fit: [blockW, sigMaxH], align: 'left', valign: 'top' });
-    } catch (e) {
-      doc.fontSize(10).fillColor('#555').text('___________________________', leftX, ty);
-    }
-  } else {
-    doc.fontSize(10).fillColor('#555').text('___________________________', leftX, ty);
-  }
-  ty += sigMaxH + 4;
 
   doc.fillColor('#888').fontSize(8)
      .text('Digital Signature', leftX, ty, { width: blockW, lineBreak: false });
