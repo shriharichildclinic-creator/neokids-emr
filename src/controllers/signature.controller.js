@@ -23,6 +23,57 @@ async function removeExistingSignature(signatureUrl) {
   } catch (_) {}
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Root-cause fix for "signature saves but never appears in PDFs":
+// prescription/invoice/certificate PDFs are cached on disk and every
+// download route only regenerates one "if missing" (a pattern meant for
+// ephemeral-disk redeploys). Nothing previously invalidated that cache
+// when a doctor uploaded, redrew, or removed their signature — so any
+// PDF generated before the signature existed (or before it changed)
+// stayed signature-less forever, even though the signature itself saved
+// correctly. Deleting the cached files here makes the existing
+// "regenerate if missing" logic in files.routes.js / doctor.controller.js
+// pick them back up with the current signature on next view/download.
+// ─────────────────────────────────────────────────────────────────────
+async function invalidateGeneratedPdfsForDoctor(doctorId) {
+  const targets = [];
+
+  try {
+    const appointments = await prisma.appointment.findMany({
+      where: { doctorId },
+      select: { id: true }
+    });
+    for (const { id } of appointments) {
+      targets.push(path.join(STORAGE, 'prescriptions', `prescription_${id}.pdf`));
+      targets.push(path.join(STORAGE, 'invoices', `invoice_${id}.pdf`));
+    }
+  } catch (err) {
+    logger.error('invalidateGeneratedPdfsForDoctor: appointment lookup failed', { doctorId, err: err.message });
+  }
+
+  try {
+    const certificates = await prisma.medicalCertificate.findMany({
+      where: { doctorId },
+      select: { id: true }
+    });
+    for (const { id } of certificates) {
+      targets.push(path.join(STORAGE, 'certificates', `certificate_${id}.pdf`));
+    }
+  } catch (err) {
+    logger.error('invalidateGeneratedPdfsForDoctor: certificate lookup failed', { doctorId, err: err.message });
+  }
+
+  let deleted = 0;
+  await Promise.all(targets.map(async (fp) => {
+    try {
+      await fs.promises.unlink(fp);
+      deleted++;
+    } catch (_) { /* file may not exist yet — fine */ }
+  }));
+
+  logger.info('invalidated cached PDFs after signature change', { doctorId, candidates: targets.length, deleted });
+}
+
 exports.get = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findFirst({
     where: { id: req.user.id, deletedAt: null },
@@ -44,6 +95,7 @@ exports.upload = asyncHandler(async (req, res) => {
   await removeExistingSignature(doctor.signatureUrl);
   const newUrl = signatureUrlFor(req.file.filename);
   const updated = await prisma.doctor.update({ where: { id: req.user.id }, data: { signatureUrl: newUrl } });
+  await invalidateGeneratedPdfsForDoctor(req.user.id);
   logger.info('doctor signature uploaded', { doctorId: req.user.id, file: req.file.filename });
   res.json({ success: true, signatureUrl: updated.signatureUrl });
 });
@@ -66,6 +118,7 @@ exports.uploadDrawn = asyncHandler(async (req, res) => {
   await fs.promises.writeFile(path.join(SIG_DIR, filename), buf);
   const url = signatureUrlFor(filename);
   await prisma.doctor.update({ where: { id: req.user.id }, data: { signatureUrl: url } });
+  await invalidateGeneratedPdfsForDoctor(req.user.id);
   logger.info('doctor signature drawn upload', { doctorId: req.user.id, file: filename });
   res.json({ success: true, signatureUrl: url });
 });
@@ -75,6 +128,7 @@ exports.remove = asyncHandler(async (req, res) => {
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
   await removeExistingSignature(doctor.signatureUrl);
   await prisma.doctor.update({ where: { id: req.user.id }, data: { signatureUrl: null } });
+  await invalidateGeneratedPdfsForDoctor(req.user.id);
   res.json({ success: true });
 });
 

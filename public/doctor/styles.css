@@ -401,7 +401,10 @@ html,body{
 }
 .np-field__hint{ font-size:.72rem; color: var(--np-muted); margin-top:.25rem; }
 .np-input, .np-textarea, .np-select-native{
+  display:block;
   width:100%;
+  max-width:100%;
+  box-sizing:border-box;
   padding: .65rem .85rem;
   font-size:.9rem;
   background: var(--nk-card);
@@ -469,12 +472,15 @@ html,body{
 @media (max-width:900px){ .np-settings-grid{ grid-template-columns: 1fr; } }
 
 .np-setting-card{
+  box-sizing:border-box;
+  width:100%;
+  max-width:100%;
   background: var(--nk-card);
   border:1px solid var(--np-border);
   border-radius: var(--np-radius-card);
   padding: 1.25rem;
   box-shadow: var(--np-card-shadow);
-  transition: transform .15s ease, box-shadow .15s ease;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .18s ease;
 }
 .np-setting-card:hover{ box-shadow: var(--np-card-shadow-hover); transform: translateY(-1px); }
 .np-setting-card__head{

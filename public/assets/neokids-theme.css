@@ -367,13 +367,11 @@ h1,h2,h3{
 .from-brand-primary{ --tw-gradient-from: var(--nk-teal-400) !important; }
 .to-brand-primary  { --tw-gradient-to:   var(--nk-teal-600) !important; }
 
-.np-input, .np-select, .np-textarea,
-input.np-input, select.np-select, textarea.np-textarea{
-  border-radius: 12px;
-  border:1px solid var(--nk-border);
-  background:#fff;
-  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
-}
+/* .np-input / .np-select / .np-textarea base box model (width, padding,
+   border-radius, border, transition) is defined once in styles.css.
+   This block only layers the focus ring — it must NOT redeclare
+   border-radius/border/background, that duplication was the source of
+   the v3.3.x "stretched inputs" Settings bug. */
 .np-input:focus, .np-select:focus, .np-textarea:focus{
   border-color: var(--nk-teal-400);
   box-shadow: var(--nk-ring-primary);
@@ -1097,13 +1095,12 @@ html[data-theme="dark"] [style*="background: #FEF2F2"]{
 
 html[data-theme="dark"] svg[style*="color:#64748B"]{ color: var(--nk-muted) !important; }
 
-.np-setting-card{
-  background: var(--nk-card);
-  border:1px solid var(--nk-border-soft);
-  border-radius:18px;
-  transition: border-color .18s ease, box-shadow .18s ease;
-}
-.np-setting-card:hover{ border-color: var(--nk-teal-200); box-shadow: var(--nk-shadow-sm); }
+/* .np-setting-card base box model (padding, border-radius, box-shadow,
+   hover transform) is defined once in styles.css. This block only adds
+   the dark-mode override — the duplicate light-mode definition that used
+   to live here (different border-radius source, no padding/box-shadow)
+   was fighting the styles.css rule and is the root cause of the
+   Consultation Fees / Appearance card layout inconsistency. */
 html[data-theme="dark"] .np-setting-card{
   background: var(--nk-card) !important;
   border-color: var(--nk-border) !important;
@@ -1584,6 +1581,17 @@ html[data-theme="dark"] [style*="color:#000"],
 html[data-theme="dark"] [style*="color: #000"],
 html[data-theme="dark"] [style*="color: black"]{
   color: var(--nk-text) !important;
+}
+
+/* The signature drawing pad is a functional input surface, not themed
+   chrome — it must always stay white with a black pen so the doctor can
+   see their own strokes, regardless of theme. Placed after the "hard
+   kill hardcoded white surfaces" rule above so it wins the cascade. */
+html[data-theme="dark"] #sigDrawWrap,
+html[data-theme="dark"] #sigCanvas,
+html[data-theme="dark"] #sigLiveWrap > div{
+  background: #fff !important;
+  color: #000 !important;
 }
 
 /* ---------- Focus rings visible in both themes ---------- */
@@ -2090,6 +2098,15 @@ html[data-theme="dark"] textarea{
   html[data-theme="dark"] .np-content [style*="background: white"]{
     background: var(--nk-card) !important;
     color: var(--nk-text) !important;
+  }
+  /* Same signature-pad exception, mobile-scoped copy — must also win
+     here since this block is deliberately kept after the mobile media
+     queries to win the cascade at <1024px widths. */
+  html[data-theme="dark"] #sigDrawWrap,
+  html[data-theme="dark"] #sigCanvas,
+  html[data-theme="dark"] #sigLiveWrap > div{
+    background: #fff !important;
+    color: #000 !important;
   }
 }
 
