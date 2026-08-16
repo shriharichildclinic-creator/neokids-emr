@@ -72,6 +72,7 @@ router.get('/certificates/templates',                       cert.listTemplates);
 router.get('/certificates',                                 cert.list);
 router.get('/certificates/:id',                             cert.detail);
 router.post('/certificates',                                cert.create);
+router.put('/certificates/:id',                             cert.update);
 router.post('/appointments/:id/certificate',                cert.createForAppointment);
 
 // ─── Patient identity & history ───

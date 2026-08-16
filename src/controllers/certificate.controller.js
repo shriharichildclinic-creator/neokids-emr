@@ -78,7 +78,8 @@ exports.list = asyncHandler(async (req, res) => {
     where,
     include: {
       patient: { select: { id: true, name: true, phone: true } },
-      doctor:  { select: { id: true, name: true, specialization: true } }
+      doctor:  { select: { id: true, name: true, specialization: true } },
+      appointment: { select: { id: true, date: true, startTime: true, consultationType: true } }
     },
     orderBy: { issuedAt: 'desc' },
     take: Math.min(Math.max(parseInt(req.query.limit || '100', 10) || 100, 1), 500)
@@ -94,7 +95,7 @@ exports.detail = asyncHandler(async (req, res) => {
     include: {
       patient: true,
       doctor:  { select: { id: true, name: true, specialization: true, qualification: true, registrationNumber: true, clinicName: true, clinicAddress: true } },
-      appointment: { select: { id: true, date: true, consultationType: true } }
+      appointment: { select: { id: true, date: true, startTime: true, consultationType: true } }
     }
   });
   if (!cert) return res.status(404).json({ error: 'Certificate not found' });
@@ -161,7 +162,8 @@ exports.create = asyncHandler(async (req, res) => {
       patientNameSnapshot: patient.name,
       patientAgeSnapshot: ageStr,
       patientGenderSnapshot: patient.gender || null
-    }
+    },
+    include: { appointment: true }
   });
 
   // Generate PDF (best-effort; controller still succeeds if generation fails,
@@ -184,4 +186,48 @@ exports.create = asyncHandler(async (req, res) => {
 exports.createForAppointment = asyncHandler(async (req, res) => {
   req.body = { ...(req.body || {}), appointmentId: req.params.id };
   return exports.create(req, res);
+});
+
+// PUT /api/doctor/certificates/:id — edit an issued certificate.
+// The doctor can correct the wording/dates; the PDF is regenerated so the
+// download always reflects the latest content.
+exports.update = asyncHandler(async (req, res) => {
+  const where = { id: req.params.id };
+  if (req.user.role === 'DOCTOR') where.doctorId = req.user.id;
+  const existing = await prisma.medicalCertificate.findFirst({
+    where,
+    include: { appointment: true, patient: true }
+  });
+  if (!existing) return res.status(404).json({ error: 'Certificate not found' });
+
+  const parsed = medicalCertificateSchema.partial().safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+  }
+  const d = parsed.data;
+  const data = {};
+  if (d.templateKey) data.templateKey = d.templateKey;
+  if (Object.prototype.hasOwnProperty.call(d, 'reason') && d.reason) data.reason = d.reason;
+  if (Object.prototype.hasOwnProperty.call(d, 'diagnosis')) data.diagnosis = d.diagnosis || null;
+  if (Object.prototype.hasOwnProperty.call(d, 'restDays')) data.restDays = d.restDays ?? null;
+  if (Object.prototype.hasOwnProperty.call(d, 'fromDate')) data.fromDate = parseDateOnlyOrNull(d.fromDate);
+  if (Object.prototype.hasOwnProperty.call(d, 'toDate')) data.toDate = parseDateOnlyOrNull(d.toDate);
+  if (Object.prototype.hasOwnProperty.call(d, 'additionalNotes')) data.additionalNotes = d.additionalNotes || null;
+
+  const cert = await prisma.medicalCertificate.update({
+    where: { id: existing.id },
+    data,
+    include: { appointment: true }
+  });
+
+  try {
+    const doctor = await prisma.doctor.findUnique({ where: { id: existing.doctorId } });
+    const result = await pdf.generateMedicalCertificate({ certificate: cert, doctor, patient: existing.patient });
+    await prisma.medicalCertificate.update({ where: { id: cert.id }, data: { pdfUrl: result.url } });
+    cert.pdfUrl = result.url;
+  } catch (e) {
+    logger.error('generateMedicalCertificate (update) failed', { id: cert.id, err: e.message });
+  }
+
+  res.json(withSignedPdfUrl(cert, req.user));
 });

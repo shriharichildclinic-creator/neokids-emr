@@ -515,7 +515,7 @@ async function loadDashboard() {
       else { badge.classList.add('hidden'); }
     }
 
-    const appts = await api('/admin/appointments?limit=10');
+    const appts = await api('/admin/appointments?limit=10&excludeAutoCancelled=1');
     $('#recentAppts').innerHTML = (appts.length === 0)
       ? `<div class="np-empty"><div class="np-empty__title">No appointments yet</div><div class="np-empty__sub">Bookings will show up here.</div></div>`
       : appts.slice(0, 10).map(a => `
@@ -997,6 +997,16 @@ async function loadDoctorsForFilter(){
       __doctorsCache.map(d => `<option value="${escapeHtml(d.id)}">${drNameHtml(d.name)}</option>`).join('');
   } catch(_) {}
 }
+function __ensureAutoCancelledFilter(){
+  var form = document.getElementById('apptFilters');
+  if (!form || document.getElementById('filterHideAutoCancelled')) return;
+  var label = document.createElement('label');
+  label.className = 'np-filter-check';
+  label.style.cssText = 'display:inline-flex;align-items:center;gap:.4rem;font-size:.82rem;font-weight:600;color:var(--np-ink,#0F2A47);cursor:pointer;white-space:nowrap;';
+  label.innerHTML = '<input type="checkbox" id="filterHideAutoCancelled" checked style="width:16px;height:16px;accent-color:#89BCBD;"> Hide auto-cancelled';
+  form.appendChild(label);
+  label.querySelector('input').addEventListener('change', function(){ loadAppointments(); });
+}
 async function loadAppointments() {
   const tbody = $('#apptsTbody');
   tbody.innerHTML = `<tr><td colspan="7" class="np-mut" style="padding:1.5rem; text-align:center;">Loading…</td></tr>`;
@@ -1008,6 +1018,9 @@ async function loadAppointments() {
   const from     = $('#filterFrom').value;
   const to       = $('#filterTo').value;
   const q        = $('#apptSearch').value.trim();
+  __ensureAutoCancelledFilter();
+  const __hideAutoEl = document.getElementById('filterHideAutoCancelled');
+  const __hideAutoCancelled = !__hideAutoEl || __hideAutoEl.checked;
   if (status)   qs.set('status',   status);
   if (type)     qs.set('type',     type);
   if (payment)  qs.set('payment',  payment);
@@ -1015,6 +1028,7 @@ async function loadAppointments() {
   if (from)     qs.set('from',     from);
   if (to)       qs.set('to',       to);
   if (q.length >= 2) qs.set('q', q);
+  if (__hideAutoCancelled) qs.set('excludeAutoCancelled', '1');
   try {
     const appts = await api('/admin/appointments' + (qs.toString() ? '?' + qs.toString() : ''));
     __apptsCache = appts;
@@ -1822,158 +1836,6 @@ async function _admApi(path, opts){
 var _admHistWired = false;
 var _admLinkCandidates = [];
 
-/* ---------- Feature 1: admin historical appointment form ---------- */
-function initAdmHistoricalForm(){
-  var form = _adm$('#admHistForm');
-  if (!form || _admHistWired) return;
-  _admHistWired = true;
-
-  _admPopulateAdmDoctors();
-
-  var lookupBtn = _adm$('#admHistLookupBtn');
-  if (lookupBtn) lookupBtn.addEventListener('click', admLookupPatient);
-  var phoneEl = _adm$('#admHistPhone');
-  if (phoneEl) phoneEl.addEventListener('change', function(){
-    _adm$('#admHistPatientId').value = '';
-    _adm$('#admHistLinkConfirmed').value = 'false';
-    var box = _adm$('#admHistMatchBox'); if (box) box.classList.add('hidden');
-  });
-  form.addEventListener('submit', submitAdmHistorical);
-}
-
-async function _admPopulateAdmDoctors(){
-  var sel = _adm$('#admHistDoctor');
-  if (!sel) return;
-  try {
-    var res = await _admApi('/admin/doctors');
-    var rows = Array.isArray(res) ? res : (res.doctors || res.items || res.rows || []);
-    sel.innerHTML = '<option value="">Select doctor…</option>' + rows.map(function(d){
-      return '<option value="' + _admEsc(d.id) + '">Dr. ' + _admEsc(d.name) + (d.specialization ? ' · ' + _admEsc(d.specialization) : '') + '</option>';
-    }).join('');
-  } catch(ex){
-    sel.innerHTML = '<option value="">(could not load doctors)</option>';
-  }
-}
-
-async function admLookupPatient(){
-  var phone = (_adm$('#admHistPhone').value || '').replace(/\D/g, '');
-  var box = _adm$('#admHistMatchBox');
-  if (!/^[6-9]\d{9}$/.test(phone)) { _admToast('error', 'Enter a valid 10-digit Indian mobile number'); return; }
-  box.classList.remove('hidden');
-  box.innerHTML = '<div class="np-mut" style="font-size:.85rem;">Searching…</div>';
-  try {
-    var res = await _admApi('/admin/appointments/lookup-patient?phone=' + encodeURIComponent(phone));
-    var rows = (res && res.matches) || (Array.isArray(res) ? res : []);
-    if (!rows.length){
-      box.innerHTML = '<div class="np-mut" style="font-size:.85rem;">No existing patient with this number. A new patient will be created.</div>';
-      _adm$('#admHistPatientId').value = '';
-      return;
-    }
-    box.innerHTML = rows.map(function(p){
-      return '<label style="display:flex; align-items:center; gap:.5rem; padding:.5rem; border:1px solid var(--np-border); border-radius:10px; cursor:pointer;">'
-        + '<input type="radio" name="admHistMatch" value="' + _admEsc(p.id) + '">'
-        + '<span><b>' + _admEsc(p.name) + '</b> '
-        + '<span class="np-mut" style="font-size:.8rem;">· ' + (p.dateOfBirth ? _admEsc(_admFmtDate(p.dateOfBirth)) : 'DOB —') + ' · ' + _admEsc(p.gender || '') + '</span>'
-        + '</span></label>';
-    }).join('');
-    Array.prototype.forEach.call(box.querySelectorAll('input[name="admHistMatch"]'), function(r){
-      r.addEventListener('change', function(){
-        _adm$('#admHistPatientId').value = r.value;
-        var sel = rows.find(function(x){ return x.id === r.value; });
-        if (sel){
-          var nameEl = _adm$('#admHistName');
-          if (nameEl && !nameEl.value) nameEl.value = sel.name || '';
-          var dobEl = _adm$('#admHistForm [name="dateOfBirth"]');
-          if (dobEl && sel.dateOfBirth && !dobEl.value) dobEl.value = String(sel.dateOfBirth).slice(0, 10);
-          var g = _adm$('#admHistForm [name="gender"]');
-          if (g && sel.gender && !g.value) g.value = sel.gender;
-        }
-      });
-    });
-    _admToast('info', rows.length + ' patient(s) found. Select one to link, or leave unselected to create new.');
-  } catch(ex){
-    box.innerHTML = '<div class="np-error">' + _admEsc(ex.message || 'Lookup failed') + '</div>';
-  }
-}
-
-async function submitAdmHistorical(e){
-  e.preventDefault();
-  var form = e.target;
-  var g = function(n){ var el = form.querySelector('[name="' + n + '"]'); return el ? el.value : ''; };
-  var fileEl = _adm$('#admHistRxFile');
-  var file = (fileEl && fileEl.files && fileEl.files[0]) || null;
-
-  if (!g('doctorId')){ _admToast('error', 'Please select a doctor'); return; }
-
-  var fd = new FormData();
-  fd.append('doctorId', g('doctorId'));
-  fd.append('phone', g('phone').replace(/\D/g, ''));
-  fd.append('patientName', g('patientName').trim());
-  if (g('parentName')) fd.append('parentName', g('parentName').trim());
-  if (g('dateOfBirth')) fd.append('dateOfBirth', g('dateOfBirth'));
-  if (g('gender')) fd.append('gender', g('gender'));
-  if (g('email')) fd.append('email', g('email').trim());
-  var pid = _adm$('#admHistPatientId').value;
-  if (pid) fd.append('patientId', pid);
-  fd.append('linkConfirmed', _adm$('#admHistLinkConfirmed').value || 'false');
-  fd.append('date', g('date'));
-  fd.append('consultationType', g('consultationType'));
-  fd.append('reasonForVisit', g('reasonForVisit').trim());
-  if (g('diagnosis')) fd.append('diagnosis', g('diagnosis').trim());
-  if (g('notes')) fd.append('notes', g('notes').trim());
-  if (g('followUpDate')) fd.append('followUpDate', g('followUpDate'));
-  if (file) fd.append('prescriptionFile', file);
-
-  var btn = _adm$('#admHistSubmitBtn');
-  btn.disabled = true; btn.textContent = 'Saving…';
-  try {
-    var res = await _admApi('/admin/historical-appointments', { method:'POST', body: fd });
-    _admToast('success', 'Historical record added to ' + ((res.patient && res.patient.name) || 'patient') + "'s timeline.");
-    form.reset();
-    _adm$('#admHistPatientId').value = ''; _adm$('#admHistLinkConfirmed').value = 'false';
-    var box = _adm$('#admHistMatchBox'); if (box) box.classList.add('hidden');
-    if (typeof loadAppointments === 'function') { try { loadAppointments(); } catch(e){} }
-  } catch(ex){
-    if (ex.status === 409 && ex.data && ex.data.code === 'PATIENT_LINK_REQUIRED'){
-      showAdmLink(ex.data.candidates || []);
-    } else if (ex.status === 409 && ex.data && ex.data.code === 'SLOT_CONFLICT'){
-      _admToast('error', ex.data.error || 'A record for this date/time already exists.');
-    } else {
-      _admToast('error', ex.message || 'Could not save historical record');
-    }
-  } finally {
-    btn.disabled = false; btn.textContent = 'Save historical record';
-  }
-}
-
-/* ---------- Smart-match conflict resolver (admin) ---------- */
-function showAdmLink(candidates){
-  _admLinkCandidates = candidates;
-  var list = _adm$('#admLinkList');
-  list.innerHTML = candidates.map(function(p, i){
-    return '<label style="display:flex; align-items:center; gap:.5rem; padding:.55rem; border:1px solid var(--np-border); border-radius:10px; cursor:pointer;">'
-      + '<input type="radio" name="admLinkCand" value="' + _admEsc(p.id) + '"' + (i === 0 ? ' checked' : '') + '>'
-      + '<span><b>' + _admEsc(p.name) + '</b> '
-      + '<span class="np-mut" style="font-size:.8rem;">· ' + (p.dateOfBirth ? _admEsc(_admFmtDate(p.dateOfBirth)) : 'DOB —') + ' · ' + _admEsc(p.gender || '') + '</span>'
-      + '</span></label>';
-  }).join('');
-  _adm$('#admLinkModal').classList.remove('hidden');
-}
-function closeAdmLink(){ _adm$('#admLinkModal').classList.add('hidden'); }
-function resolveAdmLink(choice){
-  if (choice === 'link'){
-    var sel = document.querySelector('input[name="admLinkCand"]:checked');
-    if (sel) _adm$('#admHistPatientId').value = sel.value;
-    _adm$('#admHistLinkConfirmed').value = 'true';
-  } else {
-    _adm$('#admHistPatientId').value = '';
-    _adm$('#admHistLinkConfirmed').value = 'true';
-  }
-  closeAdmLink();
-  var form = _adm$('#admHistForm');
-  if (form) form.requestSubmit();
-}
-
 /* ---------- Feature 2: admin certificates oversight ---------- */
 async function loadAdmCertificates(){
   var wrap = _adm$('#admCertList');
@@ -2050,8 +1912,6 @@ function openAdmCertInfo(){
 
 /* ---------- Wire-up ---------- */
 function setupAdmFeatureUI(){
-  var hbtn = document.querySelector('[data-view="historicalView"]');
-  if (hbtn && !hbtn.__admFeat){ hbtn.__admFeat = true; hbtn.addEventListener('click', initAdmHistoricalForm); }
   var cbtn = document.querySelector('[data-view="certsView"]');
   if (cbtn && !cbtn.__admFeat){ cbtn.__admFeat = true; cbtn.addEventListener('click', loadAdmCertificates); }
   var nb = _adm$('#admNewCertBtn');

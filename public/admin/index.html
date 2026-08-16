@@ -277,100 +277,16 @@
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
-                <div class="np-panel__title">Add Historical / Manual Appointment</div>
-                <div class="np-panel__subtitle">Record a past or offline visit that was never booked through NeoKidsPro</div>
+                <div class="np-panel__title">Historical Records &mdash; Permission Control</div>
+                <div class="np-panel__subtitle">Historical records are recorded by doctors in the Doctor Panel &mdash; never from Admin</div>
               </div>
             </div>
             <div class="np-panel__body">
               <div class="np-callout np-callout--info" style="margin-bottom:1rem;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <div>Historical records are marked <b>Manual Record</b> and kept separate from NeoKidsPro bookings. They merge into the patient's timeline and medical history.</div>
+                <div>Admins do <b>not</b> create historical records here. Admin only controls <b>which doctors</b> may use the feature: open <b>Doctors &rarr; Edit doctor</b> and toggle <b>"Allow this doctor to use the Previous Records tab"</b>. Doctors with permission will see the <b>Historical Records</b> tab in their Doctor Panel and can view, create, edit and delete records there. Doctors without permission never see the feature.</div>
               </div>
-              <form id="admHistForm" enctype="multipart/form-data" novalidate>
-                <div class="np-field">
-                  <label class="np-field__label">Doctor <span class="np-req">*</span></label>
-                  <select name="doctorId" id="admHistDoctor" class="np-select" required></select>
-                  <div class="np-field__hint">Which doctor this visit is attributed to.</div>
-                </div>
-                <div class="np-field">
-                  <label class="np-field__label">Patient mobile number <span class="np-req">*</span></label>
-                  <div style="display:flex; gap:.5rem;">
-                    <input name="phone" id="admHistPhone" class="np-input" placeholder="10-digit mobile" inputmode="numeric" maxlength="10" style="flex:1;">
-                    <button type="button" id="admHistLookupBtn" class="np-btn np-btn--ghost np-btn--sm">Find patient</button>
-                  </div>
-                  <div class="np-field__hint">We'll auto-link to an existing patient with this number.</div>
-                </div>
-                <div id="admHistMatchBox" class="hidden" style="margin-bottom:.75rem;"></div>
-                <input type="hidden" name="patientId" id="admHistPatientId">
-                <input type="hidden" name="linkConfirmed" id="admHistLinkConfirmed" value="false">
-                <div class="np-grid-2">
-                  <div class="np-field">
-                    <label class="np-field__label">Patient name <span class="np-req">*</span></label>
-                    <input name="patientName" id="admHistName" class="np-input" placeholder="Full name">
-                  </div>
-                  <div class="np-field">
-                    <label class="np-field__label">Parent / guardian name</label>
-                    <input name="parentName" class="np-input" placeholder="Parent name">
-                  </div>
-                  <div class="np-field">
-                    <label class="np-field__label">Date of birth</label>
-                    <input name="dateOfBirth" type="date" class="np-input">
-                  </div>
-                  <div class="np-field">
-                    <label class="np-field__label">Gender</label>
-                    <select name="gender" class="np-select">
-                      <option value="">—</option>
-                      <option value="MALE">Male</option>
-                      <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  </div>
-                  <div class="np-field">
-                    <label class="np-field__label">Email (optional)</label>
-                    <input name="email" type="email" class="np-input" placeholder="parent@email.com">
-                  </div>
-                </div>
-                <div class="np-divider"></div>
-                <div class="np-grid-2">
-                  <div class="np-field">
-                    <label class="np-field__label">Appointment date <span class="np-req">*</span></label>
-                    <input name="date" type="date" class="np-input" required>
-                  </div>
-                  <div class="np-field">
-                    <label class="np-field__label">Appointment type <span class="np-req">*</span></label>
-                    <select name="consultationType" class="np-select" required>
-                      <option value="OFFLINE">Clinic Visit</option>
-                      <option value="ONLINE">Online Consultation</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="np-field">
-                  <label class="np-field__label">Reason for visit <span class="np-req">*</span></label>
-                  <input name="reasonForVisit" class="np-input" placeholder="e.g. Fever and cough" required minlength="2">
-                </div>
-                <div class="np-field">
-                  <label class="np-field__label">Diagnosis</label>
-                  <input name="diagnosis" class="np-input" placeholder="e.g. Acute viral pharyngitis">
-                </div>
-                <div class="np-field">
-                  <label class="np-field__label">Notes</label>
-                  <textarea name="notes" class="np-textarea" rows="2" placeholder="Any additional notes"></textarea>
-                </div>
-                <div class="np-grid-2">
-                  <div class="np-field">
-                    <label class="np-field__label">Follow-up date (optional)</label>
-                    <input name="followUpDate" type="date" class="np-input">
-                  </div>
-                  <div class="np-field">
-                    <label class="np-field__label">Upload prescription (PDF / JPG / PNG)</label>
-                    <input name="prescriptionFile" id="admHistRxFile" type="file" accept=".pdf,.jpg,.jpeg,.png" class="np-input">
-                    <div class="np-field__hint">Scanned / handwritten prescription from the original visit.</div>
-                  </div>
-                </div>
-                <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
-                  <button type="submit" id="admHistSubmitBtn" class="np-btn np-btn--primary">Save historical record</button>
-                </div>
-              </form>
+              <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="setView('doctorsView')">Manage doctor permissions</button>
             </div>
           </div>
         </section>
@@ -656,25 +572,6 @@
     <div class="np-modal__body">
       <div class="np-callout np-callout--info" style="margin-bottom:.75rem; font-size:.85rem;">Admins have read-only oversight here. To issue a certificate for a patient, use the Doctor Panel (each doctor signs their own certificates).</div>
       <div id="admCertDetail"></div>
-    </div>
-  </div>
-</div>
-
-<div id="admLinkModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="admLinkTitle">
-  <div class="np-modal__panel" style="max-width:520px;">
-    <div class="np-modal__head">
-      <h3 id="admLinkTitle">Existing patient found</h3>
-      <button type="button" class="np-modal__close" onclick="closeAdmLink()" aria-label="Close">×</button>
-    </div>
-    <div class="np-modal__body">
-      <p class="np-mut" style="font-size:.9rem; margin-bottom:.75rem;">
-        An existing patient with this mobile number already exists. Please verify before creating a new patient.
-      </p>
-      <div id="admLinkList" style="display:grid; gap:.5rem; margin-bottom:1rem;"></div>
-      <footer style="display:flex; gap:.5rem; justify-content:flex-end;">
-        <button type="button" class="np-btn" onclick="resolveAdmLink('new')">Create separate patient</button>
-        <button type="button" id="admLinkUseBtn" class="np-btn np-btn--primary" onclick="resolveAdmLink('link')">Link to selected patient</button>
-      </footer>
     </div>
   </div>
 </div>

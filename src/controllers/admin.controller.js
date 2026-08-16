@@ -115,6 +115,7 @@ exports.listDoctors = asyncHandler(async (req, res) => {
 clinicSharePercent: true,
 doctorSharePercent: true,
 tdsPercent: true,
+canAddPreviousRecords: true,
 
 photoUrl: true,
 createdAt: true
@@ -176,6 +177,11 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   if (doctorId)  where.doctorId = doctorId;
   if (type)      where.consultationType = type;
   if (payment)   where.paymentStatus = payment;
+  // Issue 4 — auto-cancelled (unpaid-expired) appointments are noise in
+  // active listings; the UI passes excludeAutoCancelled=1 by default.
+  if (String(req.query.excludeAutoCancelled || '') === '1') {
+    where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED', notes: { contains: 'Auto-cancelled' } };
+  }
   if (date)      where.date = parseDateOnly(date);
   if (from || to) {
     where.date = {};

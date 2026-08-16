@@ -187,6 +187,7 @@ async function init(){
     populateClinic(me);
     populateFees(me);
     populateDoctorUuid(me);
+    applyHistoricalPermission(me);
     try { loadSignature(); } catch(_){}
   } catch (ex){
     if (ex.status === 401){ logout(); return; }
@@ -245,6 +246,18 @@ async function init(){
   }
   loadStats();
   loadDashSnapshot();
+}
+function applyHistoricalPermission(me){
+  // Issue 1 — Historical Records is a permission-controlled Doctor Panel
+  // feature. Admins only toggle access (canAddPreviousRecords); doctors
+  // without permission never see the tab.
+  const allowed = !!(me && me.canAddPreviousRecords);
+  const navBtn = document.querySelector('[data-tab="historicalTab"]');
+  if (navBtn) navBtn.classList.toggle('hidden', !allowed);
+  const tab = document.getElementById('historicalTab');
+  if (tab && !allowed){
+    tab.innerHTML = '<div class="np-panel"><div class="np-panel__body"><div class="np-empty"><div class="np-empty__title">Historical Records are disabled</div><div class="np-empty__sub">Ask your clinic admin to enable this feature for your account.</div></div></div></div>';
+  }
 }
 function _stripDrPrefix(n){ return String(n == null ? '' : n).replace(/^\s*(dr\.?\s+)+/i, '').trim(); }
 function renderDoctorHeader(d){
@@ -459,6 +472,11 @@ function renderAllAppointments(){
   const type   = $('#apptTypeFilter').value;
   const sort   = $('#apptSort').value;
   let arr = allAppointmentsCache.slice();
+  // Issue 4 — auto-cancelled (unpaid-expired) bookings are hidden by default.
+  const hideAutoEl = $('#apptHideAutoCancelled');
+  if (!hideAutoEl || hideAutoEl.checked) {
+    arr = arr.filter(a => !(a.status === 'CANCELLED' && a.paymentStatus === 'FAILED' && /auto-cancelled/i.test(a.notes || '')));
+  }
   if (status) arr = arr.filter(a => a.status === status);
   if (type)   arr = arr.filter(a => a.consultationType === type);
   if (search) {
@@ -481,7 +499,7 @@ function renderAllAppointments(){
   list.innerHTML = arr.map(apptCard).join('');
 }
 function setupSearchFilters(){
-  ['apptSearch','apptStatusFilter','apptTypeFilter','apptSort'].forEach(id => {
+  ['apptSearch','apptStatusFilter','apptTypeFilter','apptSort','apptHideAutoCancelled'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const ev = (el.tagName === 'INPUT') ? 'input' : 'change';
@@ -1760,12 +1778,21 @@ async function loadCertificates(){
                 <b>${escapeHtml(c.patientNameSnapshot || (c.patient && c.patient.name) || '—')}</b>
                 <span class="np-badge np-badge--mint" style="margin-left:.4rem;">${escapeHtml((c.templateKey||'GENERAL').replace(/_/g,' '))}</span>
               </div>
-              ${c.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(c.pdfUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
+              <div class="np-row" style="gap:.4rem;">
+                ${c.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(c.pdfUrl)}" target="_blank" rel="noopener">Preview PDF</a>` : ''}
+                <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-cert-edit="${escapeHtml(c.id)}">Edit</button>
+              </div>
             </div>
             ${c.diagnosis ? `<div style="font-size:.85rem; margin-top:.25rem;"><b>Diagnosis:</b> ${escapeHtml(c.diagnosis)}</div>` : ''}
             <div class="np-mut" style="font-size:.82rem; margin-top:.15rem;">${escapeHtml(c.reason || '')}</div>
           </div>
         </article>`).join('');
+      wrap.querySelectorAll('[data-cert-edit]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const cert = rows.find(x => x.id === btn.getAttribute('data-cert-edit'));
+          if (cert) openCertEdit(cert);
+        });
+      });
     }
   } catch (ex){
     wrap.innerHTML = '<div class="np-error">' + escapeHtml(ex.message || 'Failed to load') + '</div>';
@@ -1778,6 +1805,9 @@ async function loadCertificates(){
 async function openCertModal(appointment){
   _certState.patient = null;
   _certState.editingAppt = appointment || null;
+  _certState.editingCert = null;
+  $('#certModalTitle').textContent = 'Generate Medical Certificate';
+  $('#certSubmitBtn').textContent = 'Generate certificate PDF';
   $('#certApptId').value = appointment ? appointment.id : '';
   $('#certPatientId').value = '';
   $('#certPatientChosen').classList.add('hidden');
@@ -1803,6 +1833,28 @@ async function openCertModal(appointment){
   $('#certModal').classList.remove('hidden');
 }
 function closeCertModal(){ $('#certModal').classList.add('hidden'); }
+
+// Edit workflow — re-opens the same modal pre-filled from an issued
+// certificate; submit performs PUT and regenerates the PDF server-side.
+async function openCertEdit(cert){
+  if (!cert) return;
+  await openCertModal(null);
+  _certState.editingCert = cert;
+  $('#certModalTitle').textContent = 'Edit Medical Certificate';
+  $('#certSubmitBtn').textContent = 'Update certificate';
+  $('#certApptId').value = cert.appointmentId || '';
+  const p = cert.patient && cert.patient.id
+    ? cert.patient
+    : { id: cert.patientId, name: cert.patientNameSnapshot || 'Patient', phone: '' };
+  if (p.id) setCertPatient(p);
+  if (cert.templateKey) $('#certTemplate').value = cert.templateKey;
+  $('#certReason').value = cert.reason || '';
+  $('#certDiagnosis').value = cert.diagnosis || '';
+  $('#certRestDays').value = (cert.restDays != null) ? cert.restDays : '';
+  $('#certFrom').value = cert.fromDate ? String(cert.fromDate).slice(0,10) : '';
+  $('#certTo').value = cert.toDate ? String(cert.toDate).slice(0,10) : '';
+  $('#certNotes').value = cert.additionalNotes || '';
+}
 
 function setCertPatient(p){
   _certState.patient = p;
@@ -1861,12 +1913,16 @@ async function submitCert(e){
   if (appointmentId) body.appointmentId = appointmentId;
   else body.patientId = patientId;
 
-  btn.disabled = true; btn.textContent = 'Generating…';
+  const editing = _certState.editingCert;
+  btn.disabled = true; btn.textContent = editing ? 'Updating…' : 'Generating…';
   try {
-    const cert = await api('/doctor/certificates', { method:'POST', body });
-    _toast('success', 'Certificate ' + cert.certificateNumber + ' generated.');
+    const cert = editing
+      ? await api('/doctor/certificates/' + encodeURIComponent(editing.id), { method:'PUT', body })
+      : await api('/doctor/certificates', { method:'POST', body });
+    _toast('success', 'Certificate ' + cert.certificateNumber + (editing ? ' updated.' : ' generated.'));
+    _certState.editingCert = null;
     closeCertModal();
-    if (cert.pdfUrl) window.open(cert.pdfUrl, '_blank', 'noopener');
+    if (!editing && cert.pdfUrl) window.open(cert.pdfUrl, '_blank', 'noopener');
     loadCertificates();
   } catch (ex){
     _toast('error', ex.message || 'Could not generate certificate');

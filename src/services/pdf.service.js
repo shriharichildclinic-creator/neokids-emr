@@ -31,6 +31,11 @@ function ensureDir(p) {
 }
 
 function drawHeader(doc, title) {
+  // Root-cause fix for empty trailing pages: PDFKit auto page-breaks whenever
+  // a draw crosses (page.height - bottomMargin). These are fixed-layout,
+  // single-page documents, so we disable the auto-break by zeroing the bottom
+  // margin. The signature block is separately clamped to stay on this page.
+  if (doc.page && doc.page.margins) doc.page.margins.bottom = 0;
   doc.rect(0, 0, doc.page.width, 80).fill(BRAND_BLUE);
   doc.fillColor('white').fontSize(22).font('Helvetica-Bold').text('NeoKidsPro', 50, 28);
   doc.fontSize(10).font('Helvetica').text('Pediatric Clinic · neokidspro.in', 50, 55);
@@ -65,35 +70,57 @@ function resolveSignaturePath(doctor) {
 }
 
 // Draw the doctor's signature block at the bottom-right of the current
-// page. If an uploaded signature PNG exists, it's placed above the
-// name line; otherwise we fall back to the legacy "line + name" style
-// so unsigned doctors still get a valid-looking document.
+// page. Name, qualification and signature image always stay TOGETHER.
+//
+// Bug fix (PDF rendering): the old implementation drew every line with a
+// hard-coded absolute y-offset (y+55, y+70, y+82 …). PDFKit triggers an
+// automatic page break whenever ANY draw lands past the bottom margin, so
+// a tall/long name or a lower start-y pushed the doctor name, the
+// qualification and the "Digital Signature" caption onto separate pages.
+// We now compute the exact raster height, clamp the whole block so it
+// fits on one page, and use flowing relative y offsets (never absolute).
 function drawSignatureBlock(doc, doctor, opts = {}) {
-  const y = opts.y || (doc.page.height - 120);
-  const rightX = doc.page.width - 220;
   const sigPath = resolveSignaturePath(doctor);
+  const rightX  = doc.page.width - 240;
+  const hasReg  = !!(doctor && doctor.registrationNumber);
 
+  // Total block height: image/line (44) + name (14) + qualification (12)
+  // + optional reg. no (11) + caption (10).
+  const blockH  = 44 + 14 + 12 + (hasReg ? 11 : 0) + 10;
+  const bottomLimit = doc.page.height - 48;   // keep clear of the footer band
+  // The ENTIRE block (image + every text line) must end above bottomLimit,
+  // otherwise PDFKit auto page-breaks mid-block (the reported bug).
+  const maxY = bottomLimit - blockH;
+  let y = Math.min(opts.y || maxY, maxY);
+  if (y < 40) y = 40;                          // never collide with the header
+
+  // ── Signature image (fixed-height box so the lines below never move) ──
   if (sigPath) {
     try {
-      // Fit inside a 180x50 box, preserve aspect ratio.
-      doc.image(sigPath, rightX, y, { fit: [180, 50], align: 'center' });
+      // Fixed height + fit keeps the image inside the box regardless of the
+      // source aspect ratio, so the name line below is always at y+44.
+      doc.image(sigPath, rightX, y, { fit: [200, 40], height: 40, align: 'center', valign: 'bottom' });
     } catch (e) {
-      // If image decoding fails for any reason, fall back silently.
-      doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 30);
+      doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 26);
     }
   } else {
-    doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 30);
+    doc.fontSize(10).fillColor('#555').text('___________________________', rightX, y + 26);
   }
 
+  // ── Text lines: relative flowing offsets, never past the page bottom ──
+  let ty = y + 44;
   doc.font('Helvetica-Bold').fillColor('#000').fontSize(11)
-     .text(`Dr. ${doctor.name}`, rightX, y + 55, { width: 200 });
+     .text(`Dr. ${doctor.name}`, rightX, ty, { width: 220, lineBreak: false, ellipsis: true });
+  ty += 14;
   doc.font('Helvetica').fillColor('#555').fontSize(9)
-     .text(doctor.qualification || 'MBBS, MD (Pediatrics)', rightX, y + 70, { width: 200 });
-  if (doctor.registrationNumber) {
-    doc.text(`Reg. No: ${doctor.registrationNumber}`, rightX, y + 82, { width: 200 });
+     .text(doctor.qualification || 'MBBS, MD (Pediatrics)', rightX, ty, { width: 220, lineBreak: false, ellipsis: true });
+  ty += 12;
+  if (hasReg) {
+    doc.text(`Reg. No: ${doctor.registrationNumber}`, rightX, ty, { width: 220, lineBreak: false, ellipsis: true });
+    ty += 11;
   }
   doc.fillColor('#888').fontSize(8)
-     .text('Digital Signature', rightX, y + (doctor.registrationNumber ? 96 : 84), { width: 200 });
+     .text('Digital Signature', rightX, ty, { width: 220, lineBreak: false });
 }
 
 async function generateInvoice(appointment) {
@@ -102,7 +129,7 @@ async function generateInvoice(appointment) {
   const filepath = path.join(STORAGE, 'invoices', filename);
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
     const stream = fs.createWriteStream(filepath);
     doc.pipe(stream);
     drawHeader(doc, 'INVOICE');
@@ -122,8 +149,12 @@ async function generateInvoice(appointment) {
     doc.fontSize(11).font('Helvetica');
     doc.text(`Dr. ${appointment.doctor.name}`, 320, 192);
     doc.text(appointment.doctor.specialization || 'Pediatrician', 320, 207);
+    // Issue 5 — appointment date + time on the invoice.
+    doc.fillColor('#555').fontSize(9)
+       .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
+    doc.fillColor('#333');
 
-    const tableTop = 270;
+    const tableTop = 285;
     doc.rect(50, tableTop, doc.page.width - 100, 25).fill(BRAND_MINT);
     doc.fillColor('#000').fontSize(11).font('Helvetica-Bold');
     doc.text('Description', 60, tableTop + 8);
@@ -143,12 +174,14 @@ async function generateInvoice(appointment) {
     doc.text('Total Paid:', 380, rowY + 45);
     doc.text(`₹ ${Number(appointment.feeAtBooking).toFixed(2)}`, 460, rowY + 45);
 
-    // Optional signature on invoice.
-    drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 200 });
+    // Optional signature on invoice (kept on this page).
+    drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 185 });
 
+    // Footer — lineBreak:false so PDFKit never auto page-breaks the line
+    // onto a blank page (bottom margin auto-break was the root cause).
     doc.fontSize(9).font('Helvetica').fillColor('#888');
     doc.text('Thank you for choosing NeoKidsPro. This is a computer-generated invoice.',
-             50, doc.page.height - 60, { align: 'center', width: doc.page.width - 100 });
+             50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
     stream.on('finish', () => resolve({
@@ -165,7 +198,7 @@ async function generatePrescription(appointment, prescription) {
   const filepath = path.join(STORAGE, 'prescriptions', filename);
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
     const stream = fs.createWriteStream(filepath);
     doc.pipe(stream);
     drawHeader(doc, 'PRESCRIPTION');
@@ -266,7 +299,7 @@ async function generatePrescription(appointment, prescription) {
 
     doc.fontSize(8).fillColor('#888')
        .text('This is a digitally generated prescription from NeoKidsPro EMR. neokidspro.in',
-             50, doc.page.height - 60, { align: 'center', width: doc.page.width - 100 });
+             50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
     stream.on('finish', () => resolve({
@@ -481,7 +514,7 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
   const gender = certificate.patientGenderSnapshot || (patient && patient.gender) || null;
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
     const stream = fs.createWriteStream(filepath);
     doc.pipe(stream);
 
@@ -501,6 +534,11 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
     doc.fontSize(9).fillColor('#555')
        .text(`Certificate ID: ${certificate.certificateNumber}`, 320, ly, { width: 225, align: 'right' });
     doc.text(`Date of Issue: ${examDate}`, 320, ly + 14, { width: 225, align: 'right' });
+    // Issue 5 — show the linked appointment's date + time when available.
+    if (certificate.appointment && certificate.appointment.date) {
+      const apptDt = `${fmtCertDate(certificate.appointment.date)}${certificate.appointment.startTime ? ' · ' + dayjs(`2000-01-01T${certificate.appointment.startTime}`).format('hh:mm A') : ''}`;
+      doc.text(`Appointment: ${apptDt}`, 320, ly + 28, { width: 225, align: 'right' });
+    }
 
     // ── Title ────────────────────────────────────────────────────────
     const titleY = 185;
@@ -564,14 +602,14 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
          .text(certificate.additionalNotes, 50, cy + 14, { width: doc.page.width - 100 });
     }
 
-    // ── Signature block ──────────────────────────────────────────────
-    drawSignatureBlock(doc, doctor, { y: doc.page.height - 170 });
+    // ── Signature block (stays on this page) ─────────────────────────
+    drawSignatureBlock(doc, doctor, { y: doc.page.height - 175 });
 
     // ── Footer ───────────────────────────────────────────────────────
     doc.fontSize(8).fillColor('#888')
        .text(
          `This certificate was issued electronically by ${doctor.clinicName || 'NeoKidsPro Pediatric Clinic'} and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`,
-         50, doc.page.height - 60, { align: 'center', width: doc.page.width - 100 }
+         50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true }
        );
 
     doc.end();
