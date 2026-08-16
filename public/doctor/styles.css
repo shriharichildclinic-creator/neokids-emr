@@ -526,7 +526,10 @@ html,body{
   display:inline-flex; align-items:center; justify-content:center;
 }
 .np-modal__close:hover{ background: var(--nk-teal-50); color: var(--np-ink); }
-.np-modal__body{ padding: 1.25rem; overflow-y:auto; }
+/* flex:1 + min-height:0 so the body is the flex item that shrinks and
+   scrolls, instead of being allowed to grow past the panel's max-height
+   and force a scrollbar onto the panel/page. */
+.np-modal__body{ padding: 1.25rem; overflow-y:auto; flex:1 1 auto; min-height:0; }
 .np-modal__foot{
   padding: .85rem 1.25rem;
   border-top: 1px solid var(--np-border);

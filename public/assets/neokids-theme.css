@@ -325,6 +325,28 @@ h1,h2,h3{
 }
 .np-btn--ghost{ background:#fff; border-color: var(--nk-border); color: var(--nk-text); }
 .np-btn--ghost:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); border-color: var(--nk-teal-200); }
+/* Icon-only button variant (e.g. the delete-doctor trash icon). Declared
+   here — the canonical .np-btn source of truth — with explicit min-width/
+   min-height so it isn't clamped back up by the base .np-btn's 96px/40px
+   minimums at equal selector specificity. */
+.np-btn--icon{
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  flex-shrink: 0;
+  border-radius: 8px;
+  font-size: .95rem;
+}
+.np-btn--ghost.np-btn--icon.np-btn--danger{
+  color:#DC2626;
+  border-color:rgba(220,38,38,.25);
+  background:transparent;
+}
+.np-btn--ghost.np-btn--icon.np-btn--danger:hover{
+  background:#FEF2F2; border-color:#DC2626;
+}
 .np-btn--add-doctor{
   box-shadow: 0 8px 22px -6px rgba(90,148,149,.55);
   background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));

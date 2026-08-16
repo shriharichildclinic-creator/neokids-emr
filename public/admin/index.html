@@ -84,10 +84,6 @@
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           Appointments
         </button>
-        <button class="np-nav-item" data-view="historicalView" type="button">
-          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Historical Records
-        </button>
         <button class="np-nav-item" data-view="certsView" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
           Certificates
@@ -271,26 +267,6 @@
             </div>
           </div>
         </section>
-
-
-<section id="historicalView" class="tab-pane hidden">
-          <div class="np-panel">
-            <div class="np-panel__head">
-              <div style="flex:1">
-                <div class="np-panel__title">Historical Records &mdash; Permission Control</div>
-                <div class="np-panel__subtitle">Historical records are recorded by doctors in the Doctor Panel &mdash; never from Admin</div>
-              </div>
-            </div>
-            <div class="np-panel__body">
-              <div class="np-callout np-callout--info" style="margin-bottom:1rem;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <div>Admins do <b>not</b> create historical records here. Admin only controls <b>which doctors</b> may use the feature: open <b>Doctors &rarr; Edit doctor</b> and toggle <b>"Allow this doctor to use the Previous Records tab"</b>. Doctors with permission will see the <b>Historical Records</b> tab in their Doctor Panel and can view, create, edit and delete records there. Doctors without permission never see the feature.</div>
-              </div>
-              <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="setView('doctorsView')">Manage doctor permissions</button>
-            </div>
-          </div>
-        </section>
-
 <section id="certsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
@@ -682,26 +658,38 @@
           </div>
 
           <div id="kycUploadBlock">
-            <div class="np-grid-2" style="gap:.5rem;">
-              <div class="np-field">
-                <label class="np-field__label">Aadhaar Card <span id="kycAadhaarStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
-                <input type="file" name="aadhaar" accept="image/*,application/pdf" class="np-input"/>
-                <a id="kycAadhaarView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+            <div class="np-kyc-grid">
+              <div class="np-kyc-card">
+                <div class="np-kyc-card__head">
+                  <span class="np-kyc-card__title">Aadhaar Card</span>
+                  <span id="kycAadhaarStatus" class="np-kyc-card__status">Not uploaded</span>
+                </div>
+                <input type="file" name="aadhaar" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
+                <a id="kycAadhaarView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
-              <div class="np-field">
-                <label class="np-field__label">PAN Card <span id="kycPanStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
-                <input type="file" name="pan" accept="image/*,application/pdf" class="np-input"/>
-                <a id="kycPanView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+              <div class="np-kyc-card">
+                <div class="np-kyc-card__head">
+                  <span class="np-kyc-card__title">PAN Card</span>
+                  <span id="kycPanStatus" class="np-kyc-card__status">Not uploaded</span>
+                </div>
+                <input type="file" name="pan" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
+                <a id="kycPanView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
-              <div class="np-field">
-                <label class="np-field__label">Cancelled Cheque <span id="kycChequeStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
-                <input type="file" name="cancelledCheque" accept="image/*,application/pdf" class="np-input"/>
-                <a id="kycChequeView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+              <div class="np-kyc-card">
+                <div class="np-kyc-card__head">
+                  <span class="np-kyc-card__title">Cancelled Cheque</span>
+                  <span id="kycChequeStatus" class="np-kyc-card__status">Not uploaded</span>
+                </div>
+                <input type="file" name="cancelledCheque" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
+                <a id="kycChequeView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
-              <div class="np-field">
-                <label class="np-field__label">Medical Registration Cert. <span id="kycMedCertStatus" class="np-mut" style="font-size:.7rem;">— not uploaded</span></label>
-                <input type="file" name="medicalRegCert" accept="image/*,application/pdf" class="np-input"/>
-                <a id="kycMedCertView" class="hidden" target="_blank" style="font-size:.72rem;">View current file ↗</a>
+              <div class="np-kyc-card">
+                <div class="np-kyc-card__head">
+                  <span class="np-kyc-card__title">Medical Registration Cert.</span>
+                  <span id="kycMedCertStatus" class="np-kyc-card__status">Not uploaded</span>
+                </div>
+                <input type="file" name="medicalRegCert" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
+                <a id="kycMedCertView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
             </div>
 

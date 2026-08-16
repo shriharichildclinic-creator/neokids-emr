@@ -530,20 +530,29 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   text-overflow:ellipsis; overflow:hidden;
   justify-content:center;
 }
-
-.np-btn--icon{
-  width:32px; height:32px; padding:0; flex-shrink:0;
-  display:inline-flex; align-items:center; justify-content:center;
-  border-radius:8px; font-size:.95rem;
+/* Visual hierarchy within the action row: Insights (primary, filled) is
+   the loudest action; Edit is a clear secondary action with a defined
+   border so it doesn't read identically to the neutral Disable/Enable
+   toggle; Disable/Enable stays soft/neutral since it's reversible;
+   Delete is isolated as an icon-only danger action. */
+.np-doc-card__actions .np-btn:not(.np-btn--primary):not(.np-btn--ghost):not(.np-btn--icon){
+  border-color: var(--np-ink);
+  color: var(--np-ink);
+  font-weight:600;
 }
-.np-btn--ghost.np-btn--icon.np-btn--danger{
-  color:#DC2626;
-  border-color:rgba(220,38,38,.25);
-  background:transparent;
+.np-doc-card__actions .np-btn:not(.np-btn--primary):not(.np-btn--ghost):not(.np-btn--icon):hover{
+  background: var(--np-ink);
+  color:#fff;
 }
-.np-btn--ghost.np-btn--icon.np-btn--danger:hover{
-  background:#FEF2F2; border-color:#DC2626;
+.np-doc-card__actions .np-btn--ghost:not(.np-btn--icon){
+  color: var(--np-muted);
+  border-style: dashed;
 }
+/* .np-btn--icon sizing/color lives in the canonical neokids-theme.css
+   (loaded after this file) — see the button component rules there.
+   Do not redeclare width/height/padding for it here; that previously
+   fought the canonical .np-btn base at equal specificity and shrank
+   the delete-doctor icon button. */
 
 .np-btn--add-doctor{
   display:inline-flex; align-items:center; gap:.5rem;
@@ -672,13 +681,21 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 
 .np-modal{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:1rem; background: rgba(15,42,71,.45); }
 .np-modal.hidden{ display:none; }
+/* The panel owns the rounded corners + shadow and clips its children
+   (overflow:hidden) — it is NOT the scrolling element. Only .np-modal__body
+   scrolls (flex:1; min-height:0), so a native scrollbar is always drawn
+   flush inside the body's straight-edged box and never crosses the
+   panel's rounded corners or renders outside the modal frame. The head
+   is a flex:none sibling so it stays put while the body scrolls. */
 .np-modal__panel{
   background: var(--nk-card); border-radius: 20px;
   box-shadow: 0 24px 48px -12px rgba(15,42,71,.3);
-  width:100%; max-width: 540px; max-height: 90vh; overflow:auto;
+  width:100%; max-width: 540px; max-height: 90vh;
+  overflow:hidden;
+  display:flex; flex-direction:column;
 }
 .np-modal__head{
-  display:flex; align-items:center;
+  display:flex; align-items:center; flex:none;
   padding:1rem 1.25rem;
   border-bottom:1px solid var(--np-border);
 }
@@ -688,9 +705,13 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   color: var(--np-muted); font-size:1.4rem; cursor:pointer;
 }
 .np-modal__close:hover{ background:#F1F6FB; color: var(--np-text); }
-.np-modal__body{ padding: 1rem 1.25rem 1.25rem; }
+.np-modal__body{
+  padding: 1rem 1.25rem 1.25rem;
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+}
 
-.np-modal__panel{ overflow-x:hidden; }
 .np-modal__body{ min-width:0; }
 .np-modal__body .np-field{ min-width:0; overflow-wrap:anywhere; }
 
@@ -722,6 +743,50 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 }
 
 .np-row{ display:flex; align-items:center; gap:.5rem; }
+.np-kyc-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap:.65rem;
+  align-items:stretch;
+}
+@media (max-width:599px){ .np-kyc-grid{ grid-template-columns: 1fr; } }
+.np-kyc-card{
+  display:flex;
+  flex-direction:column;
+  gap:.5rem;
+  min-height:112px;
+  background:#F7FAFD;
+  border:1px solid var(--np-border);
+  border-radius:10px;
+  padding:.7rem .75rem;
+  box-sizing:border-box;
+  min-width:0;
+}
+.np-kyc-card__head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:.4rem;
+  min-width:0;
+}
+.np-kyc-card__title{
+  font-size:.8rem;
+  font-weight:600;
+  color:var(--np-ink);
+  line-height:1.3;
+}
+.np-kyc-card__status{
+  font-size:.68rem;
+  color:var(--np-muted);
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.np-kyc-card__input{ margin:0; }
+.np-kyc-card__link{
+  font-size:.72rem;
+  margin-top:auto;
+  padding-top:.15rem;
+}
 .np-grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
 @media (max-width: 599px){ .np-grid-2{ grid-template-columns: 1fr; } }
 .np-mut{ color: var(--np-muted); }
