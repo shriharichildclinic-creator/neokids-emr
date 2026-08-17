@@ -521,6 +521,33 @@ h1,h2,h3{
    never rely on a page-level inline margin. */
 .np-badge-group{ display:inline-flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
 
+.np-callout{
+  display:flex;
+  align-items:flex-start;
+  gap:.65rem;
+  padding:.75rem .9rem;
+  border-radius: var(--nk-radius-sm);
+  border:1px solid transparent;
+  font-size:.85rem;
+  line-height:1.45;
+}
+.np-callout svg{ flex:none; margin-top:.1rem; }
+.np-callout--info{ background: var(--nk-teal-50); border-color: var(--nk-teal-200); color: var(--nk-ink); }
+.np-callout--info svg{ color: var(--nk-teal-600); }
+.np-callout--success{ background:#EAFBF3; border-color:#BBE5C8; color:#0F7A66; }
+.np-callout--success svg{ color:#0F7A66; }
+.np-callout--warning{ background:#FEF3CC; border-color:#F4D9A3; color:#8A5A0F; }
+.np-callout--warning svg{ color:#8A5A0F; }
+.np-callout--danger{ background:#FEE2E5; border-color:#F5BFBF; color:#9F1E36; }
+.np-callout--danger svg{ color:#9F1E36; }
+
+html[data-theme="dark"] .np-callout--success{ background: rgba(16,185,129,.14); border-color: rgba(16,185,129,.3); color:#6EE7B7; }
+html[data-theme="dark"] .np-callout--success svg{ color:#6EE7B7; }
+html[data-theme="dark"] .np-callout--warning{ background: rgba(249,169,69,.16); border-color: rgba(249,169,69,.32); color:#FBC97A; }
+html[data-theme="dark"] .np-callout--warning svg{ color:#FBC97A; }
+html[data-theme="dark"] .np-callout--danger{ background: rgba(225,29,72,.16); border-color: rgba(225,29,72,.32); color:#FECDD3; }
+html[data-theme="dark"] .np-callout--danger svg{ color:#FECDD3; }
+
 /* Prevent stretched pills inside cards/lists/table cells */
 .np-table td .np-badge, .np-table td .np-pill, .np-table td .np-chip,
 .np-appt__badges .np-badge, .np-appt__badges .np-pill{
