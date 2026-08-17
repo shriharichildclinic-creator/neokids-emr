@@ -15,3 +15,5 @@ coverage/
 .idea/
 *.sqlite
 prisma/migrations/dev.db*
+desktop.ini
+Thumbs.db
