@@ -1866,27 +1866,36 @@ html[data-theme="dark"] .np-modal pre{
   display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;
 }
 
-/* Toolbar */
+/* Toolbar — single CSS grid so search + filters always share one
+   coherent row and never split into two mismatched, oversized boxes.
+   `.hr-toolbar__filters` uses display:contents so its four children
+   (type select, from date, to date, reset button) become direct grid
+   items sitting in the same row as search — this is what stops the
+   filter group from stacking into a tall column of full-width fields
+   while the table is still in desktop view. */
 .hr-toolbar{
-  display:flex; flex-wrap:wrap; gap:.6rem; align-items:center;
-  padding:.65rem .75rem; background:var(--np-surface-2, #f6f8fb);
-  border:1px solid var(--np-border, #e5e7eb); border-radius:14px;
-  position:sticky; top:0; z-index:5; margin-bottom:.85rem;
+  display:grid;
+  grid-template-columns: minmax(200px,1.7fr) minmax(128px,1fr) minmax(128px,1fr) minmax(128px,1fr) auto;
+  gap:.5rem; align-items:center;
+  padding:.55rem .65rem; background:var(--np-surface-2, #f6f8fb);
+  border:1px solid var(--np-border, #e5e7eb); border-radius:12px;
+  position:sticky; top:0; z-index:5; margin-bottom:.75rem;
 }
 .hr-toolbar__search{
-  position:relative; flex:1 1 260px; min-width:220px; display:flex; align-items:center;
+  position:relative; display:flex; align-items:center; min-width:0;
 }
 .hr-toolbar__searchIcon{
-  position:absolute; left:.7rem; color:var(--np-mut, #6b7280); pointer-events:none;
+  position:absolute; left:.65rem; color:var(--np-mut, #6b7280); pointer-events:none;
 }
-.hr-toolbar__searchInput{ padding-left:2.1rem !important; padding-right:2.2rem !important; }
+.hr-toolbar__searchInput{ padding-left:2.1rem !important; padding-right:2.2rem !important; height:2.3rem; }
 .hr-toolbar__clear{
   position:absolute; right:.4rem; background:transparent; border:0; cursor:pointer;
   color:var(--np-mut, #6b7280); padding:.35rem; border-radius:8px;
 }
 .hr-toolbar__clear:hover{ background:rgba(0,0,0,.06); color:var(--np-ink, #111827); }
-.hr-toolbar__filters{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
-.hr-toolbar__filter{ min-width:150px; }
+.hr-toolbar__filters{ display:contents; }
+.hr-toolbar__filter{ min-width:0; width:100%; height:2.3rem; }
+#hrFilterReset{ height:2.3rem; white-space:nowrap; }
 
 .hr-count{
   font-size:.82rem; color:var(--np-mut, #6b7280); margin:.15rem .15rem .55rem;
@@ -2022,26 +2031,45 @@ html[data-theme="dark"] .np-modal pre{
    SAME 1024px breakpoint the rest of the doctor panel already uses for
    its sidebar collapse (see .np-menu-toggle). Anything narrower than
    that got squashed table columns before; now it gets the full mobile
-   layout instead of a half-way state. */
+   layout instead of a half-way state.
+
+   Between 1024px and ~680px the toolbar keeps two neat grid rows
+   (search full-width, then the four filter controls in a compact row)
+   instead of the old behaviour where the filter group collapsed into
+   a tall stack of full-width fields. */
 @media (max-width:1024px){
   .hr-panel .np-panel__head{ gap:.6rem; }
   .hr-toolbar{
-    flex-direction:column; align-items:stretch; position:static;
-    padding:.6rem;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "search search"
+      "type   type"
+      "from   to"
+      "reset  reset";
+    position:static;
   }
-  .hr-toolbar__search{ flex:1 1 auto; min-width:0; width:100%; }
-  .hr-toolbar__filters{
-    display:grid; grid-template-columns:1fr 1fr; gap:.5rem; width:100%;
-  }
-  .hr-toolbar__filter{ min-width:0; width:100%; }
-  #hrFilterType{ grid-column:1 / -1; }
-  #hrFilterReset{ grid-column:1 / -1; width:100%; justify-content:center; }
+  .hr-toolbar__search{ grid-area:search; }
+  #hrFilterType{ grid-area:type; }
+  #hrFilterFrom{ grid-area:from; }
+  #hrFilterTo{ grid-area:to; }
+  #hrFilterReset{ grid-area:reset; justify-content:center; }
 
   .hr-table-wrap{ display:none; }
   .hr-cards{ display:flex; }
   .hr-view__row{ grid-template-columns:1fr; gap:.15rem; }
   .hr-att{ flex-wrap:wrap; }
   .hr-att__actions{ width:100%; justify-content:flex-start; }
+}
+@media (max-width:680px){
+  .hr-toolbar{
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "search"
+      "type"
+      "from"
+      "to"
+      "reset";
+  }
 }
 @media (max-width:640px){
   .hr-modal .np-modal__panel{
@@ -2052,8 +2080,6 @@ html[data-theme="dark"] .np-modal pre{
   .hr-modal__foot{ flex-wrap:wrap; }
   .hr-modal__foot .np-btn{ flex:1 1 auto; justify-content:center; }
   .hr-cell__actions{ text-align:left; }
-  .hr-toolbar__filters{ grid-template-columns:1fr; }
-  #hrFilterType{ grid-column:auto; }
 }
 
 /* Skeleton loaders — replaces plain "Loading…" text states */
