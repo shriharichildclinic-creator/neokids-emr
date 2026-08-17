@@ -733,69 +733,221 @@
           </div>
         </section>
 
+<!-- ================================================================
+     v3.4.6 — Historical Records refactor.
+     Records-first layout: search bar + filters + Add button on top,
+     table/card list below. All create/edit/view flows go through the
+     dedicated modals portaled to <body> further down.
+     Legacy hidden fields (#histPatientId / #histRecordId /
+     #histPatientSearch / #histMatchBox / historicalForm) are retained
+     inside the Add/Edit modal so any older wiring keeps working.
+     ================================================================ -->
 <section id="historicalTab" class="tab-pane hidden">
-  <div class="np-panel">
+  <div class="np-panel hr-panel">
     <div class="np-panel__head">
       <div style="flex:1">
-        <div class="np-panel__title">Previous Records</div>
-        <div class="np-panel__subtitle">Add old clinical notes for an existing patient. Only doctors with permission can access this area.</div>
+        <div class="np-panel__title">Historical Records</div>
+        <div class="np-panel__subtitle">Search, view, add and manage previous clinical records across all your patients.</div>
       </div>
+      <button class="np-btn np-btn--primary np-btn--sm" type="button" id="hrAddBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Historical Record
+      </button>
     </div>
     <div class="np-panel__body">
-      <div class="np-callout np-callout--info" style="margin-bottom:1rem;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <div>Previous records live inside the patient history timeline. Admins only control access; creation, editing and deletion happen here in the doctor panel.</div>
-      </div>
-      <form id="historicalForm" enctype="multipart/form-data" novalidate>
-        <div class="np-field">
-          <label class="np-field__label">Find patient <span class="np-req">*</span></label>
-          <div style="display:flex; gap:.5rem;">
-            <input id="histPatientSearch" class="np-input" placeholder="Search by patient name or phone" style="flex:1;">
-            <button type="button" id="histLookupBtn" class="np-btn np-btn--ghost np-btn--sm">Search</button>
-          </div>
-          <div class="np-field__hint">Select an existing patient from your panel first.</div>
+
+      <!-- Sticky toolbar: instant search + filters -->
+      <div class="hr-toolbar">
+        <div class="hr-toolbar__search">
+          <svg class="hr-toolbar__searchIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="hrSearchInput" class="np-input hr-toolbar__searchInput" type="search"
+                 placeholder="Search by patient, diagnosis, notes, medication…" autocomplete="off">
+          <button type="button" id="hrSearchClear" class="hr-toolbar__clear hidden" aria-label="Clear search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
-        <div id="histMatchBox" class="hidden" style="margin-bottom:.75rem;"></div>
+        <div class="hr-toolbar__filters">
+          <select id="hrFilterType" class="np-input hr-toolbar__filter" aria-label="Record type">
+            <option value="">All types</option>
+            <option value="CONSULTATION">Consultation</option>
+            <option value="PRESCRIPTION">Prescription</option>
+            <option value="LAB_REPORT">Lab report</option>
+            <option value="RADIOLOGY">Radiology / scan</option>
+            <option value="VACCINATION">Vaccination</option>
+            <option value="DISCHARGE">Discharge summary</option>
+            <option value="REFERRAL">Referral letter</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <input id="hrFilterFrom" type="date" class="np-input hr-toolbar__filter" aria-label="From date">
+          <input id="hrFilterTo"   type="date" class="np-input hr-toolbar__filter" aria-label="To date">
+          <button type="button" id="hrFilterReset" class="np-btn np-btn--ghost np-btn--sm">Reset filters</button>
+        </div>
+      </div>
+
+      <div id="hrCountLine" class="hr-count">Loading records…</div>
+
+      <!-- Desktop table -->
+      <div id="hrTableWrap" class="hr-table-wrap">
+        <table class="hr-table" role="table">
+          <thead>
+            <tr>
+              <th style="width:22%">Patient</th>
+              <th style="width:12%">Date</th>
+              <th style="width:14%">Type</th>
+              <th style="width:26%">Diagnosis</th>
+              <th style="width:10%">Files</th>
+              <th style="width:16%; text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="hrTableBody">
+            <tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">Loading records…</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile / narrow-viewport card list -->
+      <div id="hrCardList" class="hr-cards" aria-live="polite"></div>
+
+      <!-- Pagination -->
+      <div id="hrPager" class="hr-pager hidden">
+        <button type="button" class="np-btn np-btn--ghost np-btn--sm" id="hrPagerPrev">← Prev</button>
+        <div id="hrPagerInfo" class="hr-pager__info">Page 1 of 1</div>
+        <button type="button" class="np-btn np-btn--ghost np-btn--sm" id="hrPagerNext">Next →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     Historical Records — Add / Edit modal.
+     Portaled to <body> at runtime by historical-fix.js so the fixed
+     sidebar can never trap it. Contains a working #historicalForm
+     shell so any legacy wiring that looked up those IDs still binds.
+     ================================================================ -->
+<div id="hrRecordModal" class="np-modal hr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="hrRecordModalTitle">
+  <div class="np-modal__panel np-modal__panel--lg hr-modal__panel">
+    <div class="np-modal__head hr-modal__head">
+      <div>
+        <div id="hrRecordModalTitle" class="np-modal__title">Add Historical Record</div>
+        <div class="np-modal__subtitle" id="hrRecordModalSub">Fill the fields below and attach any supporting documents.</div>
+      </div>
+      <button type="button" class="np-modal__close" data-hr-close aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="np-modal__body hr-modal__body">
+      <form id="historicalForm" enctype="multipart/form-data" novalidate>
         <input type="hidden" name="patientId" id="histPatientId">
-        <input type="hidden" name="recordId" id="histRecordId">
+        <input type="hidden" name="recordId"  id="histRecordId">
+        <input type="hidden"                   id="histLinkConfirmed" value="false">
+
+        <!-- Patient picker (only for new records) -->
+        <div class="np-field" id="hrPatientPickerField">
+          <label class="np-field__label" for="histPatientSearch">Patient <span class="np-req">*</span></label>
+          <div class="hr-picker">
+            <input id="histPatientSearch" class="np-input hr-picker__input" placeholder="Start typing a patient name or phone…" autocomplete="off">
+            <button type="button" id="histLookupBtn" class="np-btn np-btn--ghost np-btn--sm hidden">Search</button>
+          </div>
+          <div id="hrPatientResults" class="hr-picker__results hidden"></div>
+          <div id="hrSelectedPatient" class="hr-picker__selected hidden"></div>
+          <div id="histMatchBox" class="hidden"></div>
+          <div class="np-field__hint">Type at least 2 characters. Results update as you type.</div>
+        </div>
 
         <div class="np-grid-2">
           <div class="np-field">
             <label class="np-field__label">Record date <span class="np-req">*</span></label>
-            <input name="recordDate" type="date" class="np-input" required>
+            <input name="recordDate" id="hrRecordDate" type="date" class="np-input" required>
           </div>
           <div class="np-field">
-            <label class="np-field__label">Diagnosis</label>
-            <input name="diagnosis" class="np-input" placeholder="e.g. Acute viral pharyngitis">
+            <label class="np-field__label">Record type</label>
+            <select name="recordType" id="hrRecordType" class="np-input">
+              <option value="CONSULTATION">Consultation</option>
+              <option value="PRESCRIPTION">Prescription</option>
+              <option value="LAB_REPORT">Lab report</option>
+              <option value="RADIOLOGY">Radiology / scan</option>
+              <option value="VACCINATION">Vaccination</option>
+              <option value="DISCHARGE">Discharge summary</option>
+              <option value="REFERRAL">Referral letter</option>
+              <option value="OTHER">Other</option>
+            </select>
           </div>
         </div>
         <div class="np-field">
-          <label class="np-field__label">Notes</label>
-          <textarea name="notes" class="np-textarea" rows="3" placeholder="Clinical notes"></textarea>
+          <label class="np-field__label">Title / short description</label>
+          <input name="title" id="hrTitle" class="np-input" maxlength="180" placeholder="e.g. Post-fever review at Rainbow Hospital">
         </div>
         <div class="np-field">
-          <label class="np-field__label">Treatment</label>
-          <textarea name="treatment" class="np-textarea" rows="2" placeholder="Treatment given"></textarea>
+          <label class="np-field__label">Diagnosis</label>
+          <input name="diagnosis" id="hrDiagnosis" class="np-input" placeholder="e.g. Acute viral pharyngitis">
         </div>
         <div class="np-field">
-          <label class="np-field__label">Medications</label>
-          <textarea name="medications" class="np-textarea" rows="2" placeholder="Medicines from the old visit"></textarea>
+          <label class="np-field__label">Clinical notes</label>
+          <textarea name="notes" id="hrNotes" class="np-textarea" rows="3" placeholder="Symptoms, examination, observations…"></textarea>
         </div>
+        <div class="np-grid-2">
+          <div class="np-field">
+            <label class="np-field__label">Treatment</label>
+            <textarea name="treatment" id="hrTreatment" class="np-textarea" rows="2" placeholder="Treatment given"></textarea>
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Medications</label>
+            <textarea name="medications" id="hrMedications" class="np-textarea" rows="2" placeholder="Medicines from the visit"></textarea>
+          </div>
+        </div>
+
         <div class="np-field">
-          <label class="np-field__label">Attachment</label>
-          <input name="attachment" id="histRxFile" type="file" accept=".pdf,.jpg,.jpeg,.png" class="np-input">
-          <div class="np-field__hint">Optional prescription scan or supporting file.</div>
+          <label class="np-field__label">Attachments</label>
+          <div class="hr-drop" id="hrDropZone" tabindex="0">
+            <input name="attachment" id="histRxFile" type="file" accept=".pdf,image/*,.docx,.xlsx" multiple class="hr-drop__input">
+            <div class="hr-drop__inner">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <div><b>Click to upload</b> or drop files here</div>
+              <div class="np-mut" style="font-size:.8rem;">PDF, JPG, PNG, WEBP — up to 25 MB each, 20 files</div>
+            </div>
+          </div>
+          <div id="hrPendingList" class="hr-att-list hidden"></div>
+          <div id="hrExistingAttWrap" class="hidden">
+            <div class="np-mut" style="font-size:.8rem; margin-top:.6rem;">Attached files on this record</div>
+            <div id="hrExistingAtt" class="hr-att-list"></div>
+          </div>
         </div>
-        <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
-          <button type="button" id="histResetBtn" class="np-btn np-btn--ghost">Reset</button>
-          <button type="submit" id="histSubmitBtn" class="np-btn np-btn--primary">Save previous record</button>
-        </div>
+
+        <div id="hrFormError" class="np-error hidden" style="margin-top:.5rem;"></div>
       </form>
-      <div class="np-divider"></div>
-      <div id="histListWrap"><div class="np-empty"><div class="np-empty__title">Select a patient to load previous records</div></div></div>
+    </div>
+    <div class="np-modal__foot hr-modal__foot">
+      <button type="button" class="np-btn np-btn--ghost" data-hr-close>Cancel</button>
+      <button type="button" class="np-btn np-btn--ghost" id="histResetBtn">Reset</button>
+      <button type="submit" class="np-btn np-btn--primary" id="histSubmitBtn" form="historicalForm">Save record</button>
     </div>
   </div>
-</section>
+</div>
+
+<!-- ================================================================
+     Historical Records — View (read-only) modal.
+     ================================================================ -->
+<div id="hrViewModal" class="np-modal hr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="hrViewModalTitle">
+  <div class="np-modal__panel np-modal__panel--lg hr-modal__panel">
+    <div class="np-modal__head hr-modal__head">
+      <div>
+        <div id="hrViewModalTitle" class="np-modal__title">Historical Record</div>
+        <div class="np-modal__subtitle" id="hrViewModalSub"></div>
+      </div>
+      <button type="button" class="np-modal__close" data-hr-close aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="np-modal__body hr-modal__body">
+      <div id="hrViewContent"></div>
+    </div>
+    <div class="np-modal__foot hr-modal__foot">
+      <button type="button" class="np-btn np-btn--ghost" data-hr-close>Close</button>
+      <button type="button" class="np-btn np-btn--ghost" id="hrViewEditBtn">Edit</button>
+      <button type="button" class="np-btn np-btn--primary" id="hrViewPdfBtn">Generate PDF</button>
+    </div>
+  </div>
+</div>
 
 <section id="certificatesTab" class="tab-pane hidden">
   <div class="np-panel">

@@ -105,6 +105,62 @@ exports.listForPatient = asyncH(async (req, res) => {
   res.json({ success: true, records: rows.map(r => svc.decorateRecord(req, r)) });
 });
 
+// GET /doctor/previous-records
+// -----------------------------------------------------------------
+// v3.4.6 — Historical Records list for the doctor panel refactor.
+// Returns every record this doctor has authored, with optional
+// text search (patient name / diagnosis / notes / medications /
+// treatment / title), date-range filter, recordType filter, and
+// pagination. Legacy per-patient endpoint above is untouched so
+// existing callers (patient history timeline) keep working.
+// -----------------------------------------------------------------
+exports.listAllForDoctor = asyncH(async (req, res) => {
+  const q         = String(req.query.q || '').trim();
+  const patientId = String(req.query.patientId || '').trim();
+  const recordType= String(req.query.recordType || '').trim();
+  const dateFrom  = String(req.query.dateFrom || '').trim();
+  const dateTo    = String(req.query.dateTo   || '').trim();
+  const page      = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
+  const pageSize  = Math.min(100, Math.max(1, parseInt(req.query.pageSize || '25', 10) || 25));
+
+  const where = { doctorId: req.user.id, deletedAt: null };
+  if (patientId) where.patientId = patientId;
+  if (recordType) where.recordType = recordType;
+  if (dateFrom || dateTo) {
+    where.recordDate = {};
+    if (dateFrom && /^\d{4}-\d{2}-\d{2}/.test(dateFrom)) where.recordDate.gte = new Date(dateFrom);
+    if (dateTo   && /^\d{4}-\d{2}-\d{2}/.test(dateTo))   where.recordDate.lte = new Date(dateTo);
+  }
+  if (q) {
+    where.OR = [
+      { title:       { contains: q } },
+      { diagnosis:   { contains: q } },
+      { notes:       { contains: q } },
+      { treatment:   { contains: q } },
+      { medications: { contains: q } },
+      { patient:     { name:  { contains: q } } },
+      { patient:     { phone: { contains: q.replace(/\D/g, '') || q } } },
+    ];
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.previousRecord.count({ where }),
+    prisma.previousRecord.findMany({
+      where, include,
+      orderBy: [{ recordDate: 'desc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    })
+  ]);
+
+  res.json({
+    success: true,
+    page, pageSize, total,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    records: rows.map(r => svc.decorateRecord(req, r))
+  });
+});
+
 // GET /doctor/previous-records/:id
 exports.detail = asyncH(async (req, res) => {
   const r = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null }, include });

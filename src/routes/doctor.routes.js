@@ -61,6 +61,12 @@ router.post(
 // database operation" — double-multer parsed the multipart stream twice,
 // stripping all text fields after the file.
 router.get('/previous-records/permission',                  prev.permission);
+// v3.4.6 — doctor-wide list with search/filter/pagination for the
+// refactored Historical Records panel. Must be registered BEFORE
+// `/previous-records/:id` so the literal “/permission” & bare list
+// don’t collide with the `:id` route.
+router.get('/previous-records',                             prev.listAllForDoctor);
+router.get('/previous-records/:id',                         prev.detail);
 router.get('/patients/:patientId/previous-records',         prev.listForPatient);
 router.post(
   '/patients/:patientId/previous-records',

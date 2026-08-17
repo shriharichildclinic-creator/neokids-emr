@@ -1645,24 +1645,24 @@ function _toast(kind, msg){
   else alert(msg);
 }
 
-/* ---------- Feature 1: Historical appointment form ---------- */
+/* ---------- Feature 1: Historical appointment form ----------
+ * v3.4.6: The historical/previous-records UI has been fully refactored
+ * into public/doctor/historical-fix.js (records-first layout with its
+ * own Add/Edit/View modals). The legacy fields this function relied on
+ * (#histPhone, #histName, DOB, etc.) no longer exist, so wiring here
+ * would just no-op AND conflict with the new module's submit handler
+ * on the shared #historicalForm.
+ *
+ * We therefore delegate to the new module's public entry-point when
+ * available, and otherwise no-op. The legacy backend endpoint
+ * (POST /doctor/historical-appointments) is unchanged and can still be
+ * reached programmatically — nothing in the current UI calls it now
+ * that the refactored panel uses /doctor/previous-records.
+ */
 function initHistoricalForm(){
-  const form = $('#historicalForm');
-  if (!form) return;
-  if (_histFormWired) return;
-  _histFormWired = true;
-
-  const lookupBtn = $('#histLookupBtn');
-  if (lookupBtn) lookupBtn.addEventListener('click', lookupHistoricalPatient);
-  const phoneEl = $('#histPhone');
-  if (phoneEl) phoneEl.addEventListener('change', () => {
-    // Reset link state whenever phone changes.
-    $('#histPatientId').value = '';
-    $('#histLinkConfirmed').value = 'false';
-    const box = $('#histMatchBox'); if (box) box.classList.add('hidden');
-  });
-
-  form.addEventListener('submit', submitHistorical);
+  if (typeof window.initHistoricalForm === 'function' && window.initHistoricalForm !== initHistoricalForm){
+    try { window.initHistoricalForm(); } catch(_) {}
+  }
 }
 
 async function lookupHistoricalPatient(){
@@ -2565,13 +2565,16 @@ function injectConsultBackButton(){
     }
   }
 
+  // v3.4.6: the Previous Records IIFE's own initHistoricalForm() is now a
+  // no-op — the refactored public/doctor/historical-fix.js owns the
+  // #historicalForm submit + patient-lookup + reset wiring, and running
+  // both handlers on the same form would double-fire (two POSTs per save)
+  // and re-render results into containers that no longer exist. The
+  // helpers below (fmtPrevRecord, editPreviousRecord, deletePreviousRecord,
+  // loadPreviousRecordsForPatient, __prevRecordsCache) remain callable so
+  // any other feature that references them keeps working.
   function initHistoricalForm(){
-    const form = $('#historicalForm');
-    if (!form || form.__prevWired) return;
-    form.__prevWired = true;
-    $('#histLookupBtn')?.addEventListener('click', lookupHistoricalPatient);
-    $('#histResetBtn')?.addEventListener('click', resetPreviousRecordForm);
-    form.addEventListener('submit', submitHistorical);
+    // intentionally empty — see comment above
   }
 
   function setupSignatureCanvas(){
