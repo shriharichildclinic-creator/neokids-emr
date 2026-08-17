@@ -81,8 +81,15 @@ function resolveSignaturePath(doctor) {
 // fits on one page, and use flowing relative y offsets (never absolute).
 function drawSignatureBlock(doc, doctor, opts = {}) {
   const sigPath   = resolveSignaturePath(doctor);
-  const leftX     = doc.page.width - 240;   // block's left edge — every element shares this x
-  const blockW    = 220;                    // shared width for text wrapping + image box
+  // v3.3.9: nudged right per doctor feedback ("slightly too far toward
+  // center"). blockW is trimmed from 220 to 200 to keep a ~10pt print-safe
+  // buffer from the true page edge at the new position — this only
+  // affects the text-wrap/image-fit *container* width, not the size of
+  // anything rendered inside it (name/qualification text and the
+  // signature image are both comfortably narrower than either value, so
+  // nothing changes visually except the horizontal position).
+  const leftX     = doc.page.width - 210;   // block's left edge — every element shares this x
+  const blockW    = 200;                    // shared width for text wrapping + image box
   const sigMaxH   = 46;                     // signature image never exceeds this height
   const sigInset  = 6;                      // margin inside the image's box on every side, so
                                              // ink that runs close to the source PNG's own edges

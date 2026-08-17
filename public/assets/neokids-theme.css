@@ -1639,6 +1639,17 @@ html[data-theme="dark"] [style*="color: black"]{
   touch-action:none;
   display:block;
 }
+/* v3.3.9: distinct sub-headings for the Upload vs Draw workflows inside
+   the Digital Signature card, so the two are visually separate sections
+   rather than a single run-on block of mixed controls. */
+.np-sig-section__title{
+  font-weight:700;
+  font-size:.82rem;
+  letter-spacing:.02em;
+  text-transform:uppercase;
+  color: var(--nk-muted);
+  margin-bottom:.6rem;
+}
 
 /* ---------- Focus rings visible in both themes ---------- */
 .np-btn:focus-visible,

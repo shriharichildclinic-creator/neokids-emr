@@ -39,9 +39,9 @@
     }
   }
 </script>
-<link rel="stylesheet" href="/doctor/styles.css?v=3.3.8"/>
+<link rel="stylesheet" href="/doctor/styles.css?v=3.3.9"/>
 
-<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.3.8"/>
+<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.3.9"/>
 <script>
   try {
     var t = localStorage.getItem('np-theme');
@@ -412,7 +412,7 @@
 
 <section id="settingsTab" class="tab-pane hidden">
           <div class="np-settings-grid">
-            
+            <div class="np-settings-col">
             <div class="np-setting-card" id="setting-profile">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon">
@@ -457,6 +457,115 @@
               </form>
             </div>
 
+<div class="np-setting-card">
+              <div class="np-setting-card__head">
+                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#F46A8E,#FE84A4);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                </div>
+                <div>
+                  <div class="np-setting-card__title">Clinic Location</div>
+                  <div class="np-setting-card__sub">Where patients will visit you</div>
+                </div>
+              </div>
+              <form id="clinicForm">
+                <div class="np-field">
+                  <label class="np-field__label" for="clinicNameInput">Clinic Name</label>
+                  <input id="clinicNameInput" name="clinicName" class="np-input" placeholder="NeoKids Clinic - Indiranagar">
+                </div>
+                <div class="np-field">
+                  <label class="np-field__label">Address</label>
+                  <textarea name="clinicAddress" class="np-textarea" placeholder="Full street address"></textarea>
+                </div>
+                <div class="np-field">
+                  <label class="np-field__label">Google Maps URL</label>
+                  <input name="clinicMapUrl" class="np-input" placeholder="https://maps.google.com/...">
+                </div>
+                <div class="np-grid-2">
+                  <div class="np-field">
+                    <label class="np-field__label">Latitude</label>
+                    <input name="clinicLat" type="number" step="any" class="np-input" placeholder="12.971">
+                  </div>
+                  <div class="np-field">
+                    <label class="np-field__label">Longitude</label>
+                    <input name="clinicLng" type="number" step="any" class="np-input" placeholder="77.594">
+                  </div>
+                </div>
+                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save clinic details</button>
+              </form>
+            </div>
+
+<div class="np-setting-card" id="setting-signature">
+  <div class="np-setting-card__head">
+    <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#0ea5a4,#4cc2c0);">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <div>
+      <div class="np-setting-card__title">Digital Signature</div>
+      <div class="np-setting-card__sub">Auto-applied to prescriptions, certificates &amp; invoices</div>
+    </div>
+  </div>
+
+  <!-- Current signature — applies regardless of whether it came from an
+       upload or a drawing, so it (and Remove) live here, not bundled
+       into either workflow below. -->
+  <div>
+    <div class="np-field__label">Current signature</div>
+    <div id="sigPreviewWrap" class="np-sig-surface">
+      <span id="sigPreviewEmpty" class="np-sig-empty">No signature uploaded</span>
+      <img id="sigPreviewImg" class="np-sig-img" alt="Signature preview" style="display:none;">
+    </div>
+    <button type="button" id="sigRemoveBtn" class="np-btn np-btn--danger np-btn--sm" style="margin-top:.6rem;">Remove signature</button>
+  </div>
+
+  <div class="np-divider"></div>
+
+  <!-- Upload workflow — every upload-related control lives here, and
+       nothing else does. -->
+  <div class="np-sig-section">
+    <div class="np-sig-section__title">Upload Signature Image</div>
+    <form id="signatureForm" enctype="multipart/form-data" novalidate>
+      <div class="np-field">
+        <input id="sigInput" name="signature" type="file" accept="image/png,image/jpeg" class="np-input" required>
+        <div class="np-field__hint">PNG with transparent background preferred. Max 1 MB.</div>
+      </div>
+      <div id="sigLiveWrap" class="hidden" style="margin-bottom:.75rem;">
+        <div class="np-field__label">Preview</div>
+        <div class="np-sig-surface">
+          <img id="sigLiveImg" class="np-sig-img" alt="Preview">
+        </div>
+      </div>
+      <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save Uploaded Signature</button>
+    </form>
+  </div>
+
+  <div class="np-divider"></div>
+
+  <!-- Draw workflow — every drawing-related control lives here, and
+       nothing else does. -->
+  <div class="np-sig-section">
+    <div class="np-sig-section__title">Draw Signature</div>
+    <div id="sigDrawWrap">
+      <canvas id="sigCanvas" width="640" height="180"></canvas>
+      <div class="np-field__hint" style="margin-top:.6rem;">Sign inside the box, then save it as your digital signature.</div>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.6rem;">
+        <button type="button" id="sigClearBtn" class="np-btn np-btn--ghost np-btn--sm">Clear Drawing</button>
+        <button type="button" id="sigSaveDrawnBtn" class="np-btn np-btn--primary np-btn--sm">Save Drawn Signature</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="np-divider"></div>
+  <form id="regNumForm" novalidate>
+    <div class="np-field">
+      <label class="np-field__label">Medical registration number</label>
+      <input name="registrationNumber" id="regNumInput" class="np-input" placeholder="e.g. KMC 12345">
+      <div class="np-field__hint">Shown on medical certificates.</div>
+    </div>
+    <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save registration number</button>
+  </form>
+</div>
+            </div>
+            <div class="np-settings-col">
 <div class="np-setting-card">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#89BCBD,#A4CDCE);">
@@ -545,43 +654,6 @@
 
 <div class="np-setting-card">
               <div class="np-setting-card__head">
-                <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#F46A8E,#FE84A4);">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                </div>
-                <div>
-                  <div class="np-setting-card__title">Clinic Location</div>
-                  <div class="np-setting-card__sub">Where patients will visit you</div>
-                </div>
-              </div>
-              <form id="clinicForm">
-                <div class="np-field">
-                  <label class="np-field__label" for="clinicNameInput">Clinic Name</label>
-                  <input id="clinicNameInput" name="clinicName" class="np-input" placeholder="NeoKids Clinic - Indiranagar">
-                </div>
-                <div class="np-field">
-                  <label class="np-field__label">Address</label>
-                  <textarea name="clinicAddress" class="np-textarea" placeholder="Full street address"></textarea>
-                </div>
-                <div class="np-field">
-                  <label class="np-field__label">Google Maps URL</label>
-                  <input name="clinicMapUrl" class="np-input" placeholder="https://maps.google.com/...">
-                </div>
-                <div class="np-grid-2">
-                  <div class="np-field">
-                    <label class="np-field__label">Latitude</label>
-                    <input name="clinicLat" type="number" step="any" class="np-input" placeholder="12.971">
-                  </div>
-                  <div class="np-field">
-                    <label class="np-field__label">Longitude</label>
-                    <input name="clinicLng" type="number" step="any" class="np-input" placeholder="77.594">
-                  </div>
-                </div>
-                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save clinic details</button>
-              </form>
-            </div>
-
-<div class="np-setting-card">
-              <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#E5A93A,#F2C770);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 </div>
@@ -606,62 +678,6 @@
             </div>
 
 
-<div class="np-setting-card" id="setting-signature">
-  <div class="np-setting-card__head">
-    <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#0ea5a4,#4cc2c0);">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-    </div>
-    <div>
-      <div class="np-setting-card__title">Digital Signature</div>
-      <div class="np-setting-card__sub">Auto-applied to prescriptions, certificates &amp; invoices</div>
-    </div>
-  </div>
-  <div style="margin-bottom:.75rem;">
-    <div class="np-field__label">Current signature</div>
-    <div id="sigPreviewWrap" class="np-sig-surface">
-      <span id="sigPreviewEmpty" class="np-sig-empty">No signature uploaded</span>
-      <img id="sigPreviewImg" class="np-sig-img" alt="Signature preview" style="display:none;">
-    </div>
-  </div>
-  <form id="signatureForm" enctype="multipart/form-data" novalidate>
-    <div class="np-field">
-      <label class="np-field__label" for="sigInput">Upload signature image</label>
-      <input id="sigInput" name="signature" type="file" accept="image/png,image/jpeg" class="np-input" required>
-      <div class="np-field__hint">PNG with transparent background preferred. Max 1 MB.</div>
-    </div>
-    <div class="np-divider"></div>
-    <div class="np-field">
-      <label class="np-field__label">Draw signature</label>
-      <div id="sigDrawWrap">
-        <canvas id="sigCanvas" width="640" height="180"></canvas>
-        <div class="np-field__hint" style="margin-top:.6rem;">Sign inside the box, then save it as your digital signature.</div>
-        <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.6rem;">
-          <button type="button" id="sigClearBtn" class="np-btn np-btn--ghost np-btn--sm">Clear drawing</button>
-          <button type="button" id="sigSaveDrawnBtn" class="np-btn np-btn--primary np-btn--sm">Save drawn signature</button>
-        </div>
-      </div>
-    </div>
-    <div id="sigLiveWrap" class="hidden" style="margin-bottom:.75rem;">
-      <div class="np-field__label">Live preview</div>
-      <div class="np-sig-surface">
-        <img id="sigLiveImg" class="np-sig-img" alt="Preview">
-      </div>
-    </div>
-    <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-      <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save signature</button>
-      <button type="button" id="sigRemoveBtn" class="np-btn np-btn--danger np-btn--sm">Remove</button>
-    </div>
-  </form>
-  <div class="np-divider"></div>
-  <form id="regNumForm" novalidate>
-    <div class="np-field">
-      <label class="np-field__label">Medical registration number</label>
-      <input name="registrationNumber" id="regNumInput" class="np-input" placeholder="e.g. KMC 12345">
-      <div class="np-field__hint">Shown on medical certificates.</div>
-    </div>
-    <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save registration number</button>
-  </form>
-</div>
 <div class="np-setting-card" id="setting-appearance">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#0F2E3A,#345B5B);">
@@ -712,6 +728,7 @@
                 </div>
                 <button type="submit" class="np-btn np-btn--primary np-btn--sm">Update password</button>
               </form>
+            </div>
             </div>
           </div>
         </section>

@@ -476,6 +476,14 @@ html,body{
      Consultation Fees. Cards should size to their own content. */
   align-items: start;
 }
+/* v3.3.9: the grid no longer holds cards directly — each column is a
+   flex column (Profile/Clinic/Signature on the left, Availability/Fees/
+   Appearance/Security on the right), so cards within a column pack back
+   to back with one consistent gap instead of leaving the large uneven
+   gaps that came from pairing cards of very different heights row by
+   row, and Security no longer strands itself alone on a trailing row. */
+.np-settings-col{ display:flex; flex-direction:column; gap:1rem; }
+@media (max-width:900px){ .np-settings-col{ gap:1rem; } }
 @media (max-width:900px){ .np-settings-grid{ grid-template-columns: 1fr; } }
 
 .np-setting-card{

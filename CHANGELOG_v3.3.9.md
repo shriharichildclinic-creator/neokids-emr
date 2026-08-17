@@ -99,6 +99,45 @@ margin instead of looking clipped. Re-verified by rendering a deliberately
 edge-touching test signature — full strokes visible, clean margin, no
 crop.
 
-**Cache:** bumped `styles.css` / `neokids-theme.css` links to `?v=3.3.8`
-so this update can't be masked by a stale cached stylesheet on redeploy.
+## 5. v3.3.9 — signature UX structure, settings layout balance, PDF nudge right
+
+**Digital Signature card:** the upload workflow and the draw workflow are
+now two clearly separated sections (`Upload Signature Image` / `Draw
+Signature`, each with its own heading), each containing only its own
+controls and its own save button:
+- Upload section: file input → preview → **Save Uploaded Signature**.
+- Draw section: canvas → **Clear Drawing** / **Save Drawn Signature**.
+- **Remove signature** moved out of both — it applies to whichever
+  signature is currently active, so it now lives with the "Current
+  signature" preview at the top of the card instead of being bundled
+  into the upload form's button row. No JS changes were needed: all the
+  drawing controls were already wired by `id`, independent of any
+  surrounding `<form>`, so moving them around the page didn't touch any
+  event wiring.
+
+**Settings page layout:** replaced the single `.np-settings-grid` (which
+paired cards into rows by default grid auto-placement — the actual cause
+of Security stranding itself alone on the last row, and of large uneven
+gaps when a tall and a short card landed in the same row) with two
+explicit flex columns:
+- **Left:** Profile Photo → Clinic Location → Digital Signature
+- **Right:** Availability → Consultation Fees → Appearance → Security
+
+Cards within each column now pack back-to-back with one consistent gap
+(`display:flex; flex-direction:column; gap:1rem`), so the column heights
+are naturally close to balanced (a few tall cards on the left, several
+shorter ones on the right) without leaving dead space, and Security is
+guaranteed to sit directly under Appearance rather than alone.
+
+**PDF signature position:** nudged the whole block right, per feedback
+that it sat slightly too far toward center. The wrap-box width also
+trimmed slightly (220pt → 200pt) to preserve a safe ~10pt buffer from the
+true page edge at the new position — this only affects the invisible
+text-wrap/image-fit container, not the size of anything actually
+rendered (name/qualification font sizes, image max-height, and all
+vertical spacing are unchanged). Verified by rendering with reference
+guide lines at the page's true edge and the standard 50pt content margin
+— the block sits closer to the right margin with no overflow or
+clipping.
+
 
