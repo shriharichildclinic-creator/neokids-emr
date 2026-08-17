@@ -299,4 +299,55 @@ router.get('/historical-rx/:filename', asyncHandler(async (req, res) => {
   fs.createReadStream(filepath).pipe(res);
 }));
 
+/* ─────────────────────────────────────────────────────────────────────
+   GET /api/files/previous-records/:id   (Historical Records attachment)
+   The signed URL for a PreviousRecord attachment (built in
+   previous.controller.js / fileTokens.js) points here using the
+   record's own id. This route was previously missing entirely, which
+   is why opening/downloading a linked attachment 404'd with
+   { "error": "Not Found", "code": "NOT_FOUND" } even though the file
+   was correctly saved to storage/historical-rx/.
+   ───────────────────────────────────────────────────────────────────── */
+router.get('/previous-records/:id', asyncHandler(async (req, res) => {
+  const id = String(req.params.id || '').replace(/\.(pdf|jpg|jpeg|png)$/i, '');
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid file id' });
+
+  const cred = readCredential(req);
+  if (!cred) return res.status(401).json({ error: 'Authentication required' });
+
+  const record = await prisma.previousRecord.findUnique({
+    where: { id },
+    select: { id: true, doctorId: true, attachmentUrl: true }
+  });
+  if (!record || !record.attachmentUrl) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  let allowed = false;
+  if (cred.mode === 'fileToken') {
+    allowed = cred.claims.kind === 'previous-record' &&
+              cred.claims.appointmentId === id;
+  } else {
+    const role = cred.user && cred.user.role;
+    if (role === 'ADMIN') allowed = true;
+    if (role === 'DOCTOR' && cred.user.id === record.doctorId) allowed = true;
+  }
+  if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+  const filename = path.basename(record.attachmentUrl);
+  const filepath = path.join(STORAGE, 'historical-rx', filename);
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  const ext = filename.split('.').pop().toLowerCase();
+  const mime = ext === 'pdf' ? 'application/pdf'
+             : ext === 'png' ? 'image/png'
+             : 'image/jpeg';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  fs.createReadStream(filepath).pipe(res);
+}));
+
 module.exports = router;

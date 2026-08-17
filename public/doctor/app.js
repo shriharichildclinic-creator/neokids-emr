@@ -1816,27 +1816,29 @@ async function loadCertificates(){
       wrap.innerHTML = '<div class="np-empty"><div class="np-empty__title">No certificates yet</div><div class="np-empty__sub">Generate one from an appointment or click "+ New certificate".</div></div>';
     } else {
       wrap.innerHTML = rows.map(c => `
-        <article class="np-history-row">
-          <div class="np-history-row__date">
-            <div><b>${escapeHtml(fmtDate(c.issuedAt))}</b></div>
-            <div class="np-mut" style="font-size:.78rem;">${escapeHtml(c.certificateNumber)}</div>
+        <article class="np-cert-row">
+          <div class="np-cert-row__meta">
+            <span class="np-cert-row__date">${escapeHtml(fmtDate(c.issuedAt))}</span>
+            <span class="np-cert-row__number">${escapeHtml(c.certificateNumber)}</span>
           </div>
-          <div class="np-history-row__body">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; flex-wrap:wrap;">
-              <div>
+          <div class="np-cert-row__body">
+            <div class="np-cert-row__top">
+              <div class="np-cert-row__who">
                 <b>${escapeHtml(c.patientNameSnapshot || (c.patient && c.patient.name) || '—')}</b>
-                <span class="np-badge np-badge--mint" style="margin-left:.4rem;">${escapeHtml((c.templateKey||'GENERAL').replace(/_/g,' '))}</span>
-                ${(c.consultationType === 'ONLINE' || (c.appointment && c.appointment.consultationType === 'ONLINE'))
-                  ? '<span class="np-badge np-badge--blue" style="margin-left:.3rem;">Online</span>' : ''}
+                <span class="np-pills">
+                  <span class="np-badge np-badge--mint">${escapeHtml((c.templateKey||'GENERAL').replace(/_/g,' '))}</span>
+                  ${(c.consultationType === 'ONLINE' || (c.appointment && c.appointment.consultationType === 'ONLINE'))
+                    ? '<span class="np-badge np-badge--blue">Online</span>' : ''}
+                </span>
               </div>
-              <div class="np-row" style="gap:.4rem; flex-wrap:wrap;">
+              <div class="np-row np-cert-row__actions">
                 ${c.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(c.pdfUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
                 <button type="button" class="np-btn np-btn--primary np-btn--sm" data-cert-send="${escapeHtml(c.id)}">Send</button>
                 <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-cert-edit="${escapeHtml(c.id)}">Edit</button>
               </div>
             </div>
-            ${c.diagnosis ? `<div style="font-size:.85rem; margin-top:.25rem;"><b>Diagnosis:</b> ${escapeHtml(c.diagnosis)}</div>` : ''}
-            <div class="np-mut" style="font-size:.82rem; margin-top:.15rem;">${escapeHtml(c.reason || '')}</div>
+            ${c.diagnosis ? `<div class="np-cert-row__diag"><b>Diagnosis:</b> ${escapeHtml(c.diagnosis)}</div>` : ''}
+            <div class="np-mut np-cert-row__reason">${escapeHtml(c.reason || '')}</div>
           </div>
         </article>`).join('');
       wrap.querySelectorAll('[data-cert-edit]').forEach(btn => {
@@ -1948,6 +1950,20 @@ function certAutoToDate(){
     _certState.toAuto = true;
     if (autoEl) autoEl.textContent = '(auto)';
   }
+}
+
+/* Reverse direction: doctor edits End Date directly → recompute Days
+   from Start/End (inclusive count, matching certAutoToDate's convention:
+   10 Aug → 15 Aug = 6 days, 10 Aug → 12 Aug = 3 days). */
+function certAutoRestDays(){
+  const from = $('#certFrom').value;
+  const to = $('#certTo').value;
+  if (!from || !to) return;
+  const fromD = new Date(from + 'T00:00:00');
+  const toD = new Date(to + 'T00:00:00');
+  if (isNaN(fromD.getTime()) || isNaN(toD.getTime())) return;
+  const days = Math.round((toD - fromD) / 86400000) + 1;
+  if (days >= 1) $('#certRestDays').value = days;
 }
 
 /* ── Consultation mode segmented control ── */
@@ -2128,6 +2144,7 @@ function setupCertPatientSearch(){
       _certState.toAuto = false;
       const autoEl = $('#certToAuto');
       if (autoEl) autoEl.textContent = '(manual)';
+      certAutoRestDays();
     });
   }
 }

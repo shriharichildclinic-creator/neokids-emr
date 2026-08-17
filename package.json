@@ -8,7 +8,7 @@
     "dev": "nodemon src/server.js",
     "prestart": "node scripts/ensure-storage.js",
     "predev": "node scripts/ensure-storage.js",
-    "postinstall": "node scripts/ensure-storage.js || true",
+    "postinstall": "node scripts/ensure-storage.js || true && prisma generate",
     "ensure-storage": "node scripts/ensure-storage.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

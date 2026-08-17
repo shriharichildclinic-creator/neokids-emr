@@ -770,6 +770,63 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   min-width: 0;
 }
 
+/* Certificates list — dedicated component (was previously reusing
+   .np-history-row, whose fixed 76-92px date column was sized for
+   shorter content and caused severe wrapping/truncation on mobile
+   once a full date + "NKP-CERT-2026-XXXXXXXX" had to fit inside it). */
+.np-cert-row {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding: .75rem .85rem;
+  border: 1px solid var(--np-border, #e5e7eb);
+  border-radius: 12px;
+  background: var(--np-surface, #fff);
+  margin-bottom: .55rem;
+}
+.np-cert-row__meta {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  flex-wrap: wrap;
+  font-size: .82rem;
+  color: var(--np-ink, #0f172a);
+}
+.np-cert-row__date {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.np-cert-row__number {
+  color: var(--np-mut, #64748b);
+  font-size: .78rem;
+  word-break: break-word;
+}
+.np-cert-row__body { min-width: 0; }
+.np-cert-row__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.np-cert-row__who {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.np-cert-row__actions { gap: .4rem; flex-wrap: wrap; }
+.np-cert-row__diag { font-size: .85rem; margin-top: .1rem; }
+.np-cert-row__reason { font-size: .82rem; margin-top: 0; }
+
+@media (max-width: 640px) {
+  .np-cert-row { padding: .65rem .7rem; gap: .4rem; }
+  .np-cert-row__meta { font-size: .78rem; }
+  .np-cert-row__top { flex-direction: column; align-items: flex-start; }
+  .np-cert-row__actions { width: 100%; }
+}
+
 .np-history-rx {
   padding: .75rem .85rem;
   border: 1px solid var(--np-border, #e5e7eb);

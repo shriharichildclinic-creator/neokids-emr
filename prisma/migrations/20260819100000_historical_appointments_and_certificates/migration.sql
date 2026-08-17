@@ -31,6 +31,14 @@ ALTER TABLE `prescriptions`
   ADD COLUMN `source` VARCHAR(191) NOT NULL DEFAULT 'NEOKIDSPRO';
 
 -- Feature 2: Medical Certificates
+-- NOTE: durationType / certificateDate / consultationType (v3.4.0) are
+-- included directly in this CREATE TABLE. They used to live in a
+-- separate later migration (20260817120000_certificate_v340_rework)
+-- written in Postgres syntax against this MySQL database, and ordered
+-- BEFORE this migration (which creates the table). Both problems broke
+-- certificate creation with "Invalid input for database operation" /
+-- PrismaClientValidationError. That migration has been removed; the
+-- columns are now created here, atomically, with the table itself.
 CREATE TABLE `medical_certificates` (
   `id` VARCHAR(191) NOT NULL,
   `certificateNumber` VARCHAR(191) NOT NULL,
@@ -44,6 +52,9 @@ CREATE TABLE `medical_certificates` (
   `fromDate` DATETIME(3) NULL,
   `toDate` DATETIME(3) NULL,
   `additionalNotes` TEXT NULL,
+  `durationType` VARCHAR(191) NULL,
+  `certificateDate` DATETIME(3) NULL,
+  `consultationType` VARCHAR(191) NULL,
   `patientNameSnapshot` VARCHAR(191) NOT NULL,
   `patientAgeSnapshot` VARCHAR(191) NULL,
   `patientGenderSnapshot` VARCHAR(191) NULL,
