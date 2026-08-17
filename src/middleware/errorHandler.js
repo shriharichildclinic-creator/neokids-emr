@@ -268,12 +268,19 @@ const errorHandler = (err, req, res, _next) => {
   }
 
   // 7. Zod errors that escaped controller-level handling.
+  // v3.4.4: ALWAYS include `details.flatten()` so the frontend can show
+  // the specific failing field instead of a generic "Invalid Input".
   if (err && err.name === 'ZodError') {
     logAtLevel(classify(err, 400, true), 'Client error (Zod validation)', meta);
     return res.status(400).json({
       error:     'Invalid input',
       code:      'VALIDATION_FAILED',
       details:   err.flatten ? err.flatten() : undefined,
+      issues:    Array.isArray(err.issues) ? err.issues.map(i => ({
+        path: Array.isArray(i.path) ? i.path.join('.') : String(i.path || ''),
+        message: i.message,
+        code: i.code
+      })) : undefined,
       requestId
     });
   }

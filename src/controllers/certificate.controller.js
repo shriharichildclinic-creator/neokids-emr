@@ -24,34 +24,27 @@ const logger = require('../utils/logger');
 const dayjs = require('dayjs');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
 const automation = require('../services/automation.service');
+const certDates = require('../services/certificate-date.service');
 
-// ─── v3.4.0 — duration / date helpers ────────────────────────────────
-// Resolve the effective duration type: explicit value wins; legacy rows and
-// clients that never send durationType fall back to DATE_RANGE so nothing
-// about their behaviour changes.
+// v3.4.4 — Single deterministic date flow (Option A).
+// Inputs the doctor controls:   any of {restDays, fromDate, toDateOverride, toDate}
+// Inputs NEVER consulted anymore: reverse-derivation, dual-mode, legacy DAY_COUNT.
+// Helper kept only for legacy DATE_RANGE rows that pre-existed the rewrite —
+// new writes ALWAYS go through certDates.normalizeCertificateDates().
 function resolveDurationType(d) {
-  return d.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
+  return d && d.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
 }
-
-// Smart auto-date: when the doctor gives a start date + rest days but no
-// explicit end date, derive it. `restDays` counts INCLUSIVE days starting
-// at fromDate — 10 Aug + 5 days of rest ends on 14 Aug.
 function deriveToDate(fromDate, restDays) {
+  // Back-compat only. New code uses certDates.computeEndDate.
   if (!fromDate || !restDays || restDays < 1) return null;
   return dayjs(fromDate).add(restDays - 1, 'day').format('YYYY-MM-DD');
 }
-
-// Normalize the validated payload into concrete date fields for storage.
 function resolveCertificateDates(d) {
-  const durationType = resolveDurationType(d);
-  if (durationType === 'SINGLE_DAY') {
-    const date = parseDateOnlyOrNull(d.certificateDate);
-    return { durationType, certificateDate: date, fromDate: null, toDate: null };
-  }
-  const fromDate = parseDateOnlyOrNull(d.fromDate);
-  // Client may omit toDate — derive from restDays when possible.
-  const toDate = parseDateOnlyOrNull(d.toDate) || parseDateOnlyOrNull(deriveToDate(d.fromDate, d.restDays));
-  return { durationType, certificateDate: null, fromDate, toDate };
+  const dates = certDates.normalizeCertificateDates(d || {});
+  return Object.assign(
+    { durationType: resolveDurationType(d) },
+    dates
+  );
 }
 
 // Load the full graph the delivery + PDF pipeline needs.
@@ -306,6 +299,37 @@ exports.update = asyncHandler(async (req, res) => {
     data.certificateDate = dates.certificateDate;
     data.fromDate = dates.fromDate;
     data.toDate = dates.toDate;
+  }
+
+  // v3.4.4 — Always re-run the date normalizer when ANY date-relevant
+  // field changes, so single-day toggles, partial overrides and restDays
+  // edits converge on a single canonical state and never drift.
+  const durTouched =
+    Object.prototype.hasOwnProperty.call(data, 'durationType') ||
+    Object.prototype.hasOwnProperty.call(data, 'certificateDate') ||
+    Object.prototype.hasOwnProperty.call(data, 'fromDate') ||
+    Object.prototype.hasOwnProperty.call(data, 'toDate') ||
+    Object.prototype.hasOwnProperty.call(data, 'restDays');
+  if (durTouched) {
+    const merged = Object.assign(
+      {},
+      {
+        durationType:    existing.durationType || 'DATE_RANGE',
+        certificateDate: existing.certificateDate ? dayjs(existing.certificateDate).format('YYYY-MM-DD') : undefined,
+        fromDate:        existing.fromDate ? dayjs(existing.fromDate).format('YYYY-MM-DD') : undefined,
+        toDate:          existing.toDate   ? dayjs(existing.toDate).format('YYYY-MM-DD')   : undefined,
+        restDays:        existing.restDays
+      },
+      {
+        restDays:       data.restDays,
+        fromDate:       data.fromDate,
+        toDate:         data.toDate,
+        toDateOverride: data.toDateOverride,
+        durationType:   data.durationType,
+        certificateDate:data.certificateDate
+      }
+    );
+    Object.assign(data, certDates.normalizeCertificateDates(merged));
   }
 
   const cert = await prisma.medicalCertificate.update({
