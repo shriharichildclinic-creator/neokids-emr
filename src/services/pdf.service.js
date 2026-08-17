@@ -476,17 +476,25 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
 // Feature 2 — Medical Certificate Generator
 // ─────────────────────────────────────────────────────────────────────
 
+// v3.4.0 — template catalog expanded; wording adapts to durationType:
+//   SINGLE_DAY → "on <Certificate Date>" phrasing (school absence for one
+//   day, doctor-visit proof, vaccination, etc.)
+//   DATE_RANGE → "from <from> to <to>" phrasing.
+// `ctx` carries: name, age, gender, examDate, examClause, reason, fromDate,
+// toDate, restDays, singleDate.
 const CERT_TEMPLATES = {
   GENERAL: {
     title: 'MEDICAL CERTIFICATE',
-    body: ({ name, age, gender, examDate, reason }) =>
-      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, was examined at our clinic on ${examDate}. ${reason}`
+    body: ({ name, age, gender, examClause, reason }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, ${examClause}. ${reason}`
   },
   SCHOOL_LEAVE: {
     title: 'SCHOOL LEAVE CERTIFICATE',
-    body: ({ name, age, gender, examDate, reason, fromDate, toDate, restDays }) => {
-      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}, was examined at our clinic on ${examDate}. ${reason}`;
-      if (fromDate && toDate) {
+    body: ({ name, age, gender, examClause, reason, fromDate, toDate, restDays, singleDate }) => {
+      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}, ${examClause}. ${reason}`;
+      if (singleDate) {
+        s += ` ${cap(name)} is advised to remain absent from school on ${singleDate}.`;
+      } else if (fromDate && toDate) {
         s += ` ${cap(name)} is advised to remain absent from school from ${fromDate} to ${toDate}${restDays ? ` (${restDays} day${restDays === 1 ? '' : 's'})` : ''}.`;
       }
       return s;
@@ -494,17 +502,31 @@ const CERT_TEMPLATES = {
   },
   FITNESS: {
     title: 'FITNESS CERTIFICATE',
-    body: ({ name, age, gender, examDate, reason }) =>
-      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, was examined at our clinic on ${examDate} and is found to be medically fit. ${reason}`
+    body: ({ name, age, gender, examClause, reason }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, ${examClause} and is found to be medically fit. ${reason}`
   },
   MEDICAL_REST: {
-    title: 'MEDICAL REST CERTIFICATE',
-    body: ({ name, age, gender, examDate, reason, fromDate, toDate, restDays }) => {
-      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, was examined at our clinic on ${examDate}. ${reason}`;
-      if (restDays || (fromDate && toDate)) {
+    title: 'REST ADVISED CERTIFICATE',
+    body: ({ name, age, gender, examClause, reason, fromDate, toDate, restDays, singleDate }) => {
+      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, ${examClause}. ${reason}`;
+      if (singleDate) {
+        s += ` ${cap(name)} is advised rest on ${singleDate}.`;
+      } else if (restDays || (fromDate && toDate)) {
         s += ` ${cap(name)} is advised complete medical rest${restDays ? ` for ${restDays} day${restDays === 1 ? '' : 's'}` : ''}${fromDate && toDate ? ` from ${fromDate} to ${toDate}` : ''}.`;
       }
       return s;
+    }
+  },
+  VACCINATION: {
+    title: 'VACCINATION CERTIFICATE',
+    body: ({ name, age, gender, examClause, reason, singleDate }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''} was administered vaccination at our clinic on ${singleDate || examClause.replace(/^(was examined|was examined via teleconsultation) /, '')}. ${reason}`
+  },
+  RETURN_TO_SCHOOL: {
+    title: 'RETURN TO SCHOOL CERTIFICATE',
+    body: ({ name, age, gender, examClause, reason, singleDate }) => {
+      const dateStr = singleDate ? ` on ${singleDate}` : '';
+      return `This is to certify that ${name}${age ? `, aged ${age}` : ''}, ${examClause} and is now medically fit to return to school${dateStr}. ${reason}`;
     }
   }
 };
@@ -539,6 +561,20 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
   const age = certificate.patientAgeSnapshot || (patient ? calcAge(patient.dateOfBirth) : '') || null;
   const gender = certificate.patientGenderSnapshot || (patient && patient.gender) || null;
 
+  // ── v3.4.0 — consultation mode (snapshot first, live appointment second) ──
+  // In-person (OFFLINE) → clinic name + address + contact block.
+  // Online  (ONLINE)    → "Teleconsultation" identity, doctor details only,
+  //                       no physical clinic address block.
+  const consultType = certificate.consultationType || (certificate.appointment && certificate.appointment.consultationType) || null;
+  const isOnline = consultType === 'ONLINE';
+  const examClause = isOnline
+    ? `was examined via teleconsultation (online consultation) on ${examDate}`
+    : `was examined at our clinic on ${examDate}`;
+
+  // ── v3.4.0 — duration semantics (legacy rows fall back to DATE_RANGE) ──
+  const durationType = certificate.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
+  const singleDate = durationType === 'SINGLE_DAY' ? fmtCertDate(certificate.certificateDate) : null;
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
     const stream = fs.createWriteStream(filepath);
@@ -547,23 +583,40 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
     // ── Letterhead ──────────────────────────────────────────────────
     drawHeader(doc, tpl.title);
 
-    // Clinic block under the band (left) + certificate meta (right).
+    // Identity block under the band (left) + certificate meta (right).
     let ly = 100;
-    doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
-       .text(doctor.clinicName || 'NeoKidsPro Pediatric Clinic', 50, ly);
-    doc.fontSize(9).font('Helvetica').fillColor('#555');
-    if (doctor.clinicAddress) {
-      doc.text(String(doctor.clinicAddress), 50, ly + 16, { width: 260 });
+    if (isOnline) {
+      // Teleconsultation: doctor details only — never a physical clinic
+      // address block (the consultation did not happen at the clinic).
+      doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
+         .text(`Dr. ${doctor.name}`, 50, ly);
+      doc.fontSize(9).font('Helvetica').fillColor('#555');
+      let ty = ly + 16;
+      doc.text(`${doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${doctor.specialization || 'Pediatrician'}`, 50, ty, { width: 260 });
+      ty += 12;
+      doc.fillColor(BRAND_BLUE).font('Helvetica-Bold')
+         .text('Teleconsultation / Online Consultation', 50, ty, { width: 260 });
+      ty += 12;
+      doc.font('Helvetica').fillColor('#555').text('neokidspro.in', 50, ty, { width: 260 });
+    } else {
+      doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
+         .text(doctor.clinicName || 'NeoKidsPro Pediatric Clinic', 50, ly);
+      doc.fontSize(9).font('Helvetica').fillColor('#555');
+      if (doctor.clinicAddress) {
+        doc.text(String(doctor.clinicAddress), 50, ly + 16, { width: 260 });
+      }
+      doc.text('neokidspro.in', 50, ly + (doctor.clinicAddress ? 16 + Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11 : 16), { width: 260 });
     }
-    doc.text('neokidspro.in', 50, ly + (doctor.clinicAddress ? 16 + Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11 : 16), { width: 260 });
 
     doc.fontSize(9).fillColor('#555')
        .text(`Certificate ID: ${certificate.certificateNumber}`, 320, ly, { width: 225, align: 'right' });
     doc.text(`Date of Issue: ${examDate}`, 320, ly + 14, { width: 225, align: 'right' });
-    // Issue 5 — show the linked appointment's date + time when available.
+    // Consultation mode is always explicit on the certificate.
+    doc.text(`Consultation: ${appointmentModeLabel(consultType || 'OFFLINE')}`, 320, ly + 28, { width: 225, align: 'right' });
+    // Show the linked appointment's date + time when available.
     if (certificate.appointment && certificate.appointment.date) {
       const apptDt = `${fmtCertDate(certificate.appointment.date)}${certificate.appointment.startTime ? ' · ' + dayjs(`2000-01-01T${certificate.appointment.startTime}`).format('hh:mm A') : ''}`;
-      doc.text(`Appointment: ${apptDt}`, 320, ly + 28, { width: 225, align: 'right' });
+      doc.text(`Appointment: ${apptDt}`, 320, ly + 42, { width: 225, align: 'right' });
     }
 
     // ── Title ────────────────────────────────────────────────────────
@@ -593,7 +646,7 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
     // ── Certificate body ─────────────────────────────────────────────
     cy += 12;
     const bodyText = tpl.body({
-      name, age, gender, examDate,
+      name, age, gender, examDate, examClause, singleDate,
       reason: certificate.reason,
       fromDate: fmtCertDate(certificate.fromDate),
       toDate: fmtCertDate(certificate.toDate),
@@ -614,7 +667,12 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
       cy = doc.y + 12;
     }
 
-    if (certificate.restDays && certificate.fromDate && certificate.toDate) {
+    if (durationType === 'SINGLE_DAY' && singleDate) {
+      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Certificate Date', 50, cy);
+      doc.font('Helvetica').fillColor('#222').fontSize(11)
+         .text(singleDate, 50, cy + 14, { width: doc.page.width - 100 });
+      cy = doc.y + 12;
+    } else if (certificate.restDays && certificate.fromDate && certificate.toDate) {
       doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Recommended Rest', 50, cy);
       doc.font('Helvetica').fillColor('#222').fontSize(11)
          .text(`${certificate.restDays} day${certificate.restDays === 1 ? '' : 's'} — from ${fmtCertDate(certificate.fromDate)} to ${fmtCertDate(certificate.toDate)}`,
@@ -632,9 +690,11 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
     drawSignatureBlock(doc, doctor, { y: doc.page.height - 175 });
 
     // ── Footer ───────────────────────────────────────────────────────
+    const issuerLine = isOnline
+      ? `This certificate was issued electronically by Dr. ${doctor.name} following a teleconsultation and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`
+      : `This certificate was issued electronically by ${doctor.clinicName || 'NeoKidsPro Pediatric Clinic'} and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`;
     doc.fontSize(8).fillColor('#888')
-       .text(
-         `This certificate was issued electronically by ${doctor.clinicName || 'NeoKidsPro Pediatric Clinic'} and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`,
+       .text(issuerLine,
          50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true }
        );
 

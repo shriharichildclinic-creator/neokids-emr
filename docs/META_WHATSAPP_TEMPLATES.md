@@ -13,6 +13,7 @@ Templates are managed in **Meta Business Manager → WhatsApp Manager → Messag
 | N1 | `neokids_prescription_pdf`   | UTILITY | en | DOCUMENT | 2 | — |
 | N2 | `neokids_invoice_pdf`        | UTILITY | en | DOCUMENT | 3 | — |
 | N3 | `neokids_vaccination_reminder` | UTILITY | en | TEXT (none) | 4 | 1 URL button |
+| N4 | `medical_certificate_ready`  | UTILITY | en | DOCUMENT | 3 | — |
 
 ---
 
@@ -53,6 +54,37 @@ Templates are managed in **Meta Business Manager → WhatsApp Manager → Messag
   - `{{1}}` = `Aarav`
   - `{{2}}` = `INV-3F2A9B10`
   - `{{3}}` = `500.00`
+
+---
+
+### N4. `medical_certificate_ready`  (v3.4.0)
+
+- **Category:** Utility
+- **Language:** English
+- **Header:** `DOCUMENT` (dynamic — media id of the uploaded certificate PDF supplied at send time; filename `medical_certificate_<certNumber>.pdf`)
+- **Body (3 vars):**
+  ```
+  Hello {{1}},
+
+  Your medical certificate from {{2}} is ready.
+
+  Certificate Date: {{3}}
+
+  If you have any questions, please contact the clinic.
+
+  Regards,
+  {{2}}
+  ```
+- **Buttons:** none.
+- **Variable mapping (code: `whatsapp-media.service.js → sendCertificatePdf`):**
+  - `{{1}}` = Patient name
+  - `{{2}}` = Clinic name (falls back to `Dr. <name>` when the doctor has no clinic configured)
+  - `{{3}}` = Certificate date — the single-day date, else the rest-period start, else the issue date
+- **Sample values for approval:**
+  - `{{1}}` = `Aarav Sharma`
+  - `{{2}}` = `NeoKidsPro Pediatric Clinic`
+  - `{{3}}` = `17 Aug 2026`
+- **Env override:** `WA_TPL_CERTIFICATE_PDF` (defaults to `medical_certificate_ready`)
 
 ---
 

@@ -187,6 +187,38 @@ async function sendPrescriptionPdf({ appointment, filepath, publicUrl }) {
   });
 }
 
+// ─── v3.4.0 — Medical Certificate — uses template medical_certificate_ready ───
+// Meta template contract (docs/META_WHATSAPP_TEMPLATES.md):
+//   Header : Document (the PDF itself)
+//   Body   : Hello {{1}},
+//            Your medical certificate from {{2}} is ready.
+//            Certificate Date: {{3}}
+//            If you have any questions, please contact the clinic.
+//            Regards, {{2}}
+//   {{1}} = Patient Name, {{2}} = Doctor/Clinic Name, {{3}} = Certificate Date
+async function sendCertificatePdf({ certificate, doctor, patient, filepath }) {
+  const dayjs  = require('dayjs');
+  const to      = patient.phone;
+  const tplName = process.env.WA_TPL_CERTIFICATE_PDF || 'medical_certificate_ready';
+  const fname   = `medical_certificate_${certificate.certificateNumber}.pdf`;
+  // Effective certificate date: single-day date, else the rest-period start,
+  // else the issue date.
+  const certDate = certificate.certificateDate || certificate.fromDate || certificate.issuedAt;
+
+  const media = await uploadMediaToMeta(filepath, 'application/pdf');
+  return sendDocumentTemplate({
+    to,
+    templateName: tplName,
+    mediaId:  media.id,
+    filename: fname,
+    bodyParams: [
+      patient.name,                                     // {{1}} patient
+      (doctor && doctor.clinicName) || `Dr. ${(doctor && doctor.name) || '—'}`, // {{2}} clinic / doctor
+      dayjs(certDate).format('DD MMM YYYY')             // {{3}} certificate date
+    ]
+  });
+}
+
 // Invoice — uses template neokids_invoice_pdf
 async function sendInvoicePdf({ appointment, filepath, publicUrl }) {
   const to      = appointment.patient.phone;
@@ -213,5 +245,6 @@ module.exports = {
   sendDocumentByLink,
   sendDocumentTemplate,
   sendPrescriptionPdf,
-  sendInvoicePdf
+  sendInvoicePdf,
+  sendCertificatePdf
 };

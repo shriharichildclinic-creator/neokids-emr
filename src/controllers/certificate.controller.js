@@ -23,12 +23,75 @@ const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
 const dayjs = require('dayjs');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
+const automation = require('../services/automation.service');
 
+// ─── v3.4.0 — duration / date helpers ────────────────────────────────
+// Resolve the effective duration type: explicit value wins; legacy rows and
+// clients that never send durationType fall back to DATE_RANGE so nothing
+// about their behaviour changes.
+function resolveDurationType(d) {
+  return d.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
+}
+
+// Smart auto-date: when the doctor gives a start date + rest days but no
+// explicit end date, derive it. `restDays` counts INCLUSIVE days starting
+// at fromDate — 10 Aug + 5 days of rest ends on 14 Aug.
+function deriveToDate(fromDate, restDays) {
+  if (!fromDate || !restDays || restDays < 1) return null;
+  return dayjs(fromDate).add(restDays - 1, 'day').format('YYYY-MM-DD');
+}
+
+// Normalize the validated payload into concrete date fields for storage.
+function resolveCertificateDates(d) {
+  const durationType = resolveDurationType(d);
+  if (durationType === 'SINGLE_DAY') {
+    const date = parseDateOnlyOrNull(d.certificateDate);
+    return { durationType, certificateDate: date, fromDate: null, toDate: null };
+  }
+  const fromDate = parseDateOnlyOrNull(d.fromDate);
+  // Client may omit toDate — derive from restDays when possible.
+  const toDate = parseDateOnlyOrNull(d.toDate) || parseDateOnlyOrNull(deriveToDate(d.fromDate, d.restDays));
+  return { durationType, certificateDate: null, fromDate, toDate };
+}
+
+// Load the full graph the delivery + PDF pipeline needs.
+async function loadCertificateGraph(id) {
+  return prisma.medicalCertificate.findUnique({
+    where: { id },
+    include: { patient: true, doctor: true, appointment: true }
+  });
+}
+
+// Fire PDF regeneration + WhatsApp + email delivery without letting a
+// channel failure fail the request. Returns a per-channel delivery summary
+// so the UI can show exactly what happened.
+async function deliverCertificate(cert, { sendWhatsapp = true, sendEmail = true } = {}) {
+  const full = cert && cert.patient ? cert : await loadCertificateGraph(cert.id);
+  if (!full) return { whatsapp: 'skipped', email: 'skipped' };
+
+  // Always (re)generate the PDF first so both channels attach fresh bytes.
+  let pdfRes = null;
+  try {
+    pdfRes = await pdf.generateMedicalCertificate({ certificate: full, doctor: full.doctor, patient: full.patient });
+    await prisma.medicalCertificate.update({ where: { id: full.id }, data: { pdfUrl: pdfRes.url } });
+    full.pdfUrl = pdfRes.url;
+  } catch (e) {
+    logger.error('deliverCertificate: PDF generation failed', { id: full.id, err: e.message });
+    return { whatsapp: 'pdf_failed', email: 'pdf_failed' };
+  }
+
+  return automation.onCertificateIssued({ certificate: full, pdfRes, sendWhatsapp, sendEmail });
+}
+
+// v3.4.0 — expanded catalog. Keep keys in sync with
+// pdf.service.js CERT_TEMPLATES and validators.medicalCertificateSchema.
 const TEMPLATES = [
-  { key: 'GENERAL',       label: 'General Medical Certificate' },
-  { key: 'SCHOOL_LEAVE',  label: 'School Leave Certificate' },
-  { key: 'FITNESS',       label: 'Fitness Certificate' },
-  { key: 'MEDICAL_REST',  label: 'Medical Rest Certificate' }
+  { key: 'GENERAL',           label: 'General Medical Certificate' },
+  { key: 'SCHOOL_LEAVE',      label: 'School Leave Certificate' },
+  { key: 'FITNESS',           label: 'Fitness Certificate' },
+  { key: 'MEDICAL_REST',      label: 'Rest Advised Certificate' },
+  { key: 'VACCINATION',       label: 'Vaccination Certificate' },
+  { key: 'RETURN_TO_SCHOOL',  label: 'Return To School Certificate' }
 ];
 
 function nextCertNumber() {
@@ -145,6 +208,7 @@ exports.create = asyncHandler(async (req, res) => {
 
   const ageStr = calcAge(patient.dateOfBirth) || null;
   const certificateNumber = nextCertNumber();
+  const dates = resolveCertificateDates(d);
 
   const cert = await prisma.medicalCertificate.create({
     data: {
@@ -156,9 +220,15 @@ exports.create = asyncHandler(async (req, res) => {
       diagnosis: d.diagnosis || null,
       reason: d.reason,
       restDays: d.restDays ?? null,
-      fromDate: parseDateOnlyOrNull(d.fromDate),
-      toDate:   parseDateOnlyOrNull(d.toDate),
+      durationType: dates.durationType,
+      certificateDate: dates.certificateDate,
+      fromDate: dates.fromDate,
+      toDate:   dates.toDate,
       additionalNotes: d.additionalNotes || null,
+      // v3.4.0 — snapshot consultation mode so the certificate layout is
+      // frozen at issue time even if the appointment is edited later.
+      // Appointment-linked: from the appointment. Standalone: doctor's pick.
+      consultationType: appointment ? (appointment.consultationType || null) : (d.consultationType || null),
       patientNameSnapshot: patient.name,
       patientAgeSnapshot: ageStr,
       patientGenderSnapshot: patient.gender || null
@@ -166,20 +236,16 @@ exports.create = asyncHandler(async (req, res) => {
     include: { appointment: true }
   });
 
-  // Generate PDF (best-effort; controller still succeeds if generation fails,
-  // the file can be regenerated on next download via the file route).
-  try {
-    const result = await pdf.generateMedicalCertificate({ certificate: cert, doctor, patient });
-    await prisma.medicalCertificate.update({
-      where: { id: cert.id },
-      data:  { pdfUrl: result.url }
-    });
-    cert.pdfUrl = result.url;
-  } catch (e) {
-    logger.error('generateMedicalCertificate failed', { id: cert.id, err: e.message });
-  }
+  // Generate PDF + deliver (WhatsApp + email, best-effort per channel).
+  // The controller still succeeds if a channel fails — the doctor can
+  // re-send from the certificates list via /:id/send.
+  const delivery = await deliverCertificate({ ...cert, patient, doctor }, {
+    sendWhatsapp: req.body.sendWhatsapp !== false,
+    sendEmail: req.body.sendEmail !== false
+  });
 
-  res.status(201).json(withSignedPdfUrl(cert, req.user));
+  const fresh = await prisma.medicalCertificate.findUnique({ where: { id: cert.id } });
+  res.status(201).json({ ...withSignedPdfUrl(fresh || cert, req.user), delivery });
 });
 
 // Convenience endpoint: POST /appointments/:id/certificate
@@ -210,9 +276,37 @@ exports.update = asyncHandler(async (req, res) => {
   if (Object.prototype.hasOwnProperty.call(d, 'reason') && d.reason) data.reason = d.reason;
   if (Object.prototype.hasOwnProperty.call(d, 'diagnosis')) data.diagnosis = d.diagnosis || null;
   if (Object.prototype.hasOwnProperty.call(d, 'restDays')) data.restDays = d.restDays ?? null;
-  if (Object.prototype.hasOwnProperty.call(d, 'fromDate')) data.fromDate = parseDateOnlyOrNull(d.fromDate);
-  if (Object.prototype.hasOwnProperty.call(d, 'toDate')) data.toDate = parseDateOnlyOrNull(d.toDate);
   if (Object.prototype.hasOwnProperty.call(d, 'additionalNotes')) data.additionalNotes = d.additionalNotes || null;
+
+  // Duration semantics: if the doctor switches type or touches any date
+  // field, recompute the full date set from the merged view (existing +
+  // patch) so single-day ↔ range conversions never leave stale dates.
+  const touchesDates =
+    Object.prototype.hasOwnProperty.call(d, 'durationType') ||
+    Object.prototype.hasOwnProperty.call(d, 'certificateDate') ||
+    Object.prototype.hasOwnProperty.call(d, 'fromDate') ||
+    Object.prototype.hasOwnProperty.call(d, 'toDate') ||
+    Object.prototype.hasOwnProperty.call(d, 'restDays');
+  if (touchesDates) {
+    const merged = {
+      durationType: d.durationType || existing.durationType || 'DATE_RANGE',
+      certificateDate: Object.prototype.hasOwnProperty.call(d, 'certificateDate')
+        ? d.certificateDate
+        : (existing.certificateDate ? dayjs(existing.certificateDate).format('YYYY-MM-DD') : undefined),
+      fromDate: Object.prototype.hasOwnProperty.call(d, 'fromDate')
+        ? d.fromDate
+        : (existing.fromDate ? dayjs(existing.fromDate).format('YYYY-MM-DD') : undefined),
+      toDate: Object.prototype.hasOwnProperty.call(d, 'toDate')
+        ? d.toDate
+        : (existing.toDate ? dayjs(existing.toDate).format('YYYY-MM-DD') : undefined),
+      restDays: Object.prototype.hasOwnProperty.call(d, 'restDays') ? d.restDays : existing.restDays
+    };
+    const dates = resolveCertificateDates(merged);
+    data.durationType = dates.durationType;
+    data.certificateDate = dates.certificateDate;
+    data.fromDate = dates.fromDate;
+    data.toDate = dates.toDate;
+  }
 
   const cert = await prisma.medicalCertificate.update({
     where: { id: existing.id },
@@ -220,6 +314,9 @@ exports.update = asyncHandler(async (req, res) => {
     include: { appointment: true }
   });
 
+  // Regenerate the PDF so downloads always reflect the latest wording.
+  // NOTE: an edit intentionally does NOT re-notify the patient — delivery
+  // is an explicit action (POST /:id/send) so a typo fix can't spam them.
   try {
     const doctor = await prisma.doctor.findUnique({ where: { id: existing.doctorId } });
     const result = await pdf.generateMedicalCertificate({ certificate: cert, doctor, patient: existing.patient });
@@ -230,4 +327,23 @@ exports.update = asyncHandler(async (req, res) => {
   }
 
   res.json(withSignedPdfUrl(cert, req.user));
+});
+
+// POST /api/doctor/certificates/:id/send
+// Body: { channels: ['whatsapp','email'] } — defaults to both.
+// Explicit re-delivery of an issued certificate, mirroring the prescription
+// "resend" workflow. Per-channel statuses are returned so the UI can show
+// e.g. "sent on WhatsApp, no email on file".
+exports.send = asyncHandler(async (req, res) => {
+  const where = { id: req.params.id };
+  if (req.user.role === 'DOCTOR') where.doctorId = req.user.id;
+  const existing = await prisma.medicalCertificate.findFirst({ where });
+  if (!existing) return res.status(404).json({ error: 'Certificate not found' });
+
+  const channels = Array.isArray(req.body && req.body.channels) ? req.body.channels : ['whatsapp', 'email'];
+  const delivery = await deliverCertificate(existing, {
+    sendWhatsapp: channels.includes('whatsapp'),
+    sendEmail: channels.includes('email')
+  });
+  res.json({ success: true, delivery });
 });

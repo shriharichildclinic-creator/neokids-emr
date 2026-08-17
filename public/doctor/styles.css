@@ -1659,3 +1659,132 @@ html[data-theme="dark"] .np-modal pre{
   border-color: var(--nk-border) !important;
   color: var(--nk-text) !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3.4.0 — Medical Certificate feature rework
+   Root causes addressed (no patches):
+   • .np-modal raised above the sidebar (40/50), header (30), backdrop
+     (35/44) and the portaled overflow menu (1200). Modals are portaled
+     to <body> by app.js so the fixed/sticky sidebar's stacking context
+     can never trap them below the fold.
+   ═══════════════════════════════════════════════════════════════════ */
+.np-modal{ z-index: 1300; }
+
+/* ── Segmented control (consultation mode, duration type) ── */
+.np-seg{
+  display:inline-flex; gap:4px; padding:4px;
+  background: var(--np-surface);
+  border:1px solid var(--np-border);
+  border-radius:12px;
+}
+.np-seg__btn{
+  flex:1; min-width:0;
+  padding:.5rem .9rem;
+  border:0; border-radius:9px;
+  background:transparent; color: var(--np-muted);
+  font-size:.86rem; font-weight:600;
+  cursor:pointer;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+  white-space:nowrap;
+}
+.np-seg__btn:hover{ color: var(--np-ink); }
+.np-seg__btn.is-active{
+  background: var(--nk-card);
+  color: var(--np-primary-600, var(--np-primary));
+  box-shadow: 0 1px 3px rgba(15,42,71,.12);
+}
+
+/* ── Patient picker (search → dropdown → selected card) ── */
+.np-ppicker{ position:relative; }
+.np-ppicker__searchwrap{ position:relative; }
+.np-ppicker__icon{
+  position:absolute; left:.75rem; top:50%;
+  transform: translateY(-50%);
+  color: var(--np-muted); pointer-events:none;
+}
+.np-ppicker__input{ padding-left:2.2rem; width:100%; }
+
+.np-ppicker__results{
+  position:absolute; top:calc(100% + 6px); left:0; right:0;
+  background: var(--nk-card);
+  border:1px solid var(--np-border);
+  border-radius:12px;
+  box-shadow: 0 14px 32px -8px rgba(15,42,71,.18), 0 2px 6px rgba(15,42,71,.05);
+  max-height:280px; overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  z-index:30;
+  padding:.3rem;
+}
+.np-ppicker__results.hidden{ display:none; }
+.np-ppicker__item{
+  display:flex; align-items:center; gap:.7rem;
+  width:100%; padding:.6rem .7rem;
+  border:0; border-radius:9px;
+  background:transparent; cursor:pointer;
+  text-align:left; font-family:inherit;
+}
+.np-ppicker__item:hover, .np-ppicker__item:focus-visible{ background:#F1F6FB; outline:none; }
+.np-ppicker__avatar{
+  width:36px; height:36px; flex-shrink:0;
+  border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.8rem; font-weight:700; color:#fff;
+  background: linear-gradient(135deg, #89BCBD, #6FAAAB);
+}
+.np-ppicker__item-main{ min-width:0; flex:1; }
+.np-ppicker__item-name{
+  font-weight:600; color: var(--np-ink); font-size:.9rem;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.np-ppicker__item-meta{ font-size:.78rem; color: var(--np-muted); margin-top:.1rem; }
+.np-ppicker__item-phone{ font-size:.78rem; color: var(--np-muted); flex-shrink:0; }
+.np-ppicker__empty{
+  padding:.8rem; text-align:center;
+  font-size:.84rem; color: var(--np-muted);
+}
+
+/* Prominent selected-patient card (replaces the tiny pill). */
+.np-ppicker__chosen{ margin-top:.5rem; }
+.np-ppicker__chosen.hidden{ display:none; }
+.np-ppicker__card{
+  display:flex; align-items:center; gap:.75rem;
+  padding:.75rem .9rem;
+  background: var(--np-surface);
+  border:1px solid var(--np-border);
+  border-left:3px solid var(--np-primary, #4DA8FF);
+  border-radius:12px;
+}
+.np-ppicker__card-avatar{
+  width:42px; height:42px; flex-shrink:0;
+  border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.9rem; font-weight:700; color:#fff;
+  background: linear-gradient(135deg, #4DA8FF, #3B8FE0);
+}
+.np-ppicker__card-main{ min-width:0; flex:1; }
+.np-ppicker__card-name{
+  font-weight:700; color: var(--np-ink); font-size:.95rem;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.np-ppicker__card-meta{ font-size:.8rem; color: var(--np-muted); margin-top:.15rem; }
+.np-ppicker__change{ flex-shrink:0; }
+
+/* ── Certificate actions modal (view / download / WhatsApp / email) ── */
+.np-cert-actions{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap:.55rem;
+}
+.np-cert-actions .np-btn{ justify-content:center; }
+
+@media (max-width:640px){
+  /* Mobile: the segmented controls span the full width and the actions
+     grid stays two-up so the four delivery buttons never overflow. */
+  .np-seg{ display:flex; width:100%; }
+  .np-ppicker__results{ max-height:min(50vh, 260px); }
+  .np-cert-actions{ grid-template-columns: 1fr 1fr; }
+}
+@media (max-width:400px){
+  .np-cert-actions{ grid-template-columns: 1fr; }
+}

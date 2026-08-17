@@ -73,6 +73,7 @@ router.get('/certificates',                                 cert.list);
 router.get('/certificates/:id',                             cert.detail);
 router.post('/certificates',                                cert.create);
 router.put('/certificates/:id',                             cert.update);
+router.post('/certificates/:id/send',                       cert.send);   // v3.4.0 — WhatsApp/email delivery
 router.post('/appointments/:id/certificate',                cert.createForAppointment);
 
 // ─── Patient identity & history ───

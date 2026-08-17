@@ -540,8 +540,10 @@ function apptCard(a){
     </a>`);
   }
   // Feature 2 — medical certificate from this appointment (completed or manual records).
+  // closeOverflowMenus() runs FIRST (and openCertModal → npOpenModal closes
+  // them again) so the portaled dropdown can never linger above the modal.
   if (a.status === 'COMPLETED' || a.source === 'MANUAL') {
-    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); openCertModal(__apptById('${escapeHtml(a.id)}'))">
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); closeOverflowMenus(); openCertModal(__apptById('${escapeHtml(a.id)}'))">
       <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
       Medical certificate
     </button>`);
@@ -1611,7 +1613,32 @@ async function removePhoto(){
    ===================================================================== */
 
 let _histFormWired = false;
-let _certState = { patient: null, templates: [], editingAppt: null };
+let _certState = { patient: null, templates: [], editingAppt: null, editingCert: null, durationType: 'DATE_RANGE', consultMode: null, toAuto: true, actionsCert: null };
+
+/* ─── v3.4.0 — Modal portal ─────────────────────────────────────────
+   Root cause of "certificate modal renders below the sidebar": the
+   modal lived inside the scrollable main column while the sidebar is a
+   fixed/sticky element with its own stacking context (z-index 40/50).
+   On mobile drawers and any transformed/filtered ancestor, position:fixed
+   is computed against that ancestor — so the dialog surfaced far below
+   the viewport or beneath the drawer. Fix: move every modal to <body>
+   once (a portal), so its fixed positioning is always viewport-relative
+   and its z-index (1300) always wins over sidebar/header/overflow menu. */
+function npPortalModal(id){
+  const el = document.getElementById(id);
+  if (el && el.parentNode !== document.body) document.body.appendChild(el);
+  return el;
+}
+function npOpenModal(id){
+  closeOverflowMenus();           // never leave a floating menu above a modal
+  const el = npPortalModal(id);
+  if (el) el.classList.remove('hidden');
+  return el;
+}
+function npCloseModal(id){
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
 
 function _toast(kind, msg){
   if (window.NPToast && NPToast[kind]) NPToast[kind](msg);
@@ -1756,7 +1783,29 @@ function resolveLinkConflict(choice){
   if (form) form.requestSubmit();
 }
 
-/* ---------- Feature 2: Medical Certificates ---------- */
+/* ---------- Feature 2: Medical Certificates (v3.4.0 rework) ---------- */
+
+/* Small formatting helpers for the patient picker. */
+function _npInitials(name){
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+function _npGenderLabel(g){
+  return g === 'MALE' ? 'Male' : g === 'FEMALE' ? 'Female' : (g || '');
+}
+function _npPatientMeta(p){
+  const bits = [];
+  const gl = _npGenderLabel(p && p.gender);
+  if (gl) bits.push(gl);
+  const age = p && p.dateOfBirth ? calcAge(p.dateOfBirth) : '';
+  if (age) bits.push(age.replace(/ yrs?$/, ' Years').replace(/ mo$/, ' Months'));
+  return bits.join(' • ');
+}
+function _npPatientPhone(p){
+  return p && p.phone ? `+91 ${String(p.phone).replace(/^(\d{5})(\d{5})$/, '$1 $2')}` : '';
+}
+
 async function loadCertificates(){
   const wrap = $('#certList');
   if (!wrap) return;
@@ -1777,9 +1826,12 @@ async function loadCertificates(){
               <div>
                 <b>${escapeHtml(c.patientNameSnapshot || (c.patient && c.patient.name) || '—')}</b>
                 <span class="np-badge np-badge--mint" style="margin-left:.4rem;">${escapeHtml((c.templateKey||'GENERAL').replace(/_/g,' '))}</span>
+                ${(c.consultationType === 'ONLINE' || (c.appointment && c.appointment.consultationType === 'ONLINE'))
+                  ? '<span class="np-badge np-badge--blue" style="margin-left:.3rem;">Online</span>' : ''}
               </div>
-              <div class="np-row" style="gap:.4rem;">
-                ${c.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(c.pdfUrl)}" target="_blank" rel="noopener">Preview PDF</a>` : ''}
+              <div class="np-row" style="gap:.4rem; flex-wrap:wrap;">
+                ${c.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(c.pdfUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
+                <button type="button" class="np-btn np-btn--primary np-btn--sm" data-cert-send="${escapeHtml(c.id)}">Send</button>
                 <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-cert-edit="${escapeHtml(c.id)}">Edit</button>
               </div>
             </div>
@@ -1793,6 +1845,12 @@ async function loadCertificates(){
           if (cert) openCertEdit(cert);
         });
       });
+      wrap.querySelectorAll('[data-cert-send]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const cert = rows.find(x => x.id === btn.getAttribute('data-cert-send'));
+          if (cert) openCertActions(cert);
+        });
+      });
     }
   } catch (ex){
     wrap.innerHTML = '<div class="np-error">' + escapeHtml(ex.message || 'Failed to load') + '</div>';
@@ -1802,21 +1860,129 @@ async function loadCertificates(){
   if (nb && !nb.__wired){ nb.__wired = true; nb.addEventListener('click', () => openCertModal(null)); }
 }
 
+/* ── Certificate actions modal: View / Download / WhatsApp / Email ── */
+function openCertActions(cert){
+  _certState.actionsCert = cert;
+  $('#certActionsTitle').textContent = cert.certificateNumber || 'Certificate';
+  $('#certActionsSub').textContent =
+    `${cert.patientNameSnapshot || (cert.patient && cert.patient.name) || '—'} · issued ${fmtDate(cert.issuedAt)}`;
+  const view = $('#certActView'), dl = $('#certActDownload');
+  if (cert.pdfUrl){
+    view.href = cert.pdfUrl; view.style.display = '';
+    dl.href = cert.pdfUrl;   dl.style.display = '';
+    dl.setAttribute('download', `medical_certificate_${cert.certificateNumber || cert.id}.pdf`);
+  } else {
+    view.style.display = 'none'; dl.style.display = 'none';
+  }
+  // Email needs a patient address on file; reflect that before the click.
+  const emailBtn = $('#certActEmail');
+  const hasEmail = !!(cert.patient && cert.patient.email);
+  emailBtn.disabled = false;
+  emailBtn.title = hasEmail ? '' : 'No patient email on file — the server will report this';
+  $('#certActStatus').textContent = '';
+  npOpenModal('certActionsModal');
+}
+function closeCertActions(){ npCloseModal('certActionsModal'); _certState.actionsCert = null; }
+
+async function sendCertificateChannel(channel){
+  const cert = _certState.actionsCert;
+  if (!cert) return;
+  const status = $('#certActStatus');
+  const btn = channel === 'whatsapp' ? $('#certActWa') : $('#certActEmail');
+  btn.disabled = true;
+  status.textContent = channel === 'whatsapp' ? 'Sending on WhatsApp…' : 'Sending email…';
+  try {
+    const r = await api('/doctor/certificates/' + encodeURIComponent(cert.id) + '/send', {
+      method: 'POST', body: { channels: [channel] }
+    });
+    const st = (r.delivery && r.delivery[channel]) || 'sent';
+    if (st === 'sent'){
+      status.textContent = channel === 'whatsapp'
+        ? '✓ Sent on WhatsApp (PDF attached).'
+        : '✓ Email sent with the PDF attached.';
+      _toast('success', channel === 'whatsapp' ? 'Certificate sent on WhatsApp.' : 'Certificate emailed.');
+    } else if (st === 'no_email'){
+      status.textContent = 'Patient has no email address on file.';
+      _toast('error', 'Patient has no email on file');
+    } else {
+      status.textContent = 'Delivery failed' + (r.delivery && r.delivery.whatsappError ? `: ${r.delivery.whatsappError}` : '.') + ' Try again.';
+      _toast('error', 'Delivery failed');
+    }
+  } catch (ex){
+    status.textContent = ex.message || 'Delivery failed';
+    _toast('error', ex.message || 'Delivery failed');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── Duration segmented control + smart auto-date ── */
+function setCertDuration(type){
+  _certState.durationType = type === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
+  const single = _certState.durationType === 'SINGLE_DAY';
+  $$('#certDurationSeg .np-seg__btn').forEach(b =>
+    b.classList.toggle('is-active', b.getAttribute('data-duration') === _certState.durationType));
+  $('#certSingleDayWrap').classList.toggle('hidden', !single);
+  $('#certRangeWrap').classList.toggle('hidden', single);
+  if (single){
+    // Default the certificate date to today for one-tap issuing.
+    if (!$('#certSingleDate').value) $('#certSingleDate').value = new Date().toISOString().slice(0,10);
+  }
+}
+
+/* Auto-calculate the end date: fromDate + restDays (inclusive).
+   10 Aug + 5 days of rest → ends 14 Aug. A manual edit of the To field
+   marks it as overridden until From/rest changes again. */
+function _npAddDays(iso, days){
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+function certAutoToDate(){
+  const from = $('#certFrom').value;
+  const rest = parseInt($('#certRestDays').value, 10);
+  const autoEl = $('#certToAuto');
+  if (from && rest >= 1){
+    $('#certTo').value = _npAddDays(from, rest - 1);
+    _certState.toAuto = true;
+    if (autoEl) autoEl.textContent = '(auto)';
+  }
+}
+
+/* ── Consultation mode segmented control ── */
+function setCertConsultMode(mode, hint){
+  _certState.consultMode = mode === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
+  $$('#certConsultMode .np-seg__btn').forEach(b =>
+    b.classList.toggle('is-active', b.getAttribute('data-mode') === _certState.consultMode));
+  $('#certConsultModeHint').textContent = hint || (_certState.consultMode === 'ONLINE'
+    ? 'Certificate will show "Teleconsultation / Online Consultation" with doctor details only.'
+    : 'Certificate will include the clinic name, address and contact block.');
+}
+
 async function openCertModal(appointment){
   _certState.patient = null;
   _certState.editingAppt = appointment || null;
   _certState.editingCert = null;
+  _certState.toAuto = true;
   $('#certModalTitle').textContent = 'Generate Medical Certificate';
   $('#certSubmitBtn').textContent = 'Generate certificate PDF';
   $('#certApptId').value = appointment ? appointment.id : '';
   $('#certPatientId').value = '';
   $('#certPatientChosen').classList.add('hidden');
+  $('#certPatientChosen').innerHTML = '';
   $('#certPatientSearch').value = '';
+  $('#certPatientSearch').closest('.np-ppicker__searchwrap').style.display = '';
   $('#certPatientResults').classList.add('hidden');
   $('#certReason').value = '';
   $('#certDiagnosis').value = appointment ? (appointment.diagnosis || appointment.primaryProblem || '') : '';
   $('#certRestDays').value = '';
   $('#certFrom').value = ''; $('#certTo').value = ''; $('#certNotes').value = '';
+  $('#certSingleDate').value = '';
+  setCertDuration('DATE_RANGE');
+
+  // Consultation mode: follow the appointment when there is one.
+  setCertConsultMode(appointment && appointment.consultationType === 'ONLINE' ? 'ONLINE' : 'OFFLINE');
 
   // Load templates once.
   if (!_certState.templates.length){
@@ -1830,9 +1996,9 @@ async function openCertModal(appointment){
   if (appointment && appointment.patient){
     setCertPatient(appointment.patient);
   }
-  $('#certModal').classList.remove('hidden');
+  npOpenModal('certModal');   // portals to <body> + closes any overflow menu
 }
-function closeCertModal(){ $('#certModal').classList.add('hidden'); }
+function closeCertModal(){ npCloseModal('certModal'); }
 
 // Edit workflow — re-opens the same modal pre-filled from an issued
 // certificate; submit performs PUT and regenerates the PDF server-side.
@@ -1854,45 +2020,116 @@ async function openCertEdit(cert){
   $('#certFrom').value = cert.fromDate ? String(cert.fromDate).slice(0,10) : '';
   $('#certTo').value = cert.toDate ? String(cert.toDate).slice(0,10) : '';
   $('#certNotes').value = cert.additionalNotes || '';
+  if (cert.durationType === 'SINGLE_DAY'){
+    setCertDuration('SINGLE_DAY');
+    $('#certSingleDate').value = cert.certificateDate ? String(cert.certificateDate).slice(0,10) : '';
+  }
+  if (cert.consultationType) setCertConsultMode(cert.consultationType);
 }
 
+/* Selected patient → prominent card with a Change button (the tiny pill
+   design is gone for good). */
 function setCertPatient(p){
   _certState.patient = p;
   $('#certPatientId').value = p.id;
   const box = $('#certPatientChosen');
   box.classList.remove('hidden');
-  box.innerHTML = `<span class="np-badge np-badge--blue">${escapeHtml(p.name)}${p.phone ? ' · +91 ' + escapeHtml(p.phone) : ''}</span>
-    <button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="clearCertPatient()" style="margin-left:.4rem;">Change</button>`;
+  box.innerHTML = `
+    <div class="np-ppicker__card">
+      <span class="np-ppicker__card-avatar">${escapeHtml(_npInitials(p.name))}</span>
+      <div class="np-ppicker__card-main">
+        <div class="np-ppicker__card-name">${escapeHtml(p.name || 'Patient')}</div>
+        <div class="np-ppicker__card-meta">${escapeHtml([_npPatientMeta(p), _npPatientPhone(p)].filter(Boolean).join(' · '))}</div>
+      </div>
+      <button type="button" class="np-btn np-btn--ghost np-btn--sm np-ppicker__change" onclick="clearCertPatient()">Change patient</button>
+    </div>`;
   $('#certPatientResults').classList.add('hidden');
   $('#certPatientSearch').value = '';
+  // Hide the search box while a patient is selected — the card owns the slot.
+  $('#certPatientSearch').closest('.np-ppicker__searchwrap').style.display = 'none';
 }
 function clearCertPatient(){
   _certState.patient = null; $('#certPatientId').value = '';
   $('#certPatientChosen').classList.add('hidden');
+  $('#certPatientChosen').innerHTML = '';
+  const wrap = $('#certPatientSearch').closest('.np-ppicker__searchwrap');
+  wrap.style.display = '';
+  $('#certPatientSearch').focus();
 }
 
-// Patient search (debounced)
+/* Patient search (debounced) — rich dropdown rows with avatar, name,
+   gender • age and phone. Uses event delegation (no inline JSON in
+   onclick attributes — that broke on names containing quotes). */
 let _certSearchTimer = null;
+let _certSearchRows = [];
 function setupCertPatientSearch(){
   const inp = $('#certPatientSearch');
   if (!inp || inp.__wired) return; inp.__wired = true;
+  const box = $('#certPatientResults');
+
   inp.addEventListener('input', () => {
     clearTimeout(_certSearchTimer);
     const q = inp.value.trim();
-    if (q.length < 2){ $('#certPatientResults').classList.add('hidden'); return; }
+    if (q.length < 2){ box.classList.add('hidden'); return; }
     _certSearchTimer = setTimeout(async () => {
       try {
         const rows = await api('/doctor/patients/search?q=' + encodeURIComponent(q));
-        const box = $('#certPatientResults');
-        if (!rows.length){ box.classList.add('hidden'); return; }
+        _certSearchRows = rows || [];
+        if (!_certSearchRows.length){
+          box.classList.remove('hidden');
+          box.innerHTML = '<div class="np-ppicker__empty">No patients match "' + escapeHtml(q) + '"</div>';
+          return;
+        }
         box.classList.remove('hidden');
-        box.innerHTML = rows.slice(0,8).map(p =>
-          `<button type="button" class="np-autocomplete__item" onclick='setCertPatient(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
-             <b>${escapeHtml(p.name)}</b> <span class="np-mut" style="font-size:.8rem;">+91 ${escapeHtml(p.phone||'')}</span>
-           </button>`).join('');
+        box.innerHTML = _certSearchRows.slice(0,8).map((p, i) => `
+          <button type="button" class="np-ppicker__item" role="option" data-cert-pick="${i}">
+            <span class="np-ppicker__avatar">${escapeHtml(_npInitials(p.name))}</span>
+            <span class="np-ppicker__item-main">
+              <span class="np-ppicker__item-name">${escapeHtml(p.name)}</span>
+              <span class="np-ppicker__item-meta">${escapeHtml(_npPatientMeta(p))}</span>
+            </span>
+            <span class="np-ppicker__item-phone">${escapeHtml(_npPatientPhone(p))}</span>
+          </button>`).join('');
       } catch(_){}
     }, 300);
   });
+
+  box.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-cert-pick]');
+    if (!item) return;
+    const p = _certSearchRows[Number(item.getAttribute('data-cert-pick'))];
+    if (p) setCertPatient(p);
+  });
+
+  // Close the dropdown on outside tap (mobile) / click.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#certPatientPicker')) box.classList.add('hidden');
+  });
+
+  // Duration segmented control.
+  $$('#certDurationSeg .np-seg__btn').forEach(b => {
+    if (b.__wired) return; b.__wired = true;
+    b.addEventListener('click', () => setCertDuration(b.getAttribute('data-duration')));
+  });
+  // Consultation mode segmented control.
+  $$('#certConsultMode .np-seg__btn').forEach(b => {
+    if (b.__wired) return; b.__wired = true;
+    b.addEventListener('click', () => setCertConsultMode(b.getAttribute('data-mode')));
+  });
+
+  // Smart auto-date: From/rest changes recompute To unless overridden;
+  // editing To manually marks it as doctor-controlled.
+  const fromEl = $('#certFrom'), restEl = $('#certRestDays'), toEl = $('#certTo');
+  if (fromEl && !fromEl.__wired){ fromEl.__wired = true; fromEl.addEventListener('change', certAutoToDate); }
+  if (restEl && !restEl.__wired){ restEl.__wired = true; restEl.addEventListener('input', certAutoToDate); }
+  if (toEl && !toEl.__wired){
+    toEl.__wired = true;
+    toEl.addEventListener('input', () => {
+      _certState.toAuto = false;
+      const autoEl = $('#certToAuto');
+      if (autoEl) autoEl.textContent = '(manual)';
+    });
+  }
 }
 
 async function submitCert(e){
@@ -1901,14 +2138,26 @@ async function submitCert(e){
   const patientId = $('#certPatientId').value;
   const appointmentId = $('#certApptId').value;
   if (!patientId && !appointmentId){ _toast('error', 'Select a patient first'); return; }
+
+  const single = _certState.durationType === 'SINGLE_DAY';
+  if (single && !$('#certSingleDate').value){
+    _toast('error', 'Pick the certificate date'); return;
+  }
+
   const body = {
     templateKey: $('#certTemplate').value,
     reason: $('#certReason').value.trim(),
     diagnosis: $('#certDiagnosis').value.trim() || undefined,
     restDays: $('#certRestDays').value ? Number($('#certRestDays').value) : undefined,
-    fromDate: $('#certFrom').value || undefined,
-    toDate: $('#certTo').value || undefined,
-    additionalNotes: $('#certNotes').value.trim() || undefined
+    durationType: _certState.durationType,
+    certificateDate: single ? $('#certSingleDate').value : undefined,
+    fromDate: single ? undefined : ($('#certFrom').value || undefined),
+    toDate: single ? undefined : ($('#certTo').value || undefined),
+    additionalNotes: $('#certNotes').value.trim() || undefined,
+    // Standalone certificates have no appointment to derive the mode from —
+    // send the doctor's pick. Appointment-linked certificates snapshot the
+    // mode server-side from the appointment itself.
+    consultationType: _certState.consultMode
   };
   if (appointmentId) body.appointmentId = appointmentId;
   else body.patientId = patientId;
@@ -1923,11 +2172,19 @@ async function submitCert(e){
     _certState.editingCert = null;
     closeCertModal();
     if (!editing && cert.pdfUrl) window.open(cert.pdfUrl, '_blank', 'noopener');
+    // Surface per-channel delivery so the doctor knows what went out.
+    if (!editing && cert.delivery){
+      const bits = [];
+      if (cert.delivery.whatsapp === 'sent') bits.push('WhatsApp ✓');
+      if (cert.delivery.email === 'sent') bits.push('Email ✓');
+      if (cert.delivery.email === 'no_email') bits.push('no patient email on file');
+      if (bits.length) _toast('success', 'Delivered: ' + bits.join(' · '));
+    }
     loadCertificates();
   } catch (ex){
     _toast('error', ex.message || 'Could not generate certificate');
   } finally {
-    btn.disabled = false; btn.textContent = 'Generate certificate PDF';
+    btn.disabled = false; btn.textContent = editing ? 'Update certificate' : 'Generate certificate PDF';
   }
 }
 
@@ -1989,6 +2246,10 @@ function setupSignature(){
 
 /* ---------- Wire-up on init ---------- */
 function setupFeatureUI(){
+  // Portal every modal to <body> once at startup — the root-cause fix for
+  // dialogs rendering beneath the fixed sidebar / below the viewport.
+  ['patientModal','certModal','certActionsModal','linkConflictModal','rescheduleModal','cancelModal']
+    .forEach(npPortalModal);
   setupCertPatientSearch();
   setupSignature();
   const certForm = $('#certForm');

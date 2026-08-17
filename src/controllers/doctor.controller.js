@@ -185,36 +185,46 @@ exports.searchPatients = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json([]);
 
+  const digitsOnly = q.replace(/\D/g, '');
+  const orClauses = [{ name: { contains: q } }];
+  if (digitsOnly.length >= 4) orClauses.push({ phone: { contains: digitsOnly } });
+
+  // v3.4.0 root-cause fix — the old implementation restricted results to
+  // patients who already had an appointment WITH THIS DOCTOR, so a patient
+  // registered by reception (or booked with another doctor) was impossible
+  // to find when issuing a standalone certificate. Search the full patient
+  // directory instead; lastVisit enrichment below is still per-doctor, so
+  // no data from other doctors' practices is exposed.
   const seen = await prisma.appointment.findMany({
     where: { doctorId: req.user.id },
     select: { patientId: true },
     distinct: ['patientId']
   });
-  const patientIds = seen.map(s => s.patientId);
-  if (!patientIds.length) return res.json([]);
-
-  const digitsOnly = q.replace(/\D/g, '');
-  const orClauses = [{ name: { contains: q } }];
-  if (digitsOnly.length >= 4) orClauses.push({ phone: { contains: digitsOnly } });
+  const myPatientIds = new Set(seen.map(s => s.patientId));
 
   const rows = await prisma.patient.findMany({
-    where: { id: { in: patientIds }, OR: orClauses },
-    orderBy: [{ phone: 'asc' }, { name: 'asc' }],
+    where: { OR: orClauses },
+    orderBy: [{ name: 'asc' }, { phone: 'asc' }],
     take: 20
   });
 
+  // Only run the (relatively expensive) last-visit enrichment for patients
+  // this doctor has actually seen; others get a fast null.
   const todayBoundary = getTodayDateOnly();
   const enriched = await Promise.all(rows.map(async (p) => {
-    const last = await prisma.appointment.findFirst({
-      where: {
-        patientId: p.id,
-        doctorId:  req.user.id,
-        status:    'COMPLETED',
-        date:      { lte: todayBoundary }
-      },
-      orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
-      select: { date: true, status: true }
-    });
+    let last = null;
+    if (myPatientIds.has(p.id)) {
+      last = await prisma.appointment.findFirst({
+        where: {
+          patientId: p.id,
+          doctorId:  req.user.id,
+          status:    'COMPLETED',
+          date:      { lte: todayBoundary }
+        },
+        orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
+        select: { date: true, status: true }
+      });
+    }
     return {
       id: p.id,
       name: p.name,

@@ -327,13 +327,23 @@ const medicalCertificateSchema = z.object({
   // If issued standalone, caller must pass patientId directly.
   patientId: z.string().uuid().optional(),
 
-  templateKey: z.enum(['GENERAL', 'SCHOOL_LEAVE', 'FITNESS', 'MEDICAL_REST']).optional(),
+  // v3.4.0 — expanded template catalog (vaccination / return-to-school added).
+  templateKey: z.enum(['GENERAL', 'SCHOOL_LEAVE', 'FITNESS', 'MEDICAL_REST', 'VACCINATION', 'RETURN_TO_SCHOOL']).optional(),
   diagnosis: safeOptStr('diagnosis'),
   reason: z.string().min(2, 'Reason for certificate is required').max(2000),
   restDays: z.preprocess(
     v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
     z.number().int().min(0).max(365).optional()
   ),
+  // v3.4.0 — certificate duration type. 'SINGLE_DAY' → only certificateDate
+  // is meaningful; 'DATE_RANGE' → fromDate/toDate (server mirrors toDate from
+  // fromDate + restDays when the client didn't send it).
+  durationType: z.enum(['SINGLE_DAY', 'DATE_RANGE']).optional(),
+  certificateDate: dateSchema.optional().or(z.literal('')),
+  // Standalone certificates have no appointment to derive the mode from,
+  // so the client sends the doctor's pick; appointment-linked issues
+  // ignore this and snapshot the appointment's own consultationType.
+  consultationType: z.enum(['ONLINE', 'OFFLINE']).optional(),
   fromDate: dateSchema.optional().or(z.literal('')),
   toDate: dateSchema.optional().or(z.literal('')),
   additionalNotes: safeOptStr('additionalNotes')
@@ -342,6 +352,9 @@ const medicalCertificateSchema = z.object({
   { message: 'Either appointmentId or patientId is required', path: ['patientId'] }
 ).refine(
   d => {
+    // Date-range ordering is only enforced for DATE_RANGE certificates; a
+    // single-day certificate never carries a from/to pair to compare.
+    if (d.durationType === 'SINGLE_DAY') return true;
     if (!d.fromDate || !d.toDate) return true;
     return d.fromDate <= d.toDate;
   },

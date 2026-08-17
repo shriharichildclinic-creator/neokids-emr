@@ -909,8 +909,11 @@
 </div>
 
 
+<!-- v3.4.0 — the certificate modal is PORTALED to <body> by app.js
+     (npPortalModal) so the fixed sidebar / transformed ancestors can never
+     trap it below the fold or beneath the drawer. -->
 <div id="certModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="certModalTitle">
-  <div class="np-modal__panel np-modal__panel--lg">
+  <div class="np-modal__panel">
     <div class="np-modal__head">
       <div id="certModalTitle" class="np-modal__title">Generate Medical Certificate</div>
       <button type="button" class="np-modal__close" onclick="closeCertModal()" aria-label="Close">
@@ -921,14 +924,30 @@
       <form id="certForm" novalidate>
         <input type="hidden" id="certApptId">
         <input type="hidden" id="certPatientId">
+
+        <!-- ── Patient picker: search → rich dropdown → prominent card ── -->
         <div class="np-field">
           <label class="np-field__label">Patient <span class="np-req">*</span></label>
-          <div style="display:flex; gap:.5rem;">
-            <input id="certPatientSearch" class="np-input" placeholder="Search patient by name or phone" autocomplete="off" style="flex:1;">
+          <div id="certPatientPicker" class="np-ppicker">
+            <div class="np-ppicker__searchwrap">
+              <svg class="np-ppicker__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="certPatientSearch" class="np-input np-ppicker__input" placeholder="Search patient by name or phone" autocomplete="off">
+            </div>
+            <div id="certPatientResults" class="np-ppicker__results hidden" role="listbox"></div>
+            <div id="certPatientChosen" class="np-ppicker__chosen hidden"></div>
           </div>
-          <div id="certPatientResults" class="np-autocomplete hidden"></div>
-          <div id="certPatientChosen" class="hidden" style="margin-top:.4rem;"></div>
         </div>
+
+        <!-- ── Consultation mode (drives the clinic vs teleconsultation block) ── -->
+        <div class="np-field">
+          <label class="np-field__label">Consultation mode</label>
+          <div id="certConsultMode" class="np-seg" role="group" aria-label="Consultation mode">
+            <button type="button" class="np-seg__btn" data-mode="OFFLINE">In-Person</button>
+            <button type="button" class="np-seg__btn" data-mode="ONLINE">Online</button>
+          </div>
+          <div id="certConsultModeHint" class="np-field__hint"></div>
+        </div>
+
         <div class="np-grid-2">
           <div class="np-field">
             <label class="np-field__label">Certificate template <span class="np-req">*</span></label>
@@ -936,7 +955,7 @@
           </div>
           <div class="np-field">
             <label class="np-field__label">Recommended rest (days)</label>
-            <input name="restDays" id="certRestDays" type="number" min="0" max="365" class="np-input" placeholder="e.g. 3">
+            <input name="restDays" id="certRestDays" type="number" min="0" max="365" class="np-input" placeholder="e.g. 3" inputmode="numeric">
           </div>
         </div>
         <div class="np-field">
@@ -947,25 +966,71 @@
           <label class="np-field__label">Diagnosis (optional)</label>
           <input name="diagnosis" id="certDiagnosis" class="np-input" placeholder="e.g. Acute viral fever">
         </div>
-        <div class="np-grid-2">
+
+        <!-- ── Duration type: single day vs date range ── -->
+        <div class="np-field">
+          <label class="np-field__label">Certificate duration</label>
+          <div id="certDurationSeg" class="np-seg" role="group" aria-label="Certificate duration">
+            <button type="button" class="np-seg__btn is-active" data-duration="DATE_RANGE">Date range</button>
+            <button type="button" class="np-seg__btn" data-duration="SINGLE_DAY">Single day</button>
+          </div>
+        </div>
+        <div id="certSingleDayWrap" class="np-field hidden">
+          <label class="np-field__label">Certificate date <span class="np-req">*</span></label>
+          <input name="certificateDate" id="certSingleDate" type="date" class="np-input">
+        </div>
+        <div id="certRangeWrap" class="np-grid-2">
           <div class="np-field">
             <label class="np-field__label">Rest from date</label>
             <input name="fromDate" id="certFrom" type="date" class="np-input">
           </div>
           <div class="np-field">
-            <label class="np-field__label">Rest to date</label>
+            <label class="np-field__label">Rest to date <span id="certToAuto" class="np-field__hint" style="display:inline;">(auto)</span></label>
             <input name="toDate" id="certTo" type="date" class="np-input">
           </div>
         </div>
+
         <div class="np-field">
           <label class="np-field__label">Additional notes</label>
           <textarea name="additionalNotes" id="certNotes" class="np-textarea" rows="2" placeholder="Any extra remarks"></textarea>
         </div>
-        <div style="display:flex; gap:.5rem; justify-content:flex-end;">
+        <div style="display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap;">
           <button type="button" class="np-btn np-btn--ghost" onclick="closeCertModal()">Cancel</button>
           <button type="submit" id="certSubmitBtn" class="np-btn np-btn--primary">Generate certificate PDF</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- v3.4.0 — certificate actions (view / download / WhatsApp / email) -->
+<div id="certActionsModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="certActionsTitle">
+  <div class="np-modal__card" style="max-width:480px;">
+    <header class="np-modal__head">
+      <div id="certActionsTitle" class="np-modal__title">Certificate</div>
+      <button type="button" class="np-modal__close" onclick="closeCertActions()" aria-label="Close">×</button>
+    </header>
+    <div class="np-modal__body">
+      <div id="certActionsSub" class="np-mut" style="font-size:.85rem; margin-bottom:.85rem;"></div>
+      <div class="np-cert-actions">
+        <a id="certActView" class="np-btn np-btn--sm" href="#" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          View PDF
+        </a>
+        <a id="certActDownload" class="np-btn np-btn--sm" href="#" download>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download PDF
+        </a>
+        <button id="certActWa" type="button" class="np-btn np-btn--sm np-btn--primary" onclick="sendCertificateChannel('whatsapp')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          Send on WhatsApp
+        </button>
+        <button id="certActEmail" type="button" class="np-btn np-btn--sm" onclick="sendCertificateChannel('email')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Send via Email
+        </button>
+      </div>
+      <div id="certActStatus" class="np-mut" style="font-size:.82rem; margin-top:.7rem;"></div>
     </div>
   </div>
 </div>

@@ -234,6 +234,17 @@ model MedicalCertificate {
   toDate            DateTime?
   additionalNotes   String?   @db.Text
 
+  // v3.4.0 — duration semantics: "SINGLE_DAY" uses certificateDate only;
+  // "DATE_RANGE" uses fromDate/toDate. Stored as a plain string so legacy
+  // rows (NULL) keep rendering exactly as before via the DATE_RANGE fallback.
+  durationType      String?
+  certificateDate   DateTime?
+
+  // v3.4.0 — consultation-mode snapshot at issue time ("ONLINE" / "OFFLINE").
+  // The PDF layout adapts from this so a later switch of the appointment's
+  // mode never retroactively rewrites an already-issued certificate.
+  consultationType  String?
+
   // Snapshotted patient info at time of issue (defends against later edits).
   patientNameSnapshot String
   patientAgeSnapshot  String?
