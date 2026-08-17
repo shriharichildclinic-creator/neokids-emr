@@ -75,24 +75,32 @@ async function saveAttachments(req, record){
   const files = [];
   if (Array.isArray(req.files) && req.files.length) files.push(...req.files);
   if (req.file) files.push(req.file);
-  // labels may be sent as `labels[]=a&labels[]=b`, or as `labels=a&labels=b`
-  const labels = []
-    .concat(req.body.labels || [])
-    .concat(Array.isArray(req.body['labels[]']) ? req.body['labels[]'] : (req.body['labels[]'] ? [req.body['labels[]']] : []));
+  // labels / attachmentTypes / notes travel as parallel arrays, sent either
+  // as `labels[]=a&labels[]=b` or as repeated `labels=a&labels=b`.
+  const asList = (base) => []
+    .concat(req.body[base] || [])
+    .concat(Array.isArray(req.body[base + '[]']) ? req.body[base + '[]'] : (req.body[base + '[]'] ? [req.body[base + '[]']] : []));
+  const labels = asList('labels');
+  const types  = asList('attachmentTypes');
+  const notesL = asList('attachmentNotes');
+  const startOrder = await prisma.previousRecordAttachment.count({ where: { recordId: record.id } });
   const out = [];
   for (let i = 0; i < files.length; i++){
     const f = files[i];
     const label = (labels[i] || f.originalname || 'Attachment').toString().slice(0, 190);
+    const attachmentType = types[i] ? String(types[i]).slice(0, 190) : null;
+    const notes = notesL[i] ? String(notesL[i]).slice(0, 2000) : null;
     if (!f || !f.filename) continue;
     out.push(await prisma.previousRecordAttachment.create({ data: {
       recordId: record.id, filename: f.filename, originalName: f.originalname, mimeType: f.mimetype,
-      sizeBytes: f.size, label, kind: kindOf(f.mimetype, f.originalname), storagePath: f.filename,
+      sizeBytes: f.size, label, kind: kindOf(f.mimetype, f.originalname), attachmentType, notes,
+      sortOrder: startOrder + i, storagePath: f.filename,
       uploadedById: req.user && req.user.id, uploadedByRole: 'DOCTOR'
     }}));
   }
   return out;
 }
-const include = { attachments: { orderBy: { createdAt: 'asc' } }, patient: { select: { id:true, name:true, phone:true, email:true } }, doctor: { select: { id:true, name:true } } };
+const include = { attachments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }, patient: { select: { id:true, name:true, phone:true, email:true } }, doctor: { select: { id:true, name:true } } };
 function notFound(){ const e = new Error('Historical record not found'); e.status = 404; return e; }
 function unlinkQuiet(rel){ try { const p = path.join(UP_DIR, rel || ''); if (rel && fs.existsSync(p)) fs.unlinkSync(p); } catch(_){} }
 
@@ -229,12 +237,59 @@ exports.replaceAttachment = [ upload.single('file'), asyncH(async (req, res) => 
   if (!req.file) { const e = new Error('file is required'); e.status = 422; throw e; }
   unlinkQuiet(att.storagePath);
   const label = (req.body.label || att.label || req.file.originalname).toString().slice(0,190);
+  const attachmentType = req.body.attachmentType !== undefined
+    ? (req.body.attachmentType ? String(req.body.attachmentType).slice(0,190) : null)
+    : att.attachmentType;
+  const notes = req.body.notes !== undefined
+    ? (req.body.notes ? String(req.body.notes).slice(0,2000) : null)
+    : att.notes;
   const updated = await prisma.previousRecordAttachment.update({ where: { id: att.id }, data: {
     filename: req.file.filename, originalName: req.file.originalname, mimeType: req.file.mimetype,
-    sizeBytes: req.file.size, label, kind: kindOf(req.file.mimetype, req.file.originalname), storagePath: req.file.filename
+    sizeBytes: req.file.size, label, attachmentType, notes, kind: kindOf(req.file.mimetype, req.file.originalname), storagePath: req.file.filename
   }});
   res.json({ success: true, attachment: { id: updated.id, label: updated.label } });
 })];
+
+// PATCH /doctor/previous-records/:id/attachments/:attachmentId
+// Rename / re-categorize / annotate an existing attachment WITHOUT
+// touching the file itself — powers the Edit modal's inline "Rename"
+// action so metadata changes never require a re-upload.
+const attachmentMetaSchema = z.object({
+  label: z.preprocess(emptyToUndef, z.string().max(190).optional()),
+  attachmentType: z.preprocess(emptyToUndef, z.string().max(190).optional()),
+  notes: z.preprocess((v) => (v === undefined ? undefined : (typeof v === 'string' && v.trim() === '' ? null : v)), z.string().max(2000).nullable().optional()),
+}).strip();
+exports.updateAttachmentMeta = asyncH(async (req, res) => {
+  const att = await prisma.previousRecordAttachment.findFirst({ where: { id: req.params.attachmentId, recordId: req.params.id } });
+  if (!att) throw notFound();
+  const body = attachmentMetaSchema.safeParse(req.body || {});
+  if (!body.success) { const e = new Error('Invalid input'); e.status = 422; throw e; }
+  const data = body.data;
+  const patch = {};
+  if (data.label !== undefined) patch.label = data.label;
+  if (data.attachmentType !== undefined) patch.attachmentType = data.attachmentType || null;
+  if (data.notes !== undefined) patch.notes = data.notes;
+  const updated = await prisma.previousRecordAttachment.update({ where: { id: att.id }, data: patch });
+  res.json({ success: true, attachment: { id: updated.id, label: updated.label, attachmentType: updated.attachmentType, notes: updated.notes } });
+});
+
+// PATCH /doctor/previous-records/:id/attachments/reorder  { order: [attachmentId, ...] }
+// Persists the doctor's drag/reorder of the attachment list. `order` must
+// contain every attachment id currently on the record; sortOrder is set
+// to each id's index in that array.
+exports.reorderAttachments = asyncH(async (req, res) => {
+  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!record) throw notFound();
+  const order = Array.isArray(req.body && req.body.order) ? req.body.order.map(String) : null;
+  if (!order || !order.length) { const e = new Error('order[] is required'); e.status = 422; throw e; }
+  const existing = await prisma.previousRecordAttachment.findMany({ where: { recordId: record.id }, select: { id: true } });
+  const validIds = new Set(existing.map(a => a.id));
+  const filtered = order.filter(id => validIds.has(id));
+  await prisma.$transaction(filtered.map((id, i) =>
+    prisma.previousRecordAttachment.update({ where: { id }, data: { sortOrder: i } })
+  ));
+  res.json({ success: true });
+});
 
 // DELETE /doctor/previous-records/:id/attachments/:attachmentId
 exports.deleteAttachment = asyncH(async (req, res) => {

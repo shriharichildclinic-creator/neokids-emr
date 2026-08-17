@@ -69,6 +69,17 @@
     OTHER:        'Other'
   }[t] || (t || 'Record'));
 
+  // Attachment categories are free-text on the backend (attachmentType
+  // column), but we offer this fixed list in the UI for consistency —
+  // doctors can still type a custom one via the "Other" + note pattern.
+  const ATTACHMENT_TYPES = [
+    'Lab Report', 'Prescription', 'Scan / Radiology', 'Discharge Summary',
+    'Referral Letter', 'Vaccination Certificate', 'Consultation Note', 'Other'
+  ];
+  const attTypeOptions = (selected) => ATTACHMENT_TYPES.map(t =>
+    `<option value="${esc(t)}" ${t === selected ? 'selected' : ''}>${esc(t)}</option>`
+  ).join('');
+
   const fileIcon = (kind, mime) => {
     if (mime && mime.startsWith('image/')) return '\uD83D\uDDBC\uFE0F';
     if (kind === 'PDF' || kind === 'PRESCRIPTION' || (mime && mime.includes('pdf'))) return '\uD83D\uDCC4';
@@ -109,7 +120,9 @@
     editingId: null,      // null = create, otherwise edit
     selectedPatient: null,
     pendingFiles: [],     // File[] pending upload
-    pendingLabels: [],    // parallel labels
+    pendingLabels: [],    // parallel display names
+    pendingTypes: [],     // parallel attachment types
+    pendingNotes: [],     // parallel notes
     existingAttachments: []
   };
 
@@ -381,8 +394,7 @@
     // Close handlers (all modals)
     $$('[data-hr-close]').forEach(b => b.addEventListener('click', closeAllModals));
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeAllModals();
-    });
+      if (e.key === 'Escape') closeAllModals();    });
 
     // Add/Edit form submit
     const form = $('#historicalForm');
@@ -438,7 +450,7 @@
     });
   }
 
-  function closeAllModals() { closeModal('hrRecordModal'); closeModal('hrViewModal'); }
+  function closeAllModals() { closeModal('hrRecordModal'); closeModal('hrViewModal'); closeModal('hrAttPreviewModal'); }
   function closeModal(id) {
     const m = document.getElementById(id);
     if (!m) return;
@@ -456,6 +468,8 @@
     state.editingId = id || null;
     state.pendingFiles = [];
     state.pendingLabels = [];
+    state.pendingTypes = [];
+    state.pendingNotes = [];
     state.existingAttachments = [];
 
     // Header text
@@ -497,6 +511,8 @@
     $('#hrPendingList')?.classList.add('hidden');
     state.pendingFiles = [];
     state.pendingLabels = [];
+    state.pendingTypes = [];
+    state.pendingNotes = [];
     state.existingAttachments = [];
   }
 
@@ -566,6 +582,8 @@
       }
       state.pendingFiles.push(f);
       state.pendingLabels.push(f.name.replace(/\.[^.]+$/, ''));
+      state.pendingTypes.push('');
+      state.pendingNotes.push('');
     }
     renderPendingFiles();
   }
@@ -578,8 +596,15 @@
       <div class="hr-att hr-att--pending" data-i="${i}">
         <span class="hr-att__icon">${fileIcon(null, f.type)}</span>
         <div class="hr-att__body">
-          <input class="hr-att__label np-input np-input--sm" data-label="${i}" value="${esc(state.pendingLabels[i] || f.name)}" placeholder="Label (e.g. 2023 Prescription)">
+          <input class="hr-att__label np-input np-input--sm" data-label="${i}" value="${esc(state.pendingLabels[i] || f.name)}" placeholder="Display name (e.g. 2023 Prescription)">
           <div class="hr-att__meta">${esc(f.name)} \u00b7 ${humanSize(f.size)}</div>
+          <div class="hr-att__metaRow">
+            <select class="np-input np-input--sm" data-type="${i}" aria-label="Attachment type">
+              <option value="">Attachment type (optional)</option>
+              ${attTypeOptions(state.pendingTypes[i])}
+            </select>
+            <input class="np-input np-input--sm" data-notes="${i}" value="${esc(state.pendingNotes[i] || '')}" placeholder="Notes (optional)">
+          </div>
         </div>
         <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-remove="${i}" aria-label="Remove">Remove</button>
       </div>
@@ -588,11 +613,21 @@
       const i = parseInt(b.getAttribute('data-remove'), 10);
       state.pendingFiles.splice(i, 1);
       state.pendingLabels.splice(i, 1);
+      state.pendingTypes.splice(i, 1);
+      state.pendingNotes.splice(i, 1);
       renderPendingFiles();
     }));
     $$('[data-label]', wrap).forEach(inp => inp.addEventListener('input', () => {
       const i = parseInt(inp.getAttribute('data-label'), 10);
       state.pendingLabels[i] = inp.value;
+    }));
+    $$('[data-type]', wrap).forEach(sel => sel.addEventListener('change', () => {
+      const i = parseInt(sel.getAttribute('data-type'), 10);
+      state.pendingTypes[i] = sel.value;
+    }));
+    $$('[data-notes]', wrap).forEach(inp => inp.addEventListener('input', () => {
+      const i = parseInt(inp.getAttribute('data-notes'), 10);
+      state.pendingNotes[i] = inp.value;
     }));
   }
 
@@ -603,22 +638,117 @@
     const atts = state.existingAttachments || [];
     if (!atts.length || !state.editingId) { outer.classList.add('hidden'); wrap.innerHTML = ''; return; }
     outer.classList.remove('hidden');
-    wrap.innerHTML = atts.map(a => `
+    wrap.innerHTML = atts.map((a, i) => `
       <div class="hr-att" data-att-id="${esc(a.id)}">
+        <div class="hr-att__reorder">
+          <button type="button" class="hr-att__moveBtn" data-att-up="${esc(a.id)}" aria-label="Move up" ${i === 0 ? 'disabled' : ''}>&#9650;</button>
+          <button type="button" class="hr-att__moveBtn" data-att-down="${esc(a.id)}" aria-label="Move down" ${i === atts.length - 1 ? 'disabled' : ''}>&#9660;</button>
+        </div>
         <span class="hr-att__icon">${fileIcon(a.kind, a.mimeType)}</span>
         <div class="hr-att__body">
-          <div class="hr-att__label">${esc(a.label || a.originalName)}</div>
-          <div class="hr-att__meta">${esc(a.originalName)} \u00b7 ${humanSize(a.sizeBytes)} \u00b7 ${esc(fmtDate(a.createdAt))}</div>
+          <div class="hr-att__viewRow" data-view-row>
+            <div class="hr-att__label">${esc(a.label || a.originalName)}</div>
+            <div class="hr-att__meta">
+              ${a.attachmentType ? `<span class="hr-chip">${esc(a.attachmentType)}</span> \u00b7 ` : ''}${esc(a.originalName)} \u00b7 ${humanSize(a.sizeBytes)} \u00b7 ${esc(fmtDate(a.createdAt))}
+            </div>
+            ${a.notes ? `<div class="hr-att__notes">${esc(a.notes)}</div>` : ''}
+          </div>
+          <div class="hr-att__editRow hidden" data-edit-row>
+            <input class="np-input np-input--sm" data-edit-label value="${esc(a.label || '')}" placeholder="Display name">
+            <select class="np-input np-input--sm" data-edit-type aria-label="Attachment type">
+              <option value="">No type</option>
+              ${attTypeOptions(a.attachmentType)}
+            </select>
+            <input class="np-input np-input--sm" data-edit-notes value="${esc(a.notes || '')}" placeholder="Notes (optional)">
+            <div class="hr-att__editActions">
+              <button type="button" class="np-btn np-btn--primary np-btn--sm" data-edit-save="${esc(a.id)}">Save</button>
+              <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-edit-cancel="${esc(a.id)}">Cancel</button>
+            </div>
+          </div>
         </div>
         <div class="hr-att__actions">
-          <a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${esc(a.viewUrl || '#')}">Preview</a>
+          <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-att-preview="${esc(a.id)}">Preview</button>
+          <a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${esc(a.viewUrl || '#')}">Open</a>
           <a class="np-btn np-btn--ghost np-btn--sm" href="${esc(a.downloadUrl || '#')}">Download</a>
+          <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-att-rename="${esc(a.id)}">Rename</button>
           <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-att-replace="${esc(a.id)}">Replace</button>
           <button type="button" class="np-btn np-btn--danger np-btn--sm" data-att-delete="${esc(a.id)}">Delete</button>
         </div>
       </div>`).join('');
     $$('[data-att-delete]', wrap).forEach(b => b.addEventListener('click', () => deleteExistingAttachment(b.getAttribute('data-att-delete'))));
     $$('[data-att-replace]', wrap).forEach(b => b.addEventListener('click', () => replaceExistingAttachment(b.getAttribute('data-att-replace'))));
+    $$('[data-att-preview]', wrap).forEach(b => b.addEventListener('click', () => {
+      const a = state.existingAttachments.find(x => x.id === b.getAttribute('data-att-preview'));
+      if (a) openAttachmentPreview(a);
+    }));
+    $$('[data-att-up]', wrap).forEach(b => b.addEventListener('click', () => moveAttachment(b.getAttribute('data-att-up'), -1)));
+    $$('[data-att-down]', wrap).forEach(b => b.addEventListener('click', () => moveAttachment(b.getAttribute('data-att-down'), 1)));
+    $$('[data-att-rename]', wrap).forEach(b => b.addEventListener('click', () => {
+      const row = b.closest('[data-att-id]');
+      row?.querySelector('[data-view-row]')?.classList.add('hidden');
+      row?.querySelector('[data-edit-row]')?.classList.remove('hidden');
+    }));
+    $$('[data-edit-cancel]', wrap).forEach(b => b.addEventListener('click', () => {
+      const row = b.closest('[data-att-id]');
+      row?.querySelector('[data-edit-row]')?.classList.add('hidden');
+      row?.querySelector('[data-view-row]')?.classList.remove('hidden');
+    }));
+    $$('[data-edit-save]', wrap).forEach(b => b.addEventListener('click', () => saveAttachmentMeta(b.getAttribute('data-edit-save'))));
+  }
+
+  async function saveAttachmentMeta(attId) {
+    if (!state.editingId) return;
+    const row = $(`[data-att-id="${attId}"]`, $('#hrExistingAtt'));
+    if (!row) return;
+    const label = row.querySelector('[data-edit-label]')?.value.trim();
+    const attachmentType = row.querySelector('[data-edit-type]')?.value || '';
+    const notes = row.querySelector('[data-edit-notes]')?.value.trim() || '';
+    try {
+      await api('/doctor/previous-records/' + encodeURIComponent(state.editingId) + '/attachments/' + encodeURIComponent(attId), {
+        method: 'PATCH',
+        body: { label, attachmentType, notes }
+      });
+      const a = state.existingAttachments.find(x => x.id === attId);
+      if (a) { a.label = label || a.label; a.attachmentType = attachmentType || null; a.notes = notes || null; }
+      renderExistingAttachments();
+      toast('success', 'Attachment updated');
+      loadRecords();
+    } catch (ex) { toast('error', ex && ex.message || 'Could not update attachment'); }
+  }
+
+  async function moveAttachment(attId, dir) {
+    if (!state.editingId) return;
+    const list = state.existingAttachments;
+    const i = list.findIndex(a => a.id === attId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    renderExistingAttachments();
+    try {
+      await api('/doctor/previous-records/' + encodeURIComponent(state.editingId) + '/attachments/reorder', {
+        method: 'PATCH',
+        body: { order: list.map(a => a.id) }
+      });
+    } catch (ex) { toast('error', ex && ex.message || 'Could not save new order'); }
+  }
+
+  // ---- attachment preview modal ---------------------------------------
+  function openAttachmentPreview(att) {
+    const body = $('#hrAttPreviewBody');
+    const isImg = att.mimeType && att.mimeType.startsWith('image/');
+    const isPdf = att.mimeType === 'application/pdf' || /\.pdf$/i.test(att.originalName || '');
+    if (isImg) {
+      body.innerHTML = `<img class="hr-preview__img" src="${esc(att.viewUrl)}" alt="${esc(att.label || att.originalName || 'Attachment')}">`;
+    } else if (isPdf) {
+      body.innerHTML = `<iframe class="hr-preview__frame" src="${esc(att.viewUrl)}" title="${esc(att.label || att.originalName || 'Attachment')}"></iframe>`;
+    } else {
+      body.innerHTML = `<div class="np-empty"><div class="np-empty__title">No inline preview for this file type</div><div class="np-mut" style="margin-top:.35rem;">Use Open or Download instead.</div></div>`;
+    }
+    $('#hrAttPreviewTitle').textContent = att.label || att.originalName || 'Attachment';
+    $('#hrAttPreviewSub').textContent = [att.attachmentType, att.originalName].filter(Boolean).join(' \u00b7 ');
+    $('#hrAttPreviewOpen').href = att.viewUrl || '#';
+    $('#hrAttPreviewDownload').href = att.downloadUrl || '#';
+    openModal('hrAttPreviewModal');
   }
 
   async function deleteExistingAttachment(attId) {
@@ -687,6 +817,8 @@
     state.pendingFiles.forEach((f, i) => {
       fd.append('attachment', f, f.name);
       fd.append('labels[]',   state.pendingLabels[i] || f.name);
+      fd.append('attachmentTypes[]', state.pendingTypes[i] || '');
+      fd.append('attachmentNotes[]', state.pendingNotes[i] || '');
     });
 
     const submitBtn = $('#histSubmitBtn');
@@ -776,16 +908,19 @@
       ? `<div class="hr-view__section">
            <div class="hr-view__section-title">Attachments (${atts.length})</div>
            ${atts.map(a => `
-             <div class="hr-att">
+             <div class="hr-att" data-att-id="${esc(a.id)}">
                <span class="hr-att__icon">${fileIcon(a.kind, a.mimeType)}</span>
                <div class="hr-att__body">
                  <div class="hr-att__label">${esc(a.label || a.originalName)}</div>
-                 <div class="hr-att__meta">${esc(a.originalName)} \u00b7 ${humanSize(a.sizeBytes)} \u00b7 uploaded ${esc(fmtDate(a.createdAt))}</div>
+                 <div class="hr-att__meta">
+                   ${a.attachmentType ? `<span class="hr-chip">${esc(a.attachmentType)}</span> \u00b7 ` : ''}${esc(a.originalName)} \u00b7 ${humanSize(a.sizeBytes)} \u00b7 uploaded ${esc(fmtDate(a.createdAt))}
+                 </div>
+                 ${a.notes ? `<div class="hr-att__notes">${esc(a.notes)}</div>` : ''}
                </div>
                <div class="hr-att__actions">
-                 <a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${esc(a.viewUrl || '#')}">Preview</a>
-                 <a class="np-btn np-btn--ghost np-btn--sm" href="${esc(a.downloadUrl || '#')}">Download</a>
+                 <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-view-att-preview="${esc(a.id)}">Preview</button>
                  <a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${esc(a.viewUrl || '#')}">Open</a>
+                 <a class="np-btn np-btn--ghost np-btn--sm" href="${esc(a.downloadUrl || '#')}">Download</a>
                </div>
              </div>`).join('')}
          </div>`
@@ -806,6 +941,10 @@
         </div>
         ${attHtml}
       </div>`;
+    $$('[data-view-att-preview]', $('#hrViewContent')).forEach(b => b.addEventListener('click', () => {
+      const a = atts.find(x => x.id === b.getAttribute('data-view-att-preview'));
+      if (a) openAttachmentPreview(a);
+    }));
   }
 
   // =====================================================================

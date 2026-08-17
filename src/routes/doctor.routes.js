@@ -94,6 +94,18 @@ router.post(
   uploadHistoricalPrescription.single('attachment'),
   prev.replaceAttachment
 );
+// v3.4.7 — rename / re-categorize / annotate an attachment without a
+// re-upload, and persist a manual drag-reorder of the attachment list.
+// The literal `/reorder` path is registered before the `:attachmentId`
+// PATCH so it can never be swallowed by the param route.
+router.patch(
+  '/previous-records/:id/attachments/reorder',
+  prev.reorderAttachments
+);
+router.patch(
+  '/previous-records/:id/attachments/:attachmentId',
+  prev.updateAttachmentMeta
+);
 router.delete(
   '/previous-records/:id/attachments/:attachmentId',
   prev.deleteAttachment

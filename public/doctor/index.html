@@ -1278,5 +1278,30 @@
 <script src="earnings.js"></script>
 
 <script src="/doctor/historical-fix.js" defer></script>
+<!-- ================================================================
+     Historical Records — Attachment preview modal.
+     Shared by both the Edit and View flows for the "Preview" action
+     (PDF renders in an <iframe>, images in an <img>; anything else
+     falls back to a short message + Open/Download links). "Open" and
+     "Download" stay separate actions on the attachment row itself —
+     this modal never replaces those, it's only for in-place preview.
+     ================================================================ -->
+<div id="hrAttPreviewModal" class="np-modal hr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="hrAttPreviewTitle">
+  <div class="np-modal__panel hr-modal__panel hr-preview__panel">
+    <div class="np-modal__head hr-modal__head">
+      <div>
+        <div id="hrAttPreviewTitle" class="np-modal__title">Attachment preview</div>
+        <div class="np-modal__subtitle" id="hrAttPreviewSub"></div>
+      </div>
+      <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-hr-close aria-label="Close preview">✕</button>
+    </div>
+    <div class="np-modal__body hr-modal__body hr-preview__body" id="hrAttPreviewBody"></div>
+    <div class="np-modal__foot hr-modal__foot">
+      <a id="hrAttPreviewOpen" class="np-btn np-btn--ghost" target="_blank" rel="noopener" href="#">Open in new tab</a>
+      <a id="hrAttPreviewDownload" class="np-btn np-btn--primary" href="#">Download</a>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

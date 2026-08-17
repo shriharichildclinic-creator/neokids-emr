@@ -43,7 +43,7 @@ function recordShareUrl(req, record){
 function decorateRecord(req, record){
   const atts = (record.attachments || []).map(a => {
     const u = attachmentUrls(req, a);
-    return { id: a.id, label: a.label || a.originalName, originalName: a.originalName, mimeType: a.mimeType, sizeBytes: a.sizeBytes, kind: a.kind, createdAt: a.createdAt, viewUrl: u.view, downloadUrl: u.download };
+    return { id: a.id, label: a.label || a.originalName, originalName: a.originalName, mimeType: a.mimeType, sizeBytes: a.sizeBytes, kind: a.kind, attachmentType: a.attachmentType || null, notes: a.notes || null, sortOrder: a.sortOrder || 0, createdAt: a.createdAt, viewUrl: u.view, downloadUrl: u.download };
   });
   return Object.assign({}, record, { attachments: atts, shareUrl: recordShareUrl(req, record) });
 }

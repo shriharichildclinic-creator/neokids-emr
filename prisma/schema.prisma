@@ -250,6 +250,9 @@ model PreviousRecordAttachment {
   sizeBytes       Int      @default(0)
   label           String?
   kind            String?  // 'PDF' | 'IMAGE' | 'PRESCRIPTION' | 'LEGACY' | 'OTHER'
+  attachmentType  String?  // doctor-chosen category, independent of `kind`
+  notes           String?  @db.VarChar(2000)
+  sortOrder       Int      @default(0)
   storagePath     String
   uploadedById    String?
   uploadedByRole  String?
@@ -259,6 +262,7 @@ model PreviousRecordAttachment {
   record PreviousRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
 
   @@index([recordId])
+  @@index([recordId, sortOrder])
   @@map("previous_record_attachments")
 }
 
