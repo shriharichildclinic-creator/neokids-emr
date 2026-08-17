@@ -2017,11 +2017,26 @@ html[data-theme="dark"] .np-modal pre{
   font-size:.85rem; letter-spacing:.02em; text-transform:uppercase;
 }
 
-/* Responsive breakpoints */
-@media (max-width:900px){
-  .hr-toolbar__filter{ flex:1 1 130px; min-width:120px; }
-}
-@media (max-width:780px){
+/* Responsive breakpoints
+   v3.4.7 — table/card switch and toolbar stacking both happen at the
+   SAME 1024px breakpoint the rest of the doctor panel already uses for
+   its sidebar collapse (see .np-menu-toggle). Anything narrower than
+   that got squashed table columns before; now it gets the full mobile
+   layout instead of a half-way state. */
+@media (max-width:1024px){
+  .hr-panel .np-panel__head{ gap:.6rem; }
+  .hr-toolbar{
+    flex-direction:column; align-items:stretch; position:static;
+    padding:.6rem;
+  }
+  .hr-toolbar__search{ flex:1 1 auto; min-width:0; width:100%; }
+  .hr-toolbar__filters{
+    display:grid; grid-template-columns:1fr 1fr; gap:.5rem; width:100%;
+  }
+  .hr-toolbar__filter{ min-width:0; width:100%; }
+  #hrFilterType{ grid-column:1 / -1; }
+  #hrFilterReset{ grid-column:1 / -1; width:100%; justify-content:center; }
+
   .hr-table-wrap{ display:none; }
   .hr-cards{ display:flex; }
   .hr-view__row{ grid-template-columns:1fr; gap:.15rem; }
@@ -2036,9 +2051,38 @@ html[data-theme="dark"] .np-modal pre{
   .hr-modal__head, .hr-modal__foot{ border-radius:0; }
   .hr-modal__foot{ flex-wrap:wrap; }
   .hr-modal__foot .np-btn{ flex:1 1 auto; justify-content:center; }
-  .hr-toolbar{ position:relative; }
   .hr-cell__actions{ text-align:left; }
+  .hr-toolbar__filters{ grid-template-columns:1fr; }
+  #hrFilterType{ grid-column:auto; }
 }
+
+/* Skeleton loaders — replaces plain "Loading…" text states */
+@keyframes hrShimmer{
+  0%{ background-position:-320px 0; }
+  100%{ background-position:320px 0; }
+}
+.hr-skel{
+  background:linear-gradient(90deg, var(--np-surface-2,#eef1f5) 25%, rgba(0,0,0,.06) 37%, var(--np-surface-2,#eef1f5) 63%);
+  background-size:640px 100%;
+  animation:hrShimmer 1.4s ease-in-out infinite;
+  border-radius:6px;
+  display:block;
+}
+.hr-skel-row td{ padding:.7rem .85rem; border-bottom:1px solid var(--np-border, #eef0f4); }
+.hr-skel-line{ height:.7rem; width:100%; }
+.hr-skel-line--sm{ width:60%; }
+.hr-skel-line--xs{ height:.55rem; width:40%; margin-top:.3rem; }
+.hr-skel-card{
+  background:#fff; border:1px solid var(--np-border, #e5e7eb); border-radius:14px;
+  padding:.8rem .85rem; display:flex; flex-direction:column; gap:.5rem;
+}
+.hr-skel-card__top{ display:flex; justify-content:space-between; gap:.5rem; }
+.hr-skel-chip{ height:1.4rem; width:4.5rem; border-radius:999px; }
+[data-theme="dark"] .hr-skel{
+  background:linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.14) 37%, rgba(255,255,255,.06) 63%);
+  background-size:640px 100%;
+}
+[data-theme="dark"] .hr-skel-card{ background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.08); }
 
 /* Dark theme parity */
 [data-theme="dark"] .hr-toolbar{ background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.08); }

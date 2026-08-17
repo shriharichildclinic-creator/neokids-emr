@@ -784,7 +784,7 @@
         </div>
       </div>
 
-      <div id="hrCountLine" class="hr-count">Loading records…</div>
+      <div id="hrCountLine" class="hr-count"><span class="hr-skel hr-skel-line" style="display:inline-block;width:9rem;height:.75rem;vertical-align:middle;"></span></div>
 
       <!-- Desktop table -->
       <div id="hrTableWrap" class="hr-table-wrap">
@@ -800,13 +800,18 @@
             </tr>
           </thead>
           <tbody id="hrTableBody">
-            <tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">Loading records…</div></div></td></tr>
+            <tr class="hr-skel-row"><td><span class="hr-skel hr-skel-line"></span><span class="hr-skel hr-skel-line hr-skel-line--xs"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td><td><span class="hr-skel hr-skel-chip"></span></td><td><span class="hr-skel hr-skel-line"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td></tr>
+            <tr class="hr-skel-row"><td><span class="hr-skel hr-skel-line"></span><span class="hr-skel hr-skel-line hr-skel-line--xs"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td><td><span class="hr-skel hr-skel-chip"></span></td><td><span class="hr-skel hr-skel-line"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td></tr>
+            <tr class="hr-skel-row"><td><span class="hr-skel hr-skel-line"></span><span class="hr-skel hr-skel-line hr-skel-line--xs"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td><td><span class="hr-skel hr-skel-chip"></span></td><td><span class="hr-skel hr-skel-line"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td><td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td></tr>
           </tbody>
         </table>
       </div>
 
       <!-- Mobile / narrow-viewport card list -->
-      <div id="hrCardList" class="hr-cards" aria-live="polite"></div>
+      <div id="hrCardList" class="hr-cards" aria-live="polite">
+        <div class="hr-skel-card"><div class="hr-skel-card__top"><span class="hr-skel hr-skel-line" style="width:55%"></span><span class="hr-skel hr-skel-chip"></span></div><span class="hr-skel hr-skel-line" style="width:80%"></span><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></div>
+        <div class="hr-skel-card"><div class="hr-skel-card__top"><span class="hr-skel hr-skel-line" style="width:55%"></span><span class="hr-skel hr-skel-chip"></span></div><span class="hr-skel hr-skel-line" style="width:80%"></span><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></div>
+      </div>
 
       <!-- Pagination -->
       <div id="hrPager" class="hr-pager hidden">

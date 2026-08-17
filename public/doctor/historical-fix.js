@@ -228,12 +228,38 @@
     }
   }
 
+  // Skeleton placeholders shown while the list is in flight. Real
+  // shimmering blocks instead of a plain "Loading…" text node, per the
+  // mobile/QA fix spec — never show a bare loading text container.
+  function skeletonRow() {
+    return '<tr class="hr-skel-row">' +
+      '<td><span class="hr-skel hr-skel-line"></span><span class="hr-skel hr-skel-line hr-skel-line--xs"></span></td>' +
+      '<td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td>' +
+      '<td><span class="hr-skel hr-skel-chip"></span></td>' +
+      '<td><span class="hr-skel hr-skel-line"></span></td>' +
+      '<td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td>' +
+      '<td><span class="hr-skel hr-skel-line hr-skel-line--sm"></span></td>' +
+      '</tr>';
+  }
+
+  function skeletonCard() {
+    return '<div class="hr-skel-card">' +
+      '<div class="hr-skel-card__top">' +
+        '<span class="hr-skel hr-skel-line" style="width:55%"></span>' +
+        '<span class="hr-skel hr-skel-chip"></span>' +
+      '</div>' +
+      '<span class="hr-skel hr-skel-line" style="width:80%"></span>' +
+      '<span class="hr-skel hr-skel-line hr-skel-line--sm"></span>' +
+      '</div>';
+  }
+
   function renderLoading() {
     const tbody = $('#hrTableBody');
     const cards = $('#hrCardList');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">Loading records\u2026</div></div></td></tr>';
-    if (cards) cards.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading records\u2026</div></div>';
-    const count = $('#hrCountLine'); if (count) count.textContent = 'Loading records\u2026';
+    if (tbody) tbody.innerHTML = Array.from({ length: 6 }, skeletonRow).join('');
+    if (cards) cards.innerHTML = Array.from({ length: 4 }, skeletonCard).join('');
+    const count = $('#hrCountLine');
+    if (count) count.innerHTML = '<span class="hr-skel hr-skel-line" style="display:inline-block;width:9rem;height:.75rem;vertical-align:middle;"></span>';
     $('#hrPager')?.classList.add('hidden');
   }
 
@@ -725,7 +751,10 @@
   async function openViewModal(id) {
     const modal = $('#hrViewModal');
     modal.setAttribute('data-record-id', id);
-    $('#hrViewContent').innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading\u2026</div></div>';
+    $('#hrViewContent').innerHTML = '<div class="hr-view__grid">' +
+      Array.from({ length: 5 }, () =>
+        '<div class="hr-view__row"><span class="hr-skel hr-skel-line hr-skel-line--sm"></span><span class="hr-skel hr-skel-line" style="margin-top:.3rem;"></span></div>'
+      ).join('') + '</div>';
     openModal('hrViewModal');
     try {
       const r = await api('/doctor/previous-records/' + encodeURIComponent(id));
