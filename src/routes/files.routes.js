@@ -350,4 +350,35 @@ router.get('/previous-records/:id', asyncHandler(async (req, res) => {
   fs.createReadStream(filepath).pipe(res);
 }));
 
+
+// v3.4.3 public signed share links (WhatsApp / Email)
+const histSvc = require('../services/historical-record.service');
+const prismaShare = require('../config/prisma');
+const fsShare = require('fs');
+const pathShare = require('path');
+
+router.get('/share/:token', asyncH(async (req, res) => {
+  const p = histSvc.verify(req.params.token);
+  if (!p || p.t !== 'att') return res.status(403).json({ error: 'Invalid or expired link' });
+  const fp = pathShare.join(histSvc.STORAGE_PATH, 'historical-rx', p.p);
+  if (!fsShare.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
+  res.setHeader('Content-Type', p.m || 'application/octet-stream');
+  res.setHeader('Content-Disposition', (req.query.dl === '1' ? 'attachment' : 'inline') + '; filename="' + String(p.n || 'file').replace(/"/g, '') + '"');
+  fsShare.createReadStream(fp).pipe(res);
+}));
+
+router.get('/share-record/:token', asyncH(async (req, res) => {
+  const p = histSvc.verify(req.params.token);
+  if (!p || p.t !== 'rec') return res.status(403).json({ error: 'Invalid or expired link' });
+  const r = await prismaShare.previousRecord.findFirst({ where: { id: p.id, deletedAt: null }, include: { attachments: true, patient: { select: { name: true } } } });
+  if (!r) return res.status(404).json({ error: 'Record not found' });
+  const rows = r.attachments.map(a => {
+    const t = histSvc.attachmentToken(a);
+    return '<li>' + (a.label || a.originalName) + ' - <a href="/api/files/share/' + t + '?dl=0" target="_blank">Preview</a> | <a href="/api/files/share/' + t + '?dl=1">Download</a></li>';
+  }).join('');
+  const pdf = r.pdfUrl ? '<p><a href="' + r.pdfUrl + '" target="_blank">View Record Summary PDF</a></p>' : '';
+  res.setHeader('Content-Type', 'text/html');
+  res.send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medical Record - NeoKidsPro</title></head><body style="font-family:sans-serif;max-width:640px;margin:40px auto;padding:0 16px"><h2>Medical Record Shared</h2><p><b>Patient:</b> ' + (r.patient ? r.patient.name : '') + '<br/><b>Record:</b> ' + (r.title || r.recordType || 'Historical Record') + '<br/><b>Date:</b> ' + new Date(r.recordDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + '</p>' + pdf + '<h3>Attachments</h3><ul>' + (rows || '<li>No attachments</li>') + '</ul><p style="color:#777;font-size:12px">Secure link - expires in 7 days. NeoKidsPro EMR.</p></body></html>');
+}));
+
 module.exports = router;
