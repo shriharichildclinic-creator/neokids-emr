@@ -202,15 +202,64 @@ model PreviousRecord {
   treatment     String?  @db.Text
   medications   String?  @db.Text
   attachmentUrl String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
 
-  doctor  Doctor  @relation(fields: [doctorId], references: [id])
-  patient Patient @relation(fields: [patientId], references: [id])
+  // ───────────────────────────────────────────────
+  // v3.4.3+ professional-EMR rework columns.
+  // The migration 20260817120000_historical_records_pro
+  // already applies them to MySQL. The Prisma model MUST
+  // declare them so the generated client recognises the
+  // field names — otherwise `prisma.previousRecord.create({
+  // data: { title, recordType, ... } })` throws
+  // PrismaClientValidationError ("Invalid input for database
+  // operation").
+  title               String?
+  recordType          String?  // LAB_REPORT | RADIOLOGY | CONSULTATION | PRESCRIPTION | VACCINATION | DISCHARGE | OTHER
+  pdfUrl              String?
+  pdfGeneratedAt      DateTime?
+  shareToken          String?  @unique
+  shareTokenExpiresAt DateTime?
+  lastSharedAt        DateTime?
+  lastSharedVia       String?  // 'WHATSAPP' | 'EMAIL'
+  deletedAt           DateTime?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  doctor      Doctor                 @relation(fields: [doctorId], references: [id])
+  patient     Patient                @relation(fields: [patientId], references: [id])
+  attachments PreviousRecordAttachment[]
 
   @@index([doctorId, patientId, recordDate])
   @@index([patientId, recordDate])
+  @@index([deletedAt])
   @@map("previous_records")
+}
+
+// One row per attachment (PDFs, JPGs, scans, prescriptions).
+// The table itself is created by migration
+// 20260817120000_historical_records_pro; the model declaration
+// must stay in lock-step with that migration or the v3.4.4
+// upload/replace/delete/share endpoints all throw
+// PrismaClientValidationError at runtime.
+model PreviousRecordAttachment {
+  id              String   @id @default(uuid())
+  recordId        String
+  filename        String
+  originalName    String
+  mimeType        String
+  sizeBytes       Int      @default(0)
+  label           String?
+  kind            String?  // 'PDF' | 'IMAGE' | 'PRESCRIPTION' | 'LEGACY' | 'OTHER'
+  storagePath     String
+  uploadedById    String?
+  uploadedByRole  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  record PreviousRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([recordId])
+  @@map("previous_record_attachments")
 }
 
 // ─────────────────────────────────────────────────────────────────────

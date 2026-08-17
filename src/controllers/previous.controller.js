@@ -68,12 +68,22 @@ function parseBody(req, schema){
   return r.data;
 }
 async function saveAttachments(req, record){
-  const files = req.files || [];
-  const labels = [].concat(req.body.labels || req.body['labels[]'] || []);
+  // Accept BOTH single-file and multi-file uploads. The doctor SPA submits
+  // a single `<input name="attachment">` (legacy field), but the controller
+  // also accepts an `attachments[]` field-name convention. So we read either
+  // req.file or req.files and normalise to the same flat list.
+  const files = [];
+  if (Array.isArray(req.files) && req.files.length) files.push(...req.files);
+  if (req.file) files.push(req.file);
+  // labels may be sent as `labels[]=a&labels[]=b`, or as `labels=a&labels=b`
+  const labels = []
+    .concat(req.body.labels || [])
+    .concat(Array.isArray(req.body['labels[]']) ? req.body['labels[]'] : (req.body['labels[]'] ? [req.body['labels[]']] : []));
   const out = [];
   for (let i = 0; i < files.length; i++){
     const f = files[i];
     const label = (labels[i] || f.originalname || 'Attachment').toString().slice(0, 190);
+    if (!f || !f.filename) continue;
     out.push(await prisma.previousRecordAttachment.create({ data: {
       recordId: record.id, filename: f.filename, originalName: f.originalname, mimeType: f.mimetype,
       sizeBytes: f.size, label, kind: kindOf(f.mimetype, f.originalname), storagePath: f.filename,
@@ -102,8 +112,14 @@ exports.detail = asyncH(async (req, res) => {
   res.json({ success: true, record: svc.decorateRecord(req, r) });
 });
 
-// POST /doctor/patients/:patientId/previous-records  (multipart, attachments[])
-exports.create = [ upload.array('attachments', 20), asyncH(async (req, res) => {
+// POST /doctor/patients/:patientId/previous-records
+//
+// IMPORTANT (v3.4.4): this handler does NOT mount its own multer
+// middleware. The route already runs `multer.single('attachment')` (or
+// `array('attachments', 20)` on the admin route) and writes the file
+// paths to req.file / req.files. Re-running multer here would consume
+// the body stream twice and silently drop files.
+exports.create = asyncH(async (req, res) => {
   const data = parseBody(req, createSchema);
   const patientId = req.params.patientId || data.patientId;
   if (!patientId) { const e = new Error('patientId is required'); e.status = 422; throw e; }
@@ -117,10 +133,10 @@ exports.create = [ upload.array('attachments', 20), asyncH(async (req, res) => {
   await saveAttachments(req, record);
   const full = await prisma.previousRecord.findUnique({ where: { id: record.id }, include });
   res.status(201).json({ success: true, record: svc.decorateRecord(req, full) });
-})];
+});
 
-// PUT /doctor/previous-records/:id  (multipart optional, attachments[] appended)
-exports.update = [ upload.array('attachments', 20), asyncH(async (req, res) => {
+// PUT /doctor/previous-records/:id
+exports.update = asyncH(async (req, res) => {
   const existing = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!existing) throw notFound();
   const data = parseBody(req, updateSchema); // tolerant — fixes "Invalid Input"
@@ -132,7 +148,7 @@ exports.update = [ upload.array('attachments', 20), asyncH(async (req, res) => {
   await saveAttachments(req, record);
   const full = await prisma.previousRecord.findUnique({ where: { id: record.id }, include });
   res.json({ success: true, record: svc.decorateRecord(req, full) });
-})];
+});
 
 // DELETE /doctor/previous-records/:id (soft delete)
 exports.remove = asyncH(async (req, res) => {
@@ -143,12 +159,12 @@ exports.remove = asyncH(async (req, res) => {
 });
 
 // POST /doctor/previous-records/:id/attachments
-exports.addAttachments = [ upload.array('attachments', 20), asyncH(async (req, res) => {
+exports.addAttachments = asyncH(async (req, res) => {
   const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!record) throw notFound();
   const added = await saveAttachments(req, record);
   res.status(201).json({ success: true, attachments: added.map(a => ({ id: a.id, label: a.label, originalName: a.originalName })) });
-})];
+});
 
 // POST /doctor/previous-records/:id/attachments/:attachmentId/replace
 exports.replaceAttachment = [ upload.single('file'), asyncH(async (req, res) => {

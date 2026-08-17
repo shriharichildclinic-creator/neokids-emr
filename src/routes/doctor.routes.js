@@ -53,14 +53,47 @@ router.post(
 );
 
 // ─── Previous Records (doctor-only feature flag) ───
+// v3.4.4: the controller export is now a raw function (NOT an array with
+// inline multer). The single/array multer middleware lives here on the
+// route, so the request body is parsed exactly ONCE and req.body keeps
+// the same shape the controller expects (Zod-validated, empty-string
+// tolerant, PATCH-style). This was the second cause of "Invalid input for
+// database operation" — double-multer parsed the multipart stream twice,
+// stripping all text fields after the file.
 router.get('/previous-records/permission',                  prev.permission);
 router.get('/patients/:patientId/previous-records',         prev.listForPatient);
-router.post('/patients/:patientId/previous-records', uploadHistoricalPrescription.single('attachment'), (req, _res, next) => {
-  req.body = { ...(req.body || {}), patientId: req.params.patientId };
-  next();
-}, prev.create);
-router.put('/previous-records/:id', uploadHistoricalPrescription.single('attachment'), prev.update);
+router.post(
+  '/patients/:patientId/previous-records',
+  uploadHistoricalPrescription.array('attachment', 20),
+  (req, _res, next) => {
+    req.body = { ...(req.body || {}), patientId: req.params.patientId };
+    next();
+  },
+  prev.create
+);
+router.put(
+  '/previous-records/:id',
+  uploadHistoricalPrescription.array('attachment', 20),
+  prev.update
+);
 router.delete('/previous-records/:id',                      prev.remove);
+
+router.post(
+  '/previous-records/:id/attachments',
+  uploadHistoricalPrescription.array('attachment', 20),
+  prev.addAttachments
+);
+router.post(
+  '/previous-records/:id/attachments/:attachmentId/replace',
+  uploadHistoricalPrescription.single('attachment'),
+  prev.replaceAttachment
+);
+router.delete(
+  '/previous-records/:id/attachments/:attachmentId',
+  prev.deleteAttachment
+);
+router.post('/previous-records/:id/generate-pdf',           prev.generatePdf);
+router.post('/previous-records/:id/share',                  prev.share);
 
 // ─── Prescription endpoints ───
 router.post('/appointments/:id/prescription',               c.createPrescription);

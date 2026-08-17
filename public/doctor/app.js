@@ -2481,12 +2481,19 @@ function injectConsultBackButton(){
     if (!wrap) return;
     wrap.innerHTML = `<div class="np-empty"><div class="np-empty__title">Loading previous records…</div></div>`;
     try {
-      __prevRecordsCache = await api('/doctor/patients/' + encodeURIComponent(patientId) + '/previous-records');
-      if (!__prevRecordsCache.length){
+      // v3.4.5 — the controller returns { success, records: [...] }, not a
+      // bare array. Unwrap defensively so the page works whether the
+      // backend returns either shape (legacy or new).
+      const resp = await api('/doctor/patients/' + encodeURIComponent(patientId) + '/previous-records');
+      const list = Array.isArray(resp) ? resp
+                  : Array.isArray(resp && resp.records) ? resp.records
+                  : [];
+      __prevRecordsCache = list;
+      if (!list.length){
         wrap.innerHTML = `<div class="np-empty"><div class="np-empty__title">No previous records yet</div><div class="np-empty__sub">Use the form above to add the first one.</div></div>`;
         return;
       }
-      wrap.innerHTML = __prevRecordsCache.map(fmtPrevRecord).join('');
+      wrap.innerHTML = list.map(fmtPrevRecord).join('');
       wrap.querySelectorAll('[data-prev-edit]').forEach(btn => btn.addEventListener('click', () => editPreviousRecord(btn.getAttribute('data-prev-edit'))));
       wrap.querySelectorAll('[data-prev-del]').forEach(btn => btn.addEventListener('click', () => deletePreviousRecord(btn.getAttribute('data-prev-del'))));
     } catch (ex){
