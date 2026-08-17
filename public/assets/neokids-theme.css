@@ -1,0 +1,2200 @@
+
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root{
+  
+  --nk-teal-50:#F1F7F7;
+  --nk-teal-100:#DCEBEB;
+  --nk-teal-200:#BFDCDC;
+  --nk-teal-300:#A4CDCE;
+  --nk-teal-400:#89BCBD;   
+  --nk-teal-500:#6FAAAB;
+  --nk-teal-600:#5A9495;
+  --nk-teal-700:#467878;
+  --nk-teal-800:#345B5B;
+
+--nk-pink-50:#FFF1F5;
+  --nk-pink-100:#FFE0EB;
+  --nk-pink-200:#FFC2D9;
+  --nk-pink-300:#FFA6C5;
+  --nk-pink-400:#FE84A4;        
+  --nk-pink-500:#F46A8E;
+  --nk-pink-600:#D94E74;
+  --nk-pink-700:#B53A5B;
+
+  --nk-orange-400:#F9A945;      
+  --nk-orange-500:#E89331;
+  --nk-yellow-400:#FED960;      
+  --nk-yellow-500:#F2C73F;
+  --nk-purple-400:#CE7ED4;      
+  --nk-purple-500:#B864BE;
+  --nk-lime-400:#C0CF56;        
+  --nk-lime-500:#A8B948;
+  --nk-blush:#FFEEEF;           
+
+--nk-ink:#0F2E3A;             
+  --nk-ink-2:#1F3A4A;
+  --nk-text:#1E293B;
+  --nk-muted:#64748B;
+  --nk-border:#D9E6E6;          
+  --nk-border-soft:#E8F0F0;
+  --nk-surface:#F7FAFA;         
+  --nk-card:#ffffff;
+  --nk-row-hover:#F1F7F7;
+
+--nk-shadow-xs: 0 1px 2px rgba(15,46,58,.04);
+  --nk-shadow-sm: 0 1px 2px rgba(15,46,58,.05), 0 4px 14px -6px rgba(15,46,58,.08);
+  --nk-shadow-md: 0 4px 12px -2px rgba(15,46,58,.08), 0 16px 32px -12px rgba(15,46,58,.14);
+  --nk-shadow-lg: 0 24px 48px -16px rgba(15,46,58,.22), 0 4px 10px rgba(15,46,58,.07);
+  --nk-ring-primary: 0 0 0 4px rgba(137,188,189,.25);
+
+--nk-radius-sm: 10px;
+  --nk-radius:    14px;
+  --nk-radius-card: 18px;
+  --nk-radius-lg: 22px;
+  --nk-radius-pill: 999px;
+
+--nk-grad-primary: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
+  --nk-grad-hero:    linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-500) 55%, var(--nk-pink-400) 100%);
+  --nk-grad-soft:    linear-gradient(180deg, #F4FAFA 0%, #FFFFFF 100%);
+
+--np-primary: var(--nk-teal-400);
+  --np-primary-600: var(--nk-teal-600);
+  --np-blue: var(--nk-teal-500);
+  --np-mint: var(--nk-teal-100);
+  --np-cream: var(--nk-blush);
+  --np-coral: var(--nk-pink-400);
+  --np-ink: var(--nk-ink);
+  --np-surface: var(--nk-surface);
+  --np-border: var(--nk-border);
+  --np-muted: var(--nk-muted);
+  --np-text: var(--nk-text);
+  --np-card-shadow: var(--nk-shadow-sm);
+  --np-card-shadow-hover: var(--nk-shadow-md);
+  --np-radius-card: 18px;
+}
+
+html,body{
+  background: var(--nk-surface);
+  color: var(--nk-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-feature-settings: 'cv11','ss01','ss03';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.np-sidebar__title,
+.np-login__title,
+.np-header__page-title,
+.np-panel__title,
+.np-modal__title,
+.np-drawer__title,
+.np-kpi__value,
+.np-doc-card__name,
+h1,h2,h3{
+  font-family: 'Poppins','Inter', system-ui, sans-serif;
+  letter-spacing: -.01em;
+}
+.np-kpi__value{ font-weight:700; }
+
+:focus-visible{
+  outline: 2px solid var(--nk-teal-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+::selection{ background: var(--nk-teal-100); color: var(--nk-teal-800); }
+
+*::-webkit-scrollbar{ width:10px; height:10px; }
+*::-webkit-scrollbar-thumb{
+  background: #C3DBDB;
+  border-radius: 999px;
+  border:2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover{ background:#9CC4C5; background-clip: padding-box; border:2px solid transparent; }
+*::-webkit-scrollbar-track{ background: transparent; }
+
+.np-sidebar__logo,
+.np-login__logo{
+  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 60%, var(--nk-pink-400) 100%);
+  box-shadow: 0 8px 22px -6px rgba(137,188,189,.55), 0 2px 6px -2px rgba(15,46,58,.15);
+  position: relative;
+}
+.np-sidebar__logo::after,
+.np-login__logo::after{
+  content:"";
+  position:absolute; inset:-1px;
+  border-radius: inherit;
+  background: radial-gradient(circle at 30% 20%, rgba(255,255,255,.45), transparent 60%);
+  pointer-events:none;
+}
+
+.np-sidebar{
+  background: #ffffff;
+  border-right: 1px solid var(--nk-border-soft);
+}
+.np-sidebar__brand{
+  border-bottom: 1px solid var(--nk-border-soft);
+  background: linear-gradient(180deg, #F1F7F7, transparent);
+}
+.np-nav-item{
+  border-radius: 12px;
+  font-weight: 500;
+  color: #334155;
+  transition: background .16s ease, color .16s ease, border-color .16s ease, transform .12s ease;
+}
+.np-nav-item:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+}
+.np-nav-item.active{
+  background: linear-gradient(135deg, rgba(137,188,189,.18), rgba(137,188,189,.06));
+  color: var(--nk-teal-700);
+  border-color: rgba(137,188,189,.35);
+  box-shadow: inset 0 0 0 1px rgba(137,188,189,.18);
+}
+.np-nav-item.active .np-nav-item__icon{ color: var(--nk-teal-600); }
+.np-nav-badge{
+  background: var(--nk-pink-400);   
+  color: #fff;
+  font-weight: 600;
+}
+.np-sidebar__section{
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: .68rem;
+  color: var(--nk-teal-700);
+}
+.np-sidebar__footer{ border-top: 1px solid var(--nk-border-soft); }
+
+.np-header{
+  background: #ffffff;
+  border-bottom: 1px solid var(--nk-border-soft);
+  backdrop-filter: saturate(180%) blur(6px);
+}
+.np-header__page-title{ color: var(--nk-ink); font-weight: 700; letter-spacing: -.015em; }
+
+.np-iconbtn{
+  border: 1px solid var(--nk-border);
+  border-radius: 12px;
+  background:#fff;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .12s ease;
+}
+.np-iconbtn:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-color: var(--nk-teal-200);
+}
+
+.np-profile__trigger{ transition: background .15s ease, border-color .15s ease; }
+.np-profile__trigger:hover{
+  background: var(--nk-teal-50);
+  border-color: var(--nk-teal-200);
+}
+.np-profile__avatar{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  box-shadow: 0 2px 6px -1px rgba(15,46,58,.18);
+}
+.np-profile__menu{
+  border-radius: 14px;
+  border-color: var(--nk-border);
+  box-shadow: var(--nk-shadow-md);
+  overflow: hidden;
+}
+.np-profile__menu-item:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+}
+
+.np-panel{
+  background:#fff;
+  border:1px solid var(--nk-border-soft);
+  border-radius: var(--nk-radius-card);
+  box-shadow: var(--nk-shadow-sm);
+}
+.np-panel__title{ color: var(--nk-ink); font-weight:700; letter-spacing:-.01em; }
+
+.np-kpi{
+  background:#fff;
+  border:1px solid var(--nk-border-soft);
+  border-radius: 20px;
+  padding: 1.2rem 1.3rem;
+  box-shadow: var(--nk-shadow-sm);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  position: relative;
+  overflow: hidden;
+}
+.np-kpi:hover{
+  transform: translateY(-2px);
+  box-shadow: var(--nk-shadow-md);
+  border-color: var(--nk-teal-200);
+}
+.np-kpi::before{
+  width: 5px;
+  border-radius: 5px 0 0 5px;
+  background: var(--nk-teal-400);
+}
+
+.np-kpi--blue::before  { background: linear-gradient(180deg, var(--nk-teal-400),  var(--nk-teal-600));  }
+.np-kpi--mint::before  { background: linear-gradient(180deg, var(--nk-teal-300),  var(--nk-teal-500));  }
+.np-kpi--coral::before { background: linear-gradient(180deg, var(--nk-pink-400),  var(--nk-pink-500));  }
+.np-kpi--cream::before { background: linear-gradient(180deg, var(--nk-yellow-400),var(--nk-orange-400));}
+.np-kpi--violet::before{ background: linear-gradient(180deg, var(--nk-purple-400),#9F5BA8);             }
+.np-kpi--rose::before  { background: linear-gradient(180deg, var(--nk-pink-400),  var(--nk-pink-600));  }
+.np-kpi__value{ color: var(--nk-ink); }
+.np-kpi__label{ color: var(--nk-muted); font-weight:500; }
+
+.np-content{ background: transparent; }
+
+/* ==========================================================================
+   CANONICAL BUTTON COMPONENT
+   Single source of truth for every button across the Admin Panel and
+   Doctor Panel (primary/secondary/outline/filter/apply/clear/refresh/
+   save/cancel/modal actions). Page stylesheets must not redeclare size,
+   color, padding, radius or display for `.np-btn` — only layout placement
+   (e.g. "stack full-width inside this specific mobile card") belongs there.
+   ========================================================================== */
+.np-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  width: auto;
+  min-width: 96px;
+  min-height: 40px;
+  padding: .55rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--nk-border);
+  background: #fff;
+  color: var(--nk-text);
+  font-weight: 600;
+  font-size: .88rem;
+  letter-spacing: .005em;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.np-btn:active{ transform: translateY(1px); }
+.np-btn--sm{ min-height: 32px; min-width: 0; padding: .4rem .75rem; font-size: .8rem; }
+.np-btn--block{ width: 100%; }
+.np-tab{ min-height: 36px; }
+.np-btn:disabled, .np-btn--disabled, .np-btn[disabled]{
+  opacity: .5;
+  pointer-events: none;
+  cursor: not-allowed;
+  filter: grayscale(.15);
+}
+.np-btn--primary{
+  background: linear-gradient(135deg, var(--nk-teal-400) 0%, var(--nk-teal-600) 100%);
+  border-color: var(--nk-teal-600);
+  color:#fff;
+  box-shadow: 0 6px 18px -6px rgba(90,148,149,.55);
+}
+.np-btn--primary:hover{
+  background: linear-gradient(135deg, var(--nk-teal-500) 0%, var(--nk-teal-700) 100%);
+  border-color: var(--nk-teal-700);
+  box-shadow: 0 10px 22px -6px rgba(70,120,120,.65);
+  transform: translateY(-1px);
+}
+.np-btn:hover{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-color: var(--nk-teal-200);
+}
+.np-btn--success{
+  background: linear-gradient(135deg, #2AB99A, #189B82);
+  border-color:#189B82;
+  color:#fff;
+}
+.np-btn--success:hover{
+  background: linear-gradient(135deg, #189B82, #0F7A66);
+  border-color:#0F7A66;
+  color:#fff;
+}
+.np-btn--danger{
+  background: linear-gradient(135deg, #EF6F87, #D94E74);
+  border-color:#D94E74;
+  color:#fff;
+}
+.np-btn--danger:hover{
+  background: linear-gradient(135deg, #D94E74, #B53A5B);
+  color:#fff;
+}
+.np-btn--ghost{ background:#fff; border-color: var(--nk-border); color: var(--nk-text); }
+.np-btn--ghost:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); border-color: var(--nk-teal-200); }
+/* Icon-only button variant (e.g. the delete-doctor trash icon). Declared
+   here — the canonical .np-btn source of truth — with explicit min-width/
+   min-height so it isn't clamped back up by the base .np-btn's 96px/40px
+   minimums at equal selector specificity. */
+.np-btn--icon{
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  flex-shrink: 0;
+  border-radius: 8px;
+  font-size: .95rem;
+}
+.np-btn--ghost.np-btn--icon.np-btn--danger{
+  color:#DC2626;
+  border-color:rgba(220,38,38,.25);
+  background:transparent;
+}
+.np-btn--ghost.np-btn--icon.np-btn--danger:hover{
+  background:#FEF2F2; border-color:#DC2626;
+}
+.np-btn--add-doctor{
+  box-shadow: 0 8px 22px -6px rgba(90,148,149,.55);
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  border-color: var(--nk-teal-600);
+  color:#fff;
+}
+.np-btn--add-doctor:hover{
+  box-shadow: 0 12px 26px -6px rgba(70,120,120,.65);
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+}
+
+.text-brand-primary{ color: var(--nk-teal-600) !important; }
+.bg-brand-primary  { background: var(--nk-teal-400) !important; }
+.bg-brand-surface  { background: var(--nk-surface) !important; }
+.border-brand-primary{ border-color: var(--nk-teal-400) !important; }
+.hover\:text-brand-primary:hover{ color: var(--nk-teal-600) !important; }
+.hover\:bg-brand-primary:hover  { background: var(--nk-teal-500) !important; }
+.from-brand-primary{ --tw-gradient-from: var(--nk-teal-400) !important; }
+.to-brand-primary  { --tw-gradient-to:   var(--nk-teal-600) !important; }
+
+/* .np-input / .np-select / .np-textarea base box model (width, padding,
+   border-radius, border, transition) is defined once in styles.css.
+   This block only layers the focus ring — it must NOT redeclare
+   border-radius/border/background, that duplication was the source of
+   the v3.3.x "stretched inputs" Settings bug. */
+.np-input:focus, .np-select:focus, .np-textarea:focus{
+  border-color: var(--nk-teal-400);
+  box-shadow: var(--nk-ring-primary);
+  outline: none;
+}
+.np-field__label{ color: var(--nk-ink); font-weight: 600; font-size: .82rem; }
+.np-field__hint { color: var(--nk-muted); font-size: .76rem; }
+.np-error{
+  background:#FFF1F3; border:1px solid #FCC7D2; color:#9F1E36;
+  border-radius: 12px;
+  padding: .6rem .8rem;
+  font-size: .85rem;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  white-space: normal;
+}
+.np-search input{
+  border-radius: 12px;
+  border-color: var(--nk-border);
+}
+.np-search input:focus{
+  border-color: var(--nk-teal-400);
+  box-shadow: var(--nk-ring-primary);
+}
+
+/* ==========================================================================
+   CANONICAL DIVIDER COMPONENT
+   A thin, intentional section rule — used inside forms/panels to separate
+   sub-sections. Previously redefined per-page (an invisible height-only
+   spacer on the Admin panel, a visible line with different color/margin on
+   the Doctor panel), which is why the same markup looked different in each
+   panel. It is no longer placed between the dashboard KPI grid and the
+   analytics card — that gap is handled by `.np-kpi-grid`'s own spacing
+   below, which is what actually produced the stray "blue line" there.
+   ========================================================================== */
+.np-divider{
+  height: 1px;
+  background: var(--nk-border-soft);
+  border: 0;
+  margin: 1rem 0;
+}
+
+/* Consistent vertical rhythm between the dashboard KPI grid and whatever
+   follows it (analytics/snapshot panels), on both panels — fixes "KPI
+   cards too close to analytics" / inconsistent section spacing at the
+   source instead of per-page margin patches. */
+.np-kpi-grid{ margin-bottom: 1.5rem; }
+
+/* ==========================================================================
+   CANONICAL BADGE / PILL / CHIP COMPONENT
+   Single source of truth for every status pill, chip and badge across the
+   Admin Panel and Doctor Panel. Do not redeclare `.np-badge`, `.np-pill` or
+   `.np-chip` base rules anywhere else — page stylesheets may only add
+   layout placement (e.g. margins relative to a specific container).
+   ========================================================================== */
+/* ==========================================================================
+   CANONICAL PAGINATION COMPONENT
+   Used anywhere a list can be paged (Notification Logs, tables, etc).
+   Dark-mode styling already existed for this component further below —
+   this is the missing light-mode base that makes it actually usable.
+   ========================================================================== */
+.np-pagination{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:.6rem;
+  padding-top: .85rem;
+  margin-top: .85rem;
+  border-top: 1px solid var(--nk-border-soft);
+}
+.np-pagination__info{ font-size:.8rem; color: var(--nk-muted); }
+.np-pagination__controls{ display:flex; align-items:center; gap:.35rem; }
+.np-pagination button,
+.np-pager button,
+.np-page-btn,
+.np-pagination__btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width: 34px; height: 34px;
+  padding: 0 .55rem;
+  border-radius: 9px;
+  border: 1px solid var(--nk-border);
+  background: #fff;
+  color: var(--nk-text);
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.np-pagination button:hover:not(:disabled),
+.np-pager button:hover:not(:disabled),
+.np-page-btn:hover:not(:disabled),
+.np-pagination__btn:hover:not(:disabled){
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-color: var(--nk-teal-200);
+}
+.np-pagination button.is-active,
+.np-pager button.is-active,
+.np-page-btn.is-active,
+.np-pagination__btn.is-active{
+  background: var(--nk-teal-400);
+  border-color: var(--nk-teal-400);
+  color: #fff;
+}
+.np-pagination button:disabled,
+.np-pager button:disabled,
+.np-page-btn:disabled,
+.np-pagination__btn:disabled{
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.np-badge, .np-pill, .np-chip{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  font-weight: 600;
+  padding: .22rem .65rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: .74rem;
+  line-height: 1.4;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.np-pill{ font-size:.8rem; }
+.np-badge__dot{ width:6px; height:6px; border-radius:999px; background: currentColor; flex: 0 0 auto; }
+
+.np-badge--green , .np-pill--green { background:#DCF5EE; color:#0F7A66; border-color:#BBE5C8; }
+.np-badge--mint  , .np-pill--mint  { background: var(--nk-teal-100); color: var(--nk-teal-700); border-color: var(--nk-teal-200); }
+.np-badge--blue  , .np-pill--blue  { background:#DBEAFE; color:#1E40AF; border-color:#BFD7F0; }
+.np-badge--violet, .np-pill--violet{ background:#F1E4F3; color:#7A3D85; border-color:#E4CBE9; }
+.np-badge--amber , .np-pill--amber { background:#FEF3CC; color:#8A5A0F; border-color:#F4D9A3; }
+.np-badge--red   , .np-pill--red   { background:#FEE2E5; color:#9F1E36; border-color:#F5BFBF; }
+.np-badge--slate , .np-pill--slate { background:#EEF2F4; color:#475569; border-color:#D7DEE8; }
+.np-badge--pink  , .np-pill--pink  { background: var(--nk-pink-100); color: var(--nk-pink-700); border-color: var(--nk-pink-200); }
+
+/* Badges/pills sitting next to each other (e.g. Status + audience pill in
+   the Notification Logs table) always keep a consistent, breathable gap —
+   never rely on a page-level inline margin. */
+.np-badge-group{ display:inline-flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+
+.np-callout{
+  display:flex;
+  align-items:flex-start;
+  gap:.65rem;
+  padding:.75rem .9rem;
+  border-radius: var(--nk-radius-sm);
+  border:1px solid transparent;
+  font-size:.85rem;
+  line-height:1.45;
+}
+.np-callout svg{ flex:none; margin-top:.1rem; }
+.np-callout--info{ background: var(--nk-teal-50); border-color: var(--nk-teal-200); color: var(--nk-ink); }
+.np-callout--info svg{ color: var(--nk-teal-600); }
+.np-callout--success{ background:#EAFBF3; border-color:#BBE5C8; color:#0F7A66; }
+.np-callout--success svg{ color:#0F7A66; }
+.np-callout--warning{ background:#FEF3CC; border-color:#F4D9A3; color:#8A5A0F; }
+.np-callout--warning svg{ color:#8A5A0F; }
+.np-callout--danger{ background:#FEE2E5; border-color:#F5BFBF; color:#9F1E36; }
+.np-callout--danger svg{ color:#9F1E36; }
+
+html[data-theme="dark"] .np-callout--success{ background: rgba(16,185,129,.14); border-color: rgba(16,185,129,.3); color:#6EE7B7; }
+html[data-theme="dark"] .np-callout--success svg{ color:#6EE7B7; }
+html[data-theme="dark"] .np-callout--warning{ background: rgba(249,169,69,.16); border-color: rgba(249,169,69,.32); color:#FBC97A; }
+html[data-theme="dark"] .np-callout--warning svg{ color:#FBC97A; }
+html[data-theme="dark"] .np-callout--danger{ background: rgba(225,29,72,.16); border-color: rgba(225,29,72,.32); color:#FECDD3; }
+html[data-theme="dark"] .np-callout--danger svg{ color:#FECDD3; }
+
+/* Prevent stretched pills inside cards/lists/table cells */
+.np-table td .np-badge, .np-table td .np-pill, .np-table td .np-chip,
+.np-appt__badges .np-badge, .np-appt__badges .np-pill{
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.np-table-wrap{
+  border:1px solid var(--nk-border-soft);
+  border-radius: 16px;
+  background:#fff;
+  overflow: hidden;
+}
+.np-table th{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-bottom: 1px solid var(--nk-border);
+  font-weight:700;
+  text-transform: uppercase;
+  letter-spacing:.04em;
+  font-size:.72rem;
+}
+.np-table td{ border-bottom: 1px solid var(--nk-border-soft); }
+.np-table tr:hover td{ background: var(--nk-row-hover); }
+.np-table .np-empty{ background:#FBFDFD; }
+
+/* ==========================================================================
+   CANONICAL LOGIN SCREEN
+   One definition for both panels. This used to be split three ways —
+   theme.css set radius/shadow/logo size, while admin/styles.css and
+   doctor/styles.css each separately set width/padding/background (with
+   different values: 420px vs 440px card width, 56px vs 64px logo,
+   flat card vs glassmorphism) — which is why the two login pages looked
+   like different sizes and different designs.
+   ========================================================================== */
+.np-login{
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background:
+    radial-gradient(1100px 600px at 85% -10%, rgba(137,188,189,.28), transparent 60%),
+    radial-gradient(900px 600px at 0% 110%, rgba(254,132,164,.18), transparent 60%),
+    radial-gradient(700px 500px at 50% 50%, rgba(254,217,96,.10), transparent 70%),
+    var(--nk-surface);
+}
+.np-login__card{
+  width: 100%;
+  max-width: 430px;
+  padding: 2rem;
+  border-radius: 28px;
+  box-shadow: var(--nk-shadow-lg);
+  border:1px solid #E2EEEE;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.np-login__card::before{
+  content:""; position:absolute; inset:0 0 auto 0; height:6px;
+  background: linear-gradient(90deg, var(--nk-teal-400), var(--nk-pink-400), var(--nk-yellow-400));
+}
+.np-login__logo{
+  width: 60px; height: 60px;
+  border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto .9rem;
+  color: #fff;
+  background: var(--nk-grad-primary);
+  box-shadow: 0 12px 26px -8px rgba(137,188,189,.5);
+}
+.np-login__title{ color: var(--nk-ink); font-weight: 700; letter-spacing:-.01em; font-size:1.35rem; text-align:center; }
+.np-login__subtitle{ color: var(--nk-muted); font-size:.85rem; text-align:center; margin-top:.2rem; margin-bottom:1.25rem; }
+/* Real spacing for the login form's fields/buttons — replaces the
+   undefined `space-y-3` / `space-y-4` classes that used to be on the
+   <form>, which is why Sign in and Forgot password had no gap between
+   them at all. */
+#loginForm{ display:flex; flex-direction:column; gap:.85rem; }
+#loginForm .np-field{ margin-bottom:0; }
+@media (max-width:480px){
+  .np-login__card{ padding: 1.5rem; border-radius: 22px; }
+}
+
+.np-empty__icon{
+  background: linear-gradient(135deg, rgba(137,188,189,.22), rgba(254,132,164,.16));
+  color: var(--nk-teal-700);
+  border-radius: 16px;
+}
+.np-empty__title{ color: var(--nk-ink); }
+.np-empty__sub  { color: var(--nk-muted); }
+
+.np-doc-card{
+  border:1.5px solid var(--nk-border-soft);
+  border-radius: 18px;
+  box-shadow: var(--nk-shadow-sm);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .15s ease;
+}
+.np-doc-card:hover{
+  border-color: var(--nk-teal-200);
+  box-shadow: var(--nk-shadow-md);
+  transform: translateY(-2px);
+}
+.np-doc-card__avatar{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  box-shadow: 0 0 0 1.5px rgba(137,188,189,.25), 0 2px 6px -2px rgba(15,46,58,.25);
+}
+.np-doc-card__stats{
+  background: linear-gradient(180deg, #F4FAFA, #FBFDFD);
+  border:1px solid var(--nk-border-soft);
+  border-radius: 12px;
+}
+.np-doc-card__name{ color: var(--nk-ink); }
+.np-doc-card__pill--ok  { background:#DCF5EE; color:#0F7A66; }
+.np-doc-card__pill--warn{ background:#FEF3CC; color:#8A5A0F; }
+.np-doc-card__pill--kyc { background: var(--nk-teal-100); color: var(--nk-teal-700); }
+.np-doc-card__clinic    { background: var(--nk-teal-50); color: var(--nk-teal-700); }
+
+.np-modal{ background: rgba(15,46,58,.55); backdrop-filter: blur(4px); }
+.np-modal__panel{ border-radius: 22px; box-shadow: var(--nk-shadow-lg); }
+.np-modal__head{ border-bottom: 1px solid var(--nk-border-soft); }
+.np-modal__title{ color: var(--nk-ink); }
+.np-modal__close:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); }
+
+.np-drawer__backdrop{ background: rgba(15,46,58,.55); backdrop-filter: blur(4px); }
+.np-drawer__panel{ border-top-left-radius: 22px; border-bottom-left-radius: 22px; box-shadow: var(--nk-shadow-lg); }
+.np-drawer__head{ border-bottom: 1px solid var(--nk-border-soft); }
+
+.np-appt-row:hover{ background: var(--nk-row-hover); }
+.np-appt-row{ border-bottom: 1px solid var(--nk-border-soft); transition: background .15s ease; }
+
+#consultWorkspace .np-pm-tab.active{
+  color: var(--nk-teal-700);
+  border-bottom-color: var(--nk-teal-400);
+}
+#consultWorkspace .np-pm-tab:hover{ color: var(--nk-teal-700); }
+
+.np-bars__bar{
+  background: linear-gradient(180deg, var(--nk-teal-400), var(--nk-teal-600));
+  border-radius: 6px 6px 0 0;
+}
+
+.np-content code{
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: .85em;
+}
+
+.np-theme-toggle{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600)) !important;
+  box-shadow: 0 10px 26px -8px rgba(70,120,120,.55) !important;
+  transition: background .2s ease, transform .15s ease, box-shadow .2s ease !important;
+}
+.np-theme-toggle:hover{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700)) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 14px 32px -8px rgba(70,120,120,.7) !important;
+}
+
+.np-chip{
+  background: var(--nk-teal-50);
+  border-color: var(--nk-teal-200);
+  color: var(--nk-teal-700);
+  border-radius: 999px;
+}
+.np-palette{
+  border-radius: 16px !important;
+  box-shadow: var(--nk-shadow-lg) !important;
+}
+.np-palette__item.is-active{ background: var(--nk-teal-50); color: var(--nk-teal-700); }
+.np-daterange__btn{ border-radius: 10px; }
+.np-daterange__btn.is-active{ background: var(--nk-teal-400); border-color: var(--nk-teal-400); color:#fff; }
+.np-dropzone{
+  border-radius: 14px;
+  border-style: dashed;
+  background:#FBFDFD;
+}
+.np-dropzone:hover, .np-dropzone.is-drag{
+  background: var(--nk-teal-50);
+  border-color: var(--nk-teal-400);
+  color: var(--nk-teal-700);
+}
+
+@keyframes np-fade-in   { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:none} }
+@keyframes np-pulse-soft{ 0%,100%{opacity:1} 50%{opacity:.6} }
+.np-panel, .np-card, .np-kpi, .np-doc-card{ animation: np-fade-in .25s ease both; }
+.np-skeleton{ animation: np-pulse-soft 1.4s ease-in-out infinite; background:#EEF3F3; border-radius:8px; }
+
+html[data-theme="dark"]{
+  --nk-ink:       #F4F9FA;
+  --nk-ink-2:     #DDE7EA;
+  --nk-text:      #E6EEF1;
+  --nk-muted:     #91A6B0;
+  --nk-surface:   #0A1216;
+  --nk-card:      #11202A;
+  --nk-border:    #234551;
+  --nk-border-soft:#1A323C;
+  --nk-row-hover: #18303A;
+
+--nk-teal-50:   rgba(137,188,189,.10);
+  --nk-teal-100:  rgba(137,188,189,.18);
+  --nk-teal-200:  rgba(137,188,189,.32);
+  --nk-teal-300:  #B4D7D7;
+  --nk-teal-400:  #A4CDCE;
+  --nk-teal-500:  #89BCBD;
+  --nk-teal-600:  #6FAAAB;
+  --nk-teal-700:  #5A9495;
+
+--nk-pink-50:   rgba(254,132,164,.10);
+  --nk-pink-100:  rgba(254,132,164,.18);
+  --nk-pink-200:  rgba(254,132,164,.32);
+  --nk-pink-400:  #FE9CB7;
+  --nk-pink-600:  #F46A8E;
+  --nk-pink-700:  #FE9CB7;
+
+  --nk-blush:     #1A323C;
+  --nk-shadow-sm: 0 1px 2px rgba(0,0,0,.4), 0 6px 16px -6px rgba(0,0,0,.55);
+  --nk-shadow-md: 0 4px 12px -2px rgba(0,0,0,.5),  0 16px 32px -12px rgba(0,0,0,.6);
+  --nk-shadow-lg: 0 30px 60px -16px rgba(0,0,0,.75);
+  --nk-ring-primary: 0 0 0 4px rgba(164,205,206,.28);
+
+--np-surface: var(--nk-surface);
+  --np-border:  var(--nk-border);
+  --np-muted:   var(--nk-muted);
+  --np-text:    var(--nk-text);
+  --np-ink:     var(--nk-ink);
+  --np-primary: var(--nk-teal-500);
+  --np-primary-600: var(--nk-teal-400);
+  --np-blue: var(--nk-teal-500);
+  --np-mint: rgba(137,188,189,.18);
+  --np-card-shadow: var(--nk-shadow-sm);
+  --np-card-shadow-hover: var(--nk-shadow-md);
+
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body{
+  background: var(--nk-surface);
+  color: var(--nk-text);
+}
+
+html[data-theme="dark"] *::-webkit-scrollbar-thumb{ background:#2C4A56; }
+html[data-theme="dark"] *::-webkit-scrollbar-thumb:hover{ background:#406877; }
+
+html[data-theme="dark"] .np-sidebar{
+  background: #0D1A21;
+  border-right-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-sidebar__brand{
+  background: linear-gradient(180deg, rgba(137,188,189,.12), transparent);
+  border-bottom-color: var(--nk-border-soft);
+}
+html[data-theme="dark"] .np-sidebar__title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-sidebar__subtitle,
+html[data-theme="dark"] .np-sidebar__footer{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-sidebar__section{ color: var(--nk-teal-400); }
+html[data-theme="dark"] .np-sidebar__footer{ border-top-color: var(--nk-border-soft); }
+
+html[data-theme="dark"] .np-nav-item{ color:#C8D5DB; }
+html[data-theme="dark"] .np-nav-item:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-nav-item.active{
+  background: linear-gradient(135deg, rgba(137,188,189,.28), rgba(137,188,189,.10));
+  color: var(--nk-teal-300);
+  border-color: rgba(137,188,189,.45);
+  box-shadow: inset 0 0 0 1px rgba(137,188,189,.30);
+}
+html[data-theme="dark"] .np-nav-item.active .np-nav-item__icon{ color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-nav-badge{ background: var(--nk-pink-400); color:#1A0E14; }
+
+html[data-theme="dark"] .np-header,
+html[data-theme="dark"] .np-topbar{
+  background: var(--nk-card) !important;
+  border-bottom-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-header__page-title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-header__page-subtitle{ color: var(--nk-muted); }
+
+html[data-theme="dark"] .np-iconbtn{
+  background: var(--nk-card);
+  color: var(--nk-text);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-iconbtn:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+  border-color: rgba(137,188,189,.40);
+}
+
+html[data-theme="dark"] .np-profile__trigger{ color: var(--nk-text); }
+html[data-theme="dark"] .np-profile__trigger:hover{
+  background: rgba(137,188,189,.12);
+  border-color: rgba(137,188,189,.40);
+}
+html[data-theme="dark"] .np-profile__name{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-profile__role{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-profile__menu{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-profile__menu-item{ color: var(--nk-text); }
+html[data-theme="dark"] .np-profile__menu-item:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-profile__menu-item.is-danger{ color:#FCA5A5; }
+html[data-theme="dark"] .np-profile__menu-item.is-danger:hover{ background: rgba(252,165,165,.12); }
+html[data-theme="dark"] .np-profile__menu-divider{ background: var(--nk-border-soft); }
+
+html[data-theme="dark"] .np-panel,
+html[data-theme="dark"] .np-card,
+html[data-theme="dark"] .np-kpi,
+html[data-theme="dark"] .np-table-wrap,
+html[data-theme="dark"] .np-modal__panel,
+html[data-theme="dark"] .np-drawer__panel,
+html[data-theme="dark"] .np-doc-card{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+  box-shadow: var(--nk-shadow-sm);
+}
+html[data-theme="dark"] .np-panel__title,
+html[data-theme="dark"] .np-modal__title,
+html[data-theme="dark"] .np-drawer__title,
+html[data-theme="dark"] .np-kpi__value,
+html[data-theme="dark"] .np-doc-card__name,
+html[data-theme="dark"] .np-ink{
+  color: var(--nk-ink) !important;
+}
+html[data-theme="dark"] .np-panel__subtitle,
+html[data-theme="dark"] .np-kpi__label,
+html[data-theme="dark"] .np-kpi__sub,
+html[data-theme="dark"] .np-doc-card__role,
+html[data-theme="dark"] .np-doc-card__qual,
+html[data-theme="dark"] .np-doc-card__contact,
+html[data-theme="dark"] .np-mut,
+html[data-theme="dark"] .np-empty,
+html[data-theme="dark"] .np-empty__sub{
+  color: var(--nk-muted) !important;
+}
+html[data-theme="dark"] .np-empty__title{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] .np-doc-card__avatar{ border-color: var(--nk-card); }
+html[data-theme="dark"] .np-doc-card__stats{
+  background:#0E1A22;
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-doc-card__stat-label{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-doc-card__stat-value{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-doc-card__clinic{ background: rgba(137,188,189,.16); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-doc-card__pill--ok{ background: rgba(34,197,148,.18); color:#7AE0BE; }
+html[data-theme="dark"] .np-doc-card__pill--warn{ background: rgba(249,169,69,.18); color:#FBC97A; }
+html[data-theme="dark"] .np-doc-card__pill--kyc{ background: rgba(137,188,189,.18); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-doc-card__actions{ border-top-color: var(--nk-border); }
+
+html[data-theme="dark"] .np-kpi::before{ filter: brightness(1.18) saturate(1.1); }
+
+html[data-theme="dark"] .np-table{ color: var(--nk-text); }
+html[data-theme="dark"] .np-table th{
+  background:#0E1A22 !important;
+  color: var(--nk-teal-300) !important;
+  border-bottom-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-table td{
+  border-bottom-color: var(--nk-border-soft) !important;
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-table tr:hover td{ background: var(--nk-row-hover) !important; }
+html[data-theme="dark"] .np-table .np-empty{ background:#0E1A22; }
+
+html[data-theme="dark"] .np-input,
+html[data-theme="dark"] .np-select,
+html[data-theme="dark"] .np-textarea,
+html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea{
+  background:#0E1A22 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-input::placeholder,
+html[data-theme="dark"] .np-textarea::placeholder,
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{ color:#6F8693 !important; }
+html[data-theme="dark"] .np-input:focus,
+html[data-theme="dark"] .np-select:focus,
+html[data-theme="dark"] .np-textarea:focus,
+html[data-theme="dark"] input:focus, html[data-theme="dark"] select:focus, html[data-theme="dark"] textarea:focus{
+  border-color: var(--nk-teal-400) !important;
+  box-shadow: var(--nk-ring-primary) !important;
+}
+html[data-theme="dark"] .np-field__label{ color:#DEE6EA; }
+html[data-theme="dark"] .np-field__hint{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-error{
+  background: rgba(225,29,72,.14) !important;
+  border-color: rgba(225,29,72,.45) !important;
+  color:#FECDD3 !important;
+}
+html[data-theme="dark"] .np-search input{
+  background:#0E1A22 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-search svg{ color: var(--nk-muted); }
+html[data-theme="dark"] select option{ background:#0E1A22; color: var(--nk-text); }
+
+html[data-theme="dark"] .np-btn{
+  background:#142531;
+  color: var(--nk-text);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-btn:hover{
+  background: rgba(137,188,189,.16);
+  color: var(--nk-teal-300);
+  border-color: rgba(137,188,189,.4);
+}
+html[data-theme="dark"] .np-btn--ghost{ background: transparent; }
+html[data-theme="dark"] .np-btn--primary{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+  border-color: var(--nk-teal-700);
+  color:#fff;
+}
+html[data-theme="dark"] .np-btn--primary:hover{
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+  color:#fff;
+}
+html[data-theme="dark"] .np-btn--success{
+  background: linear-gradient(135deg, #2AB99A, #0F7A66);
+  color:#fff;
+}
+html[data-theme="dark"] .np-btn--danger{
+  background: linear-gradient(135deg, #EF6F87, #B53A5B);
+  color:#fff;
+  border-color:#B53A5B;
+}
+html[data-theme="dark"] .np-btn--add-doctor{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+  color:#fff;
+  border-color: var(--nk-teal-700);
+}
+html[data-theme="dark"] .np-btn--ghost.np-btn--icon.np-btn--danger{
+  color:#FCA5A5;
+  border-color: rgba(252,165,165,.35);
+}
+html[data-theme="dark"] .np-btn--ghost.np-btn--icon.np-btn--danger:hover{
+  background: rgba(252,165,165,.12);
+  border-color:#FCA5A5;
+}
+
+html[data-theme="dark"] .np-appt-row{ border-bottom-color: var(--nk-border-soft); }
+html[data-theme="dark"] .np-appt-row:hover{ background: var(--nk-row-hover); }
+html[data-theme="dark"] .np-appt-row__time-h,
+html[data-theme="dark"] .np-appt-row__name{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-appt-row__time-d,
+html[data-theme="dark"] .np-appt-row__meta{ color: var(--nk-muted); }
+html[data-theme="dark"] #consultWorkspace .np-pm-tab{ color: var(--nk-muted); }
+html[data-theme="dark"] #consultWorkspace .np-pm-tab.active{
+  color: var(--nk-teal-300);
+  border-bottom-color: var(--nk-teal-400);
+}
+
+html[data-theme="dark"] .np-modal{ background: rgba(2,8,12,.7); }
+html[data-theme="dark"] .np-modal__head{ border-bottom-color: var(--nk-border); }
+html[data-theme="dark"] .np-modal__title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-modal__close{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-modal__close:hover{ background: rgba(137,188,189,.16); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-drawer__backdrop{ background: rgba(2,8,12,.65); }
+html[data-theme="dark"] .np-drawer__head{ border-bottom-color: var(--nk-border); }
+
+html[data-theme="dark"] .np-badge--green,
+html[data-theme="dark"] .np-badge--mint  { background: rgba(34,197,148,.18); color:#7AE0BE; }
+html[data-theme="dark"] .np-badge--blue  { background: rgba(137,188,189,.20); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-badge--amber { background: rgba(249,169,69,.22); color:#FBC97A; }
+html[data-theme="dark"] .np-badge--red   { background: rgba(225,29,72,.22);  color:#FECDD3; }
+html[data-theme="dark"] .np-badge--slate { background: rgba(148,163,184,.18); color:#CBD5E1; }
+html[data-theme="dark"] .np-badge--violet{ background: rgba(206,126,212,.22); color:#E9C2EE; }
+html[data-theme="dark"] .np-badge--pink  { background: rgba(254,132,164,.20); color:#FFC2D5; }
+
+html[data-theme="dark"] .np-empty__icon{
+  background: linear-gradient(135deg, rgba(137,188,189,.22), rgba(254,132,164,.16));
+  color: var(--nk-teal-300);
+}
+
+html[data-theme="dark"] .np-login{
+  background:
+    radial-gradient(1100px 600px at 85% -10%, rgba(137,188,189,.28), transparent 60%),
+    radial-gradient(900px 600px at 0% 110%, rgba(254,132,164,.18), transparent 60%),
+    #060B0F;
+}
+html[data-theme="dark"] .np-login__card{
+  background: var(--nk-card) !important;
+  border:1px solid var(--nk-border);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-login__title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-login__subtitle{ color: var(--nk-muted); }
+
+html[data-theme="dark"] .text-slate-300{ color:#A3B4BD !important; }
+html[data-theme="dark"] .text-slate-400,
+html[data-theme="dark"] .text-slate-500{ color: var(--nk-muted) !important; }
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-900{ color: var(--nk-text) !important; }
+html[data-theme="dark"] .bg-white{ background: var(--nk-card) !important; }
+html[data-theme="dark"] .bg-brand-surface,
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100{ background: var(--nk-surface) !important; }
+html[data-theme="dark"] .border,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-300{ border-color: var(--nk-border) !important; }
+html[data-theme="dark"] .text-brand-primary{ color: var(--nk-teal-300) !important; }
+html[data-theme="dark"] .hover\:text-brand-primary:hover{ color: var(--nk-teal-300) !important; }
+html[data-theme="dark"] .bg-brand-primary{ background: var(--nk-teal-500) !important; }
+
+html[data-theme="dark"] .np-content code,
+html[data-theme="dark"] code{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+
+html[data-theme="dark"] .np-palette{ background: var(--nk-card); color: var(--nk-text); }
+html[data-theme="dark"] .np-palette__input{ border-bottom-color: var(--nk-border); color: var(--nk-text); }
+html[data-theme="dark"] .np-palette__item{ color: var(--nk-text); }
+html[data-theme="dark"] .np-palette__item.is-active{ background: rgba(137,188,189,.20); color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-chip{ background: rgba(137,188,189,.20); color: var(--nk-teal-300); border-color: rgba(137,188,189,.40); }
+html[data-theme="dark"] .np-daterange__btn{ background:#142531; color: var(--nk-text); border-color: var(--nk-border); }
+html[data-theme="dark"] .np-daterange__btn.is-active{ background: var(--nk-teal-500); color:#fff; border-color: var(--nk-teal-500); }
+html[data-theme="dark"] .np-dropzone{ background:#0E1A22; color: var(--nk-muted); border-color: var(--nk-border); }
+html[data-theme="dark"] .np-dropzone:hover,
+html[data-theme="dark"] .np-dropzone.is-drag{
+  background: rgba(137,188,189,.10); border-color: var(--nk-teal-400); color: var(--nk-teal-300);
+}
+
+html[data-theme="dark"] .np-notif-row td.np-notif-error{ color:#FECACA; }
+
+html[data-theme="dark"] input[type=checkbox],
+html[data-theme="dark"] input[type=radio]{ accent-color: var(--nk-teal-400); }
+
+html[data-theme="dark"] .np-skeleton{ background:#1B2F39; }
+
+@media (max-width:600px){
+  .np-login__card{ border-radius: 22px; padding: 1.5rem; }
+  .np-kpi__value{ font-size:1.4rem; }
+  .np-header__inner{ padding:.75rem 1rem; }
+  .np-panel{ border-radius: 14px; }
+}
+
+html[data-theme="dark"] [style*="color:#0F2A47"],
+html[data-theme="dark"] [style*="color: #0F2A47"],
+html[data-theme="dark"] [style*="color:#0F2E3A"],
+html[data-theme="dark"] [style*="color: #0F2E3A"]{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] [style*="color:#6B7280"],
+html[data-theme="dark"] [style*="color: #6B7280"],
+html[data-theme="dark"] [style*="color:#64748B"],
+html[data-theme="dark"] [style*="color: #64748B"]{ color: var(--nk-muted) !important; }
+
+html[data-theme="dark"] [style*="background:#FFFBEB"],
+html[data-theme="dark"] [style*="background: #FFFBEB"]{
+  background: rgba(249,169,69,.12) !important;
+  border-color: rgba(249,169,69,.35) !important;
+  color:#FBC97A !important;
+}
+html[data-theme="dark"] [style*="background:#FEF2F2"],
+html[data-theme="dark"] [style*="background: #FEF2F2"]{
+  background: rgba(225,29,72,.12) !important;
+  border-color: rgba(225,29,72,.4) !important;
+  color:#FECDD3 !important;
+}
+
+html[data-theme="dark"] svg[style*="color:#64748B"]{ color: var(--nk-muted) !important; }
+
+/* .np-setting-card base box model (padding, border-radius, box-shadow,
+   hover transform) is defined once in styles.css. This block only adds
+   the dark-mode override — the duplicate light-mode definition that used
+   to live here (different border-radius source, no padding/box-shadow)
+   was fighting the styles.css rule and is the root cause of the
+   Consultation Fees / Appearance card layout inconsistency. */
+html[data-theme="dark"] .np-setting-card{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-setting-card__icon{ box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); }
+
+html[data-theme="dark"] #statsBar > *{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+}
+
+html[data-theme="dark"] .border-b,
+html[data-theme="dark"] .border-t,
+html[data-theme="dark"] .border-r,
+html[data-theme="dark"] .border-l{ border-color: var(--nk-border) !important; }
+html[data-theme="dark"] .bg-amber-50  { background: rgba(249,169,69,.12) !important; color:#FBC97A !important; }
+html[data-theme="dark"] .text-amber-700{ color:#FBC97A !important; }
+html[data-theme="dark"] .bg-red-50    { background: rgba(225,29,72,.14) !important; }
+html[data-theme="dark"] .text-red-500,
+html[data-theme="dark"] .text-red-600 { color:#FCA5A5 !important; }
+html[data-theme="dark"] .text-green-600{ color:#7AE0BE !important; }
+html[data-theme="dark"] .border-amber-200{ border-color: rgba(249,169,69,.35) !important; }
+html[data-theme="dark"] .border-red-100,
+html[data-theme="dark"] .border-red-200{ border-color: rgba(225,29,72,.35) !important; }
+html[data-theme="dark"] .bg-pink-50{ background: rgba(254,132,164,.12) !important; }
+html[data-theme="dark"] .text-pink-600,
+html[data-theme="dark"] .text-pink-700{ color:#FFC2D5 !important; }
+
+.np-ui-toast{
+  border-radius: 14px !important;
+  box-shadow: var(--nk-shadow-md) !important;
+}
+html[data-theme="dark"] .np-ui-toast{
+  background:#0F1A22 !important; color: var(--nk-text) !important;
+  border:1px solid var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-ui-modal{ background: rgba(2,8,12,.7) !important; }
+html[data-theme="dark"] .np-ui-modal__panel{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+  border:1px solid var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-ui-modal__input{
+  background:#0E1A22 !important; color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-ui-modal__title,
+html[data-theme="dark"] .np-ui-empty__title{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] .np-ui-modal__message,
+html[data-theme="dark"] .np-ui-empty__msg{ color: var(--nk-muted) !important; }
+
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="time"],
+html[data-theme="dark"] input[type="datetime-local"]{
+  color-scheme: dark;
+}
+
+@media print{
+  html, body{ background:#fff !important; color:#000 !important; }
+  .np-sidebar, .np-header, .np-theme-toggle, .np-profile, .np-iconbtn{ display:none !important; }
+  .np-panel, .np-card, .np-kpi, .np-table-wrap{
+    box-shadow:none !important; border-color:#ddd !important;
+  }
+}
+
+.np-accent-pink   { color: var(--nk-pink-500); }
+.np-accent-orange { color: var(--nk-orange-500); }
+.np-accent-yellow { color: var(--nk-yellow-500); }
+.np-accent-purple { color: var(--nk-purple-500); }
+.np-accent-lime   { color: var(--nk-lime-500); }
+.np-bg-pink-soft  { background: var(--nk-pink-100); color: var(--nk-pink-700); }
+.np-bg-mint-soft  { background: var(--nk-teal-100); color: var(--nk-teal-700); }
+
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible{
+  outline: 2px solid var(--nk-teal-500);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+html[data-theme="dark"] a:focus-visible,
+html[data-theme="dark"] button:focus-visible,
+html[data-theme="dark"] [role="button"]:focus-visible{
+  outline-color: var(--nk-teal-300);
+}
+
+.np-inline-panel{
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-inline-panel{
+  background: #0E1A22 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+
+html[data-theme="dark"] [style*="background:#FFF7ED"],
+html[data-theme="dark"] [style*="background: #FFF7ED"]{
+  background: rgba(249,169,69,.12) !important;
+  border-color: rgba(249,169,69,.35) !important;
+  color:#FBC97A !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #FED7AA"],
+html[data-theme="dark"] [style*="border: 1px solid #FED7AA"]{
+  border-color: rgba(249,169,69,.35) !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #FDE68A"],
+html[data-theme="dark"] [style*="border: 1px solid #FDE68A"]{
+  border-color: rgba(249,169,69,.35) !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #FECACA"],
+html[data-theme="dark"] [style*="border: 1px solid #FECACA"]{
+  border-color: rgba(225,29,72,.4) !important;
+}
+html[data-theme="dark"] [style*="border:1px solid #E5E7EB"],
+html[data-theme="dark"] [style*="border: 1px solid #E5E7EB"]{
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] [style*="color:#B91C1C"],
+html[data-theme="dark"] [style*="color: #B91C1C"]{ color:#FCA5A5 !important; }
+html[data-theme="dark"] [style*="color:#92400E"],
+html[data-theme="dark"] [style*="color: #92400E"]{ color:#FBC97A !important; }
+
+html[data-theme="dark"] [style*="color:#0F172A"],
+html[data-theme="dark"] [style*="color: #0F172A"],
+html[data-theme="dark"] [style*="color:#111827"],
+html[data-theme="dark"] [style*="color: #111827"],
+html[data-theme="dark"] [style*="color:#1E293B"],
+html[data-theme="dark"] [style*="color: #1E293B"]{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] [style*="color:#374151"],
+html[data-theme="dark"] [style*="color: #374151"],
+html[data-theme="dark"] [style*="color:#475569"],
+html[data-theme="dark"] [style*="color: #475569"]{ color: var(--nk-text) !important; }
+
+html[data-theme="dark"] input[type="search"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="email"],
+html[data-theme="dark"] input[type="tel"],
+html[data-theme="dark"] input[type="password"],
+html[data-theme="dark"] input[type="url"]{
+  background:#0E1A22 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+
+html[data-theme="dark"] input[type="file"]{
+  color: var(--nk-text);
+}
+html[data-theme="dark"] input[type="file"]::-webkit-file-upload-button,
+html[data-theme="dark"] input[type="file"]::file-selector-button{
+  background:#142531;
+  color: var(--nk-text);
+  border:1px solid var(--nk-border);
+  border-radius:8px;
+  padding:.4rem .75rem;
+  margin-right:.6rem;
+  cursor:pointer;
+}
+html[data-theme="dark"] input[type="file"]::-webkit-file-upload-button:hover,
+html[data-theme="dark"] input[type="file"]::file-selector-button:hover{
+  background: rgba(137,188,189,.14);
+  border-color: rgba(137,188,189,.40);
+  color: var(--nk-teal-300);
+}
+
+html[data-theme="dark"] .np-pagination button,
+html[data-theme="dark"] .np-pager button,
+html[data-theme="dark"] .np-page-btn{
+  background:#142531 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-pagination button:hover,
+html[data-theme="dark"] .np-pager button:hover,
+html[data-theme="dark"] .np-page-btn:hover{
+  background: rgba(137,188,189,.14) !important;
+  border-color: rgba(137,188,189,.40) !important;
+  color: var(--nk-teal-300) !important;
+}
+html[data-theme="dark"] .np-pagination button.is-active,
+html[data-theme="dark"] .np-pager button.is-active,
+html[data-theme="dark"] .np-page-btn.is-active{
+  background: var(--nk-teal-500) !important;
+  border-color: var(--nk-teal-500) !important;
+  color:#fff !important;
+}
+
+html[data-theme="dark"] .np-tooltip,
+html[data-theme="dark"] [data-tooltip]::after{
+  background:#11202A !important;
+  color: var(--nk-text) !important;
+  border:1px solid var(--nk-border) !important;
+}
+
+html[data-theme="dark"] svg text{ fill: var(--nk-text); }
+html[data-theme="dark"] svg .np-chart-grid,
+html[data-theme="dark"] svg .np-chart-axis{ stroke: var(--nk-border); }
+
+html[data-theme="dark"] .bg-gray-50,
+html[data-theme="dark"] .bg-gray-100,
+html[data-theme="dark"] .bg-neutral-50,
+html[data-theme="dark"] .bg-neutral-100{ background: var(--nk-surface) !important; }
+html[data-theme="dark"] .bg-gray-200{ background:#1B2F39 !important; }
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-gray-600,
+html[data-theme="dark"] .text-neutral-500,
+html[data-theme="dark"] .text-neutral-600{ color: var(--nk-muted) !important; }
+html[data-theme="dark"] .text-gray-700,
+html[data-theme="dark"] .text-gray-800,
+html[data-theme="dark"] .text-gray-900,
+html[data-theme="dark"] .text-neutral-700,
+html[data-theme="dark"] .text-neutral-800,
+html[data-theme="dark"] .text-neutral-900{ color: var(--nk-text) !important; }
+html[data-theme="dark"] .border-gray-100,
+html[data-theme="dark"] .border-gray-200,
+html[data-theme="dark"] .border-gray-300,
+html[data-theme="dark"] .border-neutral-200,
+html[data-theme="dark"] .border-neutral-300{ border-color: var(--nk-border) !important; }
+
+.np-inline-note{
+  background:#FFF7ED;
+  border:1px solid #FED7AA;
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-inline-note{
+  background: rgba(249,169,69,.12) !important;
+  border-color: rgba(249,169,69,.35) !important;
+  color:#FBC97A !important;
+}
+
+.np-settlement-card{
+  border-radius:10px;
+  padding:.75rem .9rem;
+  border:1px solid transparent;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+.np-settlement-card[data-settlement-status="PAID"]{
+  background:#ECFDF5; border-color:#A7F3D0; color:#065F46;
+}
+.np-settlement-card[data-settlement-status="GENERATED"]{
+  background:#FEF3C7; border-color:#FCD34D; color:#92400E;
+}
+.np-settlement-card[data-settlement-status="NOT_GENERATED"],
+.np-settlement-card:not([data-settlement-status]){
+  background:#F4F8FB; border-color:#E5E7EB; color:#475569;
+}
+html[data-theme="dark"] .np-settlement-card[data-settlement-status="PAID"]{
+  background: rgba(34,197,148,.14) !important;
+  border-color: rgba(34,197,148,.35) !important;
+  color:#7AE0BE !important;
+}
+html[data-theme="dark"] .np-settlement-card[data-settlement-status="GENERATED"]{
+  background: rgba(249,169,69,.14) !important;
+  border-color: rgba(249,169,69,.40) !important;
+  color:#FBC97A !important;
+}
+html[data-theme="dark"] .np-settlement-card[data-settlement-status="NOT_GENERATED"],
+html[data-theme="dark"] .np-settlement-card:not([data-settlement-status]){
+  background:#0E1A22 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-muted) !important;
+}
+html[data-theme="dark"] .np-settlement-card code{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+  padding:1px 6px;
+  border-radius:4px;
+}
+
+.np-success-card{
+  background:#ECFDF5;
+  border:1px solid #10B981;
+  color:#065F46;
+}
+.np-success-card__title{ color:#065F46; }
+html[data-theme="dark"] .np-success-card{
+  background: rgba(34,197,148,.14) !important;
+  border-color: rgba(34,197,148,.40) !important;
+  color:#7AE0BE !important;
+}
+html[data-theme="dark"] .np-success-card__title{ color:#9DEAC9 !important; }
+
+html[data-theme="dark"] [style*="border-top:1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-top: 1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-bottom:1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-bottom: 1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-left:1px dashed #E5E7EB"],
+html[data-theme="dark"] [style*="border-right:1px dashed #E5E7EB"]{
+  border-color: var(--nk-border-soft) !important;
+}
+
+/* ===================================================================
+   Design System v3.2 additions
+   Consolidated into the single theme file (no new patch/CSS files).
+   Adds: standardized theme switch, unified badges/pills, filter action
+   buttons, overflow-menu appearance, dashboard grid dark-mode polish.
+   =================================================================== */
+
+/* ---------- Theme switch (Settings page) ---------- */
+.np-theme-switch{
+  display: inline-flex;
+  gap: .35rem;
+  padding: .3rem;
+  border-radius: 999px;
+  background: var(--nk-teal-50);
+  border: 1px solid var(--nk-border-soft);
+}
+.np-theme-switch__opt{
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .5rem .95rem;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--nk-muted);
+  font: 600 .84rem/1 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.np-theme-switch__opt:hover{ color: var(--nk-teal-700); }
+.np-theme-switch__opt.is-active{
+  background: #fff;
+  color: var(--nk-teal-700);
+  box-shadow: 0 1px 2px rgba(15,46,58,.06), 0 4px 12px -6px rgba(15,46,58,.14);
+}
+.np-setting-card__hint{
+  font-size: .78rem;
+  color: var(--nk-muted);
+  margin: .75rem 0 0;
+}
+html[data-theme="dark"] .np-theme-switch{
+  background: rgba(137,188,189,.10);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-theme-switch__opt{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-theme-switch__opt.is-active{
+  background: var(--nk-card);
+  color: var(--nk-teal-300);
+  box-shadow: 0 1px 2px rgba(0,0,0,.5), 0 6px 18px -8px rgba(0,0,0,.6);
+}
+html[data-theme="dark"] .np-setting-card__hint{ color: var(--nk-muted); }
+
+/* ---------- Standardized filter action buttons ---------- */
+/* Compact Apply/Clear \u2014 never stretched to full row width */
+.np-filter-actions,
+.np-filter-actions--right{
+  display: inline-flex;
+  gap: .5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+/* Sizing here matches the canonical .np-btn base — this block only exists
+   to guarantee Apply/Clear never stretch full-width on wider viewports. */
+@media (max-width: 520px){
+  .np-filter-actions,
+  .np-filter-actions--right{ width: 100%; justify-content: flex-end; }
+  .np-filter-actions .np-btn,
+  .np-filter-actions--right .np-btn{ min-width: 0; flex: 0 1 auto; }
+}
+
+/* Dropdown right-padding for select icons \u2014 consistent everywhere */
+.np-select,
+select.np-select,
+.np-filterbar select{
+  padding-right: 2.35rem !important;
+  background-position: right .85rem center !important;
+}
+
+/* ---------- Overflow / dropdown / popover ---------- */
+.np-overflow-menu{
+  min-width: 200px;
+  max-width: min(260px, calc(100vw - 24px));
+  max-height: min(60vh, 360px);
+  overflow: auto;
+  border-radius: 12px;
+  box-shadow: 0 14px 40px -8px rgba(15,46,58,.22), 0 2px 6px rgba(15,46,58,.08);
+  background: #fff;
+  border: 1px solid var(--nk-border-soft);
+}
+html[data-theme="dark"] .np-overflow-menu{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  box-shadow: 0 20px 48px -12px rgba(0,0,0,.75), 0 2px 6px rgba(0,0,0,.4);
+}
+html[data-theme="dark"] .np-overflow-item{ color: var(--nk-text); }
+html[data-theme="dark"] .np-overflow-item:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-overflow-item.is-danger{ color: #FCA5A5; }
+html[data-theme="dark"] .np-overflow-item.is-danger:hover{
+  background: rgba(252,165,165,.12);
+  color: #FECDD3;
+}
+html[data-theme="dark"] .np-overflow-trigger{
+  background: transparent;
+  color: var(--nk-muted);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-overflow-trigger:hover{
+  background: rgba(137,188,189,.12);
+  color: var(--nk-teal-300);
+  border-color: rgba(137,188,189,.4);
+}
+
+/* Button sizing/anti-stretch rules live in one place only — see the
+   canonical .np-btn definition near the top of this file. */
+
+/* Badge/pill/chip base rule lives in one place only — see the canonical
+   definition near the top of this file. (Duplicate block removed as part
+   of the Finance/Notifications UI consistency audit.) */
+
+/* ---------- Empty states dark polish ---------- */
+html[data-theme="dark"] .np-empty__icon{
+  background: linear-gradient(135deg, rgba(137,188,189,.20), rgba(254,132,164,.14));
+  color: var(--nk-teal-300);
+}
+
+/* ---------- Sidebar sticky helpers ---------- */
+html[data-theme="dark"] .np-sidebar__nav::-webkit-scrollbar-thumb{ background:#2C4A56; }
+
+/* ---------- Table dark polish ---------- */
+html[data-theme="dark"] .np-table-wrap{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-table thead th{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* ---------- Inputs dark placeholder polish ---------- */
+html[data-theme="dark"] input::-webkit-datetime-edit,
+html[data-theme="dark"] input::-webkit-datetime-edit-fields-wrapper{ color: var(--nk-text); }
+
+/* ---------- Toast / tooltip / notification dark polish ---------- */
+html[data-theme="dark"] [role="tooltip"],
+html[data-theme="dark"] .np-tooltip{
+  background: #0F1A22;
+  color: var(--nk-text);
+  border: 1px solid var(--nk-border);
+}
+
+/* ---------- Skeleton loader dark polish ---------- */
+html[data-theme="dark"] .np-skeleton{
+  background: rgba(137,188,189,.12);
+}
+
+/* ---------- Calendar / date input dark ---------- */
+html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+html[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+html[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+  filter: invert(.85);
+  opacity: .85;
+}
+
+/* ---------- Charts / bars dark polish ---------- */
+html[data-theme="dark"] .np-bars__bar{
+  background: linear-gradient(180deg, var(--nk-teal-500), var(--nk-teal-700));
+  box-shadow: 0 6px 14px -6px rgba(0,0,0,.55);
+}
+html[data-theme="dark"] .np-bars{ color: var(--nk-muted); }
+
+/* ---------- Hard kill any lingering hardcoded white surfaces in dark ---------- */
+html[data-theme="dark"] [style*="background:#fff"],
+html[data-theme="dark"] [style*="background: #fff"],
+html[data-theme="dark"] [style*="background:#FFFFFF"],
+html[data-theme="dark"] [style*="background: #FFFFFF"],
+html[data-theme="dark"] [style*="background: white"]{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] [style*="color:#000"],
+html[data-theme="dark"] [style*="color: #000"],
+html[data-theme="dark"] [style*="color: black"]{
+  color: var(--nk-text) !important;
+}
+
+/* Signature surfaces (preview box, draw pad, live preview) live in
+   .np-sig-surface, defined once near the other v3.3.7 signature rules
+   below. That component is never themed in the first place — it does
+   not use inline `style="background:#fff"` and is not matched by the
+   "hard kill hardcoded white surfaces" rule above — so no dark-mode
+   override, and no duplicate copy of one, is needed here at all. This
+   replaces the old #sigDrawWrap / #sigCanvas / #sigLiveWrap override
+   chain (and its previously-hidden bug: `color: var(--nk-ink)` resolves
+   to a near-white color in dark mode, so the "Clear drawing" button was
+   rendering near-invisible light text on the forced-white surface). */
+
+/* ===================================================================
+   Signature surfaces (v3.3.7)
+   The signature preview box, the draw pad, and the live preview are
+   all functional white-paper-and-ink surfaces, not themed chrome — a
+   saved signature PNG is dark ink on a transparent background, so it
+   must always sit on a light backdrop to stay visible, and a doctor
+   drawing a signature needs a light page with a dark pen regardless of
+   which theme the rest of the app is in. Defined ONCE, unscoped by
+   `html[data-theme]`, so it can never drift from the other and never
+   needs a dark-mode override (see removed #sigDrawWrap rules above).
+   =================================================================== */
+.np-sig-surface{
+  background:#fff;
+  border:1px solid #D9E6E6;
+  border-radius:12px;
+  padding:.6rem;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:72px;
+  box-sizing:border-box;
+}
+.np-sig-empty{ color:#64748B; font-size:.85rem; }
+/* Signature preview images — one rule, reused for the saved-signature
+   preview, the file-upload live preview, and (via object-fit) any
+   future preview state, so scaling can never drift between them. Fixed
+   height + object-fit:contain preserves the source aspect ratio and
+   never stretches, squashes, or crops. */
+.np-sig-img{
+  display:block;
+  height:56px;
+  width:auto;
+  max-width:100%;
+  object-fit:contain;
+}
+#sigCanvas{
+  background:#fff;
+  width:100%;
+  max-width:640px;
+  height:180px;
+  border:1px solid #D9E6E6;
+  border-radius:10px;
+  touch-action:none;
+  display:block;
+}
+/* v3.3.9: distinct sub-headings for the Upload vs Draw workflows inside
+   the Digital Signature card, so the two are visually separate sections
+   rather than a single run-on block of mixed controls. */
+.np-sig-section__title{
+  font-weight:700;
+  font-size:.82rem;
+  letter-spacing:.02em;
+  text-transform:uppercase;
+  color: var(--nk-muted);
+  margin-bottom:.6rem;
+}
+
+/* ---------- Focus rings visible in both themes ---------- */
+.np-btn:focus-visible,
+.np-tab:focus-visible,
+.np-overflow-trigger:focus-visible,
+.np-theme-switch__opt:focus-visible{
+  outline: 2px solid var(--nk-teal-500);
+  outline-offset: 2px;
+}
+html[data-theme="dark"] .np-btn:focus-visible,
+html[data-theme="dark"] .np-tab:focus-visible,
+html[data-theme="dark"] .np-overflow-trigger:focus-visible,
+html[data-theme="dark"] .np-theme-switch__opt:focus-visible{
+  outline-color: var(--nk-teal-300);
+}
+
+/* ---------- Ensure legacy floating theme toggle is invisible ---------- */
+#np-theme-toggle,
+.np-theme-toggle{ display: none !important; }
+
+/* ---------- Consistent card surfaces in dark for panels holding forms ---------- */
+html[data-theme="dark"] .np-panel__body{ color: var(--nk-text); }
+html[data-theme="dark"] .np-panel__body input,
+html[data-theme="dark"] .np-panel__body select,
+html[data-theme="dark"] .np-panel__body textarea{
+  color: var(--nk-text) !important;
+}
+
+/* ---------- Global horizontal-overflow guard ---------- */
+html, body{ max-width: 100%; }
+body{ overflow-x: hidden; }
+.np-content{ min-width: 0; }
+.np-content > *{ min-width: 0; max-width: 100%; }
+
+/* ---------- Mobile appointment card polish (unified doctor & admin) ---------- */
+@media (max-width: 720px){
+  .np-appt__time{
+    padding: .5rem .55rem !important;
+    min-width: 76px !important;
+    margin: 0 !important;
+    border-radius: 12px !important;
+  }
+  .np-appt__time-h{ font-size: .95rem !important; }
+  .np-appt__time-d{ font-size: .64rem !important; letter-spacing: .04em !important; }
+  .np-appt__badges .np-badge,
+  .np-appt__badges .np-pill{
+    flex: 0 0 auto !important;
+    width: auto !important;
+  }
+}
+
+/* ---------- Late dark-mode polish for remaining hardcoded light surfaces ---------- */
+html[data-theme="dark"] .np-history-row,
+html[data-theme="dark"] .np-history-rx{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-history-row__date{
+  background: rgba(137,188,189,.16);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] #rxSuccessCard{
+  background: rgba(34,197,148,.14) !important;
+  border-color: rgba(34,197,148,.40) !important;
+  color: #7AE0BE !important;
+}
+html[data-theme="dark"] #rxSuccessSub{ color: #9DEAC9 !important; }
+html[data-theme="dark"] .np-appt__cancel-reason{
+  background: rgba(225,29,72,.14) !important;
+  border-color: rgba(225,29,72,.40) !important;
+  color: #FECDD3 !important;
+}
+html[data-theme="dark"] .np-uuid-card{
+  background: linear-gradient(180deg, rgba(137,188,189,.10) 0%, rgba(137,188,189,.04) 100%) !important;
+  border-color: var(--nk-border) !important;
+}
+
+/* ===================================================================
+   v3.3 — Root-cause fixes (single consolidated block)
+   ------------------------------------------------------------------
+   The shared theme is the single source of truth for:
+   - Sticky sidebar behaviour (desktop + mobile drawer)
+   - Dark-mode contrast across every shared component
+   Do NOT re-patch these rules in the admin/ or doctor/ local stylesheets.
+   =================================================================== */
+
+.np-sidebar{
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 40;
+}
+.np-sidebar__brand,
+.np-sidebar__footer{ flex: 0 0 auto; }
+.np-sidebar__nav{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+@media (max-height: 720px) and (min-width: 1024px){
+  .np-sidebar__nav{ overflow-y: auto; scrollbar-width: thin; }
+  .np-sidebar__nav::-webkit-scrollbar{ width: 6px; }
+}
+@media (max-width: 1023px){
+  .np-sidebar{
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    /* v3.3.3: this shared rule set previously reset z-index to 40 at ALL
+       widths (see base .np-sidebar rule above), which silently overrode the
+       admin/ and doctor/ panel-level mobile fix that raised the drawer to
+       z-index:50. Because .np-backdrop sits at z-index:44 on mobile, the
+       sidebar was landing BELOW the backdrop — the backdrop then visually
+       dimmed the drawer and (with pointer-events:auto while open) intercepted
+       every tap meant for the nav links. Re-asserting z-index:50 here, in the
+       single source of truth, keeps the drawer above the backdrop again. */
+    z-index: 50;
+  }
+  .np-sidebar__nav{ overflow-y: auto; }
+}
+
+.np-header__inner{ min-width: 0; }
+.np-header__title{ min-width: 0; flex: 1 1 auto; }
+.np-header__page-title,
+.np-header__page-subtitle{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-profile{ flex-shrink: 0; }
+.np-profile__trigger{ max-width: 100%; }
+
+.np-appt{
+  background: var(--nk-card);
+  border-color: var(--nk-border-soft);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-appt{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-appt:hover{
+  border-color: rgba(137,188,189,.45) !important;
+  box-shadow: var(--nk-shadow-md);
+}
+html[data-theme="dark"] .np-appt__name,
+html[data-theme="dark"] .np-appt__title{ color: var(--nk-ink) !important; }
+html[data-theme="dark"] .np-appt__meta,
+html[data-theme="dark"] .np-appt__problem,
+html[data-theme="dark"] .np-appt__sub{ color: var(--nk-muted) !important; }
+html[data-theme="dark"] .np-appt__time{
+  background: rgba(137,188,189,.16);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-appt__time-h{ color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-appt__time-d{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-appt__age{
+  background: rgba(137,188,189,.18);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-appt__actions .np-btn:not(.np-btn--primary){
+  background: transparent;
+  border-color: var(--nk-border);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-appt__actions .np-btn:not(.np-btn--primary):hover{
+  background: rgba(137,188,189,.14);
+  border-color: rgba(137,188,189,.4);
+  color: var(--nk-teal-300);
+}
+
+.np-code-block{
+  background: var(--nk-surface);
+  border: 1px solid var(--nk-border);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-code-block,
+html[data-theme="dark"] pre.np-code-block,
+html[data-theme="dark"] pre code{
+  background: #0B1519 !important;
+  border-color: var(--nk-border) !important;
+  color: #C7E2E4 !important;
+}
+html[data-theme="dark"] .np-code-block::-webkit-scrollbar-thumb{ background: #2C4A56; }
+
+html[data-theme="dark"] .np-pill{
+  background: var(--nk-card);
+  border-color: var(--nk-border);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-pill:hover{
+  background: rgba(137,188,189,.14);
+  border-color: rgba(137,188,189,.4);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-pill.active,
+html[data-theme="dark"] .np-pill.is-active,
+html[data-theme="dark"] .np-pill[aria-pressed="true"]{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 10px -3px rgba(0,0,0,.5);
+}
+
+html[data-theme="dark"] .np-slot-btn{
+  background: #142531;
+  border-color: var(--nk-border);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-slot-btn:hover:not(:disabled){
+  border-color: var(--nk-teal-400);
+  background: rgba(137,188,189,.12);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-slot-btn.active,
+html[data-theme="dark"] .np-slot-btn.is-selected{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
+  color: #fff;
+  border-color: transparent;
+}
+html[data-theme="dark"] .np-slot-btn:disabled{ opacity: .35; }
+
+html[data-theme="dark"] input[type="checkbox"],
+html[data-theme="dark"] input[type="radio"]{
+  accent-color: var(--nk-teal-500);
+  background-color: #0E1A22;
+  border-color: var(--nk-border);
+}
+
+html[data-theme="dark"] .np-history-rx,
+html[data-theme="dark"] .np-rx-card{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-history-rx__title,
+html[data-theme="dark"] .np-history-rx__meta,
+html[data-theme="dark"] .np-rx-card__title{ color: var(--nk-text); }
+html[data-theme="dark"] .np-history-rx__date,
+html[data-theme="dark"] .np-rx-card__sub{ color: var(--nk-muted); }
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="time"]{
+  background: #0E1A22 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] .np-appt,
+html[data-theme="dark"] .np-appt-row,
+html[data-theme="dark"] .np-pill,
+html[data-theme="dark"] .np-slot-btn,
+html[data-theme="dark"] .np-iconbtn,
+html[data-theme="dark"] .np-profile__trigger{
+  background-color: var(--nk-card);
+}
+
+html[data-theme="dark"] .np-search{
+  background: #0E1A22 !important;
+  border-color: var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-search input{
+  background: transparent !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-search svg{ color: var(--nk-muted); }
+
+html[data-theme="dark"] ::-webkit-scrollbar-track{ background: transparent; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb{
+  background: #2C4A56;
+  border: 2px solid var(--nk-surface);
+  border-radius: 999px;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover{ background: #406877; }
+
+html[data-theme="dark"] .np-modal__panel{
+  background: var(--nk-card) !important;
+  color: var(--nk-text) !important;
+  border: 1px solid var(--nk-border) !important;
+}
+html[data-theme="dark"] .np-modal__body,
+html[data-theme="dark"] .np-modal__head{
+  color: var(--nk-text);
+  border-color: var(--nk-border);
+}
+
+html[data-theme="dark"] [data-tooltip]::after{
+  background: #0F1A22;
+  color: var(--nk-text);
+  border: 1px solid var(--nk-border);
+}
+
+html[data-theme="dark"] .np-datepicker,
+html[data-theme="dark"] .np-datepicker__day{
+  background: var(--nk-card);
+  color: var(--nk-text);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-datepicker__day:hover{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-datepicker__day.is-selected{
+  background: var(--nk-teal-500);
+  color: #fff;
+}
+
+html[data-theme="dark"] .np-pagination__btn{
+  background: var(--nk-card);
+  border-color: var(--nk-border);
+  color: var(--nk-text);
+}
+html[data-theme="dark"] .np-pagination__btn:hover:not(:disabled){
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+}
+html[data-theme="dark"] .np-pagination__btn.is-active{
+  background: var(--nk-teal-500);
+  color: #fff;
+  border-color: transparent;
+}
+
+html[data-theme="dark"] .np-empty,
+html[data-theme="dark"] .np-empty__title{ color: var(--nk-text); }
+html[data-theme="dark"] .np-empty__desc{ color: var(--nk-muted); }
+
+/* ===================================================================
+   v3.3.1 — DEFINITIVE dark-mode / responsive consolidation
+   -------------------------------------------------------------------
+   Root cause fixed above (in admin/ + doctor/ local stylesheets):
+   all hardcoded #fff / white / #ffffff / #F4F8FB / #E5E7EB tokens
+   have been converted to theme CSS variables so that dark mode is
+   INHERITED automatically instead of overridden per-selector.
+
+   This block is the single source of truth for the remaining
+   mobile-only components (mobile card conversions of tables,
+   payload panels, notification detail modal, doctor header, slot /
+   working-day pills, prescription archive). It targets every
+   selector the mobile media queries create, at any viewport.
+
+   Do NOT add another override layer below this. If a component
+   still looks wrong in dark mode, fix its base rule to use the
+   token, don't patch it here.
+   =================================================================== */
+
+/* --- 1. Mobile table-to-card conversions (admin) ------------------ */
+html[data-theme="dark"] #apptsView .np-table tr,
+html[data-theme="dark"] #notifView .np-table tr,
+html[data-theme="dark"] #notifView .np-table tr.np-notif-row,
+html[data-theme="dark"] #settlementsView .np-table tr,
+html[data-theme="dark"] #invoicesView .np-table tr,
+html[data-theme="dark"] #revenueView .np-table tr{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+  box-shadow: var(--nk-shadow-sm);
+}
+html[data-theme="dark"] #apptsView .np-table td[data-label],
+html[data-theme="dark"] #notifView .np-table td[data-label],
+html[data-theme="dark"] #settlementsView .np-table td[data-label],
+html[data-theme="dark"] #invoicesView .np-table td[data-label],
+html[data-theme="dark"] #revenueView .np-table td[data-label]{
+  border-bottom-color: var(--nk-border-soft) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] #apptsView .np-table td[data-label]::before,
+html[data-theme="dark"] #notifView .np-table td[data-label]::before,
+html[data-theme="dark"] #settlementsView .np-table td[data-label]::before,
+html[data-theme="dark"] #invoicesView .np-table td[data-label]::before,
+html[data-theme="dark"] #revenueView .np-table td[data-label]::before{
+  color: var(--nk-muted) !important;
+}
+
+/* --- 2. Payload / JSON code blocks (notification details) --------- */
+html[data-theme="dark"] pre,
+html[data-theme="dark"] pre.np-code-block,
+html[data-theme="dark"] .np-code-block,
+html[data-theme="dark"] .np-payload,
+html[data-theme="dark"] .np-json,
+html[data-theme="dark"] [data-role="payload"],
+html[data-theme="dark"] [data-role="json"]{
+  background: #0B1519 !important;
+  border: 1px solid var(--nk-border) !important;
+  color: #C7E2E4 !important;
+}
+
+/* --- 3. Notification detail modal (mobile + desktop) -------------- */
+html[data-theme="dark"] #notifDetailModal .np-modal__panel,
+html[data-theme="dark"] .np-notif-detail,
+html[data-theme="dark"] .np-notif-detail__card,
+html[data-theme="dark"] .np-notif-detail__section,
+html[data-theme="dark"] .np-notif-card{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-notif-detail__label,
+html[data-theme="dark"] .np-notif-card__meta{ color: var(--nk-muted) !important; }
+html[data-theme="dark"] .np-notif-detail__value,
+html[data-theme="dark"] .np-notif-card__title{ color: var(--nk-ink) !important; }
+
+/* --- 4. Appointment cards prescription tab ----------------------- */
+html[data-theme="dark"] .np-appt,
+html[data-theme="dark"] .np-appt-card,
+html[data-theme="dark"] .np-rx-card,
+html[data-theme="dark"] .np-prescription-card,
+html[data-theme="dark"] #rxArchiveList .np-appt,
+html[data-theme="dark"] #rxArchiveList .np-history-row,
+html[data-theme="dark"] #rxArchiveList .np-history-rx{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+
+/* --- 5. Doctor profile / header ---------------------------------- */
+html[data-theme="dark"] .np-doc-header,
+html[data-theme="dark"] .np-doctor-header,
+html[data-theme="dark"] .np-doc-profile,
+html[data-theme="dark"] .np-doctor-profile,
+html[data-theme="dark"] .np-doc-card__header{
+  background: var(--nk-card) !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-doc-header *:not(.np-btn):not(.np-btn *):not(.np-badge):not(.np-badge *){
+  color: inherit;
+}
+
+/* --- 6. Availability slots + working-day pills (mobile) ---------- */
+html[data-theme="dark"] .np-slot-btn,
+html[data-theme="dark"] .np-availability-slot,
+html[data-theme="dark"] .np-working-day,
+html[data-theme="dark"] .np-workday-pill,
+html[data-theme="dark"] .np-pill{
+  background: #142531 !important;
+  border-color: var(--nk-border) !important;
+  color: var(--nk-text) !important;
+}
+html[data-theme="dark"] .np-slot-btn.active,
+html[data-theme="dark"] .np-slot-btn.is-selected,
+html[data-theme="dark"] .np-availability-slot.active,
+html[data-theme="dark"] .np-working-day.active,
+html[data-theme="dark"] .np-workday-pill.active,
+html[data-theme="dark"] .np-pill.active,
+html[data-theme="dark"] .np-pill.is-active,
+html[data-theme="dark"] .np-pill[aria-pressed="true"]{
+  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700)) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+html[data-theme="dark"] .np-slot-btn:hover:not(:disabled),
+html[data-theme="dark"] .np-availability-slot:hover:not(:disabled),
+html[data-theme="dark"] .np-working-day:hover:not(:disabled),
+html[data-theme="dark"] .np-workday-pill:hover:not(:disabled),
+html[data-theme="dark"] .np-pill:hover:not(.active):not(.is-active){
+  background: rgba(137,188,189,.14) !important;
+  border-color: rgba(137,188,189,.4) !important;
+  color: var(--nk-teal-300) !important;
+}
+
+/* --- 7. Shared inputs / dropdowns EVERYWHERE (mobile too) -------- */
+html[data-theme="dark"] .np-input,
+html[data-theme="dark"] .np-select,
+html[data-theme="dark"] .np-textarea,
+html[data-theme="dark"] .np-search,
+html[data-theme="dark"] .np-search input,
+html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea{
+  background: #0E1A22 !important;
+  color: var(--nk-text) !important;
+  border-color: var(--nk-border) !important;
+}
+
+/* --- 8. Universal safety net -------------------------------------
+   Any element still styled with a hardcoded light background at any
+   viewport width falls back to a card surface in dark mode.
+   Kept AFTER the mobile media queries so it wins the cascade.
+   ---------------------------------------------------------------- */
+@media (max-width: 1023px){
+  html[data-theme="dark"] [class*="np-"][class*="card"],
+  html[data-theme="dark"] [class*="np-"][class*="row"],
+  html[data-theme="dark"] [class*="np-"][class*="panel"],
+  html[data-theme="dark"] [class*="np-"][class*="modal__panel"],
+  html[data-theme="dark"] [class*="np-"][class*="drawer__panel"]{
+    background-color: var(--nk-card);
+    color: var(--nk-text);
+    border-color: var(--nk-border);
+  }
+  html[data-theme="dark"] .np-content [style*="background:#fff"],
+  html[data-theme="dark"] .np-content [style*="background: #fff"],
+  html[data-theme="dark"] .np-content [style*="background:#FFFFFF"],
+  html[data-theme="dark"] .np-content [style*="background: #FFFFFF"],
+  html[data-theme="dark"] .np-content [style*="background: white"]{
+    background: var(--nk-card) !important;
+    color: var(--nk-text) !important;
+  }
+  /* No mobile-scoped copy of the signature-surface override needed —
+     .np-sig-surface (defined once, below) is unthemed at every
+     viewport width, so there is nothing for this block to fight. */
+}
+
+/* --- 9. Sticky sidebar reaffirmed at all sizes ------------------- */
+@media (min-width: 1024px){
+  .np-sidebar{
+    position: sticky !important;
+    top: 0 !important;
+    height: 100vh;
+    height: 100dvh;
+    align-self: start;
+  }
+}
