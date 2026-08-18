@@ -17,7 +17,7 @@
 // =====================================================================
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { medicalCertificateSchema } = require('../utils/validators');
+const { medicalCertificateSchema, medicalCertificateUpdateSchema } = require('../utils/validators');
 const { doctorOwnsPatient } = require('../utils/patientAccess');
 const { parseDateOnlyOrNull, calcAge } = require('../utils/date');
 const pdf = require('../services/pdf.service');
@@ -289,7 +289,12 @@ exports.update = asyncHandler(async (req, res) => {
   });
   if (!existing) return res.status(404).json({ error: 'Certificate not found' });
 
-  const parsed = medicalCertificateSchema.partial().safeParse(req.body);
+  // v3.4.11 FIX — medicalCertificateSchema is a ZodEffects (built with
+  // .refine()), which has no .partial() method; calling it here threw a
+  // TypeError on every request and surfaced as a 500 "Internal Server
+  // Error" on "Update Certificate". medicalCertificateUpdateSchema is a
+  // plain partial ZodObject derived from the same base fields.
+  const parsed = medicalCertificateUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
   }
