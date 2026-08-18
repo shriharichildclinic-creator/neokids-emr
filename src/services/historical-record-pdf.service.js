@@ -12,10 +12,44 @@ const OUT_DIR = path.join(STORAGE_PATH, 'historical-pdf');
 function ensureDir(p){ if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 
 function humanType(t){
-  const m = { LAB_REPORT:'Lab Report', CONSULTATION:'Consultation', RADIOLOGY:'Radiology / Imaging', PRESCRIPTION:'Prescription', VACCINATION:'Vaccination', DISCHARGE:'Discharge Summary', OTHER:'Other' };
+  const m = { LAB_REPORT:'Lab Report', CONSULTATION:'Consultation', RADIOLOGY:'Radiology / Imaging', PRESCRIPTION:'Prescription', VACCINATION:'Vaccination', DISCHARGE:'Discharge Summary', REFERRAL:'Referral Letter', OTHER:'Other' };
   return m[t] || t || 'General Record';
 }
 function fmt(d){ if(!d) return '—'; const x = new Date(d); return x.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); }
+
+// v3.4.12 — the doctor UI stores type-specific extras (findings,
+// scanType, vaccine details, referral fields, admission/discharge
+// dates, summary) as a JSON tail appended to `notes`. This helper
+// splits the tail off so the printed PDF shows clean notes plus the
+// extras as their own sections — without needing a schema change.
+const EXTRAS_MARK_START = '\n\n<!--HR_EXTRAS_V1:';
+const EXTRAS_MARK_END   = ':HR_EXTRAS_V1-->';
+function extractExtras(notes){
+  const s = String(notes == null ? '' : notes);
+  const i = s.lastIndexOf(EXTRAS_MARK_START);
+  if (i < 0) return { notes: s, extras: {} };
+  const j = s.indexOf(EXTRAS_MARK_END, i);
+  if (j < 0) return { notes: s, extras: {} };
+  try {
+    const extras = JSON.parse(s.slice(i + EXTRAS_MARK_START.length, j)) || {};
+    return { notes: s.slice(0, i), extras };
+  } catch (_) {
+    return { notes: s, extras: {} };
+  }
+}
+
+// Ordered map of which sections to print per record type. Keeps the
+// generated PDF aligned with the Add/Edit and View modals.
+const PDF_SECTIONS = {
+  CONSULTATION: ['diagnosis','notes','treatment','medications'],
+  PRESCRIPTION: ['diagnosis','notes','medications'],
+  LAB_REPORT:   ['findings'],
+  RADIOLOGY:    ['scanType','findings'],
+  VACCINATION:  ['vaccineName','doseNumber','batchNumber','vaccinationDate','notes'],
+  REFERRAL:     ['referredTo','reason'],
+  DISCHARGE:    ['admissionDate','dischargeDate','summary'],
+  OTHER:        ['diagnosis','notes','treatment','medications']
+};
 
 async function generateHistoricalRecordPdf(record){
   ensureDir(OUT_DIR);
@@ -50,10 +84,36 @@ async function generateHistoricalRecordPdf(record){
       doc.font('Helvetica-Bold').fontSize(11).text(title, L, y); y = doc.y + 2;
       doc.font('Helvetica').fontSize(10).text(body, L, y, { width: W }); y = doc.y + 10;
     };
-    section('Diagnosis', record.diagnosis);
-    section('Clinical Notes', record.notes);
-    section('Treatment Given', record.treatment);
-    section('Medications', record.medications);
+
+    // v3.4.12 — render only the sections that belong to this record
+    // type; unpack the JSON extras tail from `notes` first so the raw
+    // marker never appears in the PDF and type-specific fields appear
+    // as their own sections.
+    const parsed = extractExtras(record.notes);
+    const extras = parsed.extras || {};
+    const cleanNotes = parsed.notes;
+    const notesLabel = (record.recordType === 'PRESCRIPTION') ? 'Prescription Notes' : 'Clinical Notes';
+    const sectionForKey = (key) => {
+      switch (key) {
+        case 'diagnosis':       section('Diagnosis',       record.diagnosis); break;
+        case 'notes':           section(notesLabel,        cleanNotes);       break;
+        case 'treatment':       section('Treatment Given', record.treatment); break;
+        case 'medications':     section('Medications',     record.medications); break;
+        case 'findings':        section('Findings',        extras.findings);  break;
+        case 'scanType':        section('Scan Type',       extras.scanType);  break;
+        case 'vaccineName':     section('Vaccine Name',    extras.vaccineName); break;
+        case 'doseNumber':      section('Dose Number',     extras.doseNumber);  break;
+        case 'batchNumber':     section('Batch Number',    extras.batchNumber); break;
+        case 'vaccinationDate': section('Vaccination Date', extras.vaccinationDate ? fmt(extras.vaccinationDate) : ''); break;
+        case 'referredTo':      section('Referred To',     extras.referredTo); break;
+        case 'reason':          section('Reason',          extras.reason);     break;
+        case 'admissionDate':   section('Admission Date',  extras.admissionDate ? fmt(extras.admissionDate) : ''); break;
+        case 'dischargeDate':   section('Discharge Date',  extras.dischargeDate ? fmt(extras.dischargeDate) : ''); break;
+        case 'summary':         section('Summary',         extras.summary);    break;
+      }
+    };
+    const order = PDF_SECTIONS[record.recordType] || PDF_SECTIONS.OTHER;
+    order.forEach(sectionForKey);
 
     if (record.attachments && record.attachments.length){
       if (y > 700) { doc.addPage(); y = 50; }

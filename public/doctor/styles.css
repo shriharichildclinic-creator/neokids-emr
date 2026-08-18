@@ -2304,20 +2304,66 @@ html[data-theme="dark"] .np-modal pre{
   }
 }
 @media (max-width:640px){
+  /* v3.4.12 — the parent .np-modal used `align-items:flex-end` on mobile
+     which, combined with the hr-modal panel forcing 100vh height, pushed
+     the sticky sticky header *above* the viewport on tall content and
+     visibly clipped the title + close button on landing. Re-anchor the
+     hr-modal to the top edge and let the panel own the full viewport so
+     the header is always the first visible row. */
+  .np-modal:has(> .np-modal__panel.hr-modal__panel),
+  .hr-modal{ align-items:flex-start; padding:0; }
   .hr-modal .np-modal__panel{
     max-height:100vh; height:100vh; width:100vw;
     max-width:100vw; border-radius:0; margin:0;
+    /* Support browsers with dynamic mobile browser chrome (iOS Safari,
+       Chrome mobile). Without this the address bar can crop the sticky
+       footer / header when the URL bar retracts. */
+    height:100dvh; max-height:100dvh;
   }
   .hr-modal__head{
     border-radius:0;
-    padding:.75rem .85rem;
+    padding:.7rem .8rem;
     gap:.5rem;
-    min-height:52px;
+    min-height:56px;
+    align-items:center;
+    /* Guarantee the header can never be visually shrunk below its
+       content — previously flex parents were letting the sticky head
+       compress and the last line of the title got cut. */
+    flex:0 0 auto;
   }
-  .hr-modal__head .np-modal__title{ font-size:1rem; }
-  .hr-modal__head .np-modal__subtitle{ font-size:.78rem; }
-  .hr-modal__head .np-modal__close{ width:32px; height:32px; }
-  .hr-modal__foot{ border-radius:0; flex-wrap:wrap; padding:.65rem .85rem; }
+  .hr-modal__head > div:first-child{
+    /* The title/subtitle wrapper must wrap; without this on very narrow
+       phones long titles pushed the close button off-screen. */
+    flex:1 1 auto; min-width:0; padding-right:.25rem;
+  }
+  .hr-modal__head .np-modal__title{
+    font-size:1rem; line-height:1.25;
+    /* Two-line clamp so a long title never grows the header beyond the
+     visible area on small phones. */
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .hr-modal__head .np-modal__subtitle{
+    font-size:.78rem; line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .hr-modal__head .np-modal__close{
+    width:36px; height:36px;
+    flex:0 0 36px;
+    align-self:center; margin-top:0;
+  }
+  .hr-modal__body{
+    padding:.9rem .85rem;
+    /* Body must be the sole scroller between the fixed head + foot. */
+    -webkit-overflow-scrolling:touch;
+  }
+  .hr-modal__foot{
+    border-radius:0; flex-wrap:wrap; padding:.65rem .85rem;
+    /* Keep the footer above the iOS home indicator. */
+    padding-bottom:calc(.65rem + env(safe-area-inset-bottom, 0px));
+    flex:0 0 auto;
+  }
   .hr-modal__foot .np-btn{ flex:1 1 auto; justify-content:center; }
   .hr-cell__actions{ text-align:left; }
   /* Legacy patient fields grid — collapse to single column so long

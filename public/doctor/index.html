@@ -974,30 +974,87 @@
             </select>
           </div>
         </div>
-        <div class="np-field">
+        <div class="np-field" data-hr-field="title">
           <label class="np-field__label">Title / short description</label>
           <input name="title" id="hrTitle" class="np-input" maxlength="180" placeholder="e.g. Post-fever review at Rainbow Hospital">
         </div>
-        <div class="np-field">
+        <div class="np-field" data-hr-field="diagnosis">
           <label class="np-field__label">Diagnosis</label>
           <input name="diagnosis" id="hrDiagnosis" class="np-input" placeholder="e.g. Acute viral pharyngitis">
         </div>
-        <div class="np-field">
-          <label class="np-field__label">Clinical notes</label>
+        <div class="np-field" data-hr-field="notes">
+          <label class="np-field__label" id="hrNotesLabel">Clinical notes</label>
           <textarea name="notes" id="hrNotes" class="np-textarea" rows="3" placeholder="Symptoms, examination, observations…"></textarea>
         </div>
-        <div class="np-grid-2">
-          <div class="np-field">
+        <div class="np-grid-2" data-hr-field="treatment-medications-grid">
+          <div class="np-field" data-hr-field="treatment">
             <label class="np-field__label">Treatment</label>
             <textarea name="treatment" id="hrTreatment" class="np-textarea" rows="2" placeholder="Treatment given"></textarea>
           </div>
-          <div class="np-field">
+          <div class="np-field" data-hr-field="medications">
             <label class="np-field__label">Medications</label>
             <textarea name="medications" id="hrMedications" class="np-textarea" rows="2" placeholder="Medicines from the visit"></textarea>
           </div>
         </div>
 
-        <div class="np-field">
+        <!-- v3.4.12 — Type-specific fields.
+             These extra inputs are only shown for the record types that
+             actually need them; applyRecordTypeVisibility() in
+             historical-fix.js toggles them. They are stored as JSON on
+             the record's `notes` column via structured markers so no
+             backend schema change is required (see historical-fix.js). -->
+        <div class="np-field hidden" data-hr-field="findings">
+          <label class="np-field__label" id="hrFindingsLabel">Findings</label>
+          <textarea id="hrFindings" class="np-textarea" rows="3" placeholder="Key findings / results"></textarea>
+        </div>
+        <div class="np-field hidden" data-hr-field="scanType">
+          <label class="np-field__label">Scan type</label>
+          <input id="hrScanType" class="np-input" maxlength="180" placeholder="e.g. Chest X-ray, MRI brain, USG abdomen">
+        </div>
+        <div class="np-grid-2 hidden" data-hr-field="vaccine-grid">
+          <div class="np-field">
+            <label class="np-field__label">Vaccine name</label>
+            <input id="hrVaccineName" class="np-input" maxlength="180" placeholder="e.g. DTP booster">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Dose number</label>
+            <input id="hrDoseNumber" class="np-input" maxlength="40" placeholder="e.g. 2 of 3">
+          </div>
+        </div>
+        <div class="np-grid-2 hidden" data-hr-field="vaccine-grid-2">
+          <div class="np-field">
+            <label class="np-field__label">Batch number</label>
+            <input id="hrBatchNumber" class="np-input" maxlength="80" placeholder="Batch / lot no.">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Vaccination date</label>
+            <input id="hrVaccinationDate" type="date" class="np-input">
+          </div>
+        </div>
+        <div class="np-field hidden" data-hr-field="referredTo">
+          <label class="np-field__label">Referred to</label>
+          <input id="hrReferredTo" class="np-input" maxlength="180" placeholder="Doctor / hospital / specialty">
+        </div>
+        <div class="np-field hidden" data-hr-field="reason">
+          <label class="np-field__label">Reason for referral</label>
+          <textarea id="hrReason" class="np-textarea" rows="2" placeholder="Reason for the referral"></textarea>
+        </div>
+        <div class="np-grid-2 hidden" data-hr-field="discharge-grid">
+          <div class="np-field">
+            <label class="np-field__label">Admission date</label>
+            <input id="hrAdmissionDate" type="date" class="np-input">
+          </div>
+          <div class="np-field">
+            <label class="np-field__label">Discharge date</label>
+            <input id="hrDischargeDate" type="date" class="np-input">
+          </div>
+        </div>
+        <div class="np-field hidden" data-hr-field="summary">
+          <label class="np-field__label">Summary</label>
+          <textarea id="hrSummary" class="np-textarea" rows="3" placeholder="Discharge summary"></textarea>
+        </div>
+
+        <div class="np-field" data-hr-field="attachments">
           <label class="np-field__label">Attachments</label>
           <div class="hr-drop" id="hrDropZone" tabindex="0">
             <input name="attachment" id="histRxFile" type="file" accept=".pdf,image/*,.docx,.xlsx" multiple class="hr-drop__input">

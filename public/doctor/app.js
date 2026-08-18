@@ -87,6 +87,19 @@ function escapeHtml(s){
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
 }
+// v3.4.12 — Previous Records extras marker stripper. historical-fix.js
+// stores type-specific extras (findings / scanType / vaccine / referral
+// / discharge details) as a JSON tail on `notes`. When patient-history
+// timeline snippets or the legacy previous-records list echo `notes`
+// directly, strip that tail so users never see the raw marker.
+function stripHrExtras(notes){
+  const s = String(notes == null ? '' : notes);
+  const i = s.lastIndexOf('\n\n<!--HR_EXTRAS_V1:');
+  if (i < 0) return s;
+  const j = s.indexOf(':HR_EXTRAS_V1-->', i);
+  if (j < 0) return s;
+  return s.slice(0, i);
+}
 function statusBadge(status){
   const map = {
     CONFIRMED:{cls:'np-badge--green', txt:'Confirmed'},
@@ -1168,7 +1181,7 @@ async function loadPatientHistoryInto(slot, patientId){
           </span>
         </div>
         ${pr.diagnosis ? `<div style="font-size:.88rem;"><b>Diagnosis:</b> ${escapeHtml(pr.diagnosis)}</div>` : ''}
-        ${pr.notes ? `<div style="font-size:.85rem;" class="np-mut"><b>Notes:</b> ${escapeHtml(pr.notes)}</div>` : ''}
+        ${(function(){ const n = stripHrExtras(pr.notes); return n ? `<div style="font-size:.85rem;" class="np-mut"><b>Notes:</b> ${escapeHtml(n)}</div>` : ''; })()}
         ${pr.treatment ? `<div style="font-size:.85rem;" class="np-mut"><b>Treatment:</b> ${escapeHtml(pr.treatment)}</div>` : ''}
         ${pr.medications ? `<div style="font-size:.85rem;" class="np-mut"><b>Medications:</b> ${escapeHtml(pr.medications)}</div>` : ''}
       </article>`).join('');
@@ -2715,7 +2728,7 @@ function injectConsultBackButton(){
               <button type="button" class="np-btn np-btn--danger np-btn--sm" data-prev-del="${record.id}">Delete</button>
             </div>
           </div>
-          ${record.notes ? `<div style="margin-top:.55rem;"><b>Notes:</b> ${escapeHtml(record.notes)}</div>` : ''}
+          ${(function(){ const n = stripHrExtras(record.notes); return n ? `<div style="margin-top:.55rem;"><b>Notes:</b> ${escapeHtml(n)}</div>` : ''; })()}
           ${record.treatment ? `<div style="margin-top:.45rem;"><b>Treatment:</b> ${escapeHtml(record.treatment)}</div>` : ''}
           ${record.medications ? `<div style="margin-top:.45rem;"><b>Medications:</b> ${escapeHtml(record.medications)}</div>` : ''}
           ${record.attachmentSignedUrl ? `<div style="margin-top:.55rem;"><a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${record.attachmentSignedUrl}">Open attachment</a></div>` : ''}
@@ -2806,7 +2819,7 @@ function injectConsultBackButton(){
     const form = $('#historicalForm');
     form.recordDate.value = rec.recordDate ? String(rec.recordDate).slice(0,10) : '';
     form.diagnosis.value = rec.diagnosis || '';
-    form.notes.value = rec.notes || '';
+    form.notes.value = stripHrExtras(rec.notes) || '';
     form.treatment.value = rec.treatment || '';
     form.medications.value = rec.medications || '';
     $('#histRecordId').value = rec.id;

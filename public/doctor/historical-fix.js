@@ -69,6 +69,170 @@
     OTHER:        'Other'
   }[t] || (t || 'Record'));
 
+  // =====================================================================
+  // v3.4.12 — Conditional Previous Records forms.
+  //
+  // Each record type only surfaces the fields that make clinical sense
+  // for that document, both in the Add/Edit modal and in the read-only
+  // View modal. The map below is the single source of truth used by
+  // applyRecordTypeVisibility() (form) and renderViewContent() (view).
+  //
+  // ADDITIVE-ONLY back-end contract: type-specific extras (findings,
+  // scanType, vaccine details, referral fields, admission/discharge
+  // dates, summary) are marshalled into the existing free-text `notes`
+  // column as a small JSON tail so the server, database schema, PDF
+  // generator, list endpoint and legacy record shape all keep working
+  // unchanged. When reading a record back, extractExtras() splits the
+  // JSON tail off and restores it into the corresponding form/view
+  // fields; extractCleanNotes() gives the human-facing notes without
+  // the JSON tail.
+  // =====================================================================
+  const RECORD_TYPE_FIELDS = {
+    CONSULTATION: {
+      show: ['title','diagnosis','notes','treatment','medications','attachments'],
+      labels: { notes: 'Clinical notes' }
+    },
+    PRESCRIPTION: {
+      show: ['title','diagnosis','notes','medications','attachments'],
+      labels: { notes: 'Prescription notes' }
+    },
+    LAB_REPORT: {
+      show: ['title','findings','attachments'],
+      labels: { findings: 'Findings' }
+    },
+    RADIOLOGY: {
+      show: ['title','scanType','findings','attachments'],
+      labels: { findings: 'Findings' }
+    },
+    VACCINATION: {
+      show: ['title','vaccine-grid','vaccine-grid-2','notes','attachments'],
+      labels: { notes: 'Notes (optional)' }
+    },
+    REFERRAL: {
+      show: ['title','referredTo','reason','attachments'],
+      labels: {}
+    },
+    DISCHARGE: {
+      show: ['title','discharge-grid','summary','attachments'],
+      labels: {}
+    },
+    OTHER: {
+      show: ['title','diagnosis','notes','treatment','medications','attachments'],
+      labels: { notes: 'Notes' }
+    }
+  };
+
+  // Toggle the visibility of every field container in the Add/Edit
+  // modal according to the currently selected record type. Never
+  // removes the DOM node — hidden fields are just `.hidden` — so that
+  // saved state on those inputs (if any) stays intact if the user
+  // switches back.
+  function applyRecordTypeVisibility(type) {
+    const cfg = RECORD_TYPE_FIELDS[type] || RECORD_TYPE_FIELDS.OTHER;
+    const show = new Set(cfg.show);
+    // The treatment/medications row uses a grid wrapper; show it when
+    // EITHER child is meant to be visible.
+    const gridActive = show.has('treatment') || show.has('medications');
+    $$('[data-hr-field]', $('#historicalForm')).forEach(el => {
+      const key = el.getAttribute('data-hr-field');
+      let visible;
+      if (key === 'treatment-medications-grid') visible = gridActive;
+      else visible = show.has(key);
+      el.classList.toggle('hidden', !visible);
+    });
+    // Hide individual children of the treatment/medications grid too,
+    // in case only one of them applies (not currently the case but keeps
+    // the map honest).
+    const treatEl = $('[data-hr-field="treatment"]', $('#historicalForm'));
+    const medsEl  = $('[data-hr-field="medications"]', $('#historicalForm'));
+    treatEl && treatEl.classList.toggle('hidden', !show.has('treatment'));
+    medsEl  && medsEl.classList.toggle('hidden',  !show.has('medications'));
+    // Field-specific label overrides (Prescription → "Prescription notes").
+    const notesLabel = $('#hrNotesLabel');
+    if (notesLabel) notesLabel.textContent = (cfg.labels && cfg.labels.notes) || 'Clinical notes';
+    const findingsLabel = $('#hrFindingsLabel');
+    if (findingsLabel) findingsLabel.textContent = (cfg.labels && cfg.labels.findings) || 'Findings';
+  }
+
+  // JSON tail marker — kept short and stable so an accidental edit of
+  // the notes body doesn't collide.
+  const EXTRAS_MARK_START = '\n\n<!--HR_EXTRAS_V1:';
+  const EXTRAS_MARK_END   = ':HR_EXTRAS_V1-->';
+
+  function extractExtras(notes) {
+    const s = String(notes == null ? '' : notes);
+    const i = s.lastIndexOf(EXTRAS_MARK_START);
+    if (i < 0) return { notes: s, extras: {} };
+    const j = s.indexOf(EXTRAS_MARK_END, i);
+    if (j < 0) return { notes: s, extras: {} };
+    const jsonBlob = s.slice(i + EXTRAS_MARK_START.length, j);
+    try {
+      const extras = JSON.parse(jsonBlob) || {};
+      return { notes: s.slice(0, i), extras };
+    } catch (_) {
+      return { notes: s, extras: {} };
+    }
+  }
+
+  function embedExtras(cleanNotes, extras) {
+    const hasAny = extras && Object.keys(extras).some(k => {
+      const v = extras[k]; return v != null && String(v).trim() !== '';
+    });
+    if (!hasAny) return cleanNotes || '';
+    const compact = {};
+    Object.keys(extras).forEach(k => {
+      const v = extras[k];
+      if (v != null && String(v).trim() !== '') compact[k] = String(v).trim();
+    });
+    return (cleanNotes || '') + EXTRAS_MARK_START + JSON.stringify(compact) + EXTRAS_MARK_END;
+  }
+
+  function extrasFromForm(type) {
+    const val = (id) => (($('#' + id) && $('#' + id).value) || '').trim();
+    const out = {};
+    switch (type) {
+      case 'LAB_REPORT':
+      case 'RADIOLOGY':
+        if (val('hrFindings'))  out.findings = val('hrFindings');
+        if (type === 'RADIOLOGY' && val('hrScanType')) out.scanType = val('hrScanType');
+        break;
+      case 'VACCINATION':
+        if (val('hrVaccineName'))     out.vaccineName     = val('hrVaccineName');
+        if (val('hrDoseNumber'))      out.doseNumber      = val('hrDoseNumber');
+        if (val('hrBatchNumber'))     out.batchNumber     = val('hrBatchNumber');
+        if (val('hrVaccinationDate')) out.vaccinationDate = val('hrVaccinationDate');
+        break;
+      case 'REFERRAL':
+        if (val('hrReferredTo')) out.referredTo = val('hrReferredTo');
+        if (val('hrReason'))     out.reason     = val('hrReason');
+        break;
+      case 'DISCHARGE':
+        if (val('hrAdmissionDate')) out.admissionDate = val('hrAdmissionDate');
+        if (val('hrDischargeDate')) out.dischargeDate = val('hrDischargeDate');
+        if (val('hrSummary'))       out.summary       = val('hrSummary');
+        break;
+    }
+    return out;
+  }
+
+  function applyExtrasToForm(extras) {
+    extras = extras || {};
+    const set = (id, v) => { const el = $('#' + id); if (el) el.value = v || ''; };
+    set('hrFindings',        extras.findings);
+    set('hrScanType',        extras.scanType);
+    set('hrVaccineName',     extras.vaccineName);
+    set('hrDoseNumber',      extras.doseNumber);
+    set('hrBatchNumber',     extras.batchNumber);
+    set('hrVaccinationDate', extras.vaccinationDate);
+    set('hrReferredTo',      extras.referredTo);
+    set('hrReason',          extras.reason);
+    set('hrAdmissionDate',   extras.admissionDate);
+    set('hrDischargeDate',   extras.dischargeDate);
+    set('hrSummary',         extras.summary);
+  }
+
+  function clearExtrasForm() { applyExtrasToForm({}); }
+
   // ---- patient ownership helpers (Patient Linkage fix) ----------------
   // A record's "owner" is either a real directory patient (r.patient set,
   // patientSource 'EXISTING') or a manually-entered legacy patient
@@ -501,6 +665,15 @@
     $('#hrSourceExistingBtn')?.addEventListener('click', () => setPatientSource('EXISTING'));
     $('#hrSourceLegacyBtn')?.addEventListener('click', () => setPatientSource('LEGACY'));
 
+    // v3.4.12 — record-type dropdown drives field visibility in the
+    // Add/Edit modal so only the fields that actually belong to the
+    // selected document type are shown. See RECORD_TYPE_FIELDS above.
+    const typeSel = $('#hrRecordType');
+    if (typeSel && !typeSel.__hrTypeWired) {
+      typeSel.__hrTypeWired = true;
+      typeSel.addEventListener('change', () => applyRecordTypeVisibility(typeSel.value || 'CONSULTATION'));
+    }
+
     // Keep the ownership badge live-updated as the doctor types a legacy
     // patient name (previously it only refreshed on toggle-switch, so the
     // header still said "Enter the historical patient’s details below"
@@ -757,6 +930,10 @@
     $('#hrRecordModalTitle').textContent = id ? 'Edit Previous Record' : 'Add Previous Record';
     $('#hrRecordModalSub').textContent   = id ? 'Update the fields below or manage attachments.' : 'Fill the fields below and attach any supporting documents.';
     $('#histSubmitBtn').textContent      = id ? 'Save changes' : 'Save record';
+    // v3.4.12 — Apply conditional visibility up-front so an Add flow
+    // starts on the right set of fields for the default record type
+    // (Consultation), instead of briefly flashing every field.
+    applyRecordTypeVisibility($('#hrRecordType').value || 'CONSULTATION');
 
     // Patient ownership area (Patient Linkage fix): the toggle + search /
     // legacy panels are now ALWAYS shown, for both new and existing
@@ -825,11 +1002,15 @@
     // Legacy patient fields
     ['hrLegacyName','hrLegacyPhone','hrLegacyDob','hrLegacyGender','hrLegacyGuardian','hrLegacyNotes']
       .forEach(id2 => { const el = $('#' + id2); if (el) el.value = ''; });
+    // v3.4.12 — clear any type-specific extras carried over from a
+    // previous Add/Edit session so switching record types starts clean.
+    clearExtrasForm();
     state.pendingFiles = [];
     state.pendingLabels = [];
     state.pendingTypes = [];
     state.pendingNotes = [];
     state.existingAttachments = [];
+    applyRecordTypeVisibility($('#hrRecordType').value || 'CONSULTATION');
   }
 
   function loadIntoForm(rec) {
@@ -876,11 +1057,19 @@
     $('#hrRecordType').value = rec.recordType || 'CONSULTATION';
     $('#hrTitle').value       = rec.title || '';
     $('#hrDiagnosis').value   = rec.diagnosis || '';
-    $('#hrNotes').value       = rec.notes || '';
+    // v3.4.12 — split any embedded type-specific extras (findings /
+    // scanType / vaccine / referral / discharge fields) off the notes
+    // body before showing them, and apply them into their dedicated
+    // form fields. The stored `notes` column stays canonical (kept as
+    // free-text with a JSON tail) so nothing on the server changes.
+    const parsed = extractExtras(rec.notes);
+    $('#hrNotes').value       = parsed.notes || '';
+    applyExtrasToForm(parsed.extras);
     $('#hrTreatment').value   = rec.treatment || '';
     $('#hrMedications').value = rec.medications || '';
     state.existingAttachments = rec.attachments || [];
     renderExistingAttachments();
+    applyRecordTypeVisibility($('#hrRecordType').value || 'CONSULTATION');
   }
 
   // v3.4.9 (part 4) — shape-tolerant record normaliser. Records can arrive
@@ -1325,14 +1514,27 @@
     }
     if (!recordDate) { showFormError('Please choose a record date.'); return; }
 
+    // v3.4.12 — only include fields relevant to the selected record
+    // type. Fields that aren't visible in the current form are sent as
+    // empty strings so a doctor changing a record from e.g. Consultation
+    // to Lab report doesn't leave stale Treatment / Medications text
+    // saved on the record.
+    const selectedType = $('#hrRecordType').value || 'CONSULTATION';
+    const cfg = RECORD_TYPE_FIELDS[selectedType] || RECORD_TYPE_FIELDS.OTHER;
+    const showFields = new Set(cfg.show);
+    const pick = (id, key) => showFields.has(key) ? ($('#' + id).value || '').trim() : '';
+    const extras = extrasFromForm(selectedType);
+    const notesBody = pick('hrNotes', 'notes');
+    const notesForSave = embedExtras(notesBody, extras);
+
     const fd = new FormData();
     fd.append('recordDate',  recordDate);
-    fd.append('recordType',  $('#hrRecordType').value || 'CONSULTATION');
-    fd.append('title',       $('#hrTitle').value.trim());
-    fd.append('diagnosis',   $('#hrDiagnosis').value.trim());
-    fd.append('notes',       $('#hrNotes').value.trim());
-    fd.append('treatment',   $('#hrTreatment').value.trim());
-    fd.append('medications', $('#hrMedications').value.trim());
+    fd.append('recordType',  selectedType);
+    fd.append('title',       pick('hrTitle',       'title'));
+    fd.append('diagnosis',   pick('hrDiagnosis',   'diagnosis'));
+    fd.append('notes',       notesForSave);
+    fd.append('treatment',   pick('hrTreatment',   'treatment'));
+    fd.append('medications', pick('hrMedications', 'medications'));
     // Patient Linkage fix: send on every save, not just create, so
     // edits can actually change (or clear-and-reassign) who a record
     // belongs to. previous.controller.js#update() only touches linkage
@@ -1485,17 +1687,51 @@
         ${isLegacy(rec) && rec.legacyPatientNotes ? `<div class="hr-view__ownerMeta">${esc(rec.legacyPatientNotes)}</div>` : ''}
       </div>`;
 
+    // v3.4.12 — View modal now renders only the fields relevant to
+    // this record's type. Extras stored as a JSON tail on the notes
+    // column (see extractExtras/embedExtras) are surfaced as first-
+    // class rows here, and the raw JSON tail is stripped from the
+    // displayed notes body so doctors never see the marker.
+    const type   = rec.recordType || 'OTHER';
+    const cfg    = RECORD_TYPE_FIELDS[type] || RECORD_TYPE_FIELDS.OTHER;
+    const show   = new Set(cfg.show);
+    const parsed = extractExtras(rec.notes);
+    const cleanNotes = parsed.notes;
+    const extras     = parsed.extras || {};
+    const notesLabel     = (cfg.labels && cfg.labels.notes)     || 'Notes';
+    const findingsLabel  = (cfg.labels && cfg.labels.findings)  || 'Findings';
+
+    const rows = [];
+    rows.push(kv('Record date', fmtDate(rec.recordDate)));
+    rows.push(kv('Record type', humanType(rec.recordType)));
+    if (show.has('title'))       rows.push(kv('Title',        rec.title));
+    if (show.has('diagnosis'))   rows.push(kv('Diagnosis',    rec.diagnosis));
+    if (show.has('scanType'))    rows.push(kv('Scan type',    extras.scanType));
+    if (show.has('findings'))    rows.push(kv(findingsLabel,  extras.findings));
+    if (show.has('vaccine-grid')) {
+      rows.push(kv('Vaccine name', extras.vaccineName));
+      rows.push(kv('Dose number',  extras.doseNumber));
+    }
+    if (show.has('vaccine-grid-2')) {
+      rows.push(kv('Batch number',      extras.batchNumber));
+      rows.push(kv('Vaccination date',  extras.vaccinationDate ? fmtDate(extras.vaccinationDate) : ''));
+    }
+    if (show.has('referredTo'))  rows.push(kv('Referred to', extras.referredTo));
+    if (show.has('reason'))      rows.push(kv('Reason',      extras.reason));
+    if (show.has('discharge-grid')) {
+      rows.push(kv('Admission date',  extras.admissionDate ? fmtDate(extras.admissionDate) : ''));
+      rows.push(kv('Discharge date',  extras.dischargeDate ? fmtDate(extras.dischargeDate) : ''));
+    }
+    if (show.has('summary'))     rows.push(kv('Summary',     extras.summary));
+    if (show.has('notes'))       rows.push(kv(notesLabel,    cleanNotes));
+    if (show.has('treatment'))   rows.push(kv('Treatment',   rec.treatment));
+    if (show.has('medications')) rows.push(kv('Medications', rec.medications));
+
     $('#hrViewContent').innerHTML = `
       <div class="hr-view">
         ${ownerHtml}
         <div class="hr-view__grid">
-          ${kv('Record date',  fmtDate(rec.recordDate))}
-          ${kv('Record type',  humanType(rec.recordType))}
-          ${kv('Title',        rec.title)}
-          ${kv('Diagnosis',    rec.diagnosis)}
-          ${kv('Notes',        rec.notes)}
-          ${kv('Treatment',    rec.treatment)}
-          ${kv('Medications',  rec.medications)}
+          ${rows.join('')}
         </div>
         ${attHtml}
       </div>`;
