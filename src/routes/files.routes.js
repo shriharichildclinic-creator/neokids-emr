@@ -359,11 +359,23 @@ const pathShare = require('path');
 
 router.get('/share/:token', asyncHandler(async (req, res) => {
   const p = histSvc.verify(req.params.token);
-  if (!p || p.t !== 'att') return res.status(403).json({ error: 'Invalid or expired link' });
-  const fp = pathShare.join(histSvc.STORAGE_PATH, 'historical-rx', p.p);
+  if (!p) return res.status(403).json({ error: 'Invalid or expired link' });
+  let fp, mime, name;
+  if (p.t === 'att') {
+    fp = pathShare.join(histSvc.STORAGE_PATH, 'historical-rx', p.p);
+    mime = p.m || 'application/octet-stream';
+    name = p.n || 'file';
+  } else if (p.t === 'pdf') {
+    // Generated record-summary PDF — see historical-record.service.js pdfShareUrl.
+    fp = pathShare.join(histSvc.STORAGE_PATH, 'historical-pdf', p.fn);
+    mime = 'application/pdf';
+    name = p.fn || 'record.pdf';
+  } else {
+    return res.status(403).json({ error: 'Invalid or expired link' });
+  }
   if (!fsShare.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
-  res.setHeader('Content-Type', p.m || 'application/octet-stream');
-  res.setHeader('Content-Disposition', (req.query.dl === '1' ? 'attachment' : 'inline') + '; filename="' + String(p.n || 'file').replace(/"/g, '') + '"');
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', (req.query.dl === '1' ? 'attachment' : 'inline') + '; filename="' + String(name).replace(/"/g, '') + '"');
   fsShare.createReadStream(fp).pipe(res);
 }));
 

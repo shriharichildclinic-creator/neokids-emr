@@ -27,6 +27,14 @@ function verify(token){
 
 function attachmentToken(att){ return sign({ t:'att', id: att.id, p: att.storagePath, n: att.originalName, m: att.mimeType, exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
 function recordShareToken(record){ return sign({ t:'rec', id: record.id, exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
+// v3.4.7 — generated record-summary PDFs are streamed through the SAME
+// signed-token route as attachments (`/api/files/share/:token`), rather
+// than a bare filesystem path. The old `/files/historical-pdf/...` path
+// this used to point to was never mounted anywhere (no static middleware,
+// no route), so opening a generated PDF always 404'd with the generic
+// API not-found handler.
+function pdfToken(record, filename){ return sign({ t:'pdf', id: record.id, fn: filename, exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
+function pdfShareUrl(req, record, filename){ return publicBase(req) + '/api/files/share/' + pdfToken(record, filename); }
 
 function publicBase(req){
   return process.env.PUBLIC_BASE_URL || (req.protocol + '://' + req.get('host'));
@@ -76,4 +84,4 @@ async function deliver({ channel, to, patientName, doctorName, recordType, recor
   return results;
 }
 
-module.exports = { sign, verify, attachmentToken, recordShareToken, attachmentUrls, recordShareUrl, decorateRecord, deliver, SHARE_TTL_SEC, STORAGE_PATH };
+module.exports = { sign, verify, attachmentToken, recordShareToken, pdfToken, pdfShareUrl, attachmentUrls, recordShareUrl, decorateRecord, deliver, SHARE_TTL_SEC, STORAGE_PATH };

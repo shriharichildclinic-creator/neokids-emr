@@ -305,8 +305,11 @@ exports.generatePdf = asyncH(async (req, res) => {
   const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null }, include });
   if (!record) throw notFound();
   const pdf = await pdfSvc.generateHistoricalRecordPdf(record);
-  await prisma.previousRecord.update({ where: { id: record.id }, data: { pdfUrl: pdf.publicUrl, pdfGeneratedAt: new Date() } });
-  res.json({ success: true, pdfUrl: pdf.publicUrl });
+  // Stream through the same signed-token route attachments use, not a
+  // bare static path — see historical-record.service.js pdfShareUrl.
+  const pdfUrl = svc.pdfShareUrl(req, record, pdf.filename);
+  await prisma.previousRecord.update({ where: { id: record.id }, data: { pdfUrl, pdfGeneratedAt: new Date() } });
+  res.json({ success: true, pdfUrl });
 });
 
 // POST /doctor/previous-records/:id/share  { channel, phone?, email?, attachmentIds? }
