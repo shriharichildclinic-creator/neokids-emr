@@ -219,18 +219,35 @@ html,body{
 
 .np-kpi-grid{
   display:grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* v3.4.13: auto-fit so the row always fills the width evenly
+     regardless of card count (dashboard now renders 3 cards; a
+     fixed repeat(4,1fr) left a dead fourth column). */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
 }
 @media (max-width:1100px){ .np-kpi-grid{ grid-template-columns: repeat(2,1fr);} }
-@media (max-width:520px){ .np-kpi-grid{ grid-template-columns: 1fr; } }
+@media (max-width:520px){
+  /* v3.4.13: KPI cards were full-width stacked on phones — three tall
+     cards of scrolling for three numbers. Compact row: value + label
+     share one line so the whole stat block is ~3 short rows. */
+  .np-kpi-grid{ grid-template-columns: 1fr; gap:.5rem; }
+  .np-kpi{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:.75rem; padding:.7rem .9rem;
+  }
+  .np-kpi::after{ display:none; }
+  .np-kpi:hover{ transform:none; }
+  .np-kpi__label{ margin-top:0; font-size:.78rem; order:1; text-align:left; }
+  .np-kpi__value{ order:2; margin-top:0; font-size:1.25rem; text-align:right; flex:none; }
+  .np-kpi__sub{ order:3; margin-top:0; flex:0 1 auto; text-align:right; }
+}
 
 .np-kpi{
   position:relative;
   background: var(--nk-card);
   border:1px solid var(--np-border);
   border-radius: var(--np-radius-card);
-  padding: 1.15rem 1.2rem 1.15rem;
+  padding: 1.05rem 1.15rem;
   box-shadow: var(--np-card-shadow);
   transition: transform .15s ease, box-shadow .15s ease, border-color .15s;
   overflow:hidden;
@@ -1487,7 +1504,7 @@ html, body{ max-width:100%; overflow-x:hidden; }
    =================================================================== */
 .np-dash-grid{
   display:grid;
-  gap: 1.5rem;
+  gap: 1rem; /* v3.4.13: was 1.5rem — tighter vertical rhythm */
   align-items: start;
   margin-top: 0.25rem;
 }
@@ -1495,7 +1512,7 @@ html, body{ max-width:100%; overflow-x:hidden; }
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 @media (max-width: 1024px){
-  .np-dash-grid--2-1{ grid-template-columns: 1fr; gap: 1.25rem; }
+  .np-dash-grid--2-1{ grid-template-columns: 1fr; gap: .9rem; }
 }
 @media (max-width: 640px){
   .np-dash-grid{ gap: 1rem; }
@@ -1927,6 +1944,40 @@ html[data-theme="dark"] .np-modal pre{
 .hr-toolbar__clear:hover{ background:rgba(0,0,0,.06); color:var(--np-ink, #111827); }
 .hr-toolbar__filters{ display:contents; }
 .hr-toolbar__filter{ min-width:0; width:100%; height:2.3rem; }
+/* v3.4.13 — Previous Records "All types" dropdown fix.
+   The filter select is a `.np-input` inside a `minmax(128px,1fr)` grid
+   track. The standalone `select.np-input` chevron block below sets
+   `background-position:right .7rem` WITHOUT re-declaring
+   background-repeat, so the moment `.np-input:focus` re-declared a
+   shorthand `background: var(--nk-card)`, the image layer reset to
+   repeat/0 0 — on reopen the glyph tiled from the top-left corner and
+   appeared to "jump" left. Worse, the text still sat at ~1fr width
+   with only 2.3rem of right padding, so "All types" clipped ("All ty…")
+   at intermediate widths. Fix: lock the chevron in place with its own
+   background shorthand (position wins over the focus shorthand), force
+   a single-layer no-repeat image, and give the type select enough
+   track width that its label never clips. */
+select.np-input.hr-toolbar__filter{
+  background-repeat:no-repeat;
+  background-position:right .6rem center;
+  background-size:14px;
+  padding-right:2.1rem;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  overflow:hidden;
+}
+select.np-input.hr-toolbar__filter:focus{
+  background:var(--nk-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right .6rem center;
+  background-size:14px;
+}
+/* Give the type column enough room that "All types" (its longest
+   option is "Discharge summary") never clips at desktop widths; the
+   date inputs can share what's left. */
+@media (min-width:1025px){
+  .hr-toolbar{
+    grid-template-columns: minmax(200px,1.5fr) minmax(168px,1.05fr) minmax(132px,.95fr) minmax(132px,.95fr) auto;
+  }
+}
 #hrFilterReset{ height:2.3rem; white-space:nowrap; }
 
 .hr-count{
@@ -2422,84 +2473,85 @@ html[data-theme="dark"] .np-modal pre{
  * v3.4.10 — Welcome section, My Profile modal, and back-nav polish.
  * ===================================================================== */
 
-/* Dashboard welcome band */
+/* Dashboard welcome — v3.4.13 compact header strip.
+   The v3.4.10 band was a tall gradient container that duplicated the
+   KPI stats as three inner cards and ballooned on mobile (the greeting
+   wrapped, then the cards stacked two-up + one full-width = hundreds
+   of px of dead space before any real content). The strip is a single
+   slim header row: eyebrow + greeting + date on the left, one live
+   waiting-room badge on the right. Numbers live in the KPI grid only. */
 .np-welcome{
-  display:flex; gap:1.25rem; align-items:stretch; flex-wrap:wrap;
-  padding:1.25rem 1.35rem; margin:0 0 1rem;
-  border-radius:18px;
-  background:linear-gradient(135deg, rgba(59,130,246,.10) 0%, rgba(16,185,129,.10) 100%);
+  display:flex; gap:.9rem; align-items:center; flex-wrap:wrap;
+  padding:.7rem .95rem; margin:0 0 .75rem;
+  border-radius:14px;
+  background:var(--nk-card);
   border:1px solid var(--np-border, rgba(148,163,184,.25));
   box-shadow:0 1px 2px rgba(15,23,42,.04);
 }
-.np-welcome__main{ flex:1 1 320px; min-width:0; }
+.np-welcome__main{ flex:1 1 220px; min-width:0; }
 .np-welcome__eyebrow{
-  font-size:.78rem; font-weight:600; letter-spacing:.03em;
+  font-size:.7rem; font-weight:600; letter-spacing:.05em;
   color:var(--np-text-mut, #64748b); text-transform:uppercase;
 }
+.np-welcome__titlerow{
+  display:flex; align-items:center; gap:.55rem; flex-wrap:wrap;
+  margin-top:.1rem;
+}
 .np-welcome__title{
-  font-size:1.55rem; font-weight:700; margin:.15rem 0 .35rem;
-  color:var(--np-text, #0f172a); line-height:1.2;
+  font-size:1.12rem; font-weight:700; margin:0;
+  color:var(--np-text, #0f172a); line-height:1.25;
+  white-space:nowrap;
 }
-.np-welcome__sub{
-  margin:0 0 .75rem; color:var(--np-text-mut, #475569);
-  font-size:.92rem;
-}
-.np-welcome__meta{ display:flex; gap:.5rem; flex-wrap:wrap; }
 .np-welcome__pill{
   display:inline-flex; align-items:center; gap:.35rem;
-  padding:.3rem .65rem; border-radius:999px;
+  padding:.22rem .6rem; border-radius:999px;
   background:rgba(255,255,255,.6); border:1px solid var(--np-border, rgba(148,163,184,.25));
-  font-size:.78rem; color:var(--np-text, #0f172a);
+  font-size:.74rem; color:var(--np-text-mut, #475569);
+  white-space:nowrap;
 }
-.np-welcome__pill--soft{
-  background:rgba(59,130,246,.10); border-color:rgba(59,130,246,.20);
-  color:#1d4ed8;
-}
-.np-welcome__cards{
-  display:grid; grid-template-columns:repeat(3, minmax(0,1fr));
-  gap:.65rem; flex:1 1 380px; min-width:0;
-}
-.np-welcome__card{
-  padding:.8rem .9rem; border-radius:14px;
-  background:var(--np-surface, #fff);
+.np-welcome__side{ flex:0 0 auto; margin-left:auto; display:flex; align-items:center; }
+.np-welcome__badge{
+  display:inline-flex; align-items:center; gap:.4rem;
+  padding:.38rem .75rem; border-radius:999px;
+  background:var(--np-surface-2, #f6f8fb);
   border:1px solid var(--np-border, rgba(148,163,184,.25));
-  display:flex; flex-direction:column; gap:.2rem;
+  font-size:.78rem; font-weight:600; color:var(--np-text-mut, #64748b);
+  cursor:pointer; white-space:nowrap;
+  transition:border-color .15s, color .15s, background .15s;
 }
-.np-welcome__card-label{
-  font-size:.72rem; text-transform:uppercase; letter-spacing:.04em;
-  color:var(--np-text-mut, #64748b); font-weight:600;
+.np-welcome__badge::before{
+  content:""; width:8px; height:8px; border-radius:50%;
+  background:#10b981; flex:none;
 }
-.np-welcome__card-value{
-  font-size:1.6rem; font-weight:700; color:var(--np-text, #0f172a);
-  line-height:1.1;
-}
-.np-welcome__card-sub{ font-size:.78rem; color:var(--np-text-mut, #64748b); }
-.np-welcome__card--alert.is-active{
+.np-welcome__badge:hover{ border-color:rgba(137,188,189,.5); color:var(--np-text, #0f172a); }
+.np-welcome__badge.is-active{
   background:rgba(245,158,11,.10);
-  border-color:rgba(245,158,11,.30);
+  border-color:rgba(245,158,11,.35);
+  color:#b45309;
 }
-.np-welcome__card--alert.is-active .np-welcome__card-value{ color:#b45309; }
+.np-welcome__badge.is-active::before{ background:#f59e0b; }
 
 @media (max-width:1023px){
-  .np-welcome{ flex-direction:column; padding:1rem 1.1rem; }
-  .np-welcome__title{ font-size:1.3rem; }
-  .np-welcome__cards{ grid-template-columns:repeat(3, minmax(0,1fr)); gap:.5rem; }
-  .np-welcome__card{ padding:.65rem .75rem; }
-  .np-welcome__card-value{ font-size:1.25rem; }
+  .np-welcome{ padding:.6rem .8rem; margin-bottom:.65rem; }
+  .np-welcome__title{ font-size:1.02rem; }
 }
 @media (max-width:560px){
-  .np-welcome__cards{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-  .np-welcome__card:last-child{ grid-column:span 2; }
+  /* Phones: greeting+date wrap onto at most two compact lines and the
+     badge drops to its own full-width row — one tap target, no more
+     card stack consuming the first viewport. */
+  .np-welcome{ align-items:flex-start; }
+  .np-welcome__title{ white-space:normal; }
+  .np-welcome__side{ width:100%; margin-left:0; }
+  .np-welcome__badge{ width:100%; justify-content:center; }
 }
 
 /* Dark theme parity */
 [data-theme="dark"] .np-welcome{
-  background:linear-gradient(135deg, rgba(59,130,246,.14) 0%, rgba(16,185,129,.10) 100%);
+  background:rgba(255,255,255,.03);
   border-color:rgba(255,255,255,.08);
 }
 [data-theme="dark"] .np-welcome__pill{ background:rgba(255,255,255,.04); }
-[data-theme="dark"] .np-welcome__pill--soft{ background:rgba(59,130,246,.18); color:#93c5fd; }
-[data-theme="dark"] .np-welcome__card{ background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.08); }
+[data-theme="dark"] .np-welcome__badge{ background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.08); }
 
 /* My Profile modal card */
 .np-profile-card{

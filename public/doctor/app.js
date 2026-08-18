@@ -433,7 +433,7 @@ function handleHashRoute(){
 
 async function loadStats(){
   try {
-    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsBar'), 4);
+    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsBar'), 3);
   } catch (_) {}
   try {
     const s = await api('/doctor/stats');
@@ -441,21 +441,21 @@ async function loadStats(){
     const done  = Number(s.completedToday || 0);
     const total = Number(s.totalConsults || 0);
     const rev   = Number(s.totalRevenue || 0);
+    /* v3.4.13 — dedupe: "Today's Patients" / "Completed Today" duplicated
+       each other (same two numbers), so the grid is now three cards:
+       one day-of card (today + completed progress), one lifetime
+       consults card, one lifetime revenue card. Remaining / waiting is
+       surfaced by the header badge in the welcome strip. */
     $('#statsBar').innerHTML = `
-      <div class="np-kpi np-kpi--blue" title="Total appointments scheduled for today (across all statuses).">
+      <div class="np-kpi np-kpi--blue" title="Total appointments scheduled for today (across all statuses) and how many you've completed.">
         <div class="np-kpi__label">Today's Patients</div>
         <div class="np-kpi__value">${today}</div>
-        <div class="np-kpi__sub">${done} completed so far</div>
+        <div class="np-kpi__sub">${done} of ${today} completed</div>
       </div>
       <div class="np-kpi np-kpi--mint" title="All-time consultations you've completed since joining.">
         <div class="np-kpi__label">Total Consults</div>
         <div class="np-kpi__value">${total}</div>
         <div class="np-kpi__sub">All-time consultations</div>
-      </div>
-      <div class="np-kpi np-kpi--coral" title="Patients marked as COMPLETED today.">
-        <div class="np-kpi__label">Completed Today</div>
-        <div class="np-kpi__value">${done}</div>
-        <div class="np-kpi__sub">Out of ${today} scheduled</div>
       </div>
       <div class="np-kpi np-kpi--cream" title="Gross fee revenue billed to your patients (before clinic split).">
         <div class="np-kpi__label">Revenue</div>
@@ -497,7 +497,10 @@ function updateDashWelcome(){
     if (!nameEl || !greetEl || !dateEl) return;
 
     const raw = ($('#docName') && $('#docName').textContent) || 'Doctor';
-    nameEl.textContent = 'Welcome back, ' + raw;
+    /* v3.4.13 — the top-right profile chip already shows the doctor's
+       name; repeating it in a giant heading made the strip the tallest
+       block on mobile. Keep the greeting, drop the name echo. */
+    nameEl.textContent = 'Welcome back';
 
     const now = new Date();
     const h = now.getHours();
@@ -515,30 +518,30 @@ function updateDashWelcome(){
 async function loadDashWelcome(){
   updateDashWelcome();
   try {
-    const [stats, waiting] = await Promise.all([
-      api('/doctor/stats').catch(() => ({})),
-      api('/doctor/waiting-room').catch(() => [])
-    ]);
-    const today = Number(stats.todayAppointments || 0);
-    const done  = Number(stats.completedToday || 0);
-    const pending = Math.max(0, today - done);
-
-    const set = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-    set('welcomeTodayCount', today);
-    set('welcomeTodayDone', done + ' completed');
-    set('welcomePendingCount', pending);
-
+    /* v3.4.13 — the old "Pending Tasks" / "Important Alerts" cards had no
+       real data behind them: pending was just (today − completed) and
+       alerts were literally the waiting-room count, both already shown
+       elsewhere. They are gone. The strip now shows ONE actionable,
+       real-data element: the live waiting-room count, deep-linking to
+       the Waiting Room tab. Awaiting-review prescriptions remain
+       discoverable via the Prescription Archive tab. */
+    const waiting = await api('/doctor/waiting-room').catch(() => []);
     const waitCount = Array.isArray(waiting) ? waiting.length : 0;
-    set('dashWelcomeAppts', today + ' appointment' + (today === 1 ? '' : 's') + ' today');
-    const alertCard = document.getElementById('welcomeAlertCard');
-    if (waitCount > 0){
-      set('welcomeAlertCount', waitCount);
-      set('welcomeAlertSub', waitCount + ' patient' + (waitCount === 1 ? '' : 's') + ' waiting');
-      if (alertCard) alertCard.classList.add('is-active');
-    } else {
-      set('welcomeAlertCount', 0);
-      set('welcomeAlertSub', 'All clear');
-      if (alertCard) alertCard.classList.remove('is-active');
+
+    const badge = document.getElementById('dashWaitingBadge');
+    if (badge){
+      badge.textContent = waitCount > 0
+        ? waitCount + ' patient' + (waitCount === 1 ? '' : 's') + ' waiting'
+        : 'Waiting room: all clear';
+      badge.classList.toggle('is-active', waitCount > 0);
+      badge.setAttribute('role', 'button');
+      badge.tabIndex = 0;
+      const jump = () => {
+        const tab = document.querySelector('[data-tab=waitingTab]');
+        if (tab) tab.click();
+      };
+      badge.onclick = jump;
+      badge.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); jump(); } };
     }
   } catch(_){}
 }
