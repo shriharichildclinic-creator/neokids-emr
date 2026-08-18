@@ -668,22 +668,34 @@
         </div>
         <div class="hr-att__actions">
           <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-att-preview="${esc(a.id)}">Preview</button>
-          <a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${esc(a.viewUrl || '#')}">Open</a>
           <a class="np-btn np-btn--ghost np-btn--sm" href="${esc(a.downloadUrl || '#')}">Download</a>
-          <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-att-rename="${esc(a.id)}">Rename</button>
-          <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-att-replace="${esc(a.id)}">Replace</button>
-          <button type="button" class="np-btn np-btn--danger np-btn--sm" data-att-delete="${esc(a.id)}">Delete</button>
+          <div class="hr-att__more">
+            <button type="button" class="np-btn np-btn--ghost np-btn--sm hr-att__moreBtn" data-att-more="${esc(a.id)}" aria-haspopup="true" aria-expanded="false" aria-label="More actions">&#8942;</button>
+            <div class="hr-att__moreMenu hidden" data-more-menu>
+              <button type="button" data-att-rename="${esc(a.id)}">Rename</button>
+              <button type="button" data-att-replace="${esc(a.id)}">Replace</button>
+              <button type="button" class="is-danger" data-att-delete="${esc(a.id)}">Delete</button>
+            </div>
+          </div>
         </div>
       </div>`).join('');
-    $$('[data-att-delete]', wrap).forEach(b => b.addEventListener('click', () => deleteExistingAttachment(b.getAttribute('data-att-delete'))));
-    $$('[data-att-replace]', wrap).forEach(b => b.addEventListener('click', () => replaceExistingAttachment(b.getAttribute('data-att-replace'))));
+    $$('[data-att-delete]', wrap).forEach(b => b.addEventListener('click', () => { closeAllAttMenus(); deleteExistingAttachment(b.getAttribute('data-att-delete')); }));
+    $$('[data-att-replace]', wrap).forEach(b => b.addEventListener('click', () => { closeAllAttMenus(); replaceExistingAttachment(b.getAttribute('data-att-replace')); }));
     $$('[data-att-preview]', wrap).forEach(b => b.addEventListener('click', () => {
       const a = state.existingAttachments.find(x => x.id === b.getAttribute('data-att-preview'));
       if (a) openAttachmentPreview(a);
     }));
     $$('[data-att-up]', wrap).forEach(b => b.addEventListener('click', () => moveAttachment(b.getAttribute('data-att-up'), -1)));
     $$('[data-att-down]', wrap).forEach(b => b.addEventListener('click', () => moveAttachment(b.getAttribute('data-att-down'), 1)));
+    $$('[data-att-more]', wrap).forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const menu = b.parentElement.querySelector('[data-more-menu]');
+      const wasOpen = !menu.classList.contains('hidden');
+      closeAllAttMenus();
+      if (!wasOpen) { menu.classList.remove('hidden'); b.setAttribute('aria-expanded', 'true'); }
+    }));
     $$('[data-att-rename]', wrap).forEach(b => b.addEventListener('click', () => {
+      closeAllAttMenus();
       const row = b.closest('[data-att-id]');
       row?.querySelector('[data-view-row]')?.classList.add('hidden');
       row?.querySelector('[data-edit-row]')?.classList.remove('hidden');
@@ -695,6 +707,12 @@
     }));
     $$('[data-edit-save]', wrap).forEach(b => b.addEventListener('click', () => saveAttachmentMeta(b.getAttribute('data-edit-save'))));
   }
+
+  function closeAllAttMenus() {
+    $$('[data-more-menu]').forEach(m => m.classList.add('hidden'));
+    $$('[data-att-more]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  }
+  document.addEventListener('click', closeAllAttMenus);
 
   async function saveAttachmentMeta(attId) {
     if (!state.editingId) return;
@@ -746,7 +764,6 @@
     }
     $('#hrAttPreviewTitle').textContent = att.label || att.originalName || 'Attachment';
     $('#hrAttPreviewSub').textContent = [att.attachmentType, att.originalName].filter(Boolean).join(' \u00b7 ');
-    $('#hrAttPreviewOpen').href = att.viewUrl || '#';
     $('#hrAttPreviewDownload').href = att.downloadUrl || '#';
     openModal('hrAttPreviewModal');
   }
@@ -919,7 +936,6 @@
                </div>
                <div class="hr-att__actions">
                  <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-view-att-preview="${esc(a.id)}">Preview</button>
-                 <a class="np-btn np-btn--ghost np-btn--sm" target="_blank" rel="noopener" href="${esc(a.viewUrl || '#')}">Open</a>
                  <a class="np-btn np-btn--ghost np-btn--sm" href="${esc(a.downloadUrl || '#')}">Download</a>
                </div>
              </div>`).join('')}

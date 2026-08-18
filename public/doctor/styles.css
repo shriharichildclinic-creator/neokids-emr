@@ -414,6 +414,22 @@ html,body{
   font-family: inherit;
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
+/* Custom chevron + guaranteed right-hand clearance for every <select>
+   styled with .np-input — native select rendering (and how much room
+   it reserves for its own arrow) varies enough across mobile browsers
+   that selected-option text was getting visually clipped ("All ty…")
+   on some devices. This makes it consistent everywhere. */
+select.np-input{
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  padding-right:2.3rem;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right .7rem center;
+  background-size:14px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  overflow:hidden;
+}
 .np-input:focus, .np-textarea:focus, .np-select-native:focus{
   outline:none; border-color: var(--np-primary);
   box-shadow: 0 0 0 4px rgba(137,188,189,.12);
@@ -1863,8 +1879,9 @@ html[data-theme="dark"] .np-modal pre{
    Add/Edit/View modals, drop zone, attachment list.
    ===================================================================== */
 .hr-panel .np-panel__head{
-  display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;
+  display:flex; align-items:flex-start; gap:.75rem; flex-wrap:wrap;
 }
+.hr-panel .np-panel__head #hrAddBtn{ flex:none; white-space:nowrap; margin-top:.1rem; }
 
 /* Toolbar — single CSS grid so search + filters always share one
    coherent row and never split into two mismatched, oversized boxes.
@@ -2037,6 +2054,29 @@ html[data-theme="dark"] .np-modal pre{
 .hr-att__moveBtn:hover:not(:disabled){ background:var(--np-surface-2, #f6f8fb); color:var(--np-ink, #111827); }
 .hr-att__moveBtn:disabled{ opacity:.35; cursor:default; }
 
+/* Attachment actions — trimmed to Preview + Download as the two
+   reliable, self-explanatory actions; Rename/Replace/Delete live in a
+   compact "more" menu so the row doesn't turn into a wall of buttons
+   on mobile (was 6 buttons per attachment, now 2 + 1). */
+.hr-att__more{ position:relative; }
+.hr-att__moreBtn{ font-size:1.1rem; line-height:1; padding:.35rem .55rem; }
+.hr-att__moreMenu{
+  position:absolute; right:0; top:calc(100% + .3rem); z-index:20;
+  background:#fff; border:1px solid var(--np-border, #e5e7eb); border-radius:10px;
+  box-shadow:0 8px 24px rgba(15,23,42,.12); min-width:9rem; padding:.3rem;
+  display:flex; flex-direction:column; gap:.1rem;
+}
+.hr-att__moreMenu button{
+  border:0; background:transparent; text-align:left; padding:.5rem .6rem;
+  border-radius:7px; font-size:.85rem; color:var(--np-ink, #111827); cursor:pointer;
+}
+.hr-att__moreMenu button:hover{ background:var(--np-surface-2, #f6f8fb); }
+.hr-att__moreMenu button.is-danger{ color:#C62828; }
+.hr-att__moreMenu button.is-danger:hover{ background:#FEECEC; }
+[data-theme="dark"] .hr-att__moreMenu{ background:#1f2530; border-color:rgba(255,255,255,.12); }
+[data-theme="dark"] .hr-att__moreMenu button{ color:#e5e7eb; }
+[data-theme="dark"] .hr-att__moreMenu button:hover{ background:rgba(255,255,255,.06); }
+
 /* Attachment preview modal (Preview action — PDF/image inline) */
 .hr-preview__panel{ width:min(92vw, 760px); max-height:min(92vh, 820px); display:flex; flex-direction:column; }
 .hr-preview__body{
@@ -2108,6 +2148,14 @@ html[data-theme="dark"] .np-modal pre{
       "from"
       "to"
       "reset";
+  }
+  /* "+ Add Historical Record" was flex-centered next to a two/three-line
+     subtitle, so on narrower phones it ended up floating at the vertical
+     midpoint of the wrapped paragraph instead of sitting cleanly above
+     or below it. Give it its own full-width row instead. */
+  .hr-panel .np-panel__head{ flex-direction:column; align-items:stretch; }
+  .hr-panel .np-panel__head #hrAddBtn{
+    width:100%; justify-content:center; margin-top:0;
   }
 }
 @media (max-width:640px){
