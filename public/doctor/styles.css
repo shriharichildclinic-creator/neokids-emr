@@ -2007,6 +2007,15 @@ html[data-theme="dark"] .np-modal pre{
    above the picker; reuses the existing .np-seg segmented-control look
    used elsewhere in the app so it matches current styling exactly. */
 .hr-source-toggle{ margin-bottom:.6rem; }
+/* Patient Linkage fix — .np-callout is display:flex (built for an
+   icon + one text block sitting side by side). The "currently linked
+   to" badge and the legacy-patient info box each stack several lines
+   of unrelated content instead, so without this modifier those lines
+   were being laid out as separate flex items in a row and truncating
+   hard (see bug report screenshots). --stack forces a column so
+   multi-line callout content wraps and stacks the way it visually
+   reads. */
+.np-callout--stack{ flex-direction:column; align-items:stretch; gap:.3rem; }
 .hr-picker__input{ flex:1; }
 .hr-picker__results{
   max-height:260px; overflow-y:auto;

@@ -555,6 +555,18 @@
     $('#hrSourceLegacyBtn')?.setAttribute('aria-selected', String(source === 'LEGACY'));
     $('#hrExistingPatientPanel')?.classList.toggle('hidden', source === 'LEGACY');
     $('#hrLegacyPatientPanel')?.classList.toggle('hidden', source !== 'LEGACY');
+
+    // Linking-logic fix: mutual exclusivity has to hold at the control
+    // level, not just visually. Hiding the inactive panel already kept
+    // its fields out of the submitted FormData, but the inputs stayed
+    // enabled underneath — reachable by tab order/autofill and able to
+    // hold a value while the "wrong" branch was active. Disabling them
+    // makes "only one patient source is active" true of the controls
+    // themselves, not just the save payload.
+    $('#hrExistingPatientPanel')?.querySelectorAll('input, button, select, textarea')
+      .forEach(el => { el.disabled = (source === 'LEGACY'); });
+    $('#hrLegacyPatientPanel')?.querySelectorAll('input, button, select, textarea')
+      .forEach(el => { el.disabled = (source !== 'LEGACY'); });
   }
 
   function openRecordModal(id) {
@@ -589,7 +601,7 @@
       loadIntoForm(rec);
       if (badge && rec) {
         badge.classList.remove('hidden');
-        badge.innerHTML = `<div class="np-callout" style="margin-bottom:.6rem;">
+        badge.innerHTML = `<div class="np-callout np-callout--info np-callout--stack" style="margin-bottom:.6rem;">
           <div>Currently linked to: ${ownershipChip(rec)}</div>
           <div style="margin-top:.3rem;"><b>${esc(ownerName(rec))}</b>${ownerPhone(rec) ? ' \u00b7 +91 ' + esc(ownerPhone(rec)) : ''}</div>
           <div class="np-mut" style="margin-top:.35rem;font-size:.78rem;">Use the options below to link a different patient, unlink and enter a legacy patient, or edit these details.</div>
