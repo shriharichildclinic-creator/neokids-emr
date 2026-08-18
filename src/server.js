@@ -131,6 +131,15 @@ const staticOpts = {
     // Issue 31 — vendor CSS is content-hashed at build time; aggressive cache.
     if (filePath.includes(path.sep + 'vendor' + path.sep)) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      // v3.4.7 — these ARE actively edited between deploys (app.js,
+      // historical-fix.js, styles.css) and aren't content-hashed, so the
+      // default 1h cache was letting mobile browsers keep serving a stale
+      // build well after a redeploy — symptoms looked like "the fix
+      // didn't work" when really the device just hadn't re-fetched yet.
+      // ETag/Last-Modified stay on, so this is still a cheap conditional
+      // GET (304) whenever the file hasn't actually changed.
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
   },
 };
