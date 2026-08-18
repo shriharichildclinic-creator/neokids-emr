@@ -28,6 +28,7 @@
 const prisma = require('../config/prisma');
 const { parseDateOnly, parseDateOnlyOrNull } = require('../utils/date');
 const logger = require('../utils/logger');
+const { doctorOwnsPatient } = require('../utils/patientAccess');
 
 function normalizeName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -59,7 +60,7 @@ function namesLookSimilar(a, b) {
  *   { action: 'NEEDS_CONFIRMATION', candidates }   // caller must resend with linkConfirmed
  *   { action: 'CREATE_NEW', patient }              // new row created
  */
-async function resolvePatient(tx, input) {
+async function resolvePatient(tx, input, actorRole) {
   const {
     patientId,
     patientName,
@@ -68,7 +69,8 @@ async function resolvePatient(tx, input) {
     parentName,
     dateOfBirth,
     gender,
-    linkConfirmed
+    linkConfirmed,
+    doctorId
   } = input;
 
   // ── Case 1: explicit link ──────────────────────────────────────────
@@ -78,6 +80,21 @@ async function resolvePatient(tx, input) {
       const err = new Error('Referenced patient does not exist');
       err.statusCode = 404;
       throw err;
+    }
+    // SECURITY FIX (Patient Linking audit): an explicit patientId used
+    // to be trusted outright — a doctor could attach a historical
+    // appointment (and everything that flows from it: prescriptions,
+    // certificates) to a patient exclusively under another doctor's
+    // care just by supplying that patient's id. Admins create these on
+    // a doctor's behalf and legitimately need the full directory, so
+    // this only applies when a DOCTOR is the one submitting the record.
+    if (actorRole === 'DOCTOR') {
+      const owns = await doctorOwnsPatient(doctorId, patientId);
+      if (!owns) {
+        const err = new Error('You can only link a historical appointment to a patient already under your own care.');
+        err.statusCode = 403;
+        throw err;
+      }
     }
     return { action: 'LINKED', patient: existing, matchType: 'EXPLICIT_ID' };
   }
@@ -217,7 +234,7 @@ async function createHistoricalAppointment(input, audit, manualPrescriptionUrl) 
 
   return prisma.$transaction(async (tx) => {
     // Step 1 — Smart patient matching / creation.
-    const resolution = await resolvePatient(tx, input);
+    const resolution = await resolvePatient(tx, input, audit && audit.addedByRole);
     if (resolution.action === 'NEEDS_CONFIRMATION') {
       return { needsConfirmation: true, candidates: resolution.candidates };
     }

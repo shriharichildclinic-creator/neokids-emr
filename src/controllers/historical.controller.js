@@ -23,6 +23,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { historicalAppointmentSchema } = require('../utils/validators');
 const svc = require('../services/historical-appointment.service');
 const logger = require('../utils/logger');
+const { myPatientIdSet } = require('../utils/patientAccess');
 
 // Build a stable, forward-only URL for uploaded prescription files.
 // Kept relative so the same value works in every env.
@@ -43,6 +44,16 @@ exports.lookupPatient = asyncHandler(async (req, res) => {
       dateOfBirth: true, gender: true, parentName: true, createdAt: true
     }
   });
+  // SECURITY FIX (Patient Linking audit): admins may look up any patient
+  // by phone (they run this same endpoint under /admin), but a doctor
+  // must only see matches among patients already under their own care —
+  // otherwise typing any real phone number surfaced another doctor's
+  // patient by name/DOB/parent name. Doctors with no existing match
+  // create a fresh historical-appointment patient record as before.
+  if (req.user && req.user.role === 'DOCTOR') {
+    const mine = await myPatientIdSet(req.user.id);
+    return res.json({ matches: rows.filter(r => mine.has(r.id)) });
+  }
   res.json({ matches: rows });
 });
 

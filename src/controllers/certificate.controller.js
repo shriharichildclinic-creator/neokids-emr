@@ -18,6 +18,7 @@
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { medicalCertificateSchema } = require('../utils/validators');
+const { doctorOwnsPatient } = require('../utils/patientAccess');
 const { parseDateOnlyOrNull, calcAge } = require('../utils/date');
 const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
@@ -179,6 +180,17 @@ exports.create = asyncHandler(async (req, res) => {
     if (!appointment) return res.status(404).json({ error: 'Appointment not found' });
     patient = appointment.patient;
   } else {
+    // SECURITY FIX (Patient Linking audit): a standalone certificate
+    // (no appointmentId) used to trust any patientId the client sent —
+    // a doctor could issue a certificate for a patient they'd never
+    // treated, exclusively belonging to another doctor. Now requires an
+    // established relationship (appointment, previous record, or an
+    // earlier certificate) with that patient. Admins are unaffected —
+    // they can already only reach here by explicitly supplying doctorId.
+    if (req.user.role === 'DOCTOR') {
+      const owns = await doctorOwnsPatient(req.user.id, d.patientId);
+      if (!owns) return res.status(404).json({ error: 'Patient not found' });
+    }
     patient = await prisma.patient.findUnique({ where: { id: d.patientId } });
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
   }

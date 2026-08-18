@@ -24,6 +24,7 @@ const prisma = require('../config/prisma');
 const { asyncHandler: asyncH } = require('../middleware/errorHandler');
 const svc = require('../services/historical-record.service');
 const pdfSvc = require('../services/historical-record-pdf.service');
+const { doctorOwnsPatient } = require('../utils/patientAccess');
 
 const UP_DIR = path.join(svc.STORAGE_PATH, 'historical-rx');
 if (!fs.existsSync(UP_DIR)) fs.mkdirSync(UP_DIR, { recursive: true });
@@ -98,6 +99,21 @@ function resolvePatientLink(data, fallbackPatientId) {
     legacyPatientGender: null, legacyPatientGuardian: null, legacyPatientNotes: null,
   };
 }
+// SECURITY FIX (Patient Linking audit): resolvePatientLink() decides
+// which patientId to persist, but never checked whether that patient
+// actually belongs to the calling doctor — a doctor could link (or
+// re-link) a previous record to ANY existing NeoKidsPro patient, not
+// just one already under their own care, by supplying that patient's
+// id. This is the actual "linking" gap the audit asked about: called
+// right after resolvePatientLink() in both create() and update(),
+// before anything is written.
+async function assertPatientOwnership(req, link) {
+  if (link.patientSource === 'EXISTING' && link.patientId) {
+    const owns = await doctorOwnsPatient(req.user.id, link.patientId);
+    if (!owns) { const e = new Error('You can only link a record to a patient already under your own care. Use "Legacy / Historical Patient" for a patient outside your records.'); e.status = 403; throw e; }
+  }
+}
+
 const shareSchema = z.object({
   channel: z.enum(['whatsapp', 'email']),
   phone: z.preprocess(emptyToUndef, z.string().max(32).optional()),
@@ -251,6 +267,7 @@ exports.detail = asyncH(async (req, res) => {
 exports.create = asyncH(async (req, res) => {
   const data = parseBody(req, createSchema);
   const link = resolvePatientLink(data, req.params.patientId);
+  await assertPatientOwnership(req, link);
   const record = await prisma.previousRecord.create({ data: Object.assign({
     doctorId: req.user.id,
     title: data.title || null, recordType: data.recordType || 'OTHER',
@@ -281,7 +298,9 @@ exports.update = asyncH(async (req, res) => {
   // still supports re-linking so a mis-entered legacy record can later
   // be matched to a real directory patient (or vice-versa).
   if (data.patientSource !== undefined || data.patientId !== undefined || data.legacyPatientName !== undefined) {
-    Object.assign(patch, resolvePatientLink(data, existing.patientId));
+    const link = resolvePatientLink(data, existing.patientId);
+    await assertPatientOwnership(req, link);
+    Object.assign(patch, link);
   }
   const record = await prisma.previousRecord.update({ where: { id: existing.id }, data: patch });
   await saveAttachments(req, record);

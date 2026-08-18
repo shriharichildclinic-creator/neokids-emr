@@ -20,6 +20,7 @@ const { incrementDoctorRevenue, decrementDoctorRevenue } = require('../services/
 const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
+const { myPatientIdSet, doctorOwnsPatient } = require('../utils/patientAccess');
 
 /* ────────────────────────────────────────────────────────────────────
    Helper: rewrite a stored `prescriptionUrl` / `invoiceUrl` into a
@@ -189,21 +190,20 @@ exports.searchPatients = asyncHandler(async (req, res) => {
   const orClauses = [{ name: { contains: q } }];
   if (digitsOnly.length >= 4) orClauses.push({ phone: { contains: digitsOnly } });
 
-  // v3.4.0 root-cause fix — the old implementation restricted results to
-  // patients who already had an appointment WITH THIS DOCTOR, so a patient
-  // registered by reception (or booked with another doctor) was impossible
-  // to find when issuing a standalone certificate. Search the full patient
-  // directory instead; lastVisit enrichment below is still per-doctor, so
-  // no data from other doctors' practices is exposed.
-  const seen = await prisma.appointment.findMany({
-    where: { doctorId: req.user.id },
-    select: { patientId: true },
-    distinct: ['patientId']
-  });
-  const myPatientIds = new Set(seen.map(s => s.patientId));
+  // SECURITY FIX (Patient Linking audit): this used to search the FULL
+  // cross-clinic patient directory, so a doctor could find and select
+  // any patient in the system — including ones exclusively under
+  // another doctor's care — for certificates and previous records.
+  // "My patients" is now the authoritative scope: an appointment,
+  // a previous record I authored, or a certificate I issued for them.
+  // If a doctor genuinely hasn't treated this patient before, the
+  // Previous Records "Legacy / Historical Patient" branch is the
+  // correct path — not linking to someone else's directory patient.
+  const myPatientIds = await myPatientIdSet(req.user.id);
+  if (!myPatientIds.size) return res.json([]);
 
   const rows = await prisma.patient.findMany({
-    where: { OR: orClauses },
+    where: { AND: [{ OR: orClauses }, { id: { in: Array.from(myPatientIds) } }] },
     orderBy: [{ name: 'asc' }, { phone: 'asc' }],
     take: 20
   });
@@ -243,6 +243,18 @@ exports.searchPatients = asyncHandler(async (req, res) => {
 
 exports.patientHistory = asyncHandler(async (req, res) => {
   const { patientId } = req.params;
+  // SECURITY FIX (Patient Linking audit): previously fetched the patient
+  // and their "siblings" (other patients sharing the same phone) with no
+  // ownership check at all — only 404ing if the row didn't exist. Any
+  // doctor could pull another doctor's-only patient's name/phone/email/
+  // DOB/parent name (and their family members' too) even though the
+  // clinical data below (visits/prescriptions/previousRecords) was
+  // already correctly doctor-scoped. Now the whole endpoint 404s unless
+  // this doctor actually has an established relationship with the
+  // patient.
+  const owns = await doctorOwnsPatient(req.user.id, patientId);
+  if (!owns) return res.status(404).json({ error: 'Patient not found' });
+
   const patient = await prisma.patient.findUnique({ where: { id: patientId } });
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
@@ -255,10 +267,17 @@ exports.patientHistory = asyncHandler(async (req, res) => {
     orderBy: [{ date: 'desc' }, { startTime: 'desc' }]
   });
 
-  const siblings = await prisma.patient.findMany({
+  // SECURITY FIX (Patient Linking audit): siblings are now filtered to
+  // only those this doctor also has an established relationship with —
+  // otherwise a shared-phone family member exclusively seen by another
+  // doctor would leak here even though the primary patient check above
+  // passed.
+  const siblingRows = await prisma.patient.findMany({
     where: { phone: patient.phone, id: { not: patient.id } },
     select: { id: true, name: true, dateOfBirth: true, gender: true }
   });
+  const siblingIds = await myPatientIdSet(req.user.id);
+  const siblings = siblingRows.filter(s => siblingIds.has(s.id));
 
   const doctorMeta = await prisma.doctor.findUnique({
     where: { id: req.user.id },
