@@ -223,7 +223,7 @@ async function init(){
     if (!currentAppointment) return;
     const id = currentAppointment.id;
     closePatientModal();
-    location.hash = '#consult/' + id;
+    goToConsult(id);
   });
 
   ['rxSearch','rxFromDate','rxToDate'].forEach(id => {
@@ -679,14 +679,22 @@ function apptCard(a){
     </div>
     <div class="np-appt__actions">
       ${isLive ? `<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="goToConsult('${escapeHtml(a.id)}')">Open Consultation</button>` : ''}
-      ${!isLive ? `<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="goToConsult('${escapeHtml(a.id)}')">View</button>` : ''}
+      ${!isLive ? `<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openPatient('${escapeHtml(a.id)}')">View</button>` : ''}
       ${canJoin ? `<a class="np-btn np-btn--success np-btn--sm" href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener">Join Meeting</a>` : ''}
       ${overflow}
     </div>
   </article>`;
 }
 
+function currentDoctorTab(){
+  const active = document.querySelector('.tab-btn.active');
+  return (active && active.dataset && active.dataset.tab) || 'dashboardTab';
+}
 function goToConsult(id){
+  try {
+    const active = currentDoctorTab();
+    if (active && active !== 'consultTab') window.__prevDoctorTab = active;
+  } catch(_){}
   location.hash = '#consult/' + id;
 }
 
@@ -1382,7 +1390,7 @@ function renderRxArchive(){
       <div class="np-appt__actions">
         ${a.prescriptionUrl ? `<a class="np-btn np-btn--primary np-btn--sm" href="${escapeHtml(a.prescriptionUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
         ${a.prescriptionUrl ? `<a class="np-btn np-btn--ghost np-btn--sm" href="${escapeHtml(a.prescriptionUrl)}" download>Download</a>` : ''}
-        <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="goToConsult('${escapeHtml(a.id)}')">Open visit</button>
+        <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openPatient('${escapeHtml(a.id)}')">Open visit</button>
       </div>
     </article>`;
   }).join('');
@@ -2428,8 +2436,7 @@ window.NPBackNav = (function(){
   function markerKey(){ return 'np-nav-' + Date.now() + '-' + Math.random().toString(36).slice(2,7); }
 
   function currentTab(){
-    const active = document.querySelector('.tab-btn.active');
-    return (active && active.dataset && active.dataset.tab) || 'dashboardTab';
+    return (typeof window.currentDoctorTab === 'function' ? window.currentDoctorTab() : 'dashboardTab');
   }
 
   function anyOpen(){ return stack.length > 0; }
@@ -2591,7 +2598,8 @@ function injectConsultBackButton(){
         '<span class="np-consult-breadcrumb">Appointments &rsaquo; <span>Consultation</span></span>';
       workspace.insertBefore(bar, workspace.firstChild);
       bar.querySelector('.np-consult-back').addEventListener('click', function(){
-        var prev = (window.__prevDoctorTab || 'appointmentsTab');
+        var prev = (window.__prevDoctorTab || 'allTab');
+        if (!doc.querySelector('[data-tab="' + prev + '"]')) prev = 'allTab';
         if (typeof setActiveTab === 'function'){
           if (location.hash.indexOf('#consult/') === 0){
             history.replaceState(null, '', location.pathname + location.search);
