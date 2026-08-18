@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.local
+.env.production
+storage/prescriptions/*
+storage/invoices/*
+!storage/prescriptions/.gitkeep
+!storage/invoices/.gitkeep
+*.log
+.DS_Store
+dist/
+build/
+coverage/
+.vscode/
+.idea/
+*.sqlite
+prisma/migrations/dev.db*

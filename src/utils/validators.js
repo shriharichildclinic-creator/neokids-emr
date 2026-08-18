@@ -320,12 +320,7 @@ const drawnSignatureSchema = z.object({
 // ─────────────────────────────────────────────────────────────────────
 // Feature 2 — Medical Certificate
 // ─────────────────────────────────────────────────────────────────────
-// Base object (no .refine() chains) — kept separate so both the "create"
-// and "update" schemas can be derived from it. z.object(...).refine(...)
-// returns a ZodEffects wrapper which has NO .partial() method; calling
-// .partial() on it throws at request-time and was the root cause of the
-// "Update Certificate" 500 (see medicalCertificateUpdateSchema below).
-const medicalCertificateBaseSchema = z.object({
+const medicalCertificateSchema = z.object({
   // If issued from an appointment, we snapshot patient info from it.
   appointmentId: z.string().uuid().optional(),
 
@@ -352,10 +347,7 @@ const medicalCertificateBaseSchema = z.object({
   fromDate: dateSchema.optional().or(z.literal('')),
   toDate: dateSchema.optional().or(z.literal('')),
   additionalNotes: safeOptStr('additionalNotes')
-});
-
-// CREATE — full validation, including the cross-field .refine() checks.
-const medicalCertificateSchema = medicalCertificateBaseSchema.refine(
+}).refine(
   d => !!d.appointmentId || !!d.patientId,
   { message: 'Either appointmentId or patientId is required', path: ['patientId'] }
 ).refine(
@@ -368,17 +360,6 @@ const medicalCertificateSchema = medicalCertificateBaseSchema.refine(
   },
   { message: 'fromDate must be on or before toDate', path: ['toDate'] }
 );
-
-// UPDATE — a PATCH-style partial of the base object. Built from
-// medicalCertificateBaseSchema (a plain ZodObject, so .partial() is valid)
-// rather than from medicalCertificateSchema. The controller's update
-// handler already re-derives durationType/date consistency itself from the
-// merged existing-row + patch view, so the create-only cross-field
-// .refine() checks above are intentionally NOT reapplied here — they would
-// incorrectly reject partial patches that only touch a single field (e.g.
-// { reason: '...' } has neither appointmentId nor patientId, which is fine
-// for an update but would fail the "create" refine).
-const medicalCertificateUpdateSchema = medicalCertificateBaseSchema.partial();
 
 module.exports = {
   loginSchema,
@@ -397,6 +378,5 @@ module.exports = {
   historicalAppointmentSchema,
   previousRecordSchema,
   drawnSignatureSchema,
-  medicalCertificateSchema,
-  medicalCertificateUpdateSchema
+  medicalCertificateSchema
 };
