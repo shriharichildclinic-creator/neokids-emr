@@ -223,7 +223,12 @@ async function init(){
     if (!currentAppointment) return;
     const id = currentAppointment.id;
     closePatientModal();
-    location.hash = '#consult/' + id;
+    // v3.4.11 FIX — same spurious-popstate guard as goToConsult().
+    if (window.NPBackNav && typeof NPBackNav.routeHashNav === 'function'){
+      NPBackNav.routeHashNav(() => { location.hash = '#consult/' + id; });
+    } else {
+      location.hash = '#consult/' + id;
+    }
   });
 
   ['rxSearch','rxFromDate','rxToDate'].forEach(id => {
@@ -687,7 +692,14 @@ function apptCard(a){
 }
 
 function goToConsult(id){
-  location.hash = '#consult/' + id;
+  // v3.4.11 FIX — route through NPBackNav.routeHashNav() so a spurious
+  // mobile-WebKit popstate doesn't get misread as a Back press and bounce
+  // the user to the Dashboard (see NPBackNav.routeHashNav for details).
+  if (window.NPBackNav && typeof NPBackNav.routeHashNav === 'function'){
+    NPBackNav.routeHashNav(() => { location.hash = '#consult/' + id; });
+  } else {
+    location.hash = '#consult/' + id;
+  }
 }
 
 // Resolve an appointment object from whichever cache holds it (all-list,
@@ -2424,8 +2436,41 @@ window.NPBackNav = (function(){
   const stack = [];               // { type:'modal', id, marker }
   let installed = false;
   let internalPop = false;
+  let internalHashNav = false;    // v3.4.11 FIX — see routeHashNav() below.
 
   function markerKey(){ return 'np-nav-' + Date.now() + '-' + Math.random().toString(36).slice(2,7); }
+
+  // v3.4.11 FIX — Critical Bug: "View" redirects to Dashboard instead of
+  // opening the appointment.
+  //
+  // Root cause: plain in-app routing like `location.hash = '#consult/'+id`
+  // (used by goToConsult()) only creates a new hash entry and is NOT a
+  // real Back-button traversal. On desktop Chrome that's all that happens.
+  // But on mobile WebKit (iOS/Android Safari-based browsers), assigning
+  // location.hash ALSO dispatches a spurious 'popstate' event as a
+  // compatibility quirk left over from before 'hashchange' existed —
+  // desktop Chrome does not do this.
+  //
+  // That spurious popstate landed in onPopState() Case 3 below: no modal
+  // was open (stack is empty — goToConsult never pushes one), and the tab
+  // had just switched to 'consultTab', which is "not dashboardTab" — so
+  // the guard concluded the user pressed Back from a non-dashboard screen
+  // and immediately called goToDashboard(), yanking them straight back to
+  // the Dashboard the instant "View" was clicked.
+  //
+  // Fix: any code path that performs in-app hash routing (not an actual
+  // Back-button press) must run through routeHashNav() so a same-tick
+  // spurious popstate is swallowed instead of triggering that guard.
+  function routeHashNav(fn){
+    internalHashNav = true;
+    try { fn(); }
+    finally {
+      // The spurious popstate (when the browser fires one at all) is
+      // queued as part of the same hash-change navigation and is
+      // processed before this timer fires, so it's still caught here.
+      setTimeout(() => { internalHashNav = false; }, 0);
+    }
+  }
 
   function currentTab(){
     const active = document.querySelector('.tab-btn.active');
@@ -2486,6 +2531,11 @@ window.NPBackNav = (function(){
     // popModal() — just swallow it and stop.
     if (internalPop){ internalPop = false; return; }
 
+    // Case 1b: this popstate is a spurious one fired by our own in-app
+    // hash routing (see routeHashNav() above), not a real Back press —
+    // swallow it too.
+    if (internalHashNav){ internalHashNav = false; return; }
+
     // Case 2: an overlay is open → close the top one only.
     if (anyOpen()){
       closeTopModal();
@@ -2517,7 +2567,7 @@ window.NPBackNav = (function(){
     window.addEventListener('popstate', onPopState);
   }
 
-  return { init: init, pushModal: pushModal, popModal: popModal, anyOpen: anyOpen };
+  return { init: init, pushModal: pushModal, popModal: popModal, anyOpen: anyOpen, routeHashNav: routeHashNav };
 })();
 
 (async function bootstrap(){
