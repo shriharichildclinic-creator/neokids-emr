@@ -579,7 +579,8 @@ select.np-input{
    so long titles wrap onto a second line instead of being cut off, and
    flex-shrink:0 on the close button keeps it pinned and always visible. */
 .np-modal__head > div:first-child{ min-width:0; flex:1 1 auto; }
-.np-modal__title{ font-size: 1.05rem; font-weight:700; color: var(--np-ink); flex:1; overflow-wrap:anywhere; word-break:break-word; }
+.np-modal__title{ font-size:1.05rem; font-weight:700; color: var(--np-ink); line-height:1.3; overflow-wrap:anywhere; word-break:break-word; }
+.np-modal__subtitle{ line-height:1.4; margin-top:.15rem; }
 .np-modal__subtitle{ overflow-wrap:anywhere; word-break:break-word; }
 .np-modal__close{
   width:36px; height:36px; border-radius:10px;

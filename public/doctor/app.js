@@ -1046,11 +1046,19 @@ async function loadPatientHistoryInto(slot, patientId){
         ${rx.followUpDate ? `<div class="np-mut" style="font-size:.82rem; margin-top:.25rem;">Follow-up: ${escapeHtml(fmtDate(rx.followUpDate))}</div>` : ''}
       </article>`).join('');
 
+    // v3.4.9 (part 4) — Patient History Previous Records visibility fix:
+    // every record now has an explicit View action AND the whole card is
+    // clickable, both opening the existing View Previous Record modal
+    // (hrViewModal from historical-fix.js) so doctors can inspect the
+    // full record, its attachments and metadata directly from history.
     const previousHtml = (h.previousRecords || []).map(pr => `
-      <article class="np-history-rx">
+      <article class="np-history-rx hr-history-prev" data-prev-view="${escapeHtml(pr.id)}" style="cursor:pointer;" role="button" tabindex="0">
         <div class="np-row" style="justify-content:space-between; align-items:center; margin-bottom:.25rem;">
           <b>${escapeHtml(fmtDate(pr.recordDate))}</b>
-          ${pr.attachmentUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(pr.attachmentUrl)}" target="_blank" rel="noopener">Open attachment</a>` : ''}
+          <span class="np-row" style="gap:.4rem;">
+            <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-prev-view="${escapeHtml(pr.id)}">View</button>
+            ${pr.attachmentUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(pr.attachmentUrl)}" target="_blank" rel="noopener">Open attachment</a>` : ''}
+          </span>
         </div>
         ${pr.diagnosis ? `<div style="font-size:.88rem;"><b>Diagnosis:</b> ${escapeHtml(pr.diagnosis)}</div>` : ''}
         ${pr.notes ? `<div style="font-size:.85rem;" class="np-mut"><b>Notes:</b> ${escapeHtml(pr.notes)}</div>` : ''}
@@ -1088,6 +1096,23 @@ async function loadPatientHistoryInto(slot, patientId){
         </div>
         ${rxHtml}` : ''}
     `;
+    // v3.4.9 (part 4) — Previous Records in Patient History are now
+    // actionable: the View button and the whole card open the existing
+    // View Previous Record modal (historical-fix.js). Fallback: jump to
+    // the Previous Records tab if the modal hook isn't available.
+    slot.querySelectorAll('[data-prev-view]').forEach(el => {
+      const openPrev = (e) => {
+        e.stopPropagation();
+        const rid = el.getAttribute('data-prev-view');
+        if (typeof window.hrOpenView === 'function') { window.hrOpenView(rid); return; }
+        const navBtn = document.querySelector('[data-tab="historicalTab"]');
+        if (navBtn) navBtn.click();
+      };
+      el.addEventListener('click', openPrev);
+      if (el.tagName === 'ARTICLE') el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPrev(e); }
+      });
+    });
   } catch (ex){
     slot.innerHTML = `Could not load patient history: ${escapeHtml(ex.message || 'unknown error')}`;
   }

@@ -548,6 +548,10 @@
 
   // ---- patient source toggle (Patient Linkage fix) --------------------
   function setPatientSource(source) {
+    // v3.4.9 (part 4) — normalise to a known value: any unexpected value
+    // previously fell through the EXISTING checks below and left the
+    // LEGACY panel visible while the hidden field claimed EXISTING.
+    source = (source === 'LEGACY') ? 'LEGACY' : 'EXISTING';
     $('#hrPatientSource').value = source;
     $('#hrSourceExistingBtn')?.classList.toggle('is-active', source === 'EXISTING');
     $('#hrSourceExistingBtn')?.setAttribute('aria-selected', String(source === 'EXISTING'));
@@ -555,6 +559,20 @@
     $('#hrSourceLegacyBtn')?.setAttribute('aria-selected', String(source === 'LEGACY'));
     $('#hrExistingPatientPanel')?.classList.toggle('hidden', source === 'LEGACY');
     $('#hrLegacyPatientPanel')?.classList.toggle('hidden', source !== 'LEGACY');
+    // Force inline display too — the .hidden class alone can be beaten by
+    // competing display rules, which is how the legacy fields stayed
+    // visible/editable while a NeoKidsPro patient was linked.
+    const exPanel = $('#hrExistingPatientPanel');
+    const lgPanel = $('#hrLegacyPatientPanel');
+    if (exPanel) exPanel.style.display = (source === 'LEGACY') ? 'none' : '';
+    if (lgPanel) lgPanel.style.display = (source === 'LEGACY') ? '' : 'none';
+    // Mutual exclusivity at the control level: #histPatientId and
+    // #hrPatientSource are hidden inputs OUTSIDE the branch panels, so a
+    // per-panel disable pass never reaches them — without this, the legacy
+    // form could still submit a stale linked patientId (and vice versa),
+    // producing conflicting ownership data.
+    const pidEl = $('#histPatientId'); if (pidEl) pidEl.disabled = (source === 'LEGACY');
+    const srcEl = $('#hrPatientSource'); if (srcEl) srcEl.disabled = false;
 
     // Linking-logic fix: mutual exclusivity has to hold at the control
     // level, not just visually. Hiding the inactive panel already kept
@@ -563,10 +581,12 @@
     // hold a value while the "wrong" branch was active. Disabling them
     // makes "only one patient source is active" true of the controls
     // themselves, not just the save payload.
-    $('#hrExistingPatientPanel')?.querySelectorAll('input, button, select, textarea')
-      .forEach(el => { el.disabled = (source === 'LEGACY'); });
-    $('#hrLegacyPatientPanel')?.querySelectorAll('input, button, select, textarea')
-      .forEach(el => { el.disabled = (source !== 'LEGACY'); });
+    const toggleDisabled = (root, disabled) => {
+      if (!root) return;
+      $$('input, button, select, textarea', root).forEach(el => { el.disabled = disabled; });
+    };
+    toggleDisabled(exPanel, source === 'LEGACY');
+    toggleDisabled(lgPanel, source !== 'LEGACY');
   }
 
   function openRecordModal(id) {
@@ -598,6 +618,22 @@
     toggle && toggle.classList.remove('hidden');
     if (id) {
       const rec = state.records.find(r => r.id === id);
+      // v3.4.9 (part 4) — if the list cache doesn't hold this record
+      // (opened straight from Patient History, or the list has paged on),
+      // open with a clean shell and fetch the authoritative record instead
+      // of dropping into a half-filled, wrongly-linked form.
+      if (!rec) {
+        badge && badge.classList.add('hidden');
+        clearForm();
+        setPatientSource('LEGACY');
+        $('#hrRecordDate').value = today();
+        renderPendingFiles();
+        renderExistingAttachments();
+        hideFormError();
+        openModal('hrRecordModal');
+        loadRecordIntoForm(id);
+        return;
+      }
       loadIntoForm(rec);
       if (badge && rec) {
         badge.classList.remove('hidden');
@@ -647,8 +683,13 @@
   function loadIntoForm(rec) {
     if (!rec) return;
     const f = $('#historicalForm');
+    // v3.4.9 (part 4) — tolerate every backend shape (raw Prisma row with
+    // patient_id / snake_case legacy columns, decorated record with patient
+    // + camelCase fields) so the ownership toggle is driven by real data
+    // and never silently defaults to the wrong branch.
+    rec = normalizeRecord(rec);
     $('#histRecordId').value  = rec.id;
-    $('#histPatientId').value = rec.patient?.id || rec.patientId || '';
+    $('#histPatientId').value = (rec.patient && rec.patient.id) || rec.patientId || '';
     const source = rec.patientSource || (rec.patient ? 'EXISTING' : 'LEGACY');
     // Always reset both branches first so switching a record that was
     // previously LEGACY into being edited doesn't leave stale EXISTING
@@ -684,6 +725,51 @@
     $('#hrMedications').value = rec.medications || '';
     state.existingAttachments = rec.attachments || [];
     renderExistingAttachments();
+  }
+
+  // v3.4.9 (part 4) — shape-tolerant record normaliser. Records can arrive
+  // from the list endpoint (decorated, camelCase, patient object included),
+  // from GET /previous-records/:id, or from Patient History payloads. The
+  // previous code trusted one shape only; anything else silently read as
+  // EXISTING-with-no-patient and left BOTH branches editable.
+  function normalizeRecord(rec) {
+    if (!rec) return rec;
+    const patientId   = rec.patientId || rec.patient_id || (rec.patient && rec.patient.id) || null;
+    const patientName = rec.legacyPatientName || rec.legacy_patient_name || null;
+    return Object.assign({}, rec, {
+      patientId,
+      patientSource: rec.patientSource || rec.patient_source || (patientId ? 'EXISTING' : 'LEGACY'),
+      legacyPatientName:     patientName,
+      legacyPatientPhone:    rec.legacyPatientPhone    || rec.legacy_patient_phone    || null,
+      legacyPatientDob:      rec.legacyPatientDob      || rec.legacy_patient_dob      || null,
+      legacyPatientGender:   rec.legacyPatientGender   || rec.legacy_patient_gender   || null,
+      legacyPatientGuardian: rec.legacyPatientGuardian || rec.legacy_patient_guardian || null,
+      legacyPatientNotes:    rec.legacyPatientNotes    || rec.legacy_patient_notes    || null
+    });
+  }
+
+  // Fetch a single record and drive the Edit form from it (used when the
+  // record isn't in the list cache).
+  async function loadRecordIntoForm(id) {
+    try {
+      const r = await api('/doctor/previous-records/' + encodeURIComponent(id));
+      const rec = r && r.record ? r.record : r;
+      if (!rec || !rec.id) throw new Error('Record not found');
+      loadIntoForm(rec);
+      const badge = $('#hrOwnershipBadge');
+      if (badge) {
+        badge.classList.remove('hidden');
+        badge.innerHTML = `<div class="np-callout np-callout--info np-callout--stack" style="margin-bottom:.6rem;">
+          <div>Currently linked to: ${ownershipChip(rec)}</div>
+          <div style="margin-top:.3rem;"><b>${esc(ownerName(rec))}</b>${ownerPhone(rec) ? ' \u00b7 +91 ' + esc(ownerPhone(rec)) : ''}</div>
+          <div class="np-mut" style="margin-top:.35rem;font-size:.78rem;">Use the options below to link a different patient, unlink and enter a legacy patient, or edit these details.</div>
+        </div>`;
+      }
+      const idx = state.records.findIndex(x => x.id === rec.id);
+      if (idx >= 0) state.records[idx] = Object.assign({}, state.records[idx], rec);
+    } catch (ex) {
+      showFormError(ex && ex.message || 'Could not load this record');
+    }
   }
 
   // Patient Linkage fix — shared renderer for the "selected existing
@@ -861,7 +947,11 @@
       const menu = b.parentElement.querySelector('[data-more-menu]');
       const wasOpen = !menu.classList.contains('hidden');
       closeAllAttMenus();
-      if (!wasOpen) { menu.classList.remove('hidden'); b.setAttribute('aria-expanded', 'true'); }
+      if (!wasOpen) {
+        menu.classList.remove('hidden');
+        b.setAttribute('aria-expanded', 'true');
+        positionAttMenu(b, menu);
+      }
     }));
     $$('[data-att-rename]', wrap).forEach(b => b.addEventListener('click', () => {
       closeAllAttMenus();
@@ -877,11 +967,46 @@
     $$('[data-edit-save]', wrap).forEach(b => b.addEventListener('click', () => saveAttachmentMeta(b.getAttribute('data-edit-save'))));
   }
 
+  // v3.4.9 (part 4) — fixed-position popover for the three-dot attachment
+  // menu. The menu used to be absolutely positioned INSIDE the scrolling
+  // modal body: near the bottom of the modal it clipped, forced the modal
+  // taller, and left a slab of white space. Now the open menu is moved to
+  // <body> and positioned with viewport coordinates — it renders above the
+  // modal, opens UPWARD when there isn't room below the trigger, and never
+  // affects modal height or scroll. It is moved back into its original
+  // container when closed so re-renders keep working.
+  function positionAttMenu(btn, menu) {
+    const holder = btn.closest('.hr-att__more') || btn.parentElement;
+    if (menu.__holder === undefined) menu.__holder = holder;
+    if (menu.parentElement !== document.body) document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth || 150;
+    const mh = menu.offsetHeight || 140;
+    let left = r.right - mw;
+    if (left < 8) left = 8;
+    if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+    let top = r.bottom + 6;
+    if (top + mh > window.innerHeight - 8) {
+      // not enough room below — open upward
+      top = r.top - mh - 6;
+      if (top < 8) top = Math.max(8, window.innerHeight - mh - 8);
+    }
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
+
   function closeAllAttMenus() {
-    $$('[data-more-menu]').forEach(m => m.classList.add('hidden'));
+    $$('[data-more-menu]').forEach(m => {
+      if (m.classList.contains('hidden')) return;
+      m.classList.add('hidden');
+      if (m.parentElement === document.body && m.__holder) m.__holder.appendChild(m);
+      m.style.left = ''; m.style.top = '';
+    });
     $$('[data-att-more]').forEach(b => b.setAttribute('aria-expanded', 'false'));
   }
   document.addEventListener('click', closeAllAttMenus);
+  window.addEventListener('scroll', closeAllAttMenus, true);
+  window.addEventListener('resize', closeAllAttMenus);
 
   async function saveAttachmentMeta(attId) {
     if (!state.editingId) return;
@@ -1186,6 +1311,11 @@
   //  BACK-COMPAT SHIMS  \u2014 keep external callers (share/pdf helpers used
   //  elsewhere in the codebase) working exactly as before.
   // =====================================================================
+  // v3.4.9 (part 4) — Patient History click-through: app.js opens the
+  // existing View Previous Record modal through this hook so doctors can
+  // review full record details, attachments and metadata from history.
+  window.hrOpenView = function (id) { if (id) openViewModal(id); };
+
   window.hrRenderAttachments = function (container, record) {
     if (!container) return;
     const atts = (record && record.attachments) || [];
