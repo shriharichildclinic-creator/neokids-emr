@@ -1993,8 +1993,20 @@ html[data-theme="dark"] .np-modal pre{
 .hr-modal__head{
   position:sticky; top:0; background:#fff; z-index:2;
   border-bottom:1px solid var(--np-border, #e5e7eb);
-  display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem;
+  display:flex; align-items:flex-start; justify-content:space-between;
+  gap:.6rem; padding:.9rem 1.05rem;
+  /* v3.4.10 (part 5) mobile header fix — the sticky head sat flush against
+     the top of the viewport with the same 1rem 1.25rem padding as desktop,
+     which on narrow phones squeezed the title + subtitle against the close
+     button and clipped the last few characters. Slightly tighter padding
+     plus explicit min-height keeps the two lines of text readable at every
+     width and never lets the close button crowd them. */
+  min-height:56px;
 }
+.hr-modal__head > div:first-child{ min-width:0; flex:1 1 auto; }
+.hr-modal__head .np-modal__title{ overflow-wrap:anywhere; word-break:break-word; line-height:1.25; }
+.hr-modal__head .np-modal__subtitle{ margin-top:.2rem; overflow-wrap:anywhere; word-break:break-word; line-height:1.35; }
+.hr-modal__head .np-modal__close{ flex-shrink:0; align-self:flex-start; margin-top:-.15rem; }
 .hr-modal__body{ overflow-y:auto; padding:1rem 1.15rem; flex:1 1 auto; }
 .hr-modal__foot{
   position:sticky; bottom:0; background:#fff; z-index:2;
@@ -2006,8 +2018,61 @@ html[data-theme="dark"] .np-modal pre{
 .hr-picker{ position:relative; display:flex; gap:.4rem; }
 /* Patient Linkage fix — Existing/Legacy source toggle sits directly
    above the picker; reuses the existing .np-seg segmented-control look
-   used elsewhere in the app so it matches current styling exactly. */
-.hr-source-toggle{ margin-bottom:.6rem; }
+   used elsewhere in the app so it matches current styling exactly.
+
+   v3.4.10 (part 5) mobile fix — the segmented control was inline-flex
+   with white-space:nowrap on the buttons, so at every viewport below
+   ~820px the two long labels ("Existing NeoKidsPro Patient" and
+   "Legacy / Historical Patient") pushed each other out of the container
+   and visually overlapped. Force display:flex + width:100% at every
+   width, let each button shrink evenly, and let the label wrap onto two
+   lines rather than truncate. A shorter alternate label is provided
+   inline via .hr-seg__short and swapped in below the mobile breakpoint
+   so the labels never overlap even on the smallest phones. */
+.hr-source-toggle{ margin-bottom:.6rem; display:flex; width:100%; }
+/* Patient Linkage fix (part 5) — .hr-panel--off is set on whichever
+   patient-source panel is currently inactive. It layers CSS on top of
+   the DOM-level `disabled` + `readonly` + `aria-hidden` + `inert`
+   attributes set from JS so the inactive panel is unreachable through
+   every interaction path: no clicks, no focus, no autofill visibility,
+   no text selection. Doctors were somehow still typing into the Legacy
+   fields while a NeoKidsPro patient was linked (report screenshots),
+   which means at least one of the previous mechanisms was being
+   bypassed — belt + braces here forecloses every remaining path. */
+.hr-panel--off{
+  pointer-events:none !important;
+  user-select:none;
+  opacity:.55;
+  filter:grayscale(.35);
+}
+.hr-panel--off input,
+.hr-panel--off select,
+.hr-panel--off textarea,
+.hr-panel--off button{
+  pointer-events:none !important;
+  background:var(--np-surface-2, #f6f8fb) !important;
+  color:var(--np-mut, #6b7280) !important;
+  cursor:not-allowed !important;
+}
+.hr-source-toggle .np-seg__btn{
+  flex:1 1 0; min-width:0;
+  white-space:normal;
+  line-height:1.2;
+  padding:.55rem .6rem;
+  text-align:center;
+  overflow-wrap:break-word;
+  word-break:break-word;
+}
+.hr-source-toggle .np-seg__btn.is-active{
+  outline:2px solid var(--np-primary-600, var(--np-primary, #2563eb));
+  outline-offset:-2px;
+}
+.hr-seg__short{ display:none; }
+@media (max-width:520px){
+  .hr-seg__long{ display:none; }
+  .hr-seg__short{ display:inline; }
+  .hr-source-toggle .np-seg__btn{ white-space:nowrap; padding:.55rem .5rem; font-size:.82rem; }
+}
 /* Patient Linkage fix — .np-callout is display:flex (built for an
    icon + one text block sitting side by side). The "currently linked
    to" badge and the legacy-patient info box each stack several lines
@@ -2093,11 +2158,23 @@ html[data-theme="dark"] .np-modal pre{
    on mobile (was 6 buttons per attachment, now 2 + 1). */
 .hr-att__more{ position:relative; }
 .hr-att__moreBtn{ font-size:1.1rem; line-height:1; padding:.35rem .55rem; }
+/* v3.4.10 (part 5) three-dot menu fix — in-flow the menu is
+   position:absolute anchored to the trigger; when the menu has to open
+   above a scrolling modal body, historical-fix.js portals it to <body>
+   and adds .is-portaled which switches to position:fixed with viewport
+   coordinates set in JS. Without this, the portaled menu was still
+   position:absolute (i.e. anchored to <html>) with a `right:0` from the
+   original rule fighting the JS `left` value — so it either painted in
+   the wrong place or shifted every time the page scrolled. */
 .hr-att__moreMenu{
   position:absolute; right:0; top:calc(100% + .3rem); z-index:20;
   background:#fff; border:1px solid var(--np-border, #e5e7eb); border-radius:10px;
   box-shadow:0 8px 24px rgba(15,23,42,.12); min-width:9rem; padding:.3rem;
   display:flex; flex-direction:column; gap:.1rem;
+}
+.hr-att__moreMenu.is-portaled{
+  position:fixed; right:auto; top:auto;
+  z-index:1400; /* above .np-modal (1300) */
 }
 .hr-att__moreMenu button{
   border:0; background:transparent; text-align:left; padding:.5rem .6rem;
@@ -2110,8 +2187,26 @@ html[data-theme="dark"] .np-modal pre{
 [data-theme="dark"] .hr-att__moreMenu button{ color:#e5e7eb; }
 [data-theme="dark"] .hr-att__moreMenu button:hover{ background:rgba(255,255,255,.06); }
 
-/* Attachment preview modal (Preview action — PDF/image inline) */
+/* Attachment preview modal (Preview action — PDF/image inline).
+
+   v3.4.10 (part 5) preview UX — header now carries a proper "← Back"
+   affordance in addition to the corner ✕, so on mobile (where the
+   preview is full-screen) users have an obvious way back to the parent
+   Previous Record modal. Both buttons close only the preview modal (the
+   preview + Escape stack fix from part 4 keeps the parent underneath
+   open and in its previous state), and Android's hardware/browser back
+   button is intercepted via a pushState in historical-fix.js so it also
+   returns to the Previous Record modal instead of navigating away. */
 .hr-preview__panel{ width:min(92vw, 760px); max-height:min(92vh, 820px); display:flex; flex-direction:column; }
+.hr-preview__head{
+  display:flex; align-items:center; gap:.6rem;
+}
+.hr-preview__headText{ min-width:0; flex:1 1 auto; }
+.hr-preview__back{
+  display:inline-flex; align-items:center; gap:.3rem; flex-shrink:0;
+  padding:.4rem .6rem;
+}
+.hr-preview__back svg{ display:block; }
 .hr-preview__body{
   display:flex; align-items:center; justify-content:center;
   background:var(--np-surface-2, #f6f8fb); min-height:320px; padding:.75rem;
@@ -2120,7 +2215,13 @@ html[data-theme="dark"] .np-modal pre{
 .hr-preview__frame{ width:100%; height:70vh; border:0; border-radius:8px; background:#fff; }
 @media (max-width:640px){
   .hr-preview__panel{ width:100vw; max-height:100vh; height:100vh; border-radius:0; margin:0; }
-  .hr-preview__frame, .hr-preview__img{ height:60vh; }
+  .hr-preview__frame, .hr-preview__img{ height:calc(100vh - 140px); max-height:none; }
+  .hr-preview__back span{ font-size:.9rem; }
+  /* Preview header on mobile: give it a touch more room and pin the
+     title/subtitle between Back and the ✕ so nothing wraps into the
+     corner buttons. */
+  .hr-preview__head{ padding:.75rem .9rem; }
+  .hr-preview__headText .np-modal__title{ font-size:.98rem; }
 }
 
 /* View modal */
@@ -2207,10 +2308,21 @@ html[data-theme="dark"] .np-modal pre{
     max-height:100vh; height:100vh; width:100vw;
     max-width:100vw; border-radius:0; margin:0;
   }
-  .hr-modal__head, .hr-modal__foot{ border-radius:0; }
-  .hr-modal__foot{ flex-wrap:wrap; }
+  .hr-modal__head{
+    border-radius:0;
+    padding:.75rem .85rem;
+    gap:.5rem;
+    min-height:52px;
+  }
+  .hr-modal__head .np-modal__title{ font-size:1rem; }
+  .hr-modal__head .np-modal__subtitle{ font-size:.78rem; }
+  .hr-modal__head .np-modal__close{ width:32px; height:32px; }
+  .hr-modal__foot{ border-radius:0; flex-wrap:wrap; padding:.65rem .85rem; }
   .hr-modal__foot .np-btn{ flex:1 1 auto; justify-content:center; }
   .hr-cell__actions{ text-align:left; }
+  /* Legacy patient fields grid — collapse to single column so long
+     labels/placeholders don't cause horizontal overflow. */
+  .hr-modal__body .np-grid-2{ grid-template-columns:1fr; }
 }
 
 /* Skeleton loaders — replaces plain "Loading…" text states */

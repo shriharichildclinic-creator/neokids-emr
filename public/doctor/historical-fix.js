@@ -171,6 +171,22 @@
     wireModal();
     wireResponsive();
 
+    // v3.4.10 (part 5) — hardware/browser back button integration for
+    // the attachment preview. If the preview is open when the back
+    // event fires, we close ONLY the preview (leaving the parent
+    // Previous Record / View modal in place, same as the header ✕ and
+    // the header Back button) and swallow the navigation.
+    window.addEventListener('popstate', () => {
+      const previewOpen = !document.getElementById('hrAttPreviewModal')?.classList.contains('hidden');
+      if (previewOpen) {
+        // pushState → popstate has already popped the history entry, so
+        // just clear our flag and close the modal directly (don't call
+        // history.back() again from closeModal).
+        state.previewPushed = false;
+        closeModal('hrAttPreviewModal');
+      }
+    });
+
     // Kick off the initial list load and permission check so the tab is
     // ready before the doctor clicks it. Permission gate lives in the
     // main app.js already.
@@ -479,8 +495,19 @@
     }
 
     // Patient source toggle (Existing NeoKidsPro Patient <-> Legacy / Historical Patient)
+    // These are user-driven switches, so no {initial:true} — which is
+    // exactly what triggers the "clear the leaving branch + refresh the
+    // ownership badge" behaviour in setPatientSource().
     $('#hrSourceExistingBtn')?.addEventListener('click', () => setPatientSource('EXISTING'));
     $('#hrSourceLegacyBtn')?.addEventListener('click', () => setPatientSource('LEGACY'));
+
+    // Keep the ownership badge live-updated as the doctor types a legacy
+    // patient name (previously it only refreshed on toggle-switch, so the
+    // header still said "Enter the historical patient’s details below"
+    // after the name was filled in).
+    $('#hrLegacyName')?.addEventListener('input', debounce(() => {
+      if ($('#hrPatientSource')?.value === 'LEGACY') refreshOwnershipBadge();
+    }, 250));
 
     // Drop zone
     const drop = $('#hrDropZone');
@@ -532,6 +559,14 @@
     m.classList.add('hidden');
     state.modalStack = (state.modalStack || []).filter(x => x !== id);
     if (!state.modalStack.length) document.body.classList.remove('np-modal-open');
+    // If we're closing the attachment preview and had pushed a history
+    // entry when it opened, pop it back off so the URL/history stack
+    // stays clean. Guarded so we don't recursively re-enter via the
+    // popstate listener — state.previewPushed is cleared first.
+    if (id === 'hrAttPreviewModal' && state.previewPushed) {
+      state.previewPushed = false;
+      try { if ((history.state && history.state.hrPreview)) history.back(); } catch (_) {}
+    }
   }
   function openModal(id) {
     const m = document.getElementById(id);
@@ -547,46 +582,164 @@
   }
 
   // ---- patient source toggle (Patient Linkage fix) --------------------
-  function setPatientSource(source) {
-    // v3.4.9 (part 4) — normalise to a known value: any unexpected value
-    // previously fell through the EXISTING checks below and left the
-    // LEGACY panel visible while the hidden field claimed EXISTING.
+  //
+  // v3.4.10 (part 5) — the highest-priority defect the QA report keeps
+  // hitting is that a doctor could have a Linked NeoKidsPro Patient AND
+  // type into the Legacy fields at the same time. The previous version
+  // of setPatientSource() correctly hid + disabled the inactive panel,
+  // but three real leaks remained:
+  //
+  //   (a) `disabled` only affects text inputs / selects / textareas / buttons.
+  //       Contenteditable elements, wrapping <label>s that forward clicks,
+  //       and (crucially) autofill events still poked values into the
+  //       hidden panel's fields. We now also add `readonly`, `tabindex=-1`,
+  //       `aria-hidden=true`, `inert` (where supported) AND `pointer-events:
+  //       none` on the whole inactive panel so it is unreachable by any
+  //       keyboard, touch, mouse or accessibility interaction path.
+  //
+  //   (b) Switching to LEGACY did not clear the ownership state — the
+  //       ownership badge kept saying "Linked NeoKidsPro Patient", the
+  //       hidden #histPatientId still held a real patient id, and the
+  //       search input still held a name. So even though the legacy
+  //       fields WERE editable, the doctor was staring at a form claiming
+  //       to link a NeoKidsPro patient while entering a legacy patient.
+  //       That's the conflicting ownership data the report describes.
+  //       Switching source now fully resets whichever branch is being
+  //       LEFT behind (patient selection cleared when moving to LEGACY,
+  //       legacy fields wiped when moving to EXISTING) and refreshes the
+  //       ownership badge so it always agrees with the toggle.
+  //
+  //   (c) The inactive panel's DOM values still made it into submit
+  //       payloads through direct .value reads in submitRecord(). We
+  //       already skipped those keys, but a safety pass at the toggle
+  //       level (explicitly clearing hidden inputs on switch) means even
+  //       a stray future call site cannot leak the wrong-branch data.
+  //
+  // The result: at any given moment exactly one branch is interactive,
+  // exactly one branch's fields hold data, and the visible ownership
+  // badge, the hidden #hrPatientSource field, and the record's saved
+  // linkage are guaranteed to agree.
+  function setPatientSource(source, opts) {
     source = (source === 'LEGACY') ? 'LEGACY' : 'EXISTING';
+    const previous = ($('#hrPatientSource')?.value === 'LEGACY') ? 'LEGACY' : 'EXISTING';
+    const initial  = !!(opts && opts.initial); // internal call from loadIntoForm/openRecordModal
+
     $('#hrPatientSource').value = source;
     $('#hrSourceExistingBtn')?.classList.toggle('is-active', source === 'EXISTING');
     $('#hrSourceExistingBtn')?.setAttribute('aria-selected', String(source === 'EXISTING'));
+    $('#hrSourceExistingBtn')?.setAttribute('tabindex', source === 'EXISTING' ? '0' : '-1');
     $('#hrSourceLegacyBtn')?.classList.toggle('is-active', source === 'LEGACY');
     $('#hrSourceLegacyBtn')?.setAttribute('aria-selected', String(source === 'LEGACY'));
-    $('#hrExistingPatientPanel')?.classList.toggle('hidden', source === 'LEGACY');
-    $('#hrLegacyPatientPanel')?.classList.toggle('hidden', source !== 'LEGACY');
-    // Force inline display too — the .hidden class alone can be beaten by
-    // competing display rules, which is how the legacy fields stayed
-    // visible/editable while a NeoKidsPro patient was linked.
+    $('#hrSourceLegacyBtn')?.setAttribute('tabindex', source === 'LEGACY' ? '0' : '-1');
+
     const exPanel = $('#hrExistingPatientPanel');
     const lgPanel = $('#hrLegacyPatientPanel');
-    if (exPanel) exPanel.style.display = (source === 'LEGACY') ? 'none' : '';
-    if (lgPanel) lgPanel.style.display = (source === 'LEGACY') ? '' : 'none';
-    // Mutual exclusivity at the control level: #histPatientId and
-    // #hrPatientSource are hidden inputs OUTSIDE the branch panels, so a
-    // per-panel disable pass never reaches them — without this, the legacy
-    // form could still submit a stale linked patientId (and vice versa),
-    // producing conflicting ownership data.
+
+    // Panel visibility — both a .hidden class AND inline display so no
+    // stray display rule can override us. Also add .hr-panel--off which
+    // is a hard "unreachable" style: pointer-events:none, opacity dim,
+    // no text selection, tabindex=-1 on descendants (handled below).
+    if (exPanel) {
+      exPanel.classList.toggle('hidden', source === 'LEGACY');
+      exPanel.style.display = (source === 'LEGACY') ? 'none' : '';
+      exPanel.classList.toggle('hr-panel--off', source === 'LEGACY');
+      applyInertToPanel(exPanel, source === 'LEGACY');
+    }
+    if (lgPanel) {
+      lgPanel.classList.toggle('hidden', source !== 'LEGACY');
+      lgPanel.style.display = (source === 'LEGACY') ? '' : 'none';
+      lgPanel.classList.toggle('hr-panel--off', source !== 'LEGACY');
+      applyInertToPanel(lgPanel, source !== 'LEGACY');
+    }
+
+    // Hidden inputs OUTSIDE the branch panels — mutual exclusivity at
+    // the payload level too, regardless of what submitRecord() does with
+    // them.
     const pidEl = $('#histPatientId'); if (pidEl) pidEl.disabled = (source === 'LEGACY');
     const srcEl = $('#hrPatientSource'); if (srcEl) srcEl.disabled = false;
 
-    // Linking-logic fix: mutual exclusivity has to hold at the control
-    // level, not just visually. Hiding the inactive panel already kept
-    // its fields out of the submitted FormData, but the inputs stayed
-    // enabled underneath — reachable by tab order/autofill and able to
-    // hold a value while the "wrong" branch was active. Disabling them
-    // makes "only one patient source is active" true of the controls
-    // themselves, not just the save payload.
-    const toggleDisabled = (root, disabled) => {
-      if (!root) return;
-      $$('input, button, select, textarea', root).forEach(el => { el.disabled = disabled; });
-    };
-    toggleDisabled(exPanel, source === 'LEGACY');
-    toggleDisabled(lgPanel, source !== 'LEGACY');
+    // On a REAL source change (not the initial pre-fill), reset the
+    // branch we're leaving so the two states can never coexist. Skipped
+    // on initial load so pre-filling an EXISTING record from the server
+    // doesn't clobber its legacy fallback fields, and vice versa.
+    if (!initial && previous !== source) {
+      if (source === 'LEGACY') {
+        // Leaving EXISTING → clear any linked NeoKidsPro patient.
+        state.selectedPatient = null;
+        if (pidEl) { pidEl.disabled = true; pidEl.value = ''; }
+        const ps = $('#histPatientSearch'); if (ps) ps.value = '';
+        $('#hrSelectedPatient')?.classList.add('hidden');
+        const sp = $('#hrSelectedPatient'); if (sp) sp.innerHTML = '';
+        $('#hrPatientResults')?.classList.add('hidden');
+        const pr = $('#hrPatientResults'); if (pr) pr.innerHTML = '';
+      } else {
+        // Leaving LEGACY → clear the manually-entered legacy fields.
+        ['hrLegacyName','hrLegacyPhone','hrLegacyDob','hrLegacyGender','hrLegacyGuardian','hrLegacyNotes']
+          .forEach(id2 => { const el = $('#' + id2); if (el) el.value = ''; });
+      }
+      // Ownership badge must always mirror the current toggle state —
+      // stale "Linked NeoKidsPro Patient" text after switching to Legacy
+      // is exactly the "conflicting ownership data" the report calls out.
+      refreshOwnershipBadge();
+    }
+  }
+
+  // Marks a whole panel as unreachable to keyboard, touch, autofill and
+  // AT. This is what makes the inactive branch genuinely non-functional
+  // (rather than merely invisible). `inert` isn't universal yet, so we
+  // combine every mechanism that IS supported.
+  function applyInertToPanel(root, off) {
+    if (!root) return;
+    if (off) {
+      root.setAttribute('aria-hidden', 'true');
+      try { root.inert = true; } catch (_) { /* older browsers */ }
+    } else {
+      root.removeAttribute('aria-hidden');
+      try { root.inert = false; } catch (_) { /* older browsers */ }
+    }
+    $$('input, button, select, textarea, a', root).forEach(el => {
+      el.disabled = !!off;
+      if (off) {
+        el.setAttribute('tabindex', '-1');
+        // readonly on text-ish inputs blocks typing/paste even if some
+        // future style rule accidentally re-enables the field.
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+          el.setAttribute('readonly', 'readonly');
+        }
+      } else {
+        el.removeAttribute('tabindex');
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+          el.removeAttribute('readonly');
+        }
+      }
+    });
+  }
+
+  // Keeps the "Currently linked to" ownership summary in sync with the
+  // current toggle state / selected patient. Called after switching
+  // sources and after picking a patient / clearing the selection.
+  function refreshOwnershipBadge() {
+    const badge = $('#hrOwnershipBadge');
+    if (!badge) return;
+    const source = ($('#hrPatientSource')?.value === 'LEGACY') ? 'LEGACY' : 'EXISTING';
+    if (source === 'EXISTING') {
+      const p = state.selectedPatient;
+      if (!p) { badge.classList.add('hidden'); badge.innerHTML = ''; return; }
+      badge.classList.remove('hidden');
+      badge.innerHTML = `<div class="np-callout np-callout--info np-callout--stack" style="margin-bottom:.6rem;">
+        <div>Currently linked to: <span class="hr-chip hr-chip--linked">Linked NeoKidsPro Patient</span></div>
+        <div style="margin-top:.3rem;"><b>${esc(p.name || '')}</b>${p.phone ? ' \u00b7 +91 ' + esc(p.phone) : ''}</div>
+        <div class="np-mut" style="margin-top:.35rem;font-size:.78rem;">Switch to “Legacy / Historical Patient” to unlink and enter details manually, or pick a different patient to re-link.</div>
+      </div>`;
+    } else {
+      const nm = ($('#hrLegacyName')?.value || '').trim();
+      badge.classList.remove('hidden');
+      badge.innerHTML = `<div class="np-callout np-callout--info np-callout--stack" style="margin-bottom:.6rem;">
+        <div>Currently linked to: <span class="hr-chip hr-chip--legacy">Legacy / Historical Patient</span></div>
+        ${nm ? `<div style="margin-top:.3rem;"><b>${esc(nm)}</b></div>` : '<div class="np-mut" style="margin-top:.3rem;font-size:.82rem;">Enter the historical patient\u2019s details below.</div>'}
+        <div class="np-mut" style="margin-top:.35rem;font-size:.78rem;">This record will not be attached to any patient in your directory. Switch to “Existing NeoKidsPro Patient” to link it to one.</div>
+      </div>`;
+    }
   }
 
   function openRecordModal(id) {
@@ -625,7 +778,7 @@
       if (!rec) {
         badge && badge.classList.add('hidden');
         clearForm();
-        setPatientSource('LEGACY');
+        setPatientSource('LEGACY', { initial: true });
         $('#hrRecordDate').value = today();
         renderPendingFiles();
         renderExistingAttachments();
@@ -635,18 +788,14 @@
         return;
       }
       loadIntoForm(rec);
-      if (badge && rec) {
-        badge.classList.remove('hidden');
-        badge.innerHTML = `<div class="np-callout np-callout--info np-callout--stack" style="margin-bottom:.6rem;">
-          <div>Currently linked to: ${ownershipChip(rec)}</div>
-          <div style="margin-top:.3rem;"><b>${esc(ownerName(rec))}</b>${ownerPhone(rec) ? ' \u00b7 +91 ' + esc(ownerPhone(rec)) : ''}</div>
-          <div class="np-mut" style="margin-top:.35rem;font-size:.78rem;">Use the options below to link a different patient, unlink and enter a legacy patient, or edit these details.</div>
-        </div>`;
-      }
+      // refreshOwnershipBadge() runs at the end of loadIntoForm via
+      // setPatientSource, so the badge now always mirrors the toggle
+      // rather than being computed once from `rec` and going stale on
+      // switch.
     } else {
       badge && badge.classList.add('hidden');
       clearForm();
-      setPatientSource('EXISTING');
+      setPatientSource('EXISTING', { initial: true });
       $('#hrRecordDate').value = today();
     }
     renderPendingFiles();
@@ -715,7 +864,11 @@
     // the hidden #hrPatientSource field, and the tab button states all
     // agree — this is the same function the toggle buttons themselves
     // call, so editing behaves identically to picking a branch fresh.
-    setPatientSource(source);
+    // opts.initial=true so the pre-fill doesn't wipe the branch we just
+    // populated (setPatientSource clears the *leaving* branch on real
+    // switches).
+    setPatientSource(source, { initial: true });
+    refreshOwnershipBadge();
     f.recordDate.value  = rec.recordDate ? String(rec.recordDate).slice(0, 10) : today();
     $('#hrRecordType').value = rec.recordType || 'CONSULTATION';
     $('#hrTitle').value       = rec.title || '';
@@ -755,16 +908,7 @@
       const r = await api('/doctor/previous-records/' + encodeURIComponent(id));
       const rec = r && r.record ? r.record : r;
       if (!rec || !rec.id) throw new Error('Record not found');
-      loadIntoForm(rec);
-      const badge = $('#hrOwnershipBadge');
-      if (badge) {
-        badge.classList.remove('hidden');
-        badge.innerHTML = `<div class="np-callout np-callout--info np-callout--stack" style="margin-bottom:.6rem;">
-          <div>Currently linked to: ${ownershipChip(rec)}</div>
-          <div style="margin-top:.3rem;"><b>${esc(ownerName(rec))}</b>${ownerPhone(rec) ? ' \u00b7 +91 ' + esc(ownerPhone(rec)) : ''}</div>
-          <div class="np-mut" style="margin-top:.35rem;font-size:.78rem;">Use the options below to link a different patient, unlink and enter a legacy patient, or edit these details.</div>
-        </div>`;
-      }
+      loadIntoForm(rec); // this now also calls refreshOwnershipBadge()
       const idx = state.records.findIndex(x => x.id === rec.id);
       if (idx >= 0) state.records[idx] = Object.assign({}, state.records[idx], rec);
     } catch (ex) {
@@ -792,6 +936,10 @@
       sp.innerHTML = '';
       const input = $('#histPatientSearch');
       if (input) { input.value = ''; input.focus(); }
+      // Clearing the linked patient must also wipe the ownership badge —
+      // otherwise it kept insisting the record was "Linked NeoKidsPro
+      // Patient" while there was no patientId in the form.
+      refreshOwnershipBadge();
     });
   }
 
@@ -820,6 +968,10 @@
         renderSelectedPatientCard(p);
         box.classList.add('hidden');
         $('#histPatientSearch').value = p.name;
+        // Patient Linkage fix (part 5) — picking a patient must update the
+        // "Currently linked to" badge immediately so the doctor doesn't
+        // see a stale label from before the pick.
+        refreshOwnershipBadge();
       }));
     } catch (ex) {
       box.innerHTML = '<div class="np-error">' + esc(ex && ex.message || 'Search failed') + '</div>';
@@ -944,14 +1096,22 @@
     $$('[data-att-down]', wrap).forEach(b => b.addEventListener('click', () => moveAttachment(b.getAttribute('data-att-down'), 1)));
     $$('[data-att-more]', wrap).forEach(b => b.addEventListener('click', (e) => {
       e.stopPropagation();
-      const menu = b.parentElement.querySelector('[data-more-menu]');
-      const wasOpen = !menu.classList.contains('hidden');
+      // v3.4.10 (part 5) three-dot menu fix — previously we called
+      // `b.parentElement.querySelector('[data-more-menu]')`, but once the
+      // menu had been portaled to <body> once and closed, it was put
+      // back into its holder correctly. However, if the row was
+      // re-rendered between opens (e.g. after a metadata save), the
+      // NEW row's holder had a fresh menu while the OLD portaled menu
+      // could still be sitting on <body> unresolved. Look up the menu
+      // via the holder ref every time and, defensively, close any
+      // orphaned portaled menus first.
       closeAllAttMenus();
-      if (!wasOpen) {
-        menu.classList.remove('hidden');
-        b.setAttribute('aria-expanded', 'true');
-        positionAttMenu(b, menu);
-      }
+      const holder = b.closest('.hr-att__more');
+      const menu = holder && holder.querySelector('[data-more-menu]');
+      if (!menu) return;
+      menu.classList.remove('hidden');
+      b.setAttribute('aria-expanded', 'true');
+      positionAttMenu(b, menu);
     }));
     $$('[data-att-rename]', wrap).forEach(b => b.addEventListener('click', () => {
       closeAllAttMenus();
@@ -977,30 +1137,51 @@
   // container when closed so re-renders keep working.
   function positionAttMenu(btn, menu) {
     const holder = btn.closest('.hr-att__more') || btn.parentElement;
-    if (menu.__holder === undefined) menu.__holder = holder;
+    // Remember the holder so we can move the menu back into the row on
+    // close (keeps subsequent re-renders finding it via querySelector).
+    menu.__holder = holder;
     if (menu.parentElement !== document.body) document.body.appendChild(menu);
+    // .is-portaled switches to position:fixed with viewport coords — the
+    // in-flow default (position:absolute + right:0) was fighting our JS
+    // left/top values and shifting with page scroll.
+    menu.classList.add('is-portaled');
+    // Measure with hidden already removed but style values reset so a
+    // previous position doesn't skew width/height calculations.
+    menu.style.left = '0px';
+    menu.style.top  = '0px';
     const r = btn.getBoundingClientRect();
-    const mw = menu.offsetWidth || 150;
+    const mw = menu.offsetWidth || 160;
     const mh = menu.offsetHeight || 140;
     let left = r.right - mw;
     if (left < 8) left = 8;
     if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
     let top = r.bottom + 6;
     if (top + mh > window.innerHeight - 8) {
-      // not enough room below — open upward
       top = r.top - mh - 6;
       if (top < 8) top = Math.max(8, window.innerHeight - mh - 8);
     }
     menu.style.left = left + 'px';
-    menu.style.top = top + 'px';
+    menu.style.top  = top + 'px';
   }
 
   function closeAllAttMenus() {
     $$('[data-more-menu]').forEach(m => {
-      if (m.classList.contains('hidden')) return;
+      const wasOpen = !m.classList.contains('hidden');
       m.classList.add('hidden');
-      if (m.parentElement === document.body && m.__holder) m.__holder.appendChild(m);
+      m.classList.remove('is-portaled');
+      // Move back into the original holder if we portaled it, so future
+      // re-renders can still find it via `holder.querySelector`. If the
+      // holder has been removed from the DOM (row re-rendered), drop
+      // the portaled menu entirely so it doesn't stack on <body>.
+      if (m.parentElement === document.body) {
+        if (m.__holder && m.__holder.isConnected) {
+          m.__holder.appendChild(m);
+        } else {
+          m.parentElement.removeChild(m);
+        }
+      }
       m.style.left = ''; m.style.top = '';
+      if (wasOpen) { /* no-op, hook for future analytics */ }
     });
     $$('[data-att-more]').forEach(b => b.setAttribute('aria-expanded', 'false'));
   }
@@ -1045,6 +1226,13 @@
   }
 
   // ---- attachment preview modal ---------------------------------------
+  // v3.4.10 (part 5) — preview now integrates with browser history so
+  // the Android/browser back button returns to the parent Previous
+  // Record modal instead of navigating the whole page away. Combined
+  // with the explicit "← Back" button in the header (see index.html) and
+  // the pre-existing per-modal close stack, the doctor now has three
+  // consistent ways back: hardware back, header Back, header ✕ — all
+  // of them land on the parent modal in the same state.
   function openAttachmentPreview(att) {
     const body = $('#hrAttPreviewBody');
     const isImg = att.mimeType && att.mimeType.startsWith('image/');
@@ -1060,6 +1248,13 @@
     $('#hrAttPreviewSub').textContent = [att.attachmentType, att.originalName].filter(Boolean).join(' \u00b7 ');
     $('#hrAttPreviewDownload').href = att.downloadUrl || '#';
     openModal('hrAttPreviewModal');
+    // Push a history entry so a hardware Back press pops the preview
+    // instead of leaving the page. Handled by the popstate listener
+    // installed once at mount time.
+    try {
+      history.pushState({ hrPreview: true }, '', location.href);
+      state.previewPushed = true;
+    } catch (_) { /* private mode / non-browser env — safe to ignore */ }
   }
 
   async function deleteExistingAttachment(attId) {
