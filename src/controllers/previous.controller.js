@@ -149,9 +149,19 @@ function notFound(){ const e = new Error('Historical record not found'); e.statu
 function unlinkQuiet(rel){ try { const p = path.join(UP_DIR, rel || ''); if (rel && fs.existsSync(p)) fs.unlinkSync(p); } catch(_){} }
 
 // GET /doctor/patients/:patientId/previous-records
+//
+// SECURITY FIX (Patient Linking audit): this used to fetch every
+// PreviousRecord for the patient with no doctorId filter at all, so a
+// doctor viewing a shared patient's timeline saw every OTHER doctor's
+// previous-record notes for that patient too (clinical notes, legacy
+// patient details, attachments). previousRecord.doctorId scopes
+// authorship, not the patient — the patient directory is intentionally
+// shared clinic-wide (see doctor.controller.js#searchPatients), but each
+// doctor's previous-record entries are private to that doctor, exactly
+// like patientHistory() already enforces for appointments/prescriptions.
 exports.listForPatient = asyncH(async (req, res) => {
   const rows = await prisma.previousRecord.findMany({
-    where: { patientId: req.params.patientId, deletedAt: null },
+    where: { patientId: req.params.patientId, doctorId: req.user.id, deletedAt: null },
     orderBy: [{ recordDate: 'desc' }, { createdAt: 'desc' }], include
   });
   res.json({ success: true, records: rows.map(r => svc.decorateRecord(req, r)) });
@@ -216,8 +226,17 @@ exports.listAllForDoctor = asyncH(async (req, res) => {
 });
 
 // GET /doctor/previous-records/:id
+//
+// SECURITY FIX (Patient Linking audit — cross-doctor record access):
+// this looked up the record by id alone, with no doctorId check. Every
+// authenticated doctor account could open ANY other doctor's previous
+// record — clinical notes, diagnosis, legacy-patient PII, attachments —
+// simply by knowing/guessing its id. Scoping by doctorId here (and on
+// every other :id-based handler below) makes a record 404 for anyone
+// but the doctor who authored it, matching how listAllForDoctor() and
+// patientHistory() already scope things.
 exports.detail = asyncH(async (req, res) => {
-  const r = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null }, include });
+  const r = await prisma.previousRecord.findFirst({ where: { id: req.params.id, doctorId: req.user.id, deletedAt: null }, include });
   if (!r) throw notFound();
   res.json({ success: true, record: svc.decorateRecord(req, r) });
 });
@@ -246,7 +265,10 @@ exports.create = asyncH(async (req, res) => {
 
 // PUT /doctor/previous-records/:id
 exports.update = asyncH(async (req, res) => {
-  const existing = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  // SECURITY FIX (Patient Linking audit): doctorId-scoped, see detail()
+  // above — without this a doctor could edit, or re-link to a different
+  // patient, a record they never created.
+  const existing = await prisma.previousRecord.findFirst({ where: { id: req.params.id, doctorId: req.user.id, deletedAt: null } });
   if (!existing) throw notFound();
   const data = parseBody(req, updateSchema); // tolerant — fixes "Invalid Input"
   const patch = {};
@@ -268,24 +290,31 @@ exports.update = asyncH(async (req, res) => {
 });
 
 // DELETE /doctor/previous-records/:id (soft delete)
+// SECURITY FIX (Patient Linking audit): doctorId-scoped — see detail().
 exports.remove = asyncH(async (req, res) => {
-  const existing = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  const existing = await prisma.previousRecord.findFirst({ where: { id: req.params.id, doctorId: req.user.id, deletedAt: null } });
   if (!existing) throw notFound();
   await prisma.previousRecord.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
   res.json({ success: true });
 });
 
 // POST /doctor/previous-records/:id/attachments
+// SECURITY FIX (Patient Linking audit): doctorId-scoped — see detail().
 exports.addAttachments = asyncH(async (req, res) => {
-  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, doctorId: req.user.id, deletedAt: null } });
   if (!record) throw notFound();
   const added = await saveAttachments(req, record);
   res.status(201).json({ success: true, attachments: added.map(a => ({ id: a.id, label: a.label, originalName: a.originalName })) });
 });
 
 // POST /doctor/previous-records/:id/attachments/:attachmentId/replace
+// SECURITY FIX (Patient Linking audit): the attachment lookup only
+// checked recordId, not who owns that record, so any doctor could
+// overwrite another doctor's attachment file by id. Filtering through
+// the `record` relation's doctorId closes that off, same as every
+// other attachment endpoint below.
 exports.replaceAttachment = [ upload.single('file'), asyncH(async (req, res) => {
-  const att = await prisma.previousRecordAttachment.findFirst({ where: { id: req.params.attachmentId, recordId: req.params.id } });
+  const att = await prisma.previousRecordAttachment.findFirst({ where: { id: req.params.attachmentId, recordId: req.params.id, record: { doctorId: req.user.id } } });
   if (!att) throw notFound();
   if (!req.file) { const e = new Error('file is required'); e.status = 422; throw e; }
   unlinkQuiet(att.storagePath);
@@ -312,8 +341,10 @@ const attachmentMetaSchema = z.object({
   attachmentType: z.preprocess(emptyToUndef, z.string().max(190).optional()),
   notes: z.preprocess((v) => (v === undefined ? undefined : (typeof v === 'string' && v.trim() === '' ? null : v)), z.string().max(2000).nullable().optional()),
 }).strip();
+// SECURITY FIX (Patient Linking audit): doctorId-scoped via the record
+// relation — see replaceAttachment() above.
 exports.updateAttachmentMeta = asyncH(async (req, res) => {
-  const att = await prisma.previousRecordAttachment.findFirst({ where: { id: req.params.attachmentId, recordId: req.params.id } });
+  const att = await prisma.previousRecordAttachment.findFirst({ where: { id: req.params.attachmentId, recordId: req.params.id, record: { doctorId: req.user.id } } });
   if (!att) throw notFound();
   const body = attachmentMetaSchema.safeParse(req.body || {});
   if (!body.success) { const e = new Error('Invalid input'); e.status = 422; throw e; }
@@ -330,8 +361,9 @@ exports.updateAttachmentMeta = asyncH(async (req, res) => {
 // Persists the doctor's drag/reorder of the attachment list. `order` must
 // contain every attachment id currently on the record; sortOrder is set
 // to each id's index in that array.
+// SECURITY FIX (Patient Linking audit): doctorId-scoped — see detail().
 exports.reorderAttachments = asyncH(async (req, res) => {
-  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, doctorId: req.user.id, deletedAt: null } });
   if (!record) throw notFound();
   const order = Array.isArray(req.body && req.body.order) ? req.body.order.map(String) : null;
   if (!order || !order.length) { const e = new Error('order[] is required'); e.status = 422; throw e; }
@@ -345,8 +377,10 @@ exports.reorderAttachments = asyncH(async (req, res) => {
 });
 
 // DELETE /doctor/previous-records/:id/attachments/:attachmentId
+// SECURITY FIX (Patient Linking audit): doctorId-scoped via the record
+// relation — see replaceAttachment() above.
 exports.deleteAttachment = asyncH(async (req, res) => {
-  const att = await prisma.previousRecordAttachment.findFirst({ where: { id: req.params.attachmentId, recordId: req.params.id } });
+  const att = await prisma.previousRecordAttachment.findFirst({ where: { id: req.params.attachmentId, recordId: req.params.id, record: { doctorId: req.user.id } } });
   if (!att) throw notFound();
   await prisma.previousRecordAttachment.delete({ where: { id: att.id } });
   unlinkQuiet(att.storagePath);
@@ -354,8 +388,9 @@ exports.deleteAttachment = asyncH(async (req, res) => {
 });
 
 // POST /doctor/previous-records/:id/generate-pdf
+// SECURITY FIX (Patient Linking audit): doctorId-scoped — see detail().
 exports.generatePdf = asyncH(async (req, res) => {
-  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null }, include });
+  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, doctorId: req.user.id, deletedAt: null }, include });
   if (!record) throw notFound();
   const pdf = await pdfSvc.generateHistoricalRecordPdf(record);
   // Stream through the same signed-token route attachments use, not a
@@ -366,8 +401,13 @@ exports.generatePdf = asyncH(async (req, res) => {
 });
 
 // POST /doctor/previous-records/:id/share  { channel, phone?, email?, attachmentIds? }
+// SECURITY FIX (Patient Linking audit): doctorId-scoped — see detail().
+// This one mattered most of all: unscoped, any doctor could trigger a
+// WhatsApp/email share of another doctor's record — including to an
+// attacker-supplied phone/email override — turning the IDOR into an
+// active PII-exfiltration primitive, not just a read.
 exports.share = asyncH(async (req, res) => {
-  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, deletedAt: null }, include });
+  const record = await prisma.previousRecord.findFirst({ where: { id: req.params.id, doctorId: req.user.id, deletedAt: null }, include });
   if (!record) throw notFound();
   const body = parseBody(req, shareSchema);
   // Smart recipient resolution: default to the same patient's contact,

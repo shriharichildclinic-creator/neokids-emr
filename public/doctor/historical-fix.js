@@ -137,7 +137,8 @@
     pendingLabels: [],    // parallel display names
     pendingTypes: [],     // parallel attachment types
     pendingNotes: [],     // parallel notes
-    existingAttachments: []
+    existingAttachments: [],
+    modalStack: []        // ids of currently-open modals, in open order
   };
 
   // =====================================================================
@@ -437,10 +438,26 @@
   //  ADD / EDIT MODAL
   // =====================================================================
   function wireModal() {
-    // Close handlers (all modals)
-    $$('[data-hr-close]').forEach(b => b.addEventListener('click', closeAllModals));
+    // Close handlers.
+    // BUGFIX (Preview closes the parent View/Edit modal): every
+    // [data-hr-close] button — including the one inside
+    // #hrAttPreviewModal — used to call closeAllModals(), which hides
+    // hrRecordModal + hrViewModal + hrAttPreviewModal together. So
+    // closing the attachment preview from inside the View modal also
+    // closed the View modal underneath it. Each close button now only
+    // closes the single modal it actually lives inside (via the nearest
+    // .np-modal ancestor), so the preview can close on its own and
+    // leave the parent record modal open and in place.
+    $$('[data-hr-close]').forEach(b => b.addEventListener('click', () => {
+      const owner = b.closest('.np-modal');
+      if (owner && owner.id) closeModal(owner.id);
+      else closeTopModal();
+    }));
+    // Escape closes only the topmost open modal (e.g. the preview, if
+    // it's open) rather than every modal at once, for the same reason.
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeAllModals();    });
+      if (e.key === 'Escape') closeTopModal();
+    });
 
     // Add/Edit form submit
     const form = $('#historicalForm');
@@ -500,18 +517,33 @@
     });
   }
 
-  function closeAllModals() { closeModal('hrRecordModal'); closeModal('hrViewModal'); closeModal('hrAttPreviewModal'); }
+  // BUGFIX (Preview closes the parent View/Edit modal): openModal/
+  // closeModal now track a stack of currently-open modal ids.
+  // closeModal(id) only ever removes that one id — closing the preview
+  // (top of stack) leaves hrViewModal/hrRecordModal underneath it open
+  // and untouched, and the body scroll-lock class is only released once
+  // the stack is fully empty (so it doesn't unlock the page behind a
+  // still-open parent modal). closeTopModal() is for triggers — Escape,
+  // a close button not clearly inside one modal — that should only ever
+  // affect whichever modal is currently on top.
   function closeModal(id) {
     const m = document.getElementById(id);
     if (!m) return;
     m.classList.add('hidden');
-    document.body.classList.remove('np-modal-open');
+    state.modalStack = (state.modalStack || []).filter(x => x !== id);
+    if (!state.modalStack.length) document.body.classList.remove('np-modal-open');
   }
   function openModal(id) {
     const m = document.getElementById(id);
     if (!m) return;
     m.classList.remove('hidden');
     document.body.classList.add('np-modal-open');
+    state.modalStack = (state.modalStack || []).filter(x => x !== id);
+    state.modalStack.push(id);
+  }
+  function closeTopModal() {
+    const top = (state.modalStack || [])[state.modalStack.length - 1];
+    if (top) closeModal(top);
   }
 
   // ---- patient source toggle (Patient Linkage fix) --------------------
