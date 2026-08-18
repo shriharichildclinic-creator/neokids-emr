@@ -208,6 +208,35 @@
 <div class="np-content">
 
 <section id="dashboardTab" class="tab-pane">
+          <!-- v3.4.10: Professional welcome section replaces the cold empty top of the dashboard. -->
+          <div id="dashWelcome" class="np-welcome" role="region" aria-label="Doctor welcome">
+            <div class="np-welcome__main">
+              <div class="np-welcome__eyebrow" id="dashWelcomeGreeting">Good morning</div>
+              <h1 class="np-welcome__title" id="dashWelcomeName">Welcome back, Doctor</h1>
+              <p class="np-welcome__sub" id="dashWelcomeSub">Here's a quick overview of your day.</p>
+              <div class="np-welcome__meta">
+                <span class="np-welcome__pill" id="dashWelcomeDate">—</span>
+                <span class="np-welcome__pill np-welcome__pill--soft" id="dashWelcomeAppts">— appointments today</span>
+              </div>
+            </div>
+            <div class="np-welcome__cards">
+              <div class="np-welcome__card">
+                <div class="np-welcome__card-label">Today's Appointments</div>
+                <div class="np-welcome__card-value" id="welcomeTodayCount">—</div>
+                <div class="np-welcome__card-sub" id="welcomeTodayDone">— completed</div>
+              </div>
+              <div class="np-welcome__card">
+                <div class="np-welcome__card-label">Pending Tasks</div>
+                <div class="np-welcome__card-value" id="welcomePendingCount">—</div>
+                <div class="np-welcome__card-sub">Awaiting your review</div>
+              </div>
+              <div class="np-welcome__card np-welcome__card--alert" id="welcomeAlertCard">
+                <div class="np-welcome__card-label">Important Alerts</div>
+                <div class="np-welcome__card-value" id="welcomeAlertCount">0</div>
+                <div class="np-welcome__card-sub" id="welcomeAlertSub">All clear</div>
+              </div>
+            </div>
+          </div>
           <div id="statsBar" class="np-kpi-grid"></div>
           <div class="np-dash-grid np-dash-grid--2-1">
             <div class="np-panel">
@@ -1038,6 +1067,38 @@
 
       </div>
     </main>
+  </div>
+</div>
+
+<!-- v3.4.10: dedicated "My Profile" modal opened from the profile dropdown. -->
+<div id="myProfileModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="myProfileModalTitle">
+  <div class="np-modal__panel np-modal__panel--md">
+    <div class="np-modal__head">
+      <div id="myProfileModalTitle" class="np-modal__title">My Profile</div>
+      <button type="button" class="np-modal__close" aria-label="Close" onclick="closeMyProfile()">&times;</button>
+    </div>
+    <div class="np-modal__body">
+      <div class="np-profile-card">
+        <div class="np-profile-card__avatar" id="myProfileAvatar"><span>D</span></div>
+        <div class="np-profile-card__meta">
+          <div class="np-profile-card__name" id="myProfileName">Doctor</div>
+          <div class="np-profile-card__spec" id="myProfileSpec">Pediatrician</div>
+          <div class="np-profile-card__badges" id="myProfileBadges"></div>
+        </div>
+      </div>
+      <dl class="np-profile-dl" id="myProfileDl">
+        <div><dt>Email</dt><dd id="myProfileEmail">—</dd></div>
+        <div><dt>Phone</dt><dd id="myProfilePhone">—</dd></div>
+        <div><dt>Qualification</dt><dd id="myProfileQual">—</dd></div>
+        <div><dt>Registration No.</dt><dd id="myProfileReg">—</dd></div>
+        <div><dt>Clinic</dt><dd id="myProfileClinic">—</dd></div>
+        <div><dt>Clinic address</dt><dd id="myProfileClinicAddr">—</dd></div>
+      </dl>
+    </div>
+    <div class="np-modal__foot">
+      <button type="button" class="np-btn np-btn--ghost" onclick="closeMyProfile()">Close</button>
+      <button type="button" class="np-btn np-btn--primary" onclick="closeMyProfile(); document.querySelector('[data-tab=settingsTab]')?.click();">Edit in Settings</button>
+    </div>
   </div>
 </div>
 

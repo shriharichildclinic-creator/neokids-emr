@@ -559,13 +559,13 @@
     m.classList.add('hidden');
     state.modalStack = (state.modalStack || []).filter(x => x !== id);
     if (!state.modalStack.length) document.body.classList.remove('np-modal-open');
-    // If we're closing the attachment preview and had pushed a history
-    // entry when it opened, pop it back off so the URL/history stack
-    // stays clean. Guarded so we don't recursively re-enter via the
-    // popstate listener — state.previewPushed is cleared first.
+    // v3.4.10 — keep the global back-nav stack in sync so device Back
+    // remains one-modal-at-a-time behavior after programmatic closes.
+    try { if (window.NPBackNav) window.NPBackNav.popModal(id); } catch(_){}
+    // Legacy preview-only history bookkeeping is now redundant with
+    // NPBackNav.popModal above, but kept as a safety net for older paths.
     if (id === 'hrAttPreviewModal' && state.previewPushed) {
       state.previewPushed = false;
-      try { if ((history.state && history.state.hrPreview)) history.back(); } catch (_) {}
     }
   }
   function openModal(id) {
@@ -575,6 +575,9 @@
     document.body.classList.add('np-modal-open');
     state.modalStack = (state.modalStack || []).filter(x => x !== id);
     state.modalStack.push(id);
+    // v3.4.10 — register with the global back-nav manager so device
+    // Back closes THIS overlay first instead of exiting the page.
+    try { if (window.NPBackNav) window.NPBackNav.pushModal(id); } catch(_){}
   }
   function closeTopModal() {
     const top = (state.modalStack || [])[state.modalStack.length - 1];

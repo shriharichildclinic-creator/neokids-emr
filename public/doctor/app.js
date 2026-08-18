@@ -246,6 +246,8 @@ async function init(){
   }
   loadStats();
   loadDashSnapshot();
+  loadDashWelcome();
+  NPBackNav.init();  // v3.4.10 — arm global mobile back-button navigation
 }
 function applyHistoricalPermission(me){
   // Issue 1 — Previous Records is a permission-controlled Doctor Panel
@@ -305,6 +307,16 @@ function setupProfileMenu(){
     if (!menu.contains(e.target) && !trigger.contains(e.target)) close();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+  // v3.4.10 FIX — "My Profile" and "Settings" used to open the same tab.
+  // Now: data-action="open-profile" → dedicated profile modal.
+  //      data-go="settingsTab"     → Settings tab.
+  $$('#profileDropdown [data-action="open-profile"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      close();
+      openMyProfile();
+    });
+  });
   $$('#profileDropdown [data-go]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.getAttribute('data-go');
@@ -313,13 +325,41 @@ function setupProfileMenu(){
       if (sectionKey === 'password'){
         const el = document.getElementById('setting-password');
         if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
-      } else if (sectionKey === 'profile'){
-        const el = document.getElementById('setting-profile');
-        if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
       }
     });
   });
 }
+
+/* ---------- v3.4.10: My Profile modal ---------- */
+let _myProfileCache = null;
+async function openMyProfile(){
+  try {
+    const me = _myProfileCache || await api('/doctor/me');
+    _myProfileCache = me;
+    const clean = String(me.name || '').replace(/^\s*(dr\.?\s+)+/i, '').trim();
+    const displayName = clean ? ('Dr. ' + clean) : 'Doctor';
+    const initials = (clean || 'D').split(/\s+/).map(s => s[0]).slice(0,2).join('').toUpperCase();
+    $('#myProfileName').textContent = displayName;
+    $('#myProfileSpec').textContent = me.specialization || 'Pediatrician';
+    const avatar = $('#myProfileAvatar');
+    if (me.photoUrl) avatar.innerHTML = `<img src="${escapeHtml(me.photoUrl)}" alt="${escapeHtml(displayName)}">`;
+    else avatar.innerHTML = `<span>${escapeHtml(initials)}</span>`;
+    const badges = [];
+    if (me.qualification) badges.push(`<span class="np-badge np-badge--blue">${escapeHtml(me.qualification)}</span>`);
+    if (me.registrationNumber) badges.push(`<span class="np-badge np-badge--mint">Reg. ${escapeHtml(me.registrationNumber)}</span>`);
+    $('#myProfileBadges').innerHTML = badges.join(' ');
+    $('#myProfileEmail').textContent = me.email || '—';
+    $('#myProfilePhone').textContent = me.phone || '—';
+    $('#myProfileQual').textContent = me.qualification || '—';
+    $('#myProfileReg').textContent = me.registrationNumber || '—';
+    $('#myProfileClinic').textContent = me.clinicName || '—';
+    $('#myProfileClinicAddr').textContent = me.clinicAddress || '—';
+  } catch (_){ /* still open the shell */ }
+  npOpenModal('myProfileModal');
+}
+function closeMyProfile(){ npCloseModal('myProfileModal'); }
+window.openMyProfile = openMyProfile;
+window.closeMyProfile = closeMyProfile;
 
 const TAB_META = {
   dashboardTab:  { title:'Dashboard',           sub:"Welcome back — here's what's happening today." },
@@ -343,7 +383,7 @@ function setActiveTab(tabId){
   if (tabId === 'waitingTab') loadWaiting();
   else if (tabId === 'allTab') loadAll();
   else if (tabId === 'settingsTab') loadSettings();
-  else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); }
+  else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); loadDashWelcome(); }
   else if (tabId === 'rxArchiveTab') loadRxArchive();
   else if (tabId === 'earningsTab' && window.Earnings) Earnings.load();
   else if (tabId === 'certificatesTab') loadCertificates();
@@ -428,6 +468,61 @@ async function loadDashSnapshot(){
   } catch (ex){
     el.innerHTML = emptyState('Could not load appointments', ex.message || 'Try refreshing.', null);
   }
+}
+
+/* ---------- v3.4.10: Dashboard welcome section ---------- */
+function updateDashWelcome(){
+  try {
+    const nameEl = $('#dashWelcomeName');
+    const greetEl = $('#dashWelcomeGreeting');
+    const dateEl  = $('#dashWelcomeDate');
+    if (!nameEl || !greetEl || !dateEl) return;
+
+    const raw = ($('#docName') && $('#docName').textContent) || 'Doctor';
+    nameEl.textContent = 'Welcome back, ' + raw;
+
+    const now = new Date();
+    const h = now.getHours();
+    const greet = h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening');
+    greetEl.textContent = greet;
+
+    try {
+      dateEl.textContent = now.toLocaleDateString(undefined, {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+    } catch(_){ dateEl.textContent = now.toDateString(); }
+  } catch(_){ /* welcome is decorative — never fail dashboard load */ }
+}
+
+async function loadDashWelcome(){
+  updateDashWelcome();
+  try {
+    const [stats, waiting] = await Promise.all([
+      api('/doctor/stats').catch(() => ({})),
+      api('/doctor/waiting-room').catch(() => [])
+    ]);
+    const today = Number(stats.todayAppointments || 0);
+    const done  = Number(stats.completedToday || 0);
+    const pending = Math.max(0, today - done);
+
+    const set = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+    set('welcomeTodayCount', today);
+    set('welcomeTodayDone', done + ' completed');
+    set('welcomePendingCount', pending);
+
+    const waitCount = Array.isArray(waiting) ? waiting.length : 0;
+    set('dashWelcomeAppts', today + ' appointment' + (today === 1 ? '' : 's') + ' today');
+    const alertCard = document.getElementById('welcomeAlertCard');
+    if (waitCount > 0){
+      set('welcomeAlertCount', waitCount);
+      set('welcomeAlertSub', waitCount + ' patient' + (waitCount === 1 ? '' : 's') + ' waiting');
+      if (alertCard) alertCard.classList.add('is-active');
+    } else {
+      set('welcomeAlertCount', 0);
+      set('welcomeAlertSub', 'All clear');
+      if (alertCard) alertCard.classList.remove('is-active');
+    }
+  } catch(_){}
 }
 function emptyState(title, sub, ctaHtml){
   return `<div class="np-empty">
@@ -1658,11 +1753,15 @@ function npOpenModal(id){
   closeOverflowMenus();           // never leave a floating menu above a modal
   const el = npPortalModal(id);
   if (el) el.classList.remove('hidden');
+  // v3.4.10 — push a history entry so device Back closes this modal first,
+  // instead of exiting the page. Guarded by a flag to survive re-open cycles.
+  try { if (window.NPBackNav) NPBackNav.pushModal(id); } catch(_){}
   return el;
 }
 function npCloseModal(id){
   const el = document.getElementById(id);
   if (el) el.classList.add('hidden');
+  try { if (window.NPBackNav) NPBackNav.popModal(id); } catch(_){}
 }
 
 function _toast(kind, msg){
@@ -2303,6 +2402,123 @@ function setupFeatureUI(){
     settingsBtn.addEventListener('click', loadSignature);
   }
 }
+
+/* =====================================================================
+ * v3.4.10 — Global mobile back-button navigation via History API.
+ *
+ * Contract: whenever the app opens something the user *perceives* as a
+ * new screen — a modal, drawer, preview, overlay or nested view — it
+ * calls NPBackNav.pushModal(id). Pressing the device Back button then
+ * closes THAT screen instead of exiting the page. When there are no
+ * more open overlays and the user is not on the dashboard, Back returns
+ * them to the dashboard; only from the dashboard does the browser exit
+ * naturally.
+ *
+ * Expected flow (Dashboard → Patient → Previous Record → Preview):
+ *   Preview → Previous Record → Patient → Dashboard → (exit)
+ *
+ * The manager is idempotent, safe to call before init, and never blocks
+ * ordinary navigation — all guarding happens in popstate.
+ * ===================================================================== */
+window.NPBackNav = (function(){
+  const stack = [];               // { type:'modal', id, marker }
+  let installed = false;
+  let internalPop = false;
+
+  function markerKey(){ return 'np-nav-' + Date.now() + '-' + Math.random().toString(36).slice(2,7); }
+
+  function currentTab(){
+    const active = document.querySelector('.tab-btn.active');
+    return (active && active.dataset && active.dataset.tab) || 'dashboardTab';
+  }
+
+  function anyOpen(){ return stack.length > 0; }
+
+  function pushModal(id){
+    if (!id) return;
+    // De-dupe: if the same modal is already on top, don't push again.
+    if (stack.length && stack[stack.length-1].id === id) return;
+    const marker = markerKey();
+    try {
+      history.pushState({ npNav: true, marker: marker, kind: 'modal', id: id }, '',
+        location.pathname + location.search + location.hash);
+    } catch(_){}
+    stack.push({ type:'modal', id: id, marker: marker });
+  }
+
+  function popModal(id){
+    // The modal is being closed programmatically (X button, save, etc.).
+    // Unwind history if our marker is still on top.
+    const idx = stack.map(s => s.id).lastIndexOf(id);
+    if (idx < 0) return;
+    // Remove from stack; step history back once if we're on top.
+    const wasTop = idx === stack.length - 1;
+    stack.splice(idx, 1);
+    if (wasTop && !internalPop){
+      try {
+        internalPop = true;
+        history.back();
+        // internalPop is cleared inside the popstate handler below.
+      } catch(_){ internalPop = false; }
+    }
+  }
+
+  function closeTopModal(){
+    const top = stack[stack.length - 1];
+    if (!top) return false;
+    stack.pop();
+    // Close the DOM element without re-triggering history.back()
+    const el = document.getElementById(top.id);
+    if (el) el.classList.add('hidden');
+    return true;
+  }
+
+  function goToDashboard(){
+    try {
+      const btn = document.querySelector('[data-tab="dashboardTab"]');
+      if (btn) btn.click();
+      else if (typeof window.setActiveTab === 'function') window.setActiveTab('dashboardTab');
+    } catch(_){}
+  }
+
+  function onPopState(ev){
+    // Case 1: this popstate is the internal history.back() we fired from
+    // popModal() — just swallow it and stop.
+    if (internalPop){ internalPop = false; return; }
+
+    // Case 2: an overlay is open → close the top one only.
+    if (anyOpen()){
+      closeTopModal();
+      return;
+    }
+
+    // Case 3: nothing is open but the user is NOT on the dashboard.
+    // Move them to the dashboard instead of leaving the page.
+    const tab = currentTab();
+    if (tab && tab !== 'dashboardTab'){
+      // Re-arm a history entry so the NEXT device back also stays inside
+      // the app until the user hits Back a second time (matches native
+      // multi-screen apps). Then switch to the dashboard.
+      try { history.pushState({ npNav: true, marker: markerKey(), kind: 'tab-guard' }, '',
+        location.pathname + location.search + location.hash); } catch(_){}
+      goToDashboard();
+      return;
+    }
+    // Case 4: on dashboard with nothing open — let the browser exit.
+  }
+
+  function init(){
+    if (installed) return;
+    installed = true;
+    // Seed one history entry so the first device-back from the dashboard
+    // still has something to pop before actually exiting.
+    try { history.pushState({ npNav: true, marker: markerKey(), kind: 'root-seed' }, '',
+      location.pathname + location.search + location.hash); } catch(_){}
+    window.addEventListener('popstate', onPopState);
+  }
+
+  return { init: init, pushModal: pushModal, popModal: popModal, anyOpen: anyOpen };
+})();
 
 (async function bootstrap(){
   if (TOKEN){

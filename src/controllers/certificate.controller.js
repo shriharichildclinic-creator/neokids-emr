@@ -262,6 +262,24 @@ exports.createForAppointment = asyncHandler(async (req, res) => {
 // PUT /api/doctor/certificates/:id — edit an issued certificate.
 // The doctor can correct the wording/dates; the PDF is regenerated so the
 // download always reflects the latest content.
+//
+// v3.4.10 FIX — Update Certificate 500 root-cause:
+//   The previous implementation ran TWO conflicting date-normalization
+//   passes back-to-back. The second one (certDates.normalizeCertificateDates)
+//   only returns { fromDate, toDate, restDays } and does NOT touch
+//   durationType/certificateDate — so it silently overwrote the correct
+//   values set by the first pass and, when restDays was unset, wiped
+//   fromDate/toDate to null. Combined with SINGLE_DAY payloads that omit
+//   fromDate/toDate entirely, Prisma then received an inconsistent record
+//   and PDF regeneration threw — surfacing as "Internal Server Error".
+//
+//   New flow (single pass, deterministic):
+//     1. Merge existing row + client patch into one view.
+//     2. Decide durationType from the merged view.
+//     3. For SINGLE_DAY  → write certificateDate, null fromDate/toDate.
+//        For DATE_RANGE  → run normalizeCertificateDates, null certificateDate.
+//     4. Regenerate PDF; PDF failure NEVER 500s the update (falls back to
+//        an empty pdfUrl and surfaces a warning to the client).
 exports.update = asyncHandler(async (req, res) => {
   const where = { id: req.params.id };
   if (req.user.role === 'DOCTOR') where.doctorId = req.user.id;
@@ -277,82 +295,87 @@ exports.update = asyncHandler(async (req, res) => {
   }
   const d = parsed.data;
   const data = {};
-  if (d.templateKey) data.templateKey = d.templateKey;
+
+  // Scalar (non-date) fields — apply only when explicitly present in patch.
+  if (Object.prototype.hasOwnProperty.call(d, 'templateKey') && d.templateKey) data.templateKey = d.templateKey;
   if (Object.prototype.hasOwnProperty.call(d, 'reason') && d.reason) data.reason = d.reason;
   if (Object.prototype.hasOwnProperty.call(d, 'diagnosis')) data.diagnosis = d.diagnosis || null;
-  if (Object.prototype.hasOwnProperty.call(d, 'restDays')) data.restDays = d.restDays ?? null;
   if (Object.prototype.hasOwnProperty.call(d, 'additionalNotes')) data.additionalNotes = d.additionalNotes || null;
+  if (Object.prototype.hasOwnProperty.call(d, 'consultationType') && d.consultationType) {
+    data.consultationType = d.consultationType;
+  }
 
-  // Duration semantics: if the doctor switches type or touches any date
-  // field, recompute the full date set from the merged view (existing +
-  // patch) so single-day ↔ range conversions never leave stale dates.
+  // Does the patch touch anything date-related?
   const touchesDates =
     Object.prototype.hasOwnProperty.call(d, 'durationType') ||
     Object.prototype.hasOwnProperty.call(d, 'certificateDate') ||
     Object.prototype.hasOwnProperty.call(d, 'fromDate') ||
     Object.prototype.hasOwnProperty.call(d, 'toDate') ||
     Object.prototype.hasOwnProperty.call(d, 'restDays');
+
   if (touchesDates) {
+    // Merge existing row + patch into a single view (patch wins).
     const merged = {
-      durationType: d.durationType || existing.durationType || 'DATE_RANGE',
+      durationType: Object.prototype.hasOwnProperty.call(d, 'durationType')
+        ? (d.durationType || existing.durationType || 'DATE_RANGE')
+        : (existing.durationType || 'DATE_RANGE'),
       certificateDate: Object.prototype.hasOwnProperty.call(d, 'certificateDate')
-        ? d.certificateDate
-        : (existing.certificateDate ? dayjs(existing.certificateDate).format('YYYY-MM-DD') : undefined),
+        ? (d.certificateDate || null)
+        : (existing.certificateDate ? dayjs(existing.certificateDate).format('YYYY-MM-DD') : null),
       fromDate: Object.prototype.hasOwnProperty.call(d, 'fromDate')
-        ? d.fromDate
-        : (existing.fromDate ? dayjs(existing.fromDate).format('YYYY-MM-DD') : undefined),
+        ? (d.fromDate || null)
+        : (existing.fromDate ? dayjs(existing.fromDate).format('YYYY-MM-DD') : null),
       toDate: Object.prototype.hasOwnProperty.call(d, 'toDate')
-        ? d.toDate
-        : (existing.toDate ? dayjs(existing.toDate).format('YYYY-MM-DD') : undefined),
-      restDays: Object.prototype.hasOwnProperty.call(d, 'restDays') ? d.restDays : existing.restDays
+        ? (d.toDate || null)
+        : (existing.toDate ? dayjs(existing.toDate).format('YYYY-MM-DD') : null),
+      restDays: Object.prototype.hasOwnProperty.call(d, 'restDays')
+        ? (d.restDays ?? null)
+        : (existing.restDays ?? null)
     };
-    const dates = resolveCertificateDates(merged);
-    data.durationType = dates.durationType;
-    data.certificateDate = dates.certificateDate;
-    data.fromDate = dates.fromDate;
-    data.toDate = dates.toDate;
+
+    if (merged.durationType === 'SINGLE_DAY') {
+      // Single-day certificates use ONLY certificateDate. Clear the range
+      // fields so a switch from DATE_RANGE → SINGLE_DAY doesn't leave
+      // stale from/to values behind.
+      data.durationType    = 'SINGLE_DAY';
+      data.certificateDate = merged.certificateDate ? parseDateOnlyOrNull(merged.certificateDate) : null;
+      data.fromDate        = null;
+      data.toDate          = null;
+      data.restDays        = null;
+    } else {
+      // DATE_RANGE — normalize fromDate / toDate / restDays through the
+      // canonical helper. certificateDate is not applicable for ranges.
+      const norm = certDates.normalizeCertificateDates({
+        fromDate:       merged.fromDate,
+        toDate:         merged.toDate,
+        toDateOverride: null,
+        restDays:       merged.restDays
+      });
+      data.durationType    = 'DATE_RANGE';
+      data.certificateDate = null;
+      data.fromDate        = norm.fromDate;
+      data.toDate          = norm.toDate;
+      data.restDays        = norm.restDays;
+    }
   }
 
-  // v3.4.4 — Always re-run the date normalizer when ANY date-relevant
-  // field changes, so single-day toggles, partial overrides and restDays
-  // edits converge on a single canonical state and never drift.
-  const durTouched =
-    Object.prototype.hasOwnProperty.call(data, 'durationType') ||
-    Object.prototype.hasOwnProperty.call(data, 'certificateDate') ||
-    Object.prototype.hasOwnProperty.call(data, 'fromDate') ||
-    Object.prototype.hasOwnProperty.call(data, 'toDate') ||
-    Object.prototype.hasOwnProperty.call(data, 'restDays');
-  if (durTouched) {
-    const merged = Object.assign(
-      {},
-      {
-        durationType:    existing.durationType || 'DATE_RANGE',
-        certificateDate: existing.certificateDate ? dayjs(existing.certificateDate).format('YYYY-MM-DD') : undefined,
-        fromDate:        existing.fromDate ? dayjs(existing.fromDate).format('YYYY-MM-DD') : undefined,
-        toDate:          existing.toDate   ? dayjs(existing.toDate).format('YYYY-MM-DD')   : undefined,
-        restDays:        existing.restDays
-      },
-      {
-        restDays:       data.restDays,
-        fromDate:       data.fromDate,
-        toDate:         data.toDate,
-        toDateOverride: data.toDateOverride,
-        durationType:   data.durationType,
-        certificateDate:data.certificateDate
-      }
-    );
-    Object.assign(data, certDates.normalizeCertificateDates(merged));
+  let cert;
+  try {
+    cert = await prisma.medicalCertificate.update({
+      where: { id: existing.id },
+      data,
+      include: { appointment: true }
+    });
+  } catch (dbErr) {
+    logger.error('MedicalCertificate.update DB failure', { id: existing.id, err: dbErr.message });
+    return res.status(400).json({ error: 'Could not update certificate', detail: dbErr.message });
   }
-
-  const cert = await prisma.medicalCertificate.update({
-    where: { id: existing.id },
-    data,
-    include: { appointment: true }
-  });
 
   // Regenerate the PDF so downloads always reflect the latest wording.
   // NOTE: an edit intentionally does NOT re-notify the patient — delivery
   // is an explicit action (POST /:id/send) so a typo fix can't spam them.
+  // PDF generation is best-effort: failure never fails the request.
+  let pdfWarning = null;
   try {
     const doctor = await prisma.doctor.findUnique({ where: { id: existing.doctorId } });
     const result = await pdf.generateMedicalCertificate({ certificate: cert, doctor, patient: existing.patient });
@@ -360,9 +383,12 @@ exports.update = asyncHandler(async (req, res) => {
     cert.pdfUrl = result.url;
   } catch (e) {
     logger.error('generateMedicalCertificate (update) failed', { id: cert.id, err: e.message });
+    pdfWarning = 'Certificate saved but PDF regeneration failed — try re-sending from the list.';
   }
 
-  res.json(withSignedPdfUrl(cert, req.user));
+  const payload = withSignedPdfUrl(cert, req.user);
+  if (pdfWarning) payload.pdfWarning = pdfWarning;
+  res.json(payload);
 });
 
 // POST /api/doctor/certificates/:id/send

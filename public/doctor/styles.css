@@ -2371,3 +2371,131 @@ html[data-theme="dark"] .np-modal pre{
 [data-theme="dark"] .hr-att__moveBtn{ background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.15); }
 [data-theme="dark"] .hr-preview__body{ background:rgba(255,255,255,.03); }
 [data-theme="dark"] .hr-preview__frame{ background:#1f2530; }
+
+/* =====================================================================
+ * v3.4.10 — Welcome section, My Profile modal, and back-nav polish.
+ * ===================================================================== */
+
+/* Dashboard welcome band */
+.np-welcome{
+  display:flex; gap:1.25rem; align-items:stretch; flex-wrap:wrap;
+  padding:1.25rem 1.35rem; margin:0 0 1rem;
+  border-radius:18px;
+  background:linear-gradient(135deg, rgba(59,130,246,.10) 0%, rgba(16,185,129,.10) 100%);
+  border:1px solid var(--np-border, rgba(148,163,184,.25));
+  box-shadow:0 1px 2px rgba(15,23,42,.04);
+}
+.np-welcome__main{ flex:1 1 320px; min-width:0; }
+.np-welcome__eyebrow{
+  font-size:.78rem; font-weight:600; letter-spacing:.03em;
+  color:var(--np-text-mut, #64748b); text-transform:uppercase;
+}
+.np-welcome__title{
+  font-size:1.55rem; font-weight:700; margin:.15rem 0 .35rem;
+  color:var(--np-text, #0f172a); line-height:1.2;
+}
+.np-welcome__sub{
+  margin:0 0 .75rem; color:var(--np-text-mut, #475569);
+  font-size:.92rem;
+}
+.np-welcome__meta{ display:flex; gap:.5rem; flex-wrap:wrap; }
+.np-welcome__pill{
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.3rem .65rem; border-radius:999px;
+  background:rgba(255,255,255,.6); border:1px solid var(--np-border, rgba(148,163,184,.25));
+  font-size:.78rem; color:var(--np-text, #0f172a);
+}
+.np-welcome__pill--soft{
+  background:rgba(59,130,246,.10); border-color:rgba(59,130,246,.20);
+  color:#1d4ed8;
+}
+.np-welcome__cards{
+  display:grid; grid-template-columns:repeat(3, minmax(0,1fr));
+  gap:.65rem; flex:1 1 380px; min-width:0;
+}
+.np-welcome__card{
+  padding:.8rem .9rem; border-radius:14px;
+  background:var(--np-surface, #fff);
+  border:1px solid var(--np-border, rgba(148,163,184,.25));
+  display:flex; flex-direction:column; gap:.2rem;
+}
+.np-welcome__card-label{
+  font-size:.72rem; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--np-text-mut, #64748b); font-weight:600;
+}
+.np-welcome__card-value{
+  font-size:1.6rem; font-weight:700; color:var(--np-text, #0f172a);
+  line-height:1.1;
+}
+.np-welcome__card-sub{ font-size:.78rem; color:var(--np-text-mut, #64748b); }
+.np-welcome__card--alert.is-active{
+  background:rgba(245,158,11,.10);
+  border-color:rgba(245,158,11,.30);
+}
+.np-welcome__card--alert.is-active .np-welcome__card-value{ color:#b45309; }
+
+@media (max-width:1023px){
+  .np-welcome{ flex-direction:column; padding:1rem 1.1rem; }
+  .np-welcome__title{ font-size:1.3rem; }
+  .np-welcome__cards{ grid-template-columns:repeat(3, minmax(0,1fr)); gap:.5rem; }
+  .np-welcome__card{ padding:.65rem .75rem; }
+  .np-welcome__card-value{ font-size:1.25rem; }
+}
+@media (max-width:560px){
+  .np-welcome__cards{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+  .np-welcome__card:last-child{ grid-column:span 2; }
+}
+
+/* Dark theme parity */
+[data-theme="dark"] .np-welcome{
+  background:linear-gradient(135deg, rgba(59,130,246,.14) 0%, rgba(16,185,129,.10) 100%);
+  border-color:rgba(255,255,255,.08);
+}
+[data-theme="dark"] .np-welcome__pill{ background:rgba(255,255,255,.04); }
+[data-theme="dark"] .np-welcome__pill--soft{ background:rgba(59,130,246,.18); color:#93c5fd; }
+[data-theme="dark"] .np-welcome__card{ background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.08); }
+
+/* My Profile modal card */
+.np-profile-card{
+  display:flex; gap:1rem; align-items:center;
+  padding:.85rem; border-radius:14px;
+  background:linear-gradient(135deg, rgba(59,130,246,.08), rgba(16,185,129,.08));
+  border:1px solid var(--np-border, rgba(148,163,184,.25));
+  margin-bottom:1rem;
+}
+.np-profile-card__avatar{
+  width:64px; height:64px; border-radius:50%;
+  background:#3b82f6; color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:1.4rem; overflow:hidden; flex-shrink:0;
+}
+.np-profile-card__avatar img{ width:100%; height:100%; object-fit:cover; }
+.np-profile-card__meta{ flex:1; min-width:0; }
+.np-profile-card__name{ font-size:1.15rem; font-weight:700; color:var(--np-text, #0f172a); }
+.np-profile-card__spec{ font-size:.85rem; color:var(--np-text-mut, #64748b); margin-top:.1rem; }
+.np-profile-card__badges{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.4rem; }
+
+.np-profile-dl{
+  display:grid; grid-template-columns:1fr; gap:.6rem; margin:0;
+}
+.np-profile-dl > div{
+  display:grid; grid-template-columns:140px 1fr; gap:.65rem;
+  padding:.55rem .1rem; border-bottom:1px dashed var(--np-border, rgba(148,163,184,.20));
+}
+.np-profile-dl > div:last-child{ border-bottom:0; }
+.np-profile-dl dt{
+  font-size:.78rem; text-transform:uppercase; letter-spacing:.03em;
+  color:var(--np-text-mut, #64748b); font-weight:600; margin:0;
+}
+.np-profile-dl dd{ margin:0; color:var(--np-text, #0f172a); font-size:.9rem; word-break:break-word; }
+
+@media (max-width:560px){
+  .np-profile-dl > div{ grid-template-columns:1fr; gap:.15rem; }
+}
+[data-theme="dark"] .np-profile-card{
+  background:linear-gradient(135deg, rgba(59,130,246,.14), rgba(16,185,129,.10));
+  border-color:rgba(255,255,255,.08);
+}
+[data-theme="dark"] .np-profile-card__name{ color:#e2e8f0; }
+[data-theme="dark"] .np-profile-dl dd{ color:#e2e8f0; }
+[data-theme="dark"] .np-profile-dl > div{ border-color:rgba(255,255,255,.08); }
