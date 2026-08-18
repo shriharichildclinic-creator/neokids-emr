@@ -734,7 +734,7 @@
         </section>
 
 <!-- ================================================================
-     v3.4.6 — Historical Records refactor.
+     v3.4.6 — Previous Records refactor.
      Records-first layout: search bar + filters + Add button on top,
      table/card list below. All create/edit/view flows go through the
      dedicated modals portaled to <body> further down.
@@ -746,12 +746,12 @@
   <div class="np-panel hr-panel">
     <div class="np-panel__head">
       <div style="flex:1">
-        <div class="np-panel__title">Historical Records</div>
+        <div class="np-panel__title">Previous Records</div>
         <div class="np-panel__subtitle">Search, view, add and manage previous clinical records across all your patients.</div>
       </div>
       <button class="np-btn np-btn--primary np-btn--sm" type="button" id="hrAddBtn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Historical Record
+        Add Previous Record
       </button>
     </div>
     <div class="np-panel__body">
@@ -824,7 +824,7 @@
 </section>
 
 <!-- ================================================================
-     Historical Records — Add / Edit modal.
+     Previous Records — Add / Edit modal.
      Portaled to <body> at runtime by historical-fix.js so the fixed
      sidebar can never trap it. Contains a working #historicalForm
      shell so any legacy wiring that looked up those IDs still binds.
@@ -833,7 +833,7 @@
   <div class="np-modal__panel np-modal__panel--lg hr-modal__panel">
     <div class="np-modal__head hr-modal__head">
       <div>
-        <div id="hrRecordModalTitle" class="np-modal__title">Add Historical Record</div>
+        <div id="hrRecordModalTitle" class="np-modal__title">Add Previous Record</div>
         <div class="np-modal__subtitle" id="hrRecordModalSub">Fill the fields below and attach any supporting documents.</div>
       </div>
       <button type="button" class="np-modal__close" data-hr-close aria-label="Close">
@@ -846,17 +846,80 @@
         <input type="hidden" name="recordId"  id="histRecordId">
         <input type="hidden"                   id="histLinkConfirmed" value="false">
 
-        <!-- Patient picker (only for new records) -->
+        <!-- ============================================================
+             Patient ownership (only shown for NEW records — an existing
+             record's linkage is displayed read-only via #hrOwnershipBadge
+             below and can only be changed by re-opening this picker).
+             Two mutually exclusive branches:
+               • Existing NeoKidsPro Patient — search + select, same as
+                 before.
+               • Legacy / Historical Patient — manual entry for a
+                 patient who existed before the EMR and has no
+                 directory record.
+             ============================================================ -->
         <div class="np-field" id="hrPatientPickerField">
-          <label class="np-field__label" for="histPatientSearch">Patient <span class="np-req">*</span></label>
-          <div class="hr-picker">
-            <input id="histPatientSearch" class="np-input hr-picker__input" placeholder="Start typing a patient name or phone…" autocomplete="off">
-            <button type="button" id="histLookupBtn" class="np-btn np-btn--ghost np-btn--sm hidden">Search</button>
+          <label class="np-field__label">Patient <span class="np-req">*</span></label>
+
+          <div class="np-seg hr-source-toggle" role="tablist" aria-label="Patient source">
+            <button type="button" class="np-seg__btn is-active" id="hrSourceExistingBtn" data-hr-source="EXISTING" role="tab" aria-selected="true">Existing NeoKidsPro Patient</button>
+            <button type="button" class="np-seg__btn" id="hrSourceLegacyBtn" data-hr-source="LEGACY" role="tab" aria-selected="false">Legacy / Historical Patient</button>
           </div>
-          <div id="hrPatientResults" class="hr-picker__results hidden"></div>
-          <div id="hrSelectedPatient" class="hr-picker__selected hidden"></div>
-          <div id="histMatchBox" class="hidden"></div>
-          <div class="np-field__hint">Type at least 2 characters. Results update as you type.</div>
+          <input type="hidden" name="patientSource" id="hrPatientSource" value="EXISTING">
+
+          <!-- Existing NeoKidsPro Patient branch -->
+          <div id="hrExistingPatientPanel">
+            <div class="hr-picker">
+              <input id="histPatientSearch" class="np-input hr-picker__input" placeholder="Start typing a patient name or phone…" autocomplete="off">
+              <button type="button" id="histLookupBtn" class="np-btn np-btn--ghost np-btn--sm hidden">Search</button>
+            </div>
+            <div id="hrPatientResults" class="hr-picker__results hidden"></div>
+            <div id="hrSelectedPatient" class="hr-picker__selected hidden"></div>
+            <div id="histMatchBox" class="hidden"></div>
+            <div class="np-field__hint">Type at least 2 characters. Results update as you type. Only patients already registered in your clinic can be selected here.</div>
+          </div>
+
+          <!-- Legacy / Historical Patient branch -->
+          <div id="hrLegacyPatientPanel" class="hidden">
+            <div class="np-callout" style="margin-bottom:.6rem;">
+              Use this for visits that happened before NeoKidsPro EMR was set up. This record will <b>not</b> be linked to any patient in your directory — enter what you know below.
+            </div>
+            <div class="np-grid-2">
+              <div class="np-field">
+                <label class="np-field__label" for="hrLegacyName">Patient name <span class="np-req">*</span></label>
+                <input id="hrLegacyName" class="np-input" maxlength="190" placeholder="Full name">
+              </div>
+              <div class="np-field">
+                <label class="np-field__label" for="hrLegacyPhone">Phone (optional)</label>
+                <input id="hrLegacyPhone" class="np-input" maxlength="32" placeholder="e.g. 98765 43210">
+              </div>
+            </div>
+            <div class="np-grid-2">
+              <div class="np-field">
+                <label class="np-field__label" for="hrLegacyDob">Date of birth (optional)</label>
+                <input id="hrLegacyDob" type="date" class="np-input">
+              </div>
+              <div class="np-field">
+                <label class="np-field__label" for="hrLegacyGender">Gender (optional)</label>
+                <select id="hrLegacyGender" class="np-input">
+                  <option value="">Not specified</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="np-field">
+              <label class="np-field__label" for="hrLegacyGuardian">Parent / guardian name (optional)</label>
+              <input id="hrLegacyGuardian" class="np-input" maxlength="190" placeholder="e.g. Mother's or father's name">
+            </div>
+            <div class="np-field">
+              <label class="np-field__label" for="hrLegacyNotes">Notes about this patient (optional)</label>
+              <textarea id="hrLegacyNotes" class="np-textarea" rows="2" placeholder="Any other identifying details worth keeping on file"></textarea>
+            </div>
+          </div>
+
+          <!-- Read-only ownership summary shown when editing an existing record -->
+          <div id="hrOwnershipBadge" class="hidden"></div>
         </div>
 
         <div class="np-grid-2">
@@ -930,13 +993,13 @@
 </div>
 
 <!-- ================================================================
-     Historical Records — View (read-only) modal.
+     Previous Records — View (read-only) modal.
      ================================================================ -->
 <div id="hrViewModal" class="np-modal hr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="hrViewModalTitle">
   <div class="np-modal__panel np-modal__panel--lg hr-modal__panel">
     <div class="np-modal__head hr-modal__head">
       <div>
-        <div id="hrViewModalTitle" class="np-modal__title">Historical Record</div>
+        <div id="hrViewModalTitle" class="np-modal__title">Previous Record</div>
         <div class="np-modal__subtitle" id="hrViewModalSub"></div>
       </div>
       <button type="button" class="np-modal__close" data-hr-close aria-label="Close">
@@ -1279,7 +1342,7 @@
 
 <script src="/doctor/historical-fix.js?v=3.4.7" defer></script>
 <!-- ================================================================
-     Historical Records — Attachment preview modal.
+     Previous Records — Attachment preview modal.
      Shared by both the Edit and View flows for the "Preview" action
      (PDF renders in an <iframe>, images in an <img>; anything else
      falls back to a short message + Open/Download links). "Open" and

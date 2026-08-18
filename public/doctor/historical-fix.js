@@ -1,5 +1,5 @@
 /* =====================================================================
-   historical-fix.js  \u2014  v3.4.6 Doctor Panel: full Historical Records
+   historical-fix.js  \u2014  v3.4.6 Doctor Panel: full Previous Records
    refactor.
 
    Design goals (per v3.4.6 spec):
@@ -69,6 +69,20 @@
     OTHER:        'Other'
   }[t] || (t || 'Record'));
 
+  // ---- patient ownership helpers (Patient Linkage fix) ----------------
+  // A record's "owner" is either a real directory patient (r.patient set,
+  // patientSource 'EXISTING') or a manually-entered legacy patient
+  // (patientSource 'LEGACY', legacyPatientName etc). These two helpers
+  // are the single source of truth every render function pulls from, so
+  // the list, cards, and View/Edit modals never disagree about whose
+  // record it is.
+  const isLegacy = (r) => (r && r.patientSource === 'LEGACY');
+  const ownerName = (r) => isLegacy(r) ? (r.legacyPatientName || 'Legacy patient') : ((r && r.patient && r.patient.name) || '\u2014');
+  const ownerPhone = (r) => isLegacy(r) ? (r.legacyPatientPhone || '') : ((r && r.patient && r.patient.phone) || '');
+  const ownershipChip = (r) => isLegacy(r)
+    ? '<span class="hr-chip hr-chip--legacy">Legacy / Historical Patient</span>'
+    : '<span class="hr-chip hr-chip--linked">Linked NeoKidsPro Patient</span>';
+
   // Attachment categories are free-text on the backend (attachmentType
   // column), but we offer this fixed list in the UI for consistency —
   // doctors can still type a custom one via the "Other" + note pattern.
@@ -136,6 +150,20 @@
 
     portalModal('hrRecordModal');
     portalModal('hrViewModal');
+    // BUGFIX (Preview button): #hrAttPreviewModal must be portaled LAST.
+    // portalModal() uses appendChild, which *moves* an element to the
+    // end of <body>. hrAttPreviewModal already sits at the end of the
+    // document (see index.html), so once the two calls above moved
+    // hrRecordModal/hrViewModal to the very end of <body>, the preview
+    // modal was left BEFORE them in DOM order. All three share the same
+    // `.np-modal` z-index (1300), so with equal z-index, later DOM
+    // position wins the paint order — the still-open Edit/View modal
+    // was rendering on TOP of the preview modal, completely hiding it.
+    // That's the "brief flash then nothing" symptom: the preview modal
+    // *did* open, it was just stacked underneath the modal you opened
+    // it from. Portaling it last guarantees it's always the topmost
+    // element whenever it's shown.
+    portalModal('hrAttPreviewModal');
 
     wireToolbar();
     wireAddButton();
@@ -235,7 +263,7 @@
       state.totalPages = Number(resp?.totalPages ?? 1);
       renderList();
     } catch (ex) {
-      renderError(ex && ex.message || 'Could not load historical records');
+      renderError(ex && ex.message || 'Could not load previous records');
     } finally {
       state.loading = false;
     }
@@ -293,7 +321,7 @@
     const filtered = state.q || state.recordType || state.dateFrom || state.dateTo;
 
     if (count) {
-      if (!rows.length) count.textContent = filtered ? 'No records match the current filters.' : 'No historical records yet.';
+      if (!rows.length) count.textContent = filtered ? 'No records match the current filters.' : 'No previous records yet.';
       else count.textContent = state.total + ' record' + (state.total === 1 ? '' : 's') +
         (filtered ? ' matching filters' : '') +
         ' \u2014 showing page ' + state.page + ' of ' + state.totalPages;
@@ -302,8 +330,8 @@
     if (!rows.length) {
       const empty = `
         <div class="np-empty">
-          <div class="np-empty__title">${filtered ? 'No matching records' : 'No historical records yet'}</div>
-          <div class="np-empty__sub">${filtered ? 'Adjust your search or filters to see more.' : 'Click <b>Add Historical Record</b> to create your first entry.'}</div>
+          <div class="np-empty__title">${filtered ? 'No matching records' : 'No previous records yet'}</div>
+          <div class="np-empty__sub">${filtered ? 'Adjust your search or filters to see more.' : 'Click <b>Add Previous Record</b> to create your first entry.'}</div>
         </div>`;
       if (tbody) tbody.innerHTML = `<tr><td colspan="6">${empty}</td></tr>`;
       if (cards) cards.innerHTML = empty;
@@ -334,14 +362,14 @@
   }
 
   function rowHtml(r) {
-    const p    = r.patient || {};
     const atts = r.attachments || [];
     return `
       <tr data-id="${esc(r.id)}">
         <td>
           <div class="hr-cell__patient">
-            <div class="hr-cell__name">${esc(p.name || '\u2014')}</div>
-            <div class="hr-cell__meta">${p.phone ? '+91 ' + esc(p.phone) : ''}</div>
+            <div class="hr-cell__name">${esc(ownerName(r))}</div>
+            <div class="hr-cell__meta">${ownerPhone(r) ? '+91 ' + esc(ownerPhone(r)) : ''}</div>
+            <div class="hr-cell__owner">${ownershipChip(r)}</div>
           </div>
         </td>
         <td>${esc(fmtDate(r.recordDate))}</td>
@@ -360,14 +388,14 @@
   }
 
   function cardHtml(r) {
-    const p    = r.patient || {};
     const atts = r.attachments || [];
     return `
       <div class="hr-card" data-id="${esc(r.id)}">
         <div class="hr-card__head">
           <div>
-            <div class="hr-card__name">${esc(p.name || '\u2014')}</div>
+            <div class="hr-card__name">${esc(ownerName(r))}</div>
             <div class="hr-card__meta">${esc(fmtDate(r.recordDate))} \u00b7 ${esc(humanType(r.recordType))}</div>
+            <div class="hr-card__owner">${ownershipChip(r)}</div>
           </div>
           <span class="hr-chip">${atts.length} file${atts.length === 1 ? '' : 's'}</span>
         </div>
@@ -414,6 +442,10 @@
     if (psInput) {
       psInput.addEventListener('input', debounce(patientSearch, 200));
     }
+
+    // Patient source toggle (Existing NeoKidsPro Patient <-> Legacy / Historical Patient)
+    $('#hrSourceExistingBtn')?.addEventListener('click', () => setPatientSource('EXISTING'));
+    $('#hrSourceLegacyBtn')?.addEventListener('click', () => setPatientSource('LEGACY'));
 
     // Drop zone
     const drop = $('#hrDropZone');
@@ -464,6 +496,17 @@
     document.body.classList.add('np-modal-open');
   }
 
+  // ---- patient source toggle (Patient Linkage fix) --------------------
+  function setPatientSource(source) {
+    $('#hrPatientSource').value = source;
+    $('#hrSourceExistingBtn')?.classList.toggle('is-active', source === 'EXISTING');
+    $('#hrSourceExistingBtn')?.setAttribute('aria-selected', String(source === 'EXISTING'));
+    $('#hrSourceLegacyBtn')?.classList.toggle('is-active', source === 'LEGACY');
+    $('#hrSourceLegacyBtn')?.setAttribute('aria-selected', String(source === 'LEGACY'));
+    $('#hrExistingPatientPanel')?.classList.toggle('hidden', source === 'LEGACY');
+    $('#hrLegacyPatientPanel')?.classList.toggle('hidden', source !== 'LEGACY');
+  }
+
   function openRecordModal(id) {
     state.editingId = id || null;
     state.pendingFiles = [];
@@ -473,19 +516,33 @@
     state.existingAttachments = [];
 
     // Header text
-    $('#hrRecordModalTitle').textContent = id ? 'Edit Historical Record' : 'Add Historical Record';
+    $('#hrRecordModalTitle').textContent = id ? 'Edit Previous Record' : 'Add Previous Record';
     $('#hrRecordModalSub').textContent   = id ? 'Update the fields below or manage attachments.' : 'Fill the fields below and attach any supporting documents.';
     $('#histSubmitBtn').textContent      = id ? 'Save changes' : 'Save record';
 
-    // Show/hide patient picker depending on mode
-    const picker = $('#hrPatientPickerField');
+    // Patient ownership area (Patient Linkage fix): for a NEW record the
+    // doctor picks a branch via the toggle; for an EXISTING record we
+    // show a read-only summary of who it belongs to instead (linkage
+    // itself isn't editable from here — see hrOwnershipBadge markup).
+    const toggle = $('.hr-source-toggle');
+    const badge  = $('#hrOwnershipBadge');
     if (id) {
-      picker && picker.classList.add('hidden');
+      toggle && toggle.classList.add('hidden');
+      $('#hrExistingPatientPanel')?.classList.add('hidden');
+      $('#hrLegacyPatientPanel')?.classList.add('hidden');
       const rec = state.records.find(r => r.id === id);
       loadIntoForm(rec);
+      if (badge && rec) {
+        badge.classList.remove('hidden');
+        badge.innerHTML = isLegacy(rec)
+          ? `<div class="np-callout"><div>${ownershipChip(rec)}</div><div style="margin-top:.3rem;"><b>${esc(rec.legacyPatientName || '')}</b>${rec.legacyPatientPhone ? ' \u00b7 +91 ' + esc(rec.legacyPatientPhone) : ''}</div></div>`
+          : `<div class="np-callout np-callout--success"><div>${ownershipChip(rec)}</div><div style="margin-top:.3rem;"><b>${esc(rec.patient ? rec.patient.name : '')}</b>${rec.patient && rec.patient.phone ? ' \u00b7 +91 ' + esc(rec.patient.phone) : ''}</div></div>`;
+      }
     } else {
-      picker && picker.classList.remove('hidden');
+      toggle && toggle.classList.remove('hidden');
+      badge && badge.classList.add('hidden');
       clearForm();
+      setPatientSource('EXISTING');
       $('#hrRecordDate').value = today();
     }
     renderPendingFiles();
@@ -509,6 +566,9 @@
     $('#hrPatientResults')?.classList.add('hidden');
     $('#hrExistingAttWrap')?.classList.add('hidden');
     $('#hrPendingList')?.classList.add('hidden');
+    // Legacy patient fields
+    ['hrLegacyName','hrLegacyPhone','hrLegacyDob','hrLegacyGender','hrLegacyGuardian','hrLegacyNotes']
+      .forEach(id2 => { const el = $('#' + id2); if (el) el.value = ''; });
     state.pendingFiles = [];
     state.pendingLabels = [];
     state.pendingTypes = [];
@@ -521,11 +581,20 @@
     const f = $('#historicalForm');
     $('#histRecordId').value  = rec.id;
     $('#histPatientId').value = rec.patient?.id || rec.patientId || '';
+    $('#hrPatientSource').value = rec.patientSource || (rec.patient ? 'EXISTING' : 'LEGACY');
     if (rec.patient) {
       state.selectedPatient = rec.patient;
       const sp = $('#hrSelectedPatient');
       sp.innerHTML = `<div class="np-callout np-callout--success"><div><b>${esc(rec.patient.name || '')}</b>${rec.patient.phone ? ' \u00b7 +91 ' + esc(rec.patient.phone) : ''}</div></div>`;
       sp.classList.remove('hidden');
+    }
+    if (isLegacy(rec)) {
+      $('#hrLegacyName').value      = rec.legacyPatientName || '';
+      $('#hrLegacyPhone').value     = rec.legacyPatientPhone || '';
+      $('#hrLegacyDob').value       = rec.legacyPatientDob ? String(rec.legacyPatientDob).slice(0, 10) : '';
+      $('#hrLegacyGender').value    = rec.legacyPatientGender || '';
+      $('#hrLegacyGuardian').value  = rec.legacyPatientGuardian || '';
+      $('#hrLegacyNotes').value     = rec.legacyPatientNotes || '';
     }
     f.recordDate.value  = rec.recordDate ? String(rec.recordDate).slice(0, 10) : today();
     $('#hrRecordType').value = rec.recordType || 'CONSULTATION';
@@ -815,11 +884,24 @@
     e.preventDefault();
     hideFormError();
     const editingId = $('#histRecordId').value || state.editingId;
-    const patientId = $('#histPatientId').value || (state.selectedPatient && state.selectedPatient.id);
     const recordDate = $('#hrRecordDate').value;
+    const source = editingId ? null : ($('#hrPatientSource').value || 'EXISTING');
 
-    if (!editingId && !patientId) { showFormError('Please select a patient first.'); return; }
-    if (!recordDate)              { showFormError('Please choose a record date.'); return; }
+    // Patient Linkage validation: only enforced for NEW records — an
+    // existing record's linkage isn't editable from this form (see
+    // hrOwnershipBadge in openRecordModal).
+    let patientId = '';
+    let legacyName = '';
+    if (!editingId) {
+      if (source === 'LEGACY') {
+        legacyName = ($('#hrLegacyName').value || '').trim();
+        if (!legacyName) { showFormError('Please enter the legacy patient\u2019s name.'); return; }
+      } else {
+        patientId = $('#histPatientId').value || (state.selectedPatient && state.selectedPatient.id) || '';
+        if (!patientId) { showFormError('Please select a patient, or switch to "Legacy / Historical Patient" and enter their details.'); return; }
+      }
+    }
+    if (!recordDate) { showFormError('Please choose a record date.'); return; }
 
     const fd = new FormData();
     fd.append('recordDate',  recordDate);
@@ -829,6 +911,19 @@
     fd.append('notes',       $('#hrNotes').value.trim());
     fd.append('treatment',   $('#hrTreatment').value.trim());
     fd.append('medications', $('#hrMedications').value.trim());
+    if (!editingId) {
+      fd.append('patientSource', source);
+      if (source === 'LEGACY') {
+        fd.append('legacyPatientName',     legacyName);
+        fd.append('legacyPatientPhone',    ($('#hrLegacyPhone').value || '').trim());
+        fd.append('legacyPatientDob',      $('#hrLegacyDob').value || '');
+        fd.append('legacyPatientGender',   $('#hrLegacyGender').value || '');
+        fd.append('legacyPatientGuardian', ($('#hrLegacyGuardian').value || '').trim());
+        fd.append('legacyPatientNotes',    ($('#hrLegacyNotes').value || '').trim());
+      } else {
+        fd.append('patientId', patientId);
+      }
+    }
     // v3.4.4 route accepts multer.array('attachment', 20) \u2014 append each file
     // under the same field name plus a parallel labels[] value.
     state.pendingFiles.forEach((f, i) => {
@@ -848,7 +943,11 @@
       if (editingId) {
         saved = await api('/doctor/previous-records/' + encodeURIComponent(editingId), { method: 'PUT', body: fd });
       } else {
-        saved = await api('/doctor/patients/' + encodeURIComponent(patientId) + '/previous-records', { method: 'POST', body: fd });
+        // v3.4.8 — generic create endpoint (no patientId in the URL) so
+        // both Existing-patient and Legacy-patient branches share one
+        // call; patientSource/patientId/legacyPatient* already travel
+        // in `fd` above.
+        saved = await api('/doctor/previous-records', { method: 'POST', body: fd });
       }
       toast('success', editingId ? 'Record updated' : 'Record added');
       closeModal('hrRecordModal');
@@ -879,7 +978,7 @@
   // =====================================================================
   async function deleteRecord(id) {
     const ok = await confirmDialog({
-      title: 'Delete historical record?',
+      title: 'Delete previous record?',
       message: 'This record and its attachments will be removed from the patient timeline. This action cannot be undone.',
       danger: true, okText: 'Delete'
     });
@@ -916,10 +1015,11 @@
   }
 
   function renderViewContent(rec) {
-    const p = rec.patient || {};
+    const name  = ownerName(rec);
+    const phone = ownerPhone(rec);
     const atts = rec.attachments || [];
     $('#hrViewModalTitle').textContent = rec.title || (humanType(rec.recordType) + ' \u2014 ' + fmtDate(rec.recordDate));
-    $('#hrViewModalSub').textContent   = (p.name || '') + (p.phone ? ' \u00b7 +91 ' + p.phone : '');
+    $('#hrViewModalSub').textContent   = name + (phone ? ' \u00b7 +91 ' + phone : '');
     const kv = (k, v) => v ? `<div class="hr-view__row"><div class="hr-view__key">${esc(k)}</div><div class="hr-view__val">${esc(v)}</div></div>` : '';
     const attHtml = atts.length
       ? `<div class="hr-view__section">
@@ -942,11 +1042,28 @@
          </div>`
       : '<div class="np-mut" style="margin-top:.5rem;">No attachments on this record.</div>';
 
+    // Patient Linkage fix: an explicit ownership section at the top of
+    // the View modal, so it's never ambiguous whether this record is
+    // tied to a real directory patient or a manually-entered legacy one.
+    const ownerHtml = `
+      <div class="hr-view__owner">
+        ${ownershipChip(rec)}
+        <div class="hr-view__ownerDetail">
+          <b>${esc(name)}</b>${phone ? ' \u00b7 +91 ' + esc(phone) : ''}
+        </div>
+        ${isLegacy(rec) && (rec.legacyPatientGuardian || rec.legacyPatientDob || rec.legacyPatientGender) ? `
+        <div class="hr-view__ownerMeta">
+          ${rec.legacyPatientGuardian ? esc('Guardian: ' + rec.legacyPatientGuardian) : ''}
+          ${rec.legacyPatientDob ? (rec.legacyPatientGuardian ? ' \u00b7 ' : '') + esc('DOB: ' + fmtDate(rec.legacyPatientDob)) : ''}
+          ${rec.legacyPatientGender ? ((rec.legacyPatientGuardian || rec.legacyPatientDob) ? ' \u00b7 ' : '') + esc(rec.legacyPatientGender) : ''}
+        </div>` : ''}
+        ${isLegacy(rec) && rec.legacyPatientNotes ? `<div class="hr-view__ownerMeta">${esc(rec.legacyPatientNotes)}</div>` : ''}
+      </div>`;
+
     $('#hrViewContent').innerHTML = `
       <div class="hr-view">
+        ${ownerHtml}
         <div class="hr-view__grid">
-          ${kv('Patient',      p.name)}
-          ${kv('Phone',        p.phone ? '+91 ' + p.phone : '')}
           ${kv('Record date',  fmtDate(rec.recordDate))}
           ${kv('Record type',  humanType(rec.recordType))}
           ${kv('Title',        rec.title)}

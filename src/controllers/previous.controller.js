@@ -52,8 +52,52 @@ const baseFields = {
   treatment: z.preprocess(emptyToUndef, z.string().max(10000).optional()),
   medications: z.preprocess(emptyToUndef, z.string().max(10000).optional()),
 };
-const createSchema = z.object(Object.assign({ patientId: z.string().min(1).optional() }, baseFields)).strip();
-const updateSchema = z.object(baseFields).strip(); // everything optional — never throws "Invalid Input" for partial edits
+// --- patient linkage fields (v3.4.8 fix) ------------------------------
+// A record either links to a real directory patient (patientSource:
+// 'EXISTING', patientId required) or is a manually-entered pre-EMR
+// patient (patientSource: 'LEGACY', legacyPatientName required). Both
+// branches are optional at the schema level; create()/update() enforce
+// the actual "one or the other" requirement so validation errors stay
+// specific instead of a generic Zod message.
+const patientLinkFields = {
+  patientId: z.preprocess(emptyToUndef, z.string().min(1).optional()),
+  patientSource: z.preprocess(emptyToUndef, z.enum(['EXISTING', 'LEGACY']).optional()),
+  legacyPatientName: z.preprocess(emptyToUndef, z.string().max(190).optional()),
+  legacyPatientPhone: z.preprocess(emptyToUndef, z.string().max(32).optional()),
+  legacyPatientDob: z.preprocess(emptyToUndef, z.string().regex(/^\d{4}-\d{2}-\d{2}/).optional()),
+  legacyPatientGender: z.preprocess(emptyToUndef, z.string().max(16).optional()),
+  legacyPatientGuardian: z.preprocess(emptyToUndef, z.string().max(190).optional()),
+  legacyPatientNotes: z.preprocess(emptyToUndef, z.string().max(10000).optional()),
+};
+const createSchema = z.object(Object.assign({}, patientLinkFields, baseFields)).strip();
+const updateSchema = z.object(Object.assign({}, patientLinkFields, baseFields)).strip(); // everything optional — never throws "Invalid Input" for partial edits
+
+// Build the patientId / patientSource / legacy* portion of a create or
+// update payload. Throws a 422 with a clear message when neither an
+// existing patient nor legacy patient details were supplied.
+function resolvePatientLink(data, fallbackPatientId) {
+  const source = data.patientSource || (data.legacyPatientName ? 'LEGACY' : 'EXISTING');
+  if (source === 'LEGACY') {
+    if (!data.legacyPatientName) { const e = new Error('Legacy patient name is required'); e.status = 422; throw e; }
+    return {
+      patientId: null,
+      patientSource: 'LEGACY',
+      legacyPatientName: data.legacyPatientName,
+      legacyPatientPhone: data.legacyPatientPhone || null,
+      legacyPatientDob: data.legacyPatientDob ? new Date(data.legacyPatientDob) : null,
+      legacyPatientGender: data.legacyPatientGender || null,
+      legacyPatientGuardian: data.legacyPatientGuardian || null,
+      legacyPatientNotes: data.legacyPatientNotes || null,
+    };
+  }
+  const patientId = data.patientId || fallbackPatientId;
+  if (!patientId) { const e = new Error('Select an existing patient, or switch to "Legacy / Historical Patient" and enter their details'); e.status = 422; throw e; }
+  return {
+    patientId, patientSource: 'EXISTING',
+    legacyPatientName: null, legacyPatientPhone: null, legacyPatientDob: null,
+    legacyPatientGender: null, legacyPatientGuardian: null, legacyPatientNotes: null,
+  };
+}
 const shareSchema = z.object({
   channel: z.enum(['whatsapp', 'email']),
   phone: z.preprocess(emptyToUndef, z.string().max(32).optional()),
@@ -148,6 +192,8 @@ exports.listAllForDoctor = asyncH(async (req, res) => {
       { medications: { contains: q } },
       { patient:     { name:  { contains: q } } },
       { patient:     { phone: { contains: q.replace(/\D/g, '') || q } } },
+      { legacyPatientName:  { contains: q } },
+      { legacyPatientPhone: { contains: q.replace(/\D/g, '') || q } },
     ];
   }
 
@@ -185,15 +231,14 @@ exports.detail = asyncH(async (req, res) => {
 // the body stream twice and silently drop files.
 exports.create = asyncH(async (req, res) => {
   const data = parseBody(req, createSchema);
-  const patientId = req.params.patientId || data.patientId;
-  if (!patientId) { const e = new Error('patientId is required'); e.status = 422; throw e; }
-  const record = await prisma.previousRecord.create({ data: {
-    doctorId: req.user.id, patientId,
+  const link = resolvePatientLink(data, req.params.patientId);
+  const record = await prisma.previousRecord.create({ data: Object.assign({
+    doctorId: req.user.id,
     title: data.title || null, recordType: data.recordType || 'OTHER',
     recordDate: data.recordDate ? new Date(data.recordDate) : new Date(),
     diagnosis: data.diagnosis || null, notes: data.notes || null,
     treatment: data.treatment || null, medications: data.medications || null,
-  }});
+  }, link)});
   await saveAttachments(req, record);
   const full = await prisma.previousRecord.findUnique({ where: { id: record.id }, include });
   res.status(201).json({ success: true, record: svc.decorateRecord(req, full) });
@@ -208,6 +253,14 @@ exports.update = asyncH(async (req, res) => {
   for (const k of ['title','recordType','diagnosis','notes','treatment','medications'])
     if (data[k] !== undefined) patch[k] = data[k] === '' ? null : data[k];
   if (data.recordDate) patch.recordDate = new Date(data.recordDate);
+  // Only touch patient linkage if the edit form actually sent linkage
+  // fields (patientSource, or a patientId, or legacy details) — the
+  // Edit modal hides the picker for existing records, but the API
+  // still supports re-linking so a mis-entered legacy record can later
+  // be matched to a real directory patient (or vice-versa).
+  if (data.patientSource !== undefined || data.patientId !== undefined || data.legacyPatientName !== undefined) {
+    Object.assign(patch, resolvePatientLink(data, existing.patientId));
+  }
   const record = await prisma.previousRecord.update({ where: { id: existing.id }, data: patch });
   await saveAttachments(req, record);
   const full = await prisma.previousRecord.findUnique({ where: { id: record.id }, include });

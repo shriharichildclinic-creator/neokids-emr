@@ -567,11 +567,25 @@ select.np-input{
   padding: 1rem 1.25rem;
   border-bottom:1px solid var(--np-border);
 }
-.np-modal__title{ font-size: 1.05rem; font-weight:700; color: var(--np-ink); flex:1; }
+/* Mobile header-clipping fix — the title/subtitle live in an unnamed
+   wrapper <div> that is itself the flex item here (not .np-modal__title
+   directly, since some modals nest an extra <div>). Flex items default
+   to min-width:auto (their content size), so on narrow viewports that
+   wrapper refused to shrink below its intrinsic text width. Combined
+   with `.np-modal__panel{ overflow:hidden }`, the overflowing part of
+   the header — often the close button, or the tail of a longer title
+   like "Edit Historical Record" — was silently clipped instead of
+   wrapping. min-width:0 lets the wrapper shrink to the available space
+   so long titles wrap onto a second line instead of being cut off, and
+   flex-shrink:0 on the close button keeps it pinned and always visible. */
+.np-modal__head > div:first-child{ min-width:0; flex:1 1 auto; }
+.np-modal__title{ font-size: 1.05rem; font-weight:700; color: var(--np-ink); flex:1; overflow-wrap:anywhere; word-break:break-word; }
+.np-modal__subtitle{ overflow-wrap:anywhere; word-break:break-word; }
 .np-modal__close{
   width:36px; height:36px; border-radius:10px;
   border:0; background:transparent; cursor:pointer; color: var(--np-muted);
   display:inline-flex; align-items:center; justify-content:center;
+  flex-shrink:0;
 }
 .np-modal__close:hover{ background: var(--nk-teal-50); color: var(--np-ink); }
 /* flex:1 + min-height:0 so the body is the flex item that shrinks and
@@ -1947,6 +1961,11 @@ html[data-theme="dark"] .np-modal pre{
   background:rgba(59,130,246,.08); color:#1d4ed8; font-size:.75rem; font-weight:600;
 }
 .hr-chip--files{ background:rgba(16,185,129,.1); color:#047857; }
+/* Patient Linkage fix — ownership chips, shared by list/cards/View modal */
+.hr-chip--linked{ background:rgba(16,185,129,.12); color:#047857; }
+.hr-chip--legacy{ background:rgba(217,119,6,.12); color:#b45309; }
+.hr-cell__owner{ margin-top:.25rem; }
+.hr-card__owner{ margin-top:.25rem; }
 
 /* Card view (mobile) */
 .hr-cards{ display:none; flex-direction:column; gap:.6rem; }
@@ -1984,6 +2003,10 @@ html[data-theme="dark"] .np-modal pre{
 
 /* Patient picker */
 .hr-picker{ position:relative; display:flex; gap:.4rem; }
+/* Patient Linkage fix — Existing/Legacy source toggle sits directly
+   above the picker; reuses the existing .np-seg segmented-control look
+   used elsewhere in the app so it matches current styling exactly. */
+.hr-source-toggle{ margin-bottom:.6rem; }
 .hr-picker__input{ flex:1; }
 .hr-picker__results{
   max-height:260px; overflow-y:auto;
@@ -2091,6 +2114,17 @@ html[data-theme="dark"] .np-modal pre{
 }
 
 /* View modal */
+/* Patient Linkage fix — ownership summary block at the top of the View
+   modal, so it's never ambiguous whether a record is tied to a real
+   directory patient or a manually-entered legacy one. */
+.hr-view__owner{
+  padding:.7rem .85rem; margin-bottom:.85rem;
+  background:var(--np-surface-2, #f6f8fb);
+  border:1px solid var(--np-border, #eef0f4); border-radius:12px;
+}
+.hr-view__ownerDetail{ margin-top:.35rem; font-size:.95rem; color:var(--np-ink, #111827); }
+.hr-view__ownerMeta{ margin-top:.2rem; font-size:.8rem; color:var(--np-mut, #6b7280); }
+
 .hr-view__grid{ display:grid; grid-template-columns:1fr; gap:.5rem; }
 .hr-view__row{
   display:grid; grid-template-columns:150px 1fr; gap:.75rem;

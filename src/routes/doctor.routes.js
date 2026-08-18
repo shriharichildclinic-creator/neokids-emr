@@ -68,11 +68,24 @@ router.get('/previous-records/permission',                  prev.permission);
 router.get('/previous-records',                             prev.listAllForDoctor);
 router.get('/previous-records/:id',                         prev.detail);
 router.get('/patients/:patientId/previous-records',         prev.listForPatient);
+// v3.4.8 — Patient Linkage fix: generic create endpoint that does NOT
+// force a patientId from the URL. Used by the current Add/Edit modal
+// for BOTH branches (existing patient chosen via search, or a legacy/
+// historical patient entered manually) — patientSource + patientId /
+// legacyPatient* fields travel in the body and prev.create()'s
+// resolvePatientLink() decides which branch applies. The older
+// `/patients/:patientId/previous-records` route below is kept exactly
+// as-is for backward compatibility with any existing callers.
+router.post(
+  '/previous-records',
+  uploadHistoricalPrescription.array('attachment', 20),
+  prev.create
+);
 router.post(
   '/patients/:patientId/previous-records',
   uploadHistoricalPrescription.array('attachment', 20),
   (req, _res, next) => {
-    req.body = { ...(req.body || {}), patientId: req.params.patientId };
+    req.body = { ...(req.body || {}), patientId: req.params.patientId, patientSource: 'EXISTING' };
     next();
   },
   prev.create

@@ -195,13 +195,33 @@ model Prescription {
 model PreviousRecord {
   id            String   @id @default(uuid())
   doctorId      String
-  patientId     String
+  // v3.4.8 — patientId is now OPTIONAL. A record either links to a real
+  // NeoKidsPro patient (patientId set, patientSource = "EXISTING") or
+  // belongs to a manually-entered pre-EMR patient that was never
+  // registered in the directory (patientId null, patientSource =
+  // "LEGACY", legacyPatient* fields populated instead). See the
+  // "Patient Linkage" fix notes in previous.controller.js.
+  patientId     String?
   recordDate    DateTime @db.Date
   diagnosis     String?  @db.Text
   notes         String?  @db.Text
   treatment     String?  @db.Text
   medications   String?  @db.Text
   attachmentUrl String?
+
+  // ───────────────────────────────────────────────
+  // v3.4.8 — Patient linkage rework columns.
+  // patientSource tells the UI/API which "ownership" branch a record is
+  // in: 'EXISTING' (linked to a real Patient row) or 'LEGACY' (manually
+  // entered, pre-EMR patient with no directory record). The legacy*
+  // fields are only populated when patientSource = 'LEGACY'.
+  patientSource      String   @default("EXISTING") // 'EXISTING' | 'LEGACY'
+  legacyPatientName  String?
+  legacyPatientPhone String?
+  legacyPatientDob   DateTime? @db.Date
+  legacyPatientGender String?
+  legacyPatientGuardian String?
+  legacyPatientNotes String?  @db.Text
 
   // ───────────────────────────────────────────────
   // v3.4.3+ professional-EMR rework columns.
@@ -226,12 +246,18 @@ model PreviousRecord {
   updatedAt           DateTime @updatedAt
 
   doctor      Doctor                 @relation(fields: [doctorId], references: [id])
-  patient     Patient                @relation(fields: [patientId], references: [id])
+  // Optional now — see patientId comment above. onDelete: SetNull so
+  // deleting a patient record never cascades into wiping a doctor's
+  // previous-record history; it just detaches (record still has the
+  // patient's name/phone frozen in place via patientSource fallback
+  // display on the frontend, if ever needed).
+  patient     Patient?               @relation(fields: [patientId], references: [id], onDelete: SetNull)
   attachments PreviousRecordAttachment[]
 
   @@index([doctorId, patientId, recordDate])
   @@index([patientId, recordDate])
   @@index([deletedAt])
+  @@index([patientSource])
   @@map("previous_records")
 }
 

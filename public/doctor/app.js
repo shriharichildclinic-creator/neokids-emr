@@ -248,7 +248,7 @@ async function init(){
   loadDashSnapshot();
 }
 function applyHistoricalPermission(me){
-  // Issue 1 — Historical Records is a permission-controlled Doctor Panel
+  // Issue 1 — Previous Records is a permission-controlled Doctor Panel
   // feature. Admins only toggle access (canAddPreviousRecords); doctors
   // without permission never see the tab.
   const allowed = !!(me && me.canAddPreviousRecords);
@@ -256,7 +256,7 @@ function applyHistoricalPermission(me){
   if (navBtn) navBtn.classList.toggle('hidden', !allowed);
   const tab = document.getElementById('historicalTab');
   if (tab && !allowed){
-    tab.innerHTML = '<div class="np-panel"><div class="np-panel__body"><div class="np-empty"><div class="np-empty__title">Historical Records are disabled</div><div class="np-empty__sub">Ask your clinic admin to enable this feature for your account.</div></div></div></div>';
+    tab.innerHTML = '<div class="np-panel"><div class="np-panel__body"><div class="np-empty"><div class="np-empty__title">Previous Records are disabled</div><div class="np-empty__sub">Ask your clinic admin to enable this feature for your account.</div></div></div></div>';
   }
 }
 function _stripDrPrefix(n){ return String(n == null ? '' : n).replace(/^\s*(dr\.?\s+)+/i, '').trim(); }
@@ -328,7 +328,7 @@ const TAB_META = {
   consultTab:    { title:'Consultation',        sub:'Active patient consultation workspace' },
   rxArchiveTab:  { title:'Prescription Archive',sub:'All prescriptions you have issued' },
   earningsTab:   { title:'My Earnings',         sub:'Monthly revenue split, TDS, and settlement status' },
-  historicalTab: { title:'Historical Records',  sub:'Add a past or offline visit to a patient timeline' },
+  historicalTab: { title:'Previous Records',  sub:'Add a past or offline visit to a patient timeline' },
   certificatesTab:{ title:'Medical Certificates', sub:'Certificates you have issued' },
   settingsTab:   { title:'Settings',            sub:'Manage your profile, availability, and clinic' }
 };
@@ -1733,7 +1733,7 @@ async function submitHistorical(e){
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
     const res = await api('/doctor/historical-appointments', { method:'POST', body: fd });
-    _toast('success', 'Historical record added to ' + (res.patient ? res.patient.name : 'patient') + "'s timeline.");
+    _toast('success', 'Previous record added to ' + (res.patient ? res.patient.name : 'patient') + "'s timeline.");
     form.reset();
     $('#histPatientId').value = ''; $('#histLinkConfirmed').value = 'false';
     const box = $('#histMatchBox'); if (box) box.classList.add('hidden');
@@ -1745,10 +1745,10 @@ async function submitHistorical(e){
     } else if (ex.status === 409 && ex.data && ex.data.code === 'SLOT_CONFLICT'){
       _toast('error', ex.data.error || 'A record for this date/time already exists.');
     } else {
-      _toast('error', ex.message || 'Could not save historical record');
+      _toast('error', ex.message || 'Could not save previous record');
     }
   } finally {
-    btn.disabled = false; btn.textContent = 'Save historical record';
+    btn.disabled = false; btn.textContent = 'Save previous record';
   }
 }
 
