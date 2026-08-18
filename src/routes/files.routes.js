@@ -363,7 +363,7 @@ router.get('/share/:token', asyncHandler(async (req, res) => {
   let fp, mime, name;
   if (p.t === 'att') {
     fp = pathShare.join(histSvc.STORAGE_PATH, 'historical-rx', p.p);
-    mime = p.m || 'application/octet-stream';
+    mime = histSvc.resolveMime(p.m, p.n);
     name = p.n || 'file';
   } else if (p.t === 'pdf') {
     // Generated record-summary PDF — see historical-record.service.js pdfShareUrl.

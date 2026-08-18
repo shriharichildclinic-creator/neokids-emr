@@ -25,7 +25,26 @@ function verify(token){
   try { const p = JSON.parse(Buffer.from(body.replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString('utf8')); if (p.exp && p.exp < Math.floor(Date.now()/1000)) return null; return p; } catch { return null; }
 }
 
-function attachmentToken(att){ return sign({ t:'att', id: att.id, p: att.storagePath, n: att.originalName, m: att.mimeType, exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
+// v3.4.7 — attachments migrated from the legacy single-file column were
+// backfilled with mimeType='application/octet-stream' (see migration
+// 20260817120000_historical_records_pro). Browsers ALWAYS force-download
+// octet-stream content regardless of Content-Disposition, which is why
+// Preview/Open/Download looked identical for those rows. Infer a real
+// mime type from the file extension whenever the stored one is generic
+// or missing, so inline viewing actually works for legacy files too.
+const EXT_MIME = {
+  '.pdf': 'application/pdf',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+  '.heic': 'image/heic', '.heif': 'image/heif'
+};
+function resolveMime(mime, name){
+  if (mime && mime !== 'application/octet-stream') return mime;
+  const ext = path.extname(String(name || '')).toLowerCase();
+  return EXT_MIME[ext] || mime || 'application/octet-stream';
+}
+
+function attachmentToken(att){ return sign({ t:'att', id: att.id, p: att.storagePath, n: att.originalName, m: resolveMime(att.mimeType, att.originalName), exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
 function recordShareToken(record){ return sign({ t:'rec', id: record.id, exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
 // v3.4.7 — generated record-summary PDFs are streamed through the SAME
 // signed-token route as attachments (`/api/files/share/:token`), rather
@@ -51,7 +70,15 @@ function recordShareUrl(req, record){
 function decorateRecord(req, record){
   const atts = (record.attachments || []).map(a => {
     const u = attachmentUrls(req, a);
-    return { id: a.id, label: a.label || a.originalName, originalName: a.originalName, mimeType: a.mimeType, sizeBytes: a.sizeBytes, kind: a.kind, attachmentType: a.attachmentType || null, notes: a.notes || null, sortOrder: a.sortOrder || 0, createdAt: a.createdAt, viewUrl: u.view, downloadUrl: u.download };
+    const mimeType = resolveMime(a.mimeType, a.originalName);
+    // Legacy rows were backfilled with sizeBytes=0 (no real size ever
+    // recorded) — stat the file on disk once so the UI shows a real
+    // number instead of a permanent "0 B".
+    let sizeBytes = a.sizeBytes;
+    if (!sizeBytes) {
+      try { sizeBytes = fs.statSync(path.join(STORAGE_PATH, 'historical-rx', a.storagePath)).size; } catch (_) { /* file missing, leave as-is */ }
+    }
+    return { id: a.id, label: a.label || a.originalName, originalName: a.originalName, mimeType, sizeBytes, kind: a.kind, attachmentType: a.attachmentType || null, notes: a.notes || null, sortOrder: a.sortOrder || 0, createdAt: a.createdAt, viewUrl: u.view, downloadUrl: u.download };
   });
   return Object.assign({}, record, { attachments: atts, shareUrl: recordShareUrl(req, record) });
 }
@@ -84,4 +111,4 @@ async function deliver({ channel, to, patientName, doctorName, recordType, recor
   return results;
 }
 
-module.exports = { sign, verify, attachmentToken, recordShareToken, pdfToken, pdfShareUrl, attachmentUrls, recordShareUrl, decorateRecord, deliver, SHARE_TTL_SEC, STORAGE_PATH };
+module.exports = { sign, verify, attachmentToken, recordShareToken, pdfToken, pdfShareUrl, attachmentUrls, recordShareUrl, decorateRecord, deliver, resolveMime, SHARE_TTL_SEC, STORAGE_PATH };
