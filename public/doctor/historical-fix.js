@@ -178,7 +178,25 @@
 
   function portalModal(id) {
     const el = document.getElementById(id);
-    if (el && el.parentElement !== document.body) document.body.appendChild(el);
+    // BUGFIX (attachment Preview never opening): this used to skip the
+    // appendChild whenever the element was ALREADY a direct child of
+    // <body> (`if (el.parentElement !== document.body) …`). That guard
+    // was meant as a harmless no-op optimisation, but appendChild is
+    // being used here for its side effect of *reordering* — it moves
+    // the node to become the LAST child of body, which is what decides
+    // paint order among the (all-equal-z-index) portaled modals.
+    // #hrAttPreviewModal already sits at the end of <body> in the raw
+    // HTML, so the guard made its portalModal() call a no-op. Then the
+    // two calls before it (hrRecordModal / hrViewModal) — whose modals
+    // start out NESTED inside the panel, so the guard doesn't block
+    // them — got appendChild'd *past* hrAttPreviewModal's original
+    // position, leaving the preview modal first (i.e. UNDERNEATH the
+    // still-open Edit/View modal) instead of last. Clicking "Preview"
+    // did open it — it was just rendering beneath the modal you opened
+    // it from, so nothing appeared to happen. Always appendChild, with
+    // no guard, so every call unconditionally moves its element to the
+    // new end of <body>, regardless of where it already was.
+    if (el) document.body.appendChild(el);
   }
 
   // =====================================================================
@@ -520,26 +538,32 @@
     $('#hrRecordModalSub').textContent   = id ? 'Update the fields below or manage attachments.' : 'Fill the fields below and attach any supporting documents.';
     $('#histSubmitBtn').textContent      = id ? 'Save changes' : 'Save record';
 
-    // Patient ownership area (Patient Linkage fix): for a NEW record the
-    // doctor picks a branch via the toggle; for an EXISTING record we
-    // show a read-only summary of who it belongs to instead (linkage
-    // itself isn't editable from here — see hrOwnershipBadge markup).
+    // Patient ownership area (Patient Linkage fix): the toggle + search /
+    // legacy panels are now ALWAYS shown, for both new and existing
+    // records. Editing an existing record pre-fills the toggle/panels
+    // with its current linkage, and submitRecord() always sends the
+    // patient-link fields — the backend (`update()` in
+    // previous.controller.js) already supports re-linking a record, this
+    // was purely a frontend gap where the picker was hidden and the
+    // fields were stripped out of the PUT body. #hrOwnershipBadge is now
+    // just an informational "currently linked to" strip shown above the
+    // (fully interactive) picker when editing, not a dead-end read-only
+    // summary.
     const toggle = $('.hr-source-toggle');
     const badge  = $('#hrOwnershipBadge');
+    toggle && toggle.classList.remove('hidden');
     if (id) {
-      toggle && toggle.classList.add('hidden');
-      $('#hrExistingPatientPanel')?.classList.add('hidden');
-      $('#hrLegacyPatientPanel')?.classList.add('hidden');
       const rec = state.records.find(r => r.id === id);
       loadIntoForm(rec);
       if (badge && rec) {
         badge.classList.remove('hidden');
-        badge.innerHTML = isLegacy(rec)
-          ? `<div class="np-callout"><div>${ownershipChip(rec)}</div><div style="margin-top:.3rem;"><b>${esc(rec.legacyPatientName || '')}</b>${rec.legacyPatientPhone ? ' \u00b7 +91 ' + esc(rec.legacyPatientPhone) : ''}</div></div>`
-          : `<div class="np-callout np-callout--success"><div>${ownershipChip(rec)}</div><div style="margin-top:.3rem;"><b>${esc(rec.patient ? rec.patient.name : '')}</b>${rec.patient && rec.patient.phone ? ' \u00b7 +91 ' + esc(rec.patient.phone) : ''}</div></div>`;
+        badge.innerHTML = `<div class="np-callout" style="margin-bottom:.6rem;">
+          <div>Currently linked to: ${ownershipChip(rec)}</div>
+          <div style="margin-top:.3rem;"><b>${esc(ownerName(rec))}</b>${ownerPhone(rec) ? ' \u00b7 +91 ' + esc(ownerPhone(rec)) : ''}</div>
+          <div class="np-mut" style="margin-top:.35rem;font-size:.78rem;">Use the options below to link a different patient, unlink and enter a legacy patient, or edit these details.</div>
+        </div>`;
       }
     } else {
-      toggle && toggle.classList.remove('hidden');
       badge && badge.classList.add('hidden');
       clearForm();
       setPatientSource('EXISTING');
@@ -581,21 +605,32 @@
     const f = $('#historicalForm');
     $('#histRecordId').value  = rec.id;
     $('#histPatientId').value = rec.patient?.id || rec.patientId || '';
-    $('#hrPatientSource').value = rec.patientSource || (rec.patient ? 'EXISTING' : 'LEGACY');
+    const source = rec.patientSource || (rec.patient ? 'EXISTING' : 'LEGACY');
+    // Always reset both branches first so switching a record that was
+    // previously LEGACY into being edited doesn't leave stale EXISTING
+    // fields (or vice versa) sitting around in the form.
+    $('#hrPatientResults')?.classList.add('hidden');
+    $('#hrSelectedPatient')?.classList.add('hidden');
     if (rec.patient) {
       state.selectedPatient = rec.patient;
-      const sp = $('#hrSelectedPatient');
-      sp.innerHTML = `<div class="np-callout np-callout--success"><div><b>${esc(rec.patient.name || '')}</b>${rec.patient.phone ? ' \u00b7 +91 ' + esc(rec.patient.phone) : ''}</div></div>`;
-      sp.classList.remove('hidden');
+      $('#histPatientId').value = rec.patient.id;
+      $('#histPatientSearch').value = rec.patient.name || '';
+      renderSelectedPatientCard(rec.patient);
+    } else {
+      state.selectedPatient = null;
+      $('#histPatientSearch').value = '';
     }
-    if (isLegacy(rec)) {
-      $('#hrLegacyName').value      = rec.legacyPatientName || '';
-      $('#hrLegacyPhone').value     = rec.legacyPatientPhone || '';
-      $('#hrLegacyDob').value       = rec.legacyPatientDob ? String(rec.legacyPatientDob).slice(0, 10) : '';
-      $('#hrLegacyGender').value    = rec.legacyPatientGender || '';
-      $('#hrLegacyGuardian').value  = rec.legacyPatientGuardian || '';
-      $('#hrLegacyNotes').value     = rec.legacyPatientNotes || '';
-    }
+    $('#hrLegacyName').value      = rec.legacyPatientName || '';
+    $('#hrLegacyPhone').value     = rec.legacyPatientPhone || '';
+    $('#hrLegacyDob').value       = rec.legacyPatientDob ? String(rec.legacyPatientDob).slice(0, 10) : '';
+    $('#hrLegacyGender').value    = rec.legacyPatientGender || '';
+    $('#hrLegacyGuardian').value  = rec.legacyPatientGuardian || '';
+    $('#hrLegacyNotes').value     = rec.legacyPatientNotes || '';
+    // Drive the toggle through setPatientSource() so the visible panel,
+    // the hidden #hrPatientSource field, and the tab button states all
+    // agree — this is the same function the toggle buttons themselves
+    // call, so editing behaves identically to picking a branch fresh.
+    setPatientSource(source);
     f.recordDate.value  = rec.recordDate ? String(rec.recordDate).slice(0, 10) : today();
     $('#hrRecordType').value = rec.recordType || 'CONSULTATION';
     $('#hrTitle').value       = rec.title || '';
@@ -605,6 +640,29 @@
     $('#hrMedications').value = rec.medications || '';
     state.existingAttachments = rec.attachments || [];
     renderExistingAttachments();
+  }
+
+  // Patient Linkage fix — shared renderer for the "selected existing
+  // patient" card, used both when picking fresh from search results and
+  // when loading an existing record into the Edit form. Includes a
+  // "Change patient" action so a doctor can clear the current selection
+  // and search again without having to reopen the modal.
+  function renderSelectedPatientCard(p) {
+    const sp = $('#hrSelectedPatient');
+    if (!sp || !p) return;
+    sp.innerHTML = `<div class="np-callout np-callout--success">
+      <div><b>${esc(p.name || '')}</b>${p.phone ? ' \u00b7 +91 ' + esc(p.phone) : ''}</div>
+      <button type="button" class="np-btn np-btn--ghost np-btn--sm" data-hr-clear-patient style="margin-top:.4rem;">Change patient</button>
+    </div>`;
+    sp.classList.remove('hidden');
+    sp.querySelector('[data-hr-clear-patient]')?.addEventListener('click', () => {
+      state.selectedPatient = null;
+      $('#histPatientId').value = '';
+      sp.classList.add('hidden');
+      sp.innerHTML = '';
+      const input = $('#histPatientSearch');
+      if (input) { input.value = ''; input.focus(); }
+    });
   }
 
   async function patientSearch() {
@@ -629,9 +687,7 @@
         const p = rows.find(x => x.id === btn.getAttribute('data-pid'));
         state.selectedPatient = p;
         $('#histPatientId').value = p.id;
-        const sp = $('#hrSelectedPatient');
-        sp.innerHTML = `<div class="np-callout np-callout--success"><div><b>${esc(p.name)}</b>${p.phone ? ' \u00b7 +91 ' + esc(p.phone) : ''}</div></div>`;
-        sp.classList.remove('hidden');
+        renderSelectedPatientCard(p);
         box.classList.add('hidden');
         $('#histPatientSearch').value = p.name;
       }));
@@ -885,21 +941,20 @@
     hideFormError();
     const editingId = $('#histRecordId').value || state.editingId;
     const recordDate = $('#hrRecordDate').value;
-    const source = editingId ? null : ($('#hrPatientSource').value || 'EXISTING');
+    const source = $('#hrPatientSource').value || 'EXISTING';
 
-    // Patient Linkage validation: only enforced for NEW records — an
-    // existing record's linkage isn't editable from this form (see
-    // hrOwnershipBadge in openRecordModal).
+    // Patient Linkage fix: the toggle/panels are now shown \u2014 and
+    // validated \u2014 for BOTH new and existing records, so a doctor can
+    // unlink, re-link to a different NeoKidsPro patient, or convert to/
+    // from a legacy patient while editing, not just at creation time.
     let patientId = '';
     let legacyName = '';
-    if (!editingId) {
-      if (source === 'LEGACY') {
-        legacyName = ($('#hrLegacyName').value || '').trim();
-        if (!legacyName) { showFormError('Please enter the legacy patient\u2019s name.'); return; }
-      } else {
-        patientId = $('#histPatientId').value || (state.selectedPatient && state.selectedPatient.id) || '';
-        if (!patientId) { showFormError('Please select a patient, or switch to "Legacy / Historical Patient" and enter their details.'); return; }
-      }
+    if (source === 'LEGACY') {
+      legacyName = ($('#hrLegacyName').value || '').trim();
+      if (!legacyName) { showFormError('Please enter the legacy patient\u2019s name.'); return; }
+    } else {
+      patientId = $('#histPatientId').value || (state.selectedPatient && state.selectedPatient.id) || '';
+      if (!patientId) { showFormError('Please select a patient, or switch to "Legacy / Historical Patient" and enter their details.'); return; }
     }
     if (!recordDate) { showFormError('Please choose a record date.'); return; }
 
@@ -911,18 +966,21 @@
     fd.append('notes',       $('#hrNotes').value.trim());
     fd.append('treatment',   $('#hrTreatment').value.trim());
     fd.append('medications', $('#hrMedications').value.trim());
-    if (!editingId) {
-      fd.append('patientSource', source);
-      if (source === 'LEGACY') {
-        fd.append('legacyPatientName',     legacyName);
-        fd.append('legacyPatientPhone',    ($('#hrLegacyPhone').value || '').trim());
-        fd.append('legacyPatientDob',      $('#hrLegacyDob').value || '');
-        fd.append('legacyPatientGender',   $('#hrLegacyGender').value || '');
-        fd.append('legacyPatientGuardian', ($('#hrLegacyGuardian').value || '').trim());
-        fd.append('legacyPatientNotes',    ($('#hrLegacyNotes').value || '').trim());
-      } else {
-        fd.append('patientId', patientId);
-      }
+    // Patient Linkage fix: send on every save, not just create, so
+    // edits can actually change (or clear-and-reassign) who a record
+    // belongs to. previous.controller.js#update() only touches linkage
+    // when these fields are present, and re-resolves them the same way
+    // create() does.
+    fd.append('patientSource', source);
+    if (source === 'LEGACY') {
+      fd.append('legacyPatientName',     legacyName);
+      fd.append('legacyPatientPhone',    ($('#hrLegacyPhone').value || '').trim());
+      fd.append('legacyPatientDob',      $('#hrLegacyDob').value || '');
+      fd.append('legacyPatientGender',   $('#hrLegacyGender').value || '');
+      fd.append('legacyPatientGuardian', ($('#hrLegacyGuardian').value || '').trim());
+      fd.append('legacyPatientNotes',    ($('#hrLegacyNotes').value || '').trim());
+    } else {
+      fd.append('patientId', patientId);
     }
     // v3.4.4 route accepts multer.array('attachment', 20) \u2014 append each file
     // under the same field name plus a parallel labels[] value.

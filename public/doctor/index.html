@@ -847,10 +847,12 @@
         <input type="hidden"                   id="histLinkConfirmed" value="false">
 
         <!-- ============================================================
-             Patient ownership (only shown for NEW records — an existing
-             record's linkage is displayed read-only via #hrOwnershipBadge
-             below and can only be changed by re-opening this picker).
-             Two mutually exclusive branches:
+             Patient ownership — shown for BOTH new and existing records.
+             When editing, #hrOwnershipBadge above shows a "currently
+             linked to" summary and this picker is pre-filled with the
+             record's current linkage; changing the toggle, picking a
+             different patient, or switching to Legacy re-links the
+             record on save. Two mutually exclusive branches:
                • Existing NeoKidsPro Patient — search + select, same as
                  before.
                • Legacy / Historical Patient — manual entry for a
@@ -859,6 +861,11 @@
              ============================================================ -->
         <div class="np-field" id="hrPatientPickerField">
           <label class="np-field__label">Patient <span class="np-req">*</span></label>
+
+          <!-- "Currently linked to" summary shown only when editing an
+               existing record; populated by openRecordModal() in
+               historical-fix.js. -->
+          <div id="hrOwnershipBadge" class="hidden"></div>
 
           <div class="np-seg hr-source-toggle" role="tablist" aria-label="Patient source">
             <button type="button" class="np-seg__btn is-active" id="hrSourceExistingBtn" data-hr-source="EXISTING" role="tab" aria-selected="true">Existing NeoKidsPro Patient</button>
@@ -917,9 +924,6 @@
               <textarea id="hrLegacyNotes" class="np-textarea" rows="2" placeholder="Any other identifying details worth keeping on file"></textarea>
             </div>
           </div>
-
-          <!-- Read-only ownership summary shown when editing an existing record -->
-          <div id="hrOwnershipBadge" class="hidden"></div>
         </div>
 
         <div class="np-grid-2">
