@@ -53,7 +53,7 @@ router.post(
 );
 
 // ─── Previous Records (doctor-only feature flag) ───
-// v3.4.4: the controller export is now a raw function (NOT an array with
+// The controller export is a raw function (NOT an array with
 // inline multer). The single/array multer middleware lives here on the
 // route, so the request body is parsed exactly ONCE and req.body keeps
 // the same shape the controller expects (Zod-validated, empty-string
@@ -61,14 +61,14 @@ router.post(
 // database operation" — double-multer parsed the multipart stream twice,
 // stripping all text fields after the file.
 router.get('/previous-records/permission',                  prev.permission);
-// v3.4.6 — doctor-wide list with search/filter/pagination for the
+// Doctor-wide list with search/filter/pagination for the
 // refactored Historical Records panel. Must be registered BEFORE
 // `/previous-records/:id` so the literal “/permission” & bare list
 // don’t collide with the `:id` route.
 router.get('/previous-records',                             prev.listAllForDoctor);
 router.get('/previous-records/:id',                         prev.detail);
 router.get('/patients/:patientId/previous-records',         prev.listForPatient);
-// v3.4.8 — Patient Linkage fix: generic create endpoint that does NOT
+// Patient Linkage — generic create endpoint that does NOT
 // force a patientId from the URL. Used by the current Add/Edit modal
 // for BOTH branches (existing patient chosen via search, or a legacy/
 // historical patient entered manually) — patientSource + patientId /
@@ -107,7 +107,7 @@ router.post(
   uploadHistoricalPrescription.single('attachment'),
   prev.replaceAttachment
 );
-// v3.4.7 — rename / re-categorize / annotate an attachment without a
+// Rename / re-categorize / annotate an attachment without a
 // re-upload, and persist a manual drag-reorder of the attachment list.
 // The literal `/reorder` path is registered before the `:attachmentId`
 // PATCH so it can never be swallowed by the param route.
@@ -137,7 +137,7 @@ router.get('/certificates',                                 cert.list);
 router.get('/certificates/:id',                             cert.detail);
 router.post('/certificates',                                cert.create);
 router.put('/certificates/:id',                             cert.update);
-router.post('/certificates/:id/send',                       cert.send);   // v3.4.0 — WhatsApp/email delivery
+router.post('/certificates/:id/send',                       cert.send);   // WhatsApp/email delivery
 router.post('/appointments/:id/certificate',                cert.createForAppointment);
 
 // ─── Patient identity & history ───

@@ -131,7 +131,7 @@ exports.updateDoctor = asyncHandler(async (req, res) => {
   res.json(safe);
 });
 
-// Soft delete = Deactivate (per Bug 8)
+// Soft delete = Deactivate
 exports.deleteDoctor = asyncHandler(async (req, res) => {
   const { id } = req.params;
   await prisma.doctor.update({
@@ -141,7 +141,7 @@ exports.deleteDoctor = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Doctor deactivated' });
 });
 
-// Hard delete = only if no appointments (per Bug 8)
+// Hard delete = only if no appointments
 exports.hardDeleteDoctor = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const appointmentCount = await prisma.appointment.count({ where: { doctorId: id } });

@@ -11,7 +11,7 @@ router.get('/appointments/:id',  c.appointmentStatus);
 // Used by /payment-status page AND by the booking widget after checkout.
 router.get('/verify-payment',    c.verifyPayment);
 
-// Bug 3 — follow-up recall pre-fill (idempotent GET, no auth)
+// Follow-up recall pre-fill (idempotent GET, no auth)
 router.get('/recall/:id',        c.recallPrefill);
 
 module.exports = router;

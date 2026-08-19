@@ -70,8 +70,8 @@ function parsePeriod(req, opts = {}) {
   const yearProvided  = rawYear  !== undefined && rawYear  !== '' && rawYear  !== null;
   const monthProvided = rawMonth !== undefined && rawMonth !== '' && rawMonth !== null;
 
-  // Issue 29 — for the READ endpoint (revenue-report), no params at all
-  // is a sensible "what does this month look like so far?" question.
+  // For the READ endpoint (revenue-report), no params at all is a
+  // sensible "what does this month look like so far?" question.
   // Default to the current UTC year+month and tell the caller via the
   // response payload (`defaulted: true`).
   if (!yearProvided && !monthProvided && !requireExplicit) {

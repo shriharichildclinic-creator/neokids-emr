@@ -1,5 +1,5 @@
 // =====================================================================
-// doctor.controller.js — Bug 2/3/4/5 hardened version
+// doctor.controller.js
 // =====================================================================
 const { clinicSettingsSchema } = require('../utils/validators');
 const fs   = require('fs');

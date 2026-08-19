@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Issue 8 — seed must never bake in defaults like "ChangeMe@123" /
+// The seed must never bake in defaults like "ChangeMe@123" /
 // "Doctor@123". Anyone running `npm run seed` against a fresh DB used to
 // get known credentials. Now both passwords are required env vars, and
 // the seed refuses to run if either is missing or too weak.

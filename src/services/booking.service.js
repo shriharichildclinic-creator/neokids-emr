@@ -21,26 +21,26 @@ function normalizeName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-// Issue #18 — produce the canonical *stored* name. Whitespace is
-// collapsed and trimmed so we never write "  alice   kid  " into the
-// row, but the original casing is preserved (titlecasing user-supplied
-// names is a path to mangling proper nouns — we just normalize
-// whitespace, which is the actual source of the duplicate-row bug).
+// Produce the canonical *stored* name. Whitespace is collapsed and
+// trimmed so we never write "  alice   kid  " into the row, but the
+// original casing is preserved (titlecasing user-supplied names is a
+// path to mangling proper nouns — we just normalize whitespace, which
+// is the actual source of the duplicate-row bug).
 function canonicalizeName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ');
 }
 
 /**
- * Bug 1 + Issue #18 — Resolve patient row by (phone + normalized name).
+ * Resolve patient row by (phone + normalized name).
  *
  * Old behavior: prisma.patient.upsert({ where: { phone }, ... })
  *   → @unique on phone meant ONE patient per phone, so sibling B's booking
  *     was forcibly merged into sibling A's row.
  *
- * Issue #18 specifically: the lookup function existed, but two concurrent
- * bookings could both miss the lookup and both insert, producing duplicate
- * rows for the same child. And the stored `name` value wasn't normalized,
- * so a re-lookup after a sloppy entry could miss as well.
+ * The lookup function existed, but two concurrent bookings could both
+ * miss the lookup and both insert, producing duplicate rows for the
+ * same child. And the stored `name` value wasn't normalized, so a
+ * re-lookup after a sloppy entry could miss as well.
  *
  * New behavior:
  *   1. Whitespace-canonicalize the supplied name on the way in.

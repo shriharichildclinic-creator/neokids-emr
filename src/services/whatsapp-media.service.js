@@ -187,7 +187,7 @@ async function sendPrescriptionPdf({ appointment, filepath, publicUrl }) {
   });
 }
 
-// ─── v3.4.0 — Medical Certificate — uses template medical_certificate_ready ───
+// ─── Medical Certificate — uses template medical_certificate_ready ───
 // Meta template contract (docs/META_WHATSAPP_TEMPLATES.md):
 //   Header : Document (the PDF itself)
 //   Body   : Hello {{1}},

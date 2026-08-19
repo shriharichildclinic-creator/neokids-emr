@@ -25,7 +25,7 @@ function verify(token){
   try { const p = JSON.parse(Buffer.from(body.replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString('utf8')); if (p.exp && p.exp < Math.floor(Date.now()/1000)) return null; return p; } catch { return null; }
 }
 
-// v3.4.7 — attachments migrated from the legacy single-file column were
+// Attachments migrated from the legacy single-file column were
 // backfilled with mimeType='application/octet-stream' (see migration
 // 20260817120000_historical_records_pro). Browsers ALWAYS force-download
 // octet-stream content regardless of Content-Disposition, which is why
@@ -46,7 +46,7 @@ function resolveMime(mime, name){
 
 function attachmentToken(att){ return sign({ t:'att', id: att.id, p: att.storagePath, n: att.originalName, m: resolveMime(att.mimeType, att.originalName), exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
 function recordShareToken(record){ return sign({ t:'rec', id: record.id, exp: Math.floor(Date.now()/1000)+SHARE_TTL_SEC }); }
-// v3.4.7 — generated record-summary PDFs are streamed through the SAME
+// Generated record-summary PDFs are streamed through the SAME
 // signed-token route as attachments (`/api/files/share/:token`), rather
 // than a bare filesystem path. The old `/files/historical-pdf/...` path
 // this used to point to was never mounted anywhere (no static middleware,

@@ -176,7 +176,7 @@ const updateDoctorAvailabilitySchema = z.object({
     path: ['availableToOffline']
   });
 
-// v3.4.14 — Consultation-mode-aware validation.
+// Consultation-mode-aware validation.
 // Doctors are configured as ONLINE-only, OFFLINE-only or BOTH (hybrid).
 // Availability / fees settings that belong to a mode the doctor does NOT
 // offer are ignored (rejected) so stale values can't be saved by accident.
@@ -223,7 +223,7 @@ const clinicSettingsSchema = z.object({
   )
 });
 
-// v3.4.14 — Multi-specialty expansion.
+// Multi-specialty expansion.
 // NeoKidsPro is pediatric-first but no longer pediatric-only: the platform
 // now also serves general physicians, gynecologists and other specialties,
 // so patients may be children, teenagers, adults or elderly.
@@ -376,7 +376,7 @@ const medicalCertificateBaseSchema = z.object({
   // If issued standalone, caller must pass patientId directly.
   patientId: z.string().uuid().optional(),
 
-  // v3.4.0 — expanded template catalog (vaccination / return-to-school added).
+  // Template catalog (vaccination / return-to-school added).
   templateKey: z.enum(['GENERAL', 'SCHOOL_LEAVE', 'FITNESS', 'MEDICAL_REST', 'VACCINATION', 'RETURN_TO_SCHOOL']).optional(),
   diagnosis: safeOptStr('diagnosis'),
   reason: z.string().min(2, 'Reason for certificate is required').max(2000),
@@ -384,7 +384,7 @@ const medicalCertificateBaseSchema = z.object({
     v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
     z.number().int().min(0).max(365).optional()
   ),
-  // v3.4.0 — certificate duration type. 'SINGLE_DAY' → only certificateDate
+  // Certificate duration type. 'SINGLE_DAY' → only certificateDate
   // is meaningful; 'DATE_RANGE' → fromDate/toDate (server mirrors toDate from
   // fromDate + restDays when the client didn't send it).
   durationType: z.enum(['SINGLE_DAY', 'DATE_RANGE']).optional(),

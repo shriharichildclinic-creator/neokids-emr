@@ -476,7 +476,7 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
 // Feature 2 — Medical Certificate Generator
 // ─────────────────────────────────────────────────────────────────────
 
-// v3.4.0 — template catalog expanded; wording adapts to durationType:
+// Template catalog; wording adapts to durationType:
 //   SINGLE_DAY → "on <Certificate Date>" phrasing (school absence for one
 //   day, doctor-visit proof, vaccination, etc.)
 //   DATE_RANGE → "from <from> to <to>" phrasing.
@@ -561,7 +561,7 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
   const age = certificate.patientAgeSnapshot || (patient ? calcAge(patient.dateOfBirth) : '') || null;
   const gender = certificate.patientGenderSnapshot || (patient && patient.gender) || null;
 
-  // ── v3.4.0 — consultation mode (snapshot first, live appointment second) ──
+  // ── Consultation mode (snapshot first, live appointment second) ──
   // In-person (OFFLINE) → clinic name + address + contact block.
   // Online  (ONLINE)    → "Teleconsultation" identity, doctor details only,
   //                       no physical clinic address block.
@@ -571,7 +571,7 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
     ? `was examined via teleconsultation (online consultation) on ${examDate}`
     : `was examined at our clinic on ${examDate}`;
 
-  // ── v3.4.0 — duration semantics (legacy rows fall back to DATE_RANGE) ──
+  // ── Duration semantics (legacy rows fall back to DATE_RANGE) ──
   const durationType = certificate.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
   const singleDate = durationType === 'SINGLE_DAY' ? fmtCertDate(certificate.certificateDate) : null;
 

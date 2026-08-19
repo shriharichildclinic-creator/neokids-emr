@@ -116,7 +116,7 @@ function fmtTime(hhmm) {
 }
 function getClinicNameForBody(doctor) { return doctor.clinicName || 'NeoKidsPro Clinic'; }
 /**
- * Bug 2 fix — "Get Directions" button in neokids_booking_confirms_offline_v2.
+ * "Get Directions" button in neokids_booking_confirms_offline_v2.
  *
  * The Meta WhatsApp template defines the button URL as:
  *     https://www.google.com/maps/search/{{1}}
@@ -223,7 +223,7 @@ async function safeWa({ appointmentId, to, direction, templateName, bodyParams, 
 /**
  * Send with strict primary + plain-text fallback only.
  *
- * IMPORTANT (Bug 4 / reschedule fix):
+ * IMPORTANT:
  * `fallbackTemplate` is preserved for compatibility but you SHOULD pass
  * `null`. A booking-confirm template is NOT a valid fallback for a
  * reschedule because the wording is wrong and the patient gets a "new

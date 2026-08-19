@@ -1057,19 +1057,13 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   .np-table th, .np-table td{ padding: .55rem .65rem; }
 }
 
-html[data-theme="dark"]{
-  --np-bg:      var(--nk-surface);
-  --np-surface: var(--nk-card);
-  --np-text:    var(--nk-text);
-  --np-muted:   var(--nk-muted);
-  --np-border:  var(--nk-border);
-  --np-ink:     var(--nk-ink);
-}
-html[data-theme="dark"] .np-search{
-  background: var(--nk-card) !important;
-  border-color: var(--nk-border) !important;
-}
-html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
+/* Dark-mode theming for shared components (search, --np-* variable
+   remap) lives in /assets/neokids-theme.css, which loads after this
+   file and is the single source of truth — see the "v3.3.1 DEFINITIVE
+   dark-mode consolidation" block there. This panel-local copy was
+   redundant (theme.css's rules always won the cascade already) and
+   risked drifting out of sync, so it's removed rather than kept as
+   dead code. */
 
 .np-shell{ overflow:hidden; }
 .np-main{
@@ -1400,10 +1394,6 @@ html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
   background: #E7F5EA;
   color: #16794A;
   border-color: #A7D7B4;
-}
-html[data-theme="dark"] .np-uuid-card{
-  background: rgba(255,255,255,.03);
-  border-color: rgba(255,255,255,.08);
 }
 html[data-theme="dark"] .np-uuid-card__value{
   background: rgba(255,255,255,.05);

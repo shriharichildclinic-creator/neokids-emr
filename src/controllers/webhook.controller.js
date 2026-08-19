@@ -11,7 +11,7 @@ function getValue(event, paths) {
   return undefined;
 }
 
-// Issue #23 — uniform external response.
+// Uniform external response.
 //
 // We log internally with a fine-grained reason ('missing-signature',
 // 'missing-timestamp', 'bad-signature', 'stale-timestamp', etc.) so the

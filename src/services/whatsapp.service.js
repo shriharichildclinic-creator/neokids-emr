@@ -1,6 +1,6 @@
-// whatsapp.service.js — Bug 4 hardened version
+// whatsapp.service.js
 // =====================================================================
-// Changes vs previous:
+// Notable behavior:
 //   1. Returns rich structured errors (errorCode, errorTitle, errorDetail)
 //      so the caller can log WHY a send failed, not just "FAILED".
 //   2. Phone normalization is centralized and matches India (+91) but the
@@ -151,7 +151,7 @@ async function sendWhatsApp({ to, templateName, bodyParams, urlButtonParam, head
 }
 
 /**
- * Bug 4 — Tries primary → fallback template → plain text (24h window).
+ * Tries primary → fallback template → plain text (24h window).
  * Returns { ok, via, error? }.
  *   - via: 'primary' | 'fallback' | 'text' | 'mock' | 'skipped'
  *   - error: structured error from the LAST failed attempt (if any)

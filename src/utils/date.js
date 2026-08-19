@@ -56,7 +56,7 @@ function formatDateOnly(date, locale = 'en-IN', timeZone = DEFAULT_TIME_ZONE) {
 }
 
 /**
- * Bug 3 — Returns "X yrs Y months" from a DOB.
+ * Returns "X yrs Y months" from a DOB.
  * Accepts Date object or ISO string. Returns '' on invalid input.
  */
 function calcAge(dob) {

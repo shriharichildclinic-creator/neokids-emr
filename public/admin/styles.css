@@ -817,30 +817,22 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 
 .hidden{ display:none !important; }
 
-html[data-theme="dark"]{
-  --np-bg:      var(--nk-surface);
-  --np-surface: var(--nk-card);
-  --np-text:    var(--nk-text);
-  --np-muted:   var(--nk-muted);
-  --np-border:  var(--nk-border);
-  --np-ink:     var(--nk-ink);
-}
-html[data-theme="dark"] .np-search{
-  background: var(--nk-card) !important;
-  border-color: var(--nk-border) !important;
-}
-html[data-theme="dark"] .np-mut{ color: var(--nk-muted) !important; }
-/* v3.3.2: notification payload / code blocks in dark mode. */
-html[data-theme="dark"] .np-code-block{
-  background: var(--nk-surface) !important;
-  border-color: var(--nk-border) !important;
-  color: var(--nk-text) !important;
-}
+/* Dark-mode theming for shared components (search, code blocks, --np-*
+   variable remap) lives in /assets/neokids-theme.css, which loads after
+   this file and is the single source of truth — see the "v3.3.1
+   DEFINITIVE dark-mode consolidation" block there. Keeping a second,
+   panel-local copy of those rules previously caused this file and
+   theme.css to disagree on notification-modal code-block colors
+   (var(--nk-surface) here vs the canonical #0B1519 there); the ID-scoped
+   selector below made this file win, so the modal was silently a
+   different shade of dark than every other code block. Scoped only to
+   #notifModal to match that block's specificity so it doesn't drift
+   again. */
 html[data-theme="dark"] #notifModal .np-code-block,
 html[data-theme="dark"] #notifModal pre{
-  background: var(--nk-surface) !important;
+  background: #0B1519 !important;
   border-color: var(--nk-border) !important;
-  color: var(--nk-text) !important;
+  color: #C7E2E4 !important;
 }
 .np-empty{ text-align:center; padding:1.5rem .5rem; color:var(--np-muted); }
 .np-empty__title{ color: var(--np-ink); font-weight:700; margin-bottom:.25rem; }
@@ -1413,10 +1405,6 @@ html[data-theme="dark"] .np-notif-template-select option{
   background: #E7F5EA;
   color: #16794A;
   border-color: #A7D7B4;
-}
-html[data-theme="dark"] .np-uuid-card{
-  background: rgba(255,255,255,.03);
-  border-color: rgba(255,255,255,.08);
 }
 html[data-theme="dark"] .np-uuid-card__value{
   background: rgba(255,255,255,.05);

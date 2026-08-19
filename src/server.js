@@ -67,7 +67,7 @@ if (process.env.NODE_ENV === 'production') {
   app.use(cors({ origin: '*' /* credentials intentionally omitted */ }));
 }
 
-// ─── Issue #15 — per-route rate limiting ──────────────────────────────
+// ─── Per-route rate limiting ──────────────────────────────────────────
 const crypto = require('crypto');
 function tokenKey(req) {
   const hdr = req.headers.authorization || '';
@@ -128,11 +128,11 @@ const staticOpts = {
     if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
-    // Issue 31 — vendor CSS is content-hashed at build time; aggressive cache.
+    // Vendor CSS is content-hashed at build time; aggressive cache.
     if (filePath.includes(path.sep + 'vendor' + path.sep)) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
-      // v3.4.7 — these ARE actively edited between deploys (app.js,
+      // These ARE actively edited between deploys (app.js,
       // historical-fix.js, styles.css) and aren't content-hashed, so the
       // default 1h cache was letting mobile browsers keep serving a stale
       // build well after a redeploy — symptoms looked like "the fix
@@ -161,7 +161,7 @@ app.get('/', (req, res) => {
 
 app.get('/payment-status', publicCtrl.paymentStatusPage);
 
-// ─── Issue 28 — CSRF guard mounted BEFORE all mutating API routers ───
+// ─── CSRF guard mounted BEFORE all mutating API routers ───────────────
 // The guard itself bypasses /api/webhooks, /api/public/book, login and
 // forgot/reset-password — see middleware/csrf.js for the exhaustive list.
 app.use(makeCsrfGuard());

@@ -4,7 +4,7 @@ const { expirePendingAppointments } = require('./appointment-state.service');
 const { getTodayDateOnly, getCurrentTimeMinutes } = require('../utils/date');
 
 /**
- * Bug 9 — Auto-complete appointments whose endTime has passed.
+ * Auto-complete appointments whose endTime has passed.
  * This is the ONLY place revenue/consults are incremented for online appointments
  * (the duplicate increment in onOnlineBookingConfirmed has been removed).
  */

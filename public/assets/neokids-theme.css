@@ -948,11 +948,11 @@ html[data-theme="dark"] .np-error{
   border-color: rgba(225,29,72,.45) !important;
   color:#FECDD3 !important;
 }
-html[data-theme="dark"] .np-search input{
-  background:#0E1A22 !important;
-  border-color: var(--nk-border) !important;
-  color: var(--nk-text) !important;
-}
+/* .np-search input's actual dark background/color come from the
+   !important rule in the "v3.3.1 DEFINITIVE dark-mode consolidation"
+   block further down — that rule is last in source order among three
+   identical-specificity !important declarations, so it always won.
+   This rule never rendered; kept only the unique .np-search svg color. */
 html[data-theme="dark"] .np-search svg{ color: var(--nk-muted); }
 html[data-theme="dark"] select option{ background:#0E1A22; color: var(--nk-text); }
 
@@ -1013,7 +1013,6 @@ html[data-theme="dark"] #consultWorkspace .np-pm-tab.active{
 
 html[data-theme="dark"] .np-modal{ background: rgba(2,8,12,.7); }
 html[data-theme="dark"] .np-modal__head{ border-bottom-color: var(--nk-border); }
-html[data-theme="dark"] .np-modal__title{ color: var(--nk-ink); }
 html[data-theme="dark"] .np-modal__close{ color: var(--nk-muted); }
 html[data-theme="dark"] .np-modal__close:hover{ background: rgba(137,188,189,.16); color: var(--nk-teal-300); }
 html[data-theme="dark"] .np-drawer__backdrop{ background: rgba(2,8,12,.65); }
@@ -1567,9 +1566,12 @@ html[data-theme="dark"] .np-table thead th{
 html[data-theme="dark"] input::-webkit-datetime-edit,
 html[data-theme="dark"] input::-webkit-datetime-edit-fields-wrapper{ color: var(--nk-text); }
 
-/* ---------- Toast / tooltip / notification dark polish ---------- */
-html[data-theme="dark"] [role="tooltip"],
-html[data-theme="dark"] .np-tooltip{
+/* ---------- Toast / tooltip / notification dark polish ----------
+   .np-tooltip's actual dark colors come from the !important rule
+   near the top of the file (html[data-theme="dark"] .np-tooltip,
+   [data-tooltip]::after) — that rule always wins over this one, so
+   only the [role="tooltip"] selector here was ever doing anything. */
+html[data-theme="dark"] [role="tooltip"]{
   background: #0F1A22;
   color: var(--nk-text);
   border: 1px solid var(--nk-border);
@@ -1871,40 +1873,16 @@ html[data-theme="dark"] pre code{
 }
 html[data-theme="dark"] .np-code-block::-webkit-scrollbar-thumb{ background: #2C4A56; }
 
-html[data-theme="dark"] .np-pill{
-  background: var(--nk-card);
-  border-color: var(--nk-border);
-  color: var(--nk-text);
-}
-html[data-theme="dark"] .np-pill:hover{
-  background: rgba(137,188,189,.14);
-  border-color: rgba(137,188,189,.4);
-  color: var(--nk-teal-300);
-}
+/* .np-pill / .np-slot-btn base, hover, and active colors are set by the
+   !important rules in the "v3.3.1 DEFINITIVE dark-mode consolidation"
+   block further down (they always won this cascade anyway, since
+   !important beats a plain declaration regardless of source order —
+   this block previously just described a color that never rendered).
+   box-shadow and :disabled aren't set there, so they stay here. */
 html[data-theme="dark"] .np-pill.active,
 html[data-theme="dark"] .np-pill.is-active,
 html[data-theme="dark"] .np-pill[aria-pressed="true"]{
-  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
-  color: #fff;
-  border-color: transparent;
   box-shadow: 0 4px 10px -3px rgba(0,0,0,.5);
-}
-
-html[data-theme="dark"] .np-slot-btn{
-  background: #142531;
-  border-color: var(--nk-border);
-  color: var(--nk-text);
-}
-html[data-theme="dark"] .np-slot-btn:hover:not(:disabled){
-  border-color: var(--nk-teal-400);
-  background: rgba(137,188,189,.12);
-  color: var(--nk-teal-300);
-}
-html[data-theme="dark"] .np-slot-btn.active,
-html[data-theme="dark"] .np-slot-btn.is-selected{
-  background: linear-gradient(135deg, var(--nk-teal-500), var(--nk-teal-700));
-  color: #fff;
-  border-color: transparent;
 }
 html[data-theme="dark"] .np-slot-btn:disabled{ opacity: .35; }
 
@@ -1947,12 +1925,6 @@ html[data-theme="dark"] .np-search{
   background: #0E1A22 !important;
   border-color: var(--nk-border) !important;
 }
-html[data-theme="dark"] .np-search input{
-  background: transparent !important;
-  color: var(--nk-text) !important;
-}
-html[data-theme="dark"] .np-search svg{ color: var(--nk-muted); }
-
 html[data-theme="dark"] ::-webkit-scrollbar-track{ background: transparent; }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb{
   background: #2C4A56;
@@ -1970,12 +1942,6 @@ html[data-theme="dark"] .np-modal__body,
 html[data-theme="dark"] .np-modal__head{
   color: var(--nk-text);
   border-color: var(--nk-border);
-}
-
-html[data-theme="dark"] [data-tooltip]::after{
-  background: #0F1A22;
-  color: var(--nk-text);
-  border: 1px solid var(--nk-border);
 }
 
 html[data-theme="dark"] .np-datepicker,
@@ -2008,8 +1974,6 @@ html[data-theme="dark"] .np-pagination__btn.is-active{
   border-color: transparent;
 }
 
-html[data-theme="dark"] .np-empty,
-html[data-theme="dark"] .np-empty__title{ color: var(--nk-text); }
 html[data-theme="dark"] .np-empty__desc{ color: var(--nk-muted); }
 
 /* ===================================================================

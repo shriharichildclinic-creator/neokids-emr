@@ -70,14 +70,14 @@ exports.book = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
-// Issue #19 — the public appointment lookup used to return the full
-// appointment row including cashfreeOrderId, cashfreePaymentId, the
-// raw paymentStatus history, meetLink, meetEventId, and the full
-// patient phone number. Anyone who knew (or guessed, or found in a
-// leaked confirmation email) the appointment UUID could pull all of it
-// with zero authentication.
+// The public appointment lookup used to return the full appointment
+// row including cashfreeOrderId, cashfreePaymentId, the raw
+// paymentStatus history, meetLink, meetEventId, and the full patient
+// phone number. Anyone who knew (or guessed, or found in a leaked
+// confirmation email) the appointment UUID could pull all of it with
+// zero authentication.
 //
-// Fix:
+// To prevent that:
 //   * By default we return a *confirmation-card* projection: enough for
 //     the booking widget to render "booked / paid / your visit is on X
 //     at Y with Dr Z" and nothing else. Payment IDs, meet event IDs,
@@ -147,16 +147,12 @@ exports.appointmentStatus = asyncHandler(async (req, res) => {
  * bypassing webhook delay. Idempotent.
  * GET /api/public/verify-payment?order_id=appt_<uuid>
  *
- * Bug 3 fix: the DB row is the ultimate source of truth. We confirm via
- * Cashfree ONLY when Cashfree explicitly says PAID. Any other Cashfree
- * status (ACTIVE, EXPIRED, TERMINATED, FAILED) → never fire automations.
- */
-/**
- * Force-verify a payment by asking Cashfree directly.
- * Hardened (Bug 1): only confirms when BOTH
+ * The DB row is the ultimate source of truth. We only confirm when BOTH
  *   (a) Cashfree order_status === 'PAID' AND
  *   (b) a SUCCESS payment row exists with amount == appt.feeAtBooking
- * (b) can be disabled via STRICT_PAYMENT_VERIFICATION=false.
+ * (b) can be disabled via STRICT_PAYMENT_VERIFICATION=false. Any other
+ * Cashfree status (ACTIVE, EXPIRED, TERMINATED, FAILED) never fires
+ * automations.
  */
 exports.verifyPayment = asyncHandler(async (req, res) => {
   const orderId = req.query.order_id || req.query.orderId;
