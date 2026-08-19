@@ -12,7 +12,7 @@ Templates are managed in **Meta Business Manager → WhatsApp Manager → Messag
 |---|---|---|---|---|---|---|
 | N1 | `neokids_prescription_pdf`   | UTILITY | en | DOCUMENT | 2 | — |
 | N2 | `neokids_invoice_pdf`        | UTILITY | en | DOCUMENT | 3 | — |
-| N3 | `neokids_vaccination_reminder` | UTILITY | en | TEXT (none) | 4 | 1 URL button |
+| N3 | `neokids_vacc_reminder_v2`   | UTILITY | en | TEXT (none) | 5 | 1 static URL button |
 | N4 | `medical_certificate_ready`  | UTILITY | en | DOCUMENT | 3 | — |
 
 ---
@@ -88,33 +88,52 @@ Templates are managed in **Meta Business Manager → WhatsApp Manager → Messag
 
 ---
 
-### N3. `neokids_vaccination_reminder`
+### N3. `neokids_vacc_reminder_v2`
+
+> Replaces the deprecated `neokids_vaccination_reminder` (4-var). Create this
+> template in Meta and submit for approval; the code defaults to this name
+> (`WA_TPL_VACCINATION` env override available). The old template is NOT
+> used anywhere once this is approved.
 
 - **Category:** Utility
 - **Language:** English
 - **Header:** none (text-only).
-- **Body (4 vars):**
+- **Body (5 vars) — paste EXACTLY:**
   ```
-  Hi {{1}}, this is a friendly reminder that {{1}}'s next vaccination
-  ({{2}}) is due on {{3}}.
+  Hi {{1}}'s parent, this is a friendly reminder that {{1}}'s vaccination
+  {{2}} falls due on {{3}} as per the standard vaccination schedule for
+  your child's age.
 
-  Please book a vaccination consultation with {{4}} so your child stays
-  on schedule.
+  {{5}}
 
-  — NeoKidsPro
+  For appointments or more information, please visit the Vaccination
+  Portal.
+
+  — {{4}}, NeoKidsPro
   ```
-- **Buttons:** one URL button, label “Book Vaccination”.
-  ```
-  https://neokidspro.in/assets/booking-widget.html?{{1}}
-  ```
-  The `{{1}}` URL suffix is filled at send time with:
-  `vacc=<vaccine-code>&patient=<patient-id>`.
+- **Variable mapping (code: `vaccination.service.js → sendReminderForVaccine`):**
+  - `{{1}}` = Child name
+  - `{{2}}` = Vaccine name (e.g. `DTwP/DTaP - 2`)
+  - `{{3}}` = Due date (`DD MMM YYYY`)
+  - `{{4}}` = Doctor name (`VACC_DOCTOR_NAME` env, default `Dr. Vishal Parmar`)
+  - `{{5}}` = Mandatory disclaimer, sent verbatim from the code:
+    ```
+    We do not have information regarding which vaccinations have already
+    been administered to your child. This reminder is generated based on
+    your child's age and standard vaccination schedules and should not be
+    considered confirmation that a vaccine is pending. Please consult your
+    pediatrician. Visit the Vaccination Portal for appointments or more
+    information.
+    ```
+- **Buttons:** one **static** Call-to-action URL button:
+  - Label: `Visit Vaccination Portal`
+  - URL: `https://vaxiclinics.com/` (static — no dynamic suffix)
 - **Sample values for approval:**
   - `{{1}}` = `Aarav`
   - `{{2}}` = `DTwP/DTaP - 2`
   - `{{3}}` = `24 Jul 2026`
   - `{{4}}` = `Dr. Vishal Parmar`
-  - Button URL suffix: `vacc=DTwP%2FDTaP-2&patient=abcd1234`
+  - `{{5}}` = the disclaimer text above (verbatim)
 
 ---
 
@@ -209,19 +228,30 @@ The email template is generated at runtime by `vaccination.service.js → buildE
   Dear {ParentName},
 
   This is a friendly reminder that {ChildName}'s next vaccination
-  is due on {DueDate}.
+  ({VaccineName}) falls due on {DueDate} as per the standard
+  vaccination schedule for your child's age.
 
     Vaccine       : {VaccineName}
     Scheduled at  : {AgeLabel, e.g. "6 weeks"}
     Due date      : {DueDate}
 
-  Please book a vaccination consultation with {DoctorName} so your
-  child stays on schedule.
+  ┌ MANDATORY DISCLAIMER (highlighted box) ─────────────────────┐
+  │ We do not have information regarding which vaccinations      │
+  │ have already been administered to your child. This reminder  │
+  │ is generated based on your child's age and standard          │
+  │ vaccination schedules and should not be considered           │
+  │ confirmation that a vaccine is pending. Please consult your  │
+  │ pediatrician. Visit the Vaccination Portal for appointments  │
+  │ or more information.                                         │
+  └──────────────────────────────────────────────────────────────┘
 
-     [ 📅 Book Vaccination Consultation ]    ← button
+  To book a vaccination consultation with {DoctorName}, or for
+  more information, please visit the Vaccination Portal:
+
+     [ 📅 Visit the Vaccination Portal ]    ← button
 
   If the button doesn't work, open this link:
-  {BookingLink}
+  {PortalLink}
   ```
 
 The template supports the following variables (populated automatically):
@@ -234,6 +264,6 @@ The template supports the following variables (populated automatically):
 | `{AgeLabel}` | e.g. `10 weeks` |
 | `{DueDate}` | Localised, `DD MMM YYYY` |
 | `{DoctorName}` | `VACC_DOCTOR_NAME` env — default **Dr. Vishal Parmar** |
-| `{BookingLink}` | `PUBLIC_BOOKING_URL/assets/booking-widget.html?vacc=1&patient=<id>` |
+| `{PortalLink}` | `VACC_PORTAL_URL` env — default `https://vaxiclinics.com/` |
 
 Nothing needs to be uploaded to any external system for the email template — SMTP delivery uses the existing `email.service.js` transport (SendGrid / SMTP / mock).

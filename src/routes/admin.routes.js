@@ -41,6 +41,9 @@ router.get('/certificates/:id',       cert.detail);
 router.get('/notifications', c.listNotifications);
 router.get('/notifications/templates', c.listNotificationTemplates);
 
+// Automation — manual trigger for the vaccination reminder scan (testing/ops)
+router.post('/jobs/vaccination-reminders/run', c.runVaccinationReminders);
+
 // Revenue Management
 router.get('/finance/revenue-report', fin.revenueReport);
 router.get('/finance/settlements', fin.listSettlements);

@@ -208,14 +208,7 @@
 <div class="np-content">
 
 <section id="dashboardTab" class="tab-pane">
-          <!-- v3.4.13: Compact dashboard header strip.
-               Replaces the tall v3.4.10 welcome band + duplicated stat
-               cards with a slim, professional header. Day-of stats
-               (today / completed / waiting) and lifetime totals now
-               live ONLY in the KPI cards below — the header carries
-               just the greeting, the date, and a live waiting-room
-               status badge that deep-links into the Waiting Room. -->
-          <div id="dashWelcome" class="np-welcome np-welcome--strip" role="region" aria-label="Doctor welcome">
+          <div id="dashWelcome" class="np-welcome" role="region" aria-label="Doctor welcome">
             <div class="np-welcome__main">
               <div class="np-welcome__eyebrow" id="dashWelcomeGreeting">Good morning</div>
               <div class="np-welcome__titlerow">
@@ -224,7 +217,21 @@
               </div>
             </div>
             <div class="np-welcome__side">
-              <span class="np-welcome__badge" id="dashWaitingBadge">Waiting room: —</span>
+              <button type="button" class="np-welcome__badge" id="dashWaitingBadge">Waiting room: —</button>
+            </div>
+            <div class="np-welcome__stats" id="dashWelcomeStats" aria-label="Today's summary">
+              <button type="button" class="np-welcome__stat" id="dashStatToday">
+                <span class="np-welcome__stat-value">—</span>
+                <span class="np-welcome__stat-label">Today's appointments</span>
+              </button>
+              <button type="button" class="np-welcome__stat" id="dashStatPending">
+                <span class="np-welcome__stat-value">—</span>
+                <span class="np-welcome__stat-label">Pending consultations</span>
+              </button>
+              <button type="button" class="np-welcome__stat" id="dashStatWaiting">
+                <span class="np-welcome__stat-value">—</span>
+                <span class="np-welcome__stat-label">In waiting room</span>
+              </button>
             </div>
           </div>
           <div id="statsBar" class="np-kpi-grid"></div>

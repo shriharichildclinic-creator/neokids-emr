@@ -488,7 +488,7 @@ async function loadDashSnapshot(){
   }
 }
 
-/* ---------- v3.4.10: Dashboard welcome section ---------- */
+/* ---------- Dashboard welcome section ---------- */
 function updateDashWelcome(){
   try {
     const nameEl = $('#dashWelcomeName');
@@ -496,11 +496,9 @@ function updateDashWelcome(){
     const dateEl  = $('#dashWelcomeDate');
     if (!nameEl || !greetEl || !dateEl) return;
 
-    const raw = ($('#docName') && $('#docName').textContent) || 'Doctor';
-    /* v3.4.13 — the top-right profile chip already shows the doctor's
-       name; repeating it in a giant heading made the strip the tallest
-       block on mobile. Keep the greeting, drop the name echo. */
-    nameEl.textContent = 'Welcome back';
+    const raw = (($('#docName') && $('#docName').textContent) || '').trim() || 'Doctor';
+    const display = raw === 'Doctor' ? raw : (/^dr\./i.test(raw) ? raw : 'Dr. ' + raw);
+    nameEl.textContent = 'Welcome back, ' + display;
 
     const now = new Date();
     const h = now.getHours();
@@ -515,18 +513,39 @@ function updateDashWelcome(){
   } catch(_){ /* welcome is decorative — never fail dashboard load */ }
 }
 
+function wireWelcomeStatJump(id, tabId){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('click', () => {
+    const tab = document.querySelector('[data-tab=' + tabId + ']');
+    if (tab) tab.click();
+  });
+}
+
+function setWelcomeStat(id, value){
+  const el = document.querySelector('#' + id + ' .np-welcome__stat-value');
+  if (el) el.textContent = String(value);
+}
+
 async function loadDashWelcome(){
   updateDashWelcome();
+  wireWelcomeStatJump('dashStatToday',   'allTab');
+  wireWelcomeStatJump('dashStatPending', 'allTab');
+  wireWelcomeStatJump('dashStatWaiting', 'waitingTab');
   try {
-    /* v3.4.13 — the old "Pending Tasks" / "Important Alerts" cards had no
-       real data behind them: pending was just (today − completed) and
-       alerts were literally the waiting-room count, both already shown
-       elsewhere. They are gone. The strip now shows ONE actionable,
-       real-data element: the live waiting-room count, deep-linking to
-       the Waiting Room tab. Awaiting-review prescriptions remain
-       discoverable via the Prescription Archive tab. */
-    const waiting = await api('/doctor/waiting-room').catch(() => []);
+    const [stats, waiting] = await Promise.all([
+      api('/doctor/stats').catch(() => null),
+      api('/doctor/waiting-room').catch(() => [])
+    ]);
+
+    const today     = stats ? Number(stats.todayAppointments || 0) : 0;
+    const completed = stats ? Number(stats.completedToday || 0) : 0;
+    const pending   = Math.max(0, today - completed);
     const waitCount = Array.isArray(waiting) ? waiting.length : 0;
+
+    setWelcomeStat('dashStatToday',   today);
+    setWelcomeStat('dashStatPending', pending);
+    setWelcomeStat('dashStatWaiting', waitCount);
 
     const badge = document.getElementById('dashWaitingBadge');
     if (badge){
@@ -534,14 +553,10 @@ async function loadDashWelcome(){
         ? waitCount + ' patient' + (waitCount === 1 ? '' : 's') + ' waiting'
         : 'Waiting room: all clear';
       badge.classList.toggle('is-active', waitCount > 0);
-      badge.setAttribute('role', 'button');
-      badge.tabIndex = 0;
-      const jump = () => {
+      badge.onclick = () => {
         const tab = document.querySelector('[data-tab=waitingTab]');
         if (tab) tab.click();
       };
-      badge.onclick = jump;
-      badge.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); jump(); } };
     }
   } catch(_){}
 }

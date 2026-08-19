@@ -623,8 +623,12 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
   }
 
   const shouldComplete = appt.status !== 'COMPLETED';
-  const updated = await prisma.appointment.update({
-    where: { id },
+
+  // Double-credit race fix: claim the transition atomically. The auto-
+  // complete cron applies the same pattern, so whichever path flips the
+  // row first (count === 1) is the only one that credits/debits revenue.
+  const claim = await prisma.appointment.updateMany({
+    where: { id, status: shouldComplete ? 'CONFIRMED' : 'COMPLETED' },
     data: shouldComplete
       ? {
           status: 'COMPLETED',
@@ -638,9 +642,14 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
         }
   });
 
+  if (claim.count === 0) {
+    return res.status(409).json({ error: 'Appointment status changed concurrently — refresh and try again' });
+  }
+
   if (shouldComplete) await incrementDoctorRevenue(appt.doctorId, appt.feeAtBooking, appt.paymentStatus);
   else                await decrementDoctorRevenue(appt.doctorId, appt.feeAtBooking, appt.paymentStatus);
 
+  const updated = await prisma.appointment.findUnique({ where: { id } });
   res.json({ ...updated, toggledTo: shouldComplete ? 'COMPLETED' : 'CONFIRMED' });
 });
 

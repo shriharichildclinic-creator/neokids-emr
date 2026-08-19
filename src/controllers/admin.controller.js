@@ -479,3 +479,20 @@ exports.analytics = asyncHandler(async (req, res) => {
     daily: Object.values(daily)
   });
 });
+
+// Manually trigger the vaccination reminder scan (bypasses the daily guard).
+// Used for end-to-end testing and for verifying WhatsApp/Email wiring.
+exports.runVaccinationReminders = asyncHandler(async (req, res) => {
+  const vacc = require('../services/vaccination.service');
+  const result = await vacc.processVaccinationReminders();
+  res.json({
+    ok: true,
+    template: vacc.WA_TPL_VACCINATION,
+    portalUrl: vacc.VACCINATION_PORTAL_URL,
+    waProvider: (process.env.WA_PROVIDER || 'MOCK').toUpperCase(),
+    smtpConfigured: !!process.env.SMTP_HOST,
+    metaConfigured: !!(process.env.META_PHONE_NUMBER_ID && process.env.META_ACCESS_TOKEN),
+    enabled: process.env.VACC_REMINDERS_ENABLED !== 'false',
+    ...result
+  });
+});

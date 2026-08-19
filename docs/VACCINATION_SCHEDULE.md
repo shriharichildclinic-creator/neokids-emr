@@ -26,3 +26,26 @@ The service scans this table daily and dispatches WhatsApp + Email
 reminders for any dose whose due date falls within `VACC_APPROACH_DAYS`
 (default: 7) days from today. Each `(patient, vaccine, dueDate)`
 combination is deduplicated via `NotificationLog`.
+
+## Testing & manual trigger
+
+- **Manual trigger (admin JWT required):**
+  `POST /api/admin/jobs/vaccination-reminders/run`
+  Runs the full scan immediately and returns the effective config
+  (template name, portal URL, WA provider, SMTP/Meta configured flags)
+  plus `{ considered, sent, skippedDedup, patients }`.
+- **Local dry run:** `node scripts/test-vaccination-reminders.js`
+  prints matching patients/vaccines, dispatches with dedup, and lists the
+  NotificationLog rows written by the run.
+- **Kill switch:** set `VACC_REMINDERS_ENABLED=false` to pause sends.
+- **Delivery audit:** Admin → Notification Logs; template name is
+  `neokids_vacc_reminder_v2`; every send carries
+  `payload.dedupKey = "VACC:<code>:<dueDate>"`.
+
+## Disclaimer (mandatory in every reminder)
+
+Both the WhatsApp template body (var {{5}}) and the email (highlighted
+box) include the disclaimer stating that administered-vaccine data is
+not tracked, the reminder is age/schedule derived, it is not a
+confirmation that a vaccine is pending, and parents should consult their
+pediatrician / visit the Vaccination Portal.

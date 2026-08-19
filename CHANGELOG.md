@@ -62,3 +62,39 @@ Fixed (surgical, no unrelated refactors):
   primary `setupSidebar` handlers.
 - Filter Apply/Clear buttons on Notifications use the shared `.np-btn` tokens
   with a consistent `min-height:40px`.
+
+## v3.5.1 — Automation audit & vaccination reminder fix (2026-08-19)
+
+**Vaccination reminders**
+- Content: WhatsApp + Email reminders now carry the mandatory disclaimer
+  (age/schedule-derived reminder, not a confirmation of a pending vaccine,
+  consult your pediatrician, Vaccination Portal link). Email CTA relabelled
+  to "Visit the Vaccination Portal".
+- Template: code now defaults to the NEW Meta template
+  `neokids_vacc_reminder_v2` (5 body vars + static portal button); old
+  4-var `neokids_vaccination_reminder` is deprecated. See
+  docs/META_WHATSAPP_TEMPLATES.md §N3 for the exact body to paste into Meta.
+- Reliability: the daily scan stamp in lifecycle.service is now set only
+  after a successful scan (previously set even when every send failed);
+  scan results are logged unconditionally; `VACC_REMINDERS_ENABLED=false`
+  kill switch added.
+- Testing: new admin endpoint `POST /api/admin/jobs/vaccination-reminders/run`
+  and new script `scripts/test-vaccination-reminders.js`.
+
+**Finance**
+- Root-cause fix for a double-credit race between the 5-minute
+  auto-complete cron and the doctor's manual "Mark Complete": both paths
+  now claim the appointment row transition atomically (updateMany with
+  status guard) and only the winner credits/debits revenue.
+- Verified correct and unchanged: settlement maths (clinic/doctor split,
+  TDS on doctor gross, single round2 per total), Cashfree webhook
+  signature + strict payment verification, KYC gate on settlement
+  generation, immutable PAID settlements, cancelled-but-paid exclusion
+  from settlements.
+
+**Doctor dashboard**
+- Welcome section redesigned: "Welcome back, Dr. <Name>", current date,
+  waiting-room badge, and a new three-stat row (Today's appointments,
+  Pending consultations, In waiting room) with real data from
+  /doctor/stats and /doctor/waiting-room. Fully responsive, overflow-safe
+  (min-width:0 grid, wrapping labels), keyboard-focusable.

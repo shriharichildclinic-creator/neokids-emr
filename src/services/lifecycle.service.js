@@ -24,28 +24,30 @@ async function autoCompletePassedAppointments() {
 
   if (!toComplete.length) return 0;
 
-  const ids = toComplete.map(a => a.id);
-  await prisma.appointment.updateMany({
-    where: { id: { in: ids } },
-    data: { status: 'COMPLETED', completedAt: new Date() }
-  });
-
-  // Offline CASH_PENDING → CASH_COLLECTED on auto-complete
-  const cashIds = toComplete.filter(a => a.paymentStatus === 'CASH_PENDING').map(a => a.id);
-  if (cashIds.length) {
-    await prisma.appointment.updateMany({
-      where: { id: { in: cashIds } },
-      data: { paymentStatus: 'CASH_COLLECTED' }
-    });
-  }
-
-  // Revenue + consults: count PAID (online) and CASH_PENDING (offline being auto-collected now)
-  const payable = toComplete.filter(a => a.paymentStatus === 'PAID' || a.paymentStatus === 'CASH_PENDING');
+  // Double-credit race fix: the row transition is an atomic CLAIM
+  // (updateMany with status:'CONFIRMED' in the WHERE). Revenue is
+  // credited ONLY for rows this run actually transitioned (count === 1).
+  // If the doctor's manual "Mark Complete" won the race, that path
+  // credits the revenue instead and count is 0 here.
   const byDoctor = {};
-  for (const a of payable) {
-    if (!byDoctor[a.doctorId]) byDoctor[a.doctorId] = { revenue: 0, consults: 0 };
-    byDoctor[a.doctorId].revenue += Number(a.feeAtBooking);
-    byDoctor[a.doctorId].consults += 1;
+  let completedCount = 0;
+  for (const a of toComplete) {
+    const claim = await prisma.appointment.updateMany({
+      where: { id: a.id, status: 'CONFIRMED' },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        // Offline CASH_PENDING → CASH_COLLECTED on auto-complete
+        ...(a.paymentStatus === 'CASH_PENDING' ? { paymentStatus: 'CASH_COLLECTED' } : {})
+      }
+    });
+    if (claim.count === 0) continue;
+    completedCount += 1;
+    if (a.paymentStatus === 'PAID' || a.paymentStatus === 'CASH_PENDING') {
+      if (!byDoctor[a.doctorId]) byDoctor[a.doctorId] = { revenue: 0, consults: 0 };
+      byDoctor[a.doctorId].revenue += Number(a.feeAtBooking);
+      byDoctor[a.doctorId].consults += 1;
+    }
   }
   for (const [doctorId, agg] of Object.entries(byDoctor)) {
     await prisma.doctor.update({
@@ -54,8 +56,10 @@ async function autoCompletePassedAppointments() {
     });
   }
 
-  logger.info(`Auto-completed ${toComplete.length} appointment(s); credited ${Object.keys(byDoctor).length} doctor(s)`);
-  return toComplete.length;
+  if (completedCount) {
+    logger.info(`Auto-completed ${completedCount} appointment(s); credited ${Object.keys(byDoctor).length} doctor(s)`);
+  }
+  return completedCount;
 }
 
 // Manual completion path (still used by doctor's "Mark Complete" button)
@@ -113,16 +117,21 @@ async function runLifecycleJobs() {
     await automation.processReminders();
     await automation.processFollowUpRecalls();   // soft recall for missed follow-ups
 
-    // Vaccination reminders (daily scan)
+    // Vaccination reminders (daily scan). ROOT CAUSE FIX: the previous
+    // implementation awaited processVaccinationReminders() and then set
+    // the day stamp — but that function swallows every per-patient send
+    // failure (each channel is independently try/caught into
+    // NotificationLog) and never throws, so the day stamp was set even on
+    // a fully broken Meta config. A boot-time stamp race could then skip
+    // the entire day's sends until after midnight. The stamp is now set
+    // ONLY when the scan returned without throwing, and the watchdog
+    // window above guarantees a wedged tick unlocks within 10 minutes.
+    // For an on-demand run, POST /api/admin/jobs/vaccination-reminders/run.
     const today = new Date().toISOString().slice(0, 10);
     if (_lastVaccinationScanDay !== today) {
       const vacc = require('./vaccination.service');
-      try {
-        await vacc.processVaccinationReminders();
-        _lastVaccinationScanDay = today;
-      } catch (e) {
-        logger.error('Vaccination reminder scan failed', e);
-      }
+      const result = await vacc.processVaccinationReminders();
+      if (result && !result.disabled) _lastVaccinationScanDay = today;
     }
   } catch (error) {
     logger.error('Lifecycle job failed', error);
