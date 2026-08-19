@@ -176,10 +176,38 @@ const updateDoctorAvailabilitySchema = z.object({
     path: ['availableToOffline']
   });
 
+// v3.4.14 — Consultation-mode-aware validation.
+// Doctors are configured as ONLINE-only, OFFLINE-only or BOTH (hybrid).
+// Availability / fees settings that belong to a mode the doctor does NOT
+// offer are ignored (rejected) so stale values can't be saved by accident.
+const updateDoctorAvailabilitySchemaForMode = (modes) => {
+  const m = String(modes || 'BOTH').toUpperCase();
+  return updateDoctorAvailabilitySchema.superRefine((d, ctx) => {
+    if (m === 'OFFLINE' && (d.availableFromOnline || d.availableToOnline)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Online availability does not apply to an offline-only doctor', path: ['availableFromOnline'] });
+    }
+    if (m === 'ONLINE' && (d.availableFromOffline || d.availableToOffline)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'In-person availability does not apply to an online-only doctor', path: ['availableFromOffline'] });
+    }
+  });
+};
+
 const updateDoctorFeesSchema = z.object({
   onlineConsultFee: z.number().nonnegative().optional(),
   physicalConsultFee: z.number().nonnegative().optional()
 });
+
+const updateDoctorFeesSchemaForMode = (modes) => {
+  const m = String(modes || 'BOTH').toUpperCase();
+  return updateDoctorFeesSchema.superRefine((d, ctx) => {
+    if (m === 'OFFLINE' && d.onlineConsultFee !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Online consultation fee does not apply to an offline-only doctor', path: ['onlineConsultFee'] });
+    }
+    if (m === 'ONLINE' && d.physicalConsultFee !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'In-person consultation fee does not apply to an online-only doctor', path: ['physicalConsultFee'] });
+    }
+  });
+};
 
 const clinicSettingsSchema = z.object({
   clinicName: z.string().trim().min(2, 'Clinic name is required'),
@@ -195,12 +223,26 @@ const clinicSettingsSchema = z.object({
   )
 });
 
+// v3.4.14 — Multi-specialty expansion.
+// NeoKidsPro is pediatric-first but no longer pediatric-only: the platform
+// now also serves general physicians, gynecologists and other specialties,
+// so patients may be children, teenagers, adults or elderly.
+//   * DOB has NO upper-age bound anymore (only "not in the future").
+//     The old hard under-18 ceiling is removed.
+//   * parentName is optional in general. It becomes REQUIRED only when the
+//     supplied DOB makes the patient a minor (< 18 years old) — a child
+//     cannot be registered without a parent/guardian contact, but an adult
+//     can book on their own. Sibling/family grouping (patients sharing a
+//     phone) is untouched by this change.
 const bookAppointmentSchema = z.object({
   doctorId: z.string().uuid(),
   patientName: z.string().min(2),
   phone: phoneSchema,
   email: z.string().email().optional().or(z.literal('')),
-  parentName: z.string().min(2, 'Parent name is required'),
+  parentName: z.preprocess(
+    v => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().min(2, 'Parent name must be at least 2 characters').optional()
+  ),
   dateOfBirth: dateSchema,
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
   primaryProblem: z.string().min(3),
@@ -212,11 +254,13 @@ const bookAppointmentSchema = z.object({
   .refine(d => d.date >= getTodayDateString(), { message: 'Appointment date cannot be in the past', path: ['date'] })
   .refine(d => d.dateOfBirth <= getTodayDateString(), { message: 'Date of birth cannot be in the future', path: ['dateOfBirth'] })
   .refine(d => {
+    // Parent/guardian required only for minors; optional for adults.
     const dob = new Date(d.dateOfBirth + 'T00:00:00.000Z');
     const eighteenAgo = new Date();
     eighteenAgo.setUTCFullYear(eighteenAgo.getUTCFullYear() - 18);
-    return dob >= eighteenAgo;
-  }, { message: 'This is a pediatric clinic — patient must be under 18 years old', path: ['dateOfBirth'] });
+    const isMinor = dob >= eighteenAgo;
+    return !isMinor || !!d.parentName;
+  }, { message: 'Parent / guardian name is required for patients under 18 years old', path: ['parentName'] });
 
 const prescriptionSchema = z.object({
   weight: optStr.optional(),
@@ -386,7 +430,9 @@ module.exports = {
   createDoctorSchema,
   updateDoctorByAdminSchema,
   updateDoctorAvailabilitySchema,
+  updateDoctorAvailabilitySchemaForMode,
   updateDoctorFeesSchema,
+  updateDoctorFeesSchemaForMode,
   clinicSettingsSchema,
   bookAppointmentSchema,
   prescriptionSchema,

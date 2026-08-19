@@ -31,7 +31,7 @@
       <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
     </div>
     <h1 class="np-login__title">NeoKidsPro Admin</h1>
-    <p class="np-login__subtitle">Pediatric clinic management</p>
+    <p class="np-login__subtitle">Doctor network &amp; telehealth platform administration</p>
     <form id="loginForm" novalidate>
       <div class="np-field">
         <label class="np-field__label" for="email">Email</label>
@@ -131,7 +131,7 @@
           </button>
           <div class="np-header__title">
             <div id="pageTitle" class="np-header__page-title">Dashboard</div>
-            <div id="pageSubtitle" class="np-header__page-subtitle">Overview of your clinic</div>
+            <div id="pageSubtitle" class="np-header__page-subtitle">Overview of your platform</div>
           </div>
           <div id="profileMenu" class="np-profile">
             <button id="profileTrigger" type="button" class="np-profile__trigger" aria-haspopup="true" aria-expanded="false">
@@ -177,7 +177,7 @@
               <div class="np-panel__head">
                 <div style="flex:1">
                   <div class="np-panel__title">Recent appointments</div>
-                  <div class="np-panel__subtitle">Latest 10 bookings across the clinic</div>
+                  <div class="np-panel__subtitle">Latest 10 bookings across the platform</div>
                 </div>
                 <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="setView('apptsView')">View all</button>
               </div>
@@ -191,7 +191,7 @@
             <div class="np-panel__head">
               <div style="flex:1">
                 <div class="np-panel__title">Doctors</div>
-                <div class="np-panel__subtitle">Manage clinic doctors, fees, and availability</div>
+                <div class="np-panel__subtitle">Manage platform doctors, fees, and availability</div>
               </div>
               <button class="np-btn np-btn--primary np-btn--add-doctor" type="button" onclick="openDoctorModal()">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -202,7 +202,7 @@
               <div class="np-filterbar">
                 <div class="np-search">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  <input id="docSearch" type="search" placeholder="Search by name, email, phone, clinic…" autocomplete="off"/>
+                  <input id="docSearch" type="search" placeholder="Search by name, email, phone, practice…" autocomplete="off"/>
                 </div>
                 <select id="docFilterAvail" class="np-select" aria-label="Filter availability">
                   <option value="">All</option>
@@ -597,11 +597,11 @@
               <option value="OFFLINE">Offline only</option>
             </select>
           </div>
-          <div class="np-field">
+          <div class="np-field" id="adminFeeOnlineField">
             <label class="np-field__label">Online fee (₹)</label>
             <input name="onlineConsultFee" type="number" min="0" step="0.01" class="np-input" placeholder="500"/>
           </div>
-          <div class="np-field">
+          <div class="np-field" id="adminFeeOfflineField">
             <label class="np-field__label">Physical fee (₹)</label>
             <input name="physicalConsultFee" type="number" min="0" step="0.01" class="np-input" placeholder="750"/>
           </div>

@@ -8,7 +8,9 @@ const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
 const {
   updateDoctorAvailabilitySchema,
+  updateDoctorAvailabilitySchemaForMode,
   updateDoctorFeesSchema,
+  updateDoctorFeesSchemaForMode,
   prescriptionSchema,
   rescheduleSchema
 } = require('../utils/validators');
@@ -69,7 +71,13 @@ exports.me = asyncHandler(async (req, res) => {
 });
 
 exports.updateAvailability = asyncHandler(async (req, res) => {
-  const parsed = updateDoctorAvailabilitySchema.safeParse(req.body);
+  // v3.4.14 — consultation-mode-aware availability.
+  // An ONLINE-only doctor cannot save offline hours (and vice versa) so the
+  // settings UI stays clean and stale mode-specific values never get written.
+  const current = await prisma.doctor.findUnique({ where: { id: req.user.id }, select: { consultationModes: true } });
+  if (!current) return res.status(404).json({ error: 'Doctor not found' });
+  const schema = updateDoctorAvailabilitySchemaForMode(current.consultationModes);
+  const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
   const payload = Object.fromEntries(
     Object.entries(parsed.data).map(([k, v]) => [k, v === '' ? null : v])
@@ -80,7 +88,11 @@ exports.updateAvailability = asyncHandler(async (req, res) => {
 });
 
 exports.updateFees = asyncHandler(async (req, res) => {
-  const parsed = updateDoctorFeesSchema.safeParse(req.body);
+  // v3.4.14 — consultation-mode-aware fees (same guard as availability).
+  const current = await prisma.doctor.findUnique({ where: { id: req.user.id }, select: { consultationModes: true } });
+  if (!current) return res.status(404).json({ error: 'Doctor not found' });
+  const schema = updateDoctorFeesSchemaForMode(current.consultationModes);
+  const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
   const updated = await prisma.doctor.update({ where: { id: req.user.id }, data: parsed.data });
   const { passwordHash, ...safe } = updated;
@@ -657,6 +669,13 @@ exports.stats = asyncHandler(async (req, res) => {
 });
 
 exports.updateClinic = asyncHandler(async (req, res) => {
+  // v3.4.14 — clinic/practice location only makes sense for doctors who see
+  // patients in person. ONLINE-only doctors have no clinic to configure.
+  const me = await prisma.doctor.findUnique({ where: { id: req.user.id }, select: { consultationModes: true } });
+  if (!me) return res.status(404).json({ error: 'Doctor not found' });
+  if (String(me.consultationModes).toUpperCase() === 'ONLINE') {
+    return res.status(400).json({ error: 'Practice location settings do not apply to an online-only doctor' });
+  }
   const parsed = clinicSettingsSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
   let { clinicName, clinicAddress, clinicMapUrl, clinicLat, clinicLng } = parsed.data;

@@ -59,7 +59,7 @@
       <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
     </div>
     <h1 class="np-login__title">NeoKidsPro Doctor</h1>
-    <p class="np-login__subtitle">Sign in to your pediatric EMR</p>
+    <p class="np-login__subtitle">Sign in to your NeoKidsPro EMR</p>
 
     <form id="loginForm" novalidate action="javascript:void(0)" onsubmit="return false">
       <div class="np-field">
@@ -154,7 +154,7 @@
 
       <div class="np-sidebar__footer">
         <div>NeoKidsPro &middot; v2.0</div>
-        <div style="margin-top:.15rem;">Pediatric EMR</div>
+        <div style="margin-top:.15rem;">NeoKidsPro EMR</div>
       </div>
     </aside>
 
@@ -266,7 +266,7 @@
                   </li>
                   <li class="np-row" style="align-items:flex-start;">
                     <span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Setup</span>
-                    <span>Update your availability and clinic details in Settings for accurate bookings.</span>
+                    <span>Update your availability and practice details in Settings for accurate bookings.</span>
                   </li>
                 </ul>
               </div>
@@ -476,14 +476,14 @@
               </form>
             </div>
 
-<div class="np-setting-card">
+<div class="np-setting-card" id="setting-clinic">
               <div class="np-setting-card__head">
                 <div class="np-setting-card__icon" style="background: linear-gradient(135deg,#F46A8E,#FE84A4);">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                 </div>
                 <div>
-                  <div class="np-setting-card__title">Clinic Location</div>
-                  <div class="np-setting-card__sub">Where patients will visit you</div>
+                  <div class="np-setting-card__title">Practice Location</div>
+                  <div class="np-setting-card__sub">Where patients will visit you in person</div>
                 </div>
               </div>
               <form id="clinicForm">
@@ -509,7 +509,7 @@
                     <input name="clinicLng" type="number" step="any" class="np-input" placeholder="77.594">
                   </div>
                 </div>
-                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save clinic details</button>
+                <button type="submit" class="np-btn np-btn--primary np-btn--sm">Save practice location</button>
               </form>
             </div>
 
@@ -594,10 +594,11 @@
                   <div class="np-setting-card__title">Availability</div>
                   <div class="np-setting-card__sub">Working hours, days, and consultation slot length</div>
                 </div>
+                <div id="availModeNotice" class="np-field__hint hidden" style="margin-top:.5rem;"></div>
               </div>
               <form id="availForm">
                 <div class="np-grid-2">
-                  <div class="np-field">
+                  <div class="np-field" id="availOnlineFrom">
                     <label class="np-field__label">Online — From</label>
                     <div style="display:flex; gap:.4rem;">
                       <select name="availableFromOnline_h" class="np-select-native" style="flex:1"></select>
@@ -606,7 +607,7 @@
                       </select>
                     </div>
                   </div>
-                  <div class="np-field">
+                  <div class="np-field" id="availOnlineTo">
                     <label class="np-field__label">Online — To</label>
                     <div style="display:flex; gap:.4rem;">
                       <select name="availableToOnline_h" class="np-select-native" style="flex:1"></select>
@@ -615,7 +616,7 @@
                       </select>
                     </div>
                   </div>
-                  <div class="np-field">
+                  <div class="np-field" id="availOfflineFrom">
                     <label class="np-field__label">In-Person — From</label>
                     <div style="display:flex; gap:.4rem;">
                       <select name="availableFromOffline_h" class="np-select-native" style="flex:1"></select>
@@ -624,7 +625,7 @@
                       </select>
                     </div>
                   </div>
-                  <div class="np-field">
+                  <div class="np-field" id="availOfflineTo">
                     <label class="np-field__label">In-Person — To</label>
                     <div style="display:flex; gap:.4rem;">
                       <select name="availableToOffline_h" class="np-select-native" style="flex:1"></select>
@@ -683,11 +684,11 @@
               </div>
               <form id="feesForm">
                 <div class="np-grid-2">
-                  <div class="np-field">
+                  <div class="np-field" id="feeOnlineField">
                     <label class="np-field__label">Online (₹)</label>
                     <input name="onlineConsultFee" type="number" min="0" class="np-input" placeholder="500">
                   </div>
-                  <div class="np-field">
+                  <div class="np-field" id="feeOfflineField">
                     <label class="np-field__label">In-Person (₹)</label>
                     <input name="physicalConsultFee" type="number" min="0" class="np-input" placeholder="750">
                   </div>
@@ -901,7 +902,7 @@
             <div id="hrPatientResults" class="hr-picker__results hidden"></div>
             <div id="hrSelectedPatient" class="hr-picker__selected hidden"></div>
             <div id="histMatchBox" class="hidden"></div>
-            <div class="np-field__hint">Type at least 2 characters. Results update as you type. Only patients already registered in your clinic can be selected here.</div>
+            <div class="np-field__hint">Type at least 2 characters. Results update as you type. Only patients already registered with you can be selected here.</div>
           </div>
 
           <!-- Legacy / Historical Patient branch -->
@@ -1138,8 +1139,8 @@
         <div><dt>Phone</dt><dd id="myProfilePhone">—</dd></div>
         <div><dt>Qualification</dt><dd id="myProfileQual">—</dd></div>
         <div><dt>Registration No.</dt><dd id="myProfileReg">—</dd></div>
-        <div><dt>Clinic</dt><dd id="myProfileClinic">—</dd></div>
-        <div><dt>Clinic address</dt><dd id="myProfileClinicAddr">—</dd></div>
+        <div><dt>Practice</dt><dd id="myProfileClinic">—</dd></div>
+        <div><dt>Practice address</dt><dd id="myProfileClinicAddr">—</dd></div>
       </dl>
     </div>
     <div class="np-modal__foot">

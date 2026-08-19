@@ -1530,6 +1530,7 @@ function loadSettings(){
   api('/doctor/me').then(d => {
     doctorCache = d;
     renderDoctorHeader(d);
+    applyModeVisibility(d);
     populateAvailability(d);
     populateClinic(d);
     populateFees(d);
@@ -1539,6 +1540,41 @@ function loadSettings(){
       if (input) NPDropzone.bind(input, { label: 'Drop profile photo here', hint: 'or click to browse (JPG / PNG)' });
     }
   }).catch(()=>{});
+}
+
+// v3.4.14 — Consultation-mode-aware settings.
+// Doctors only see configuration that matches how they actually consult:
+//   ONLINE  only → hide practice-location card, in-person hours, in-person fee
+//   OFFLINE only → hide online hours and online fee
+//   BOTH (hybrid) → everything stays visible
+function applyModeVisibility(d){
+  const mode = String((d && d.consultationModes) || 'BOTH').toUpperCase();
+  const showOnline  = mode === 'BOTH' || mode === 'ONLINE';
+  const showOffline = mode === 'BOTH' || mode === 'OFFLINE';
+
+  const _show = (id, show) => { const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !show); };
+
+  _show('setting-clinic', showOffline);
+  _show('availOnlineFrom',  showOnline);
+  _show('availOnlineTo',    showOnline);
+  _show('availOfflineFrom', showOffline);
+  _show('availOfflineTo',   showOffline);
+  _show('feeOnlineField',  showOnline);
+  _show('feeOfflineField', showOffline);
+
+  const notice = document.getElementById('availModeNotice');
+  if (notice) {
+    if (mode === 'ONLINE') {
+      notice.textContent = 'You consult online only — in-person availability and practice-location settings are hidden.';
+      notice.classList.remove('hidden');
+    } else if (mode === 'OFFLINE') {
+      notice.textContent = 'You consult in person only — online availability and online fee settings are hidden.';
+      notice.classList.remove('hidden');
+    } else {
+      notice.textContent = '';
+      notice.classList.add('hidden');
+    }
+  }
 }
 
 function populateDoctorUuid(d){
@@ -1668,18 +1704,27 @@ function setupForms(){
   });
   $('#availForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    // v3.4.14 — only send the availability fields relevant to this doctor's
+    // consultation mode; mode-irrelevant fields are omitted entirely so the
+    // server-side mode guard never trips on hidden inputs.
+    const mode = String((doctorCache && doctorCache.consultationModes) || 'BOTH').toUpperCase();
     const body = {
-      availableFromOnline:  readTimePicker('availableFromOnline'),
-      availableToOnline:    readTimePicker('availableToOnline'),
-      availableFromOffline: readTimePicker('availableFromOffline'),
-      availableToOffline:   readTimePicker('availableToOffline'),
       slotDuration: Number($('#slotDurationVal').value || 15),
       workingDays:  $('#workingDaysVal').value || '',
       isAvailable:  !!e.target.isAvailable.checked
     };
+    if (mode === 'BOTH' || mode === 'ONLINE') {
+      body.availableFromOnline = readTimePicker('availableFromOnline');
+      body.availableToOnline   = readTimePicker('availableToOnline');
+    }
+    if (mode === 'BOTH' || mode === 'OFFLINE') {
+      body.availableFromOffline = readTimePicker('availableFromOffline');
+      body.availableToOffline   = readTimePicker('availableToOffline');
+    }
     function _hm(s){ if (!s) return null; const m = String(s).match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1])*60 + Number(m[2])) : null; }
-    const pairs = [['Online', body.availableFromOnline, body.availableToOnline],
-                   ['Offline', body.availableFromOffline, body.availableToOffline]];
+    const pairs = [];
+    if (mode === 'BOTH' || mode === 'ONLINE')  pairs.push(['Online',  body.availableFromOnline,  body.availableToOnline]);
+    if (mode === 'BOTH' || mode === 'OFFLINE') pairs.push(['Offline', body.availableFromOffline, body.availableToOffline]);
     for (const [label, a, b] of pairs) {
       const av = _hm(a), bv = _hm(b);
       if (av != null && bv != null && av >= bv) {
@@ -1700,15 +1745,16 @@ function setupForms(){
       clinicLat:     e.target.clinicLat.value ? Number(e.target.clinicLat.value) : null,
       clinicLng:     e.target.clinicLng.value ? Number(e.target.clinicLng.value) : null
     };
-    try { await api('/doctor/clinic', { method:'PUT', body }); alert('Clinic details saved.'); }
+    try { await api('/doctor/clinic', { method:'PUT', body }); alert('Practice location saved.'); }
     catch (ex){ alert(ex.message || 'Could not save'); }
   });
   $('#feesForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const body = {
-      onlineConsultFee:   Number(e.target.onlineConsultFee.value || 0),
-      physicalConsultFee: Number(e.target.physicalConsultFee.value || 0)
-    };
+    // v3.4.14 — only send the fee relevant to this doctor's consultation mode.
+    const mode = String((doctorCache && doctorCache.consultationModes) || 'BOTH').toUpperCase();
+    const body = {};
+    if (mode === 'BOTH' || mode === 'ONLINE')  body.onlineConsultFee   = Number(e.target.onlineConsultFee.value || 0);
+    if (mode === 'BOTH' || mode === 'OFFLINE') body.physicalConsultFee = Number(e.target.physicalConsultFee.value || 0);
     try { await api('/doctor/fees', { method:'PUT', body }); alert('Fees saved.'); }
     catch (ex){ alert(ex.message || 'Could not save'); }
   });

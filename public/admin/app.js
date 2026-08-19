@@ -694,6 +694,25 @@ async function hardDeleteDoctor(id, name) {
   } catch (err) { NPToast.error(err.message); }
 }
 
+// v3.4.14 — Consultation-mode-aware doctor form.
+// Only the fee fields relevant to the doctor's consultation mode are shown,
+// so onboarding an online-only (or offline-only) doctor stays uncluttered.
+function applyAdminModeVisibility(mode){
+  const m = String(mode || 'BOTH').toUpperCase();
+  const showOnline  = m === 'BOTH' || m === 'ONLINE';
+  const showOffline = m === 'BOTH' || m === 'OFFLINE';
+  const on  = document.getElementById('adminFeeOnlineField');
+  const off = document.getElementById('adminFeeOfflineField');
+  if (on)  on.classList.toggle('hidden', !showOnline);
+  if (off) off.classList.toggle('hidden', !showOffline);
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.name === 'consultationModes' && e.target.form && e.target.form.id === 'doctorForm') {
+    applyAdminModeVisibility(e.target.value);
+  }
+});
+
 function openDoctorModal() {
   $('#doctorModalTitle').textContent = 'Add Doctor';
   const f = $('#doctorForm');
@@ -703,6 +722,7 @@ function openDoctorModal() {
   f.email.readOnly = false;
   f.password.placeholder = '(invite link is preferred)';
   loadKycForDoctor(null);
+  applyAdminModeVisibility(f.consultationModes ? f.consultationModes.value : 'BOTH');
   $('#doctorModal').classList.remove('hidden');
   if (typeof NPDropzone !== 'undefined') {
     setTimeout(() => {
@@ -742,6 +762,7 @@ function openEditDoctor(id) {
   if (f.tdsPercent)         f.tdsPercent.value         = d.tdsPercent ?? 10;
   if (f.canAddPreviousRecords) f.canAddPreviousRecords.checked = !!d.canAddPreviousRecords;
   loadKycForDoctor(id);
+  applyAdminModeVisibility(d.consultationModes || 'BOTH');
   $('#doctorModal').classList.remove('hidden');
 }
 

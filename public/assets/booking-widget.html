@@ -1066,19 +1066,20 @@ body.bw-cashfree-active.bw-keyboard-open [class*="sheet"] {
           Step 2 of 4
         </div>
         <h2 id="step2Heading" class="bw-section-h2">Patient Details</h2>
-        <p class="bw-section-sub">Please fill in the child's information accurately.</p>
+        <p class="bw-section-sub">Please fill in the patient's information accurately.</p>
       </div>
 
       <div class="bw-form-row">
-        <label for="f_name" class="bw-label">Child's Full Name *</label>
+        <label for="f_name" class="bw-label">Patient's Full Name *</label>
         <input id="f_name" name="patientName" required autocomplete="name"
-          placeholder="Enter child's full name" class="bw-input" aria-required="true"/>
+          placeholder="Enter patient's full name" class="bw-input" aria-required="true"/>
       </div>
 
       <div class="bw-form-row">
-        <label for="f_parent" class="bw-label">Parent / Guardian Name *</label>
-        <input id="f_parent" name="parentName" required autocomplete="name"
-          placeholder="Enter parent or guardian name" class="bw-input" aria-required="true"/>
+        <label for="f_parent" id="f_parent_label" class="bw-label">Parent / Guardian Name *</label>
+        <input id="f_parent" name="parentName" autocomplete="name"
+          placeholder="Enter parent or guardian name" class="bw-input"/>
+        <p id="parentHelp" class="bw-input-hint">Required for patients under 18; optional for adults.</p>
       </div>
 
       <div class="bw-form-grid">
@@ -1089,7 +1090,7 @@ body.bw-cashfree-active.bw-keyboard-open [class*="sheet"] {
             <input id="f_dob" name="dateOfBirth" type="date" required
               class="bw-input" aria-required="true" aria-describedby="dobHelp"/>
           </div>
-          <p id="dobHelp" class="bw-input-hint">Patient must be under 18.</p>
+          <p id="dobHelp" class="bw-input-hint">Children, adults and elderly patients are all welcome.</p>
         </div>
         <div class="bw-form-row">
           <label for="f_gender" class="bw-label">Gender *</label>
@@ -1118,7 +1119,7 @@ body.bw-cashfree-active.bw-keyboard-open [class*="sheet"] {
       <div class="bw-form-row">
         <label for="f_problem" class="bw-label">Reason for Visit *</label>
         <textarea id="f_problem" name="primaryProblem" required rows="3"
-          placeholder="Briefly describe the child's symptoms or reason for the appointment…"
+          placeholder="Briefly describe the symptoms or reason for the appointment…"
           class="bw-input" aria-required="true" style="resize:vertical;"></textarea>
       </div>
 
@@ -1505,22 +1506,45 @@ async function preselectDoctor(id) {
 
 async function selectDoctor(id){ await preselectDoctor(id); }
 
+// v3.4.14 — multi-specialty: the platform is pediatric-first but no longer
+// pediatric-only. DOB has no minimum-age bound anymore; only the future-date
+// ceiling is enforced. Parent/guardian becomes required only when the entered
+// DOB makes the patient a minor (< 18), and optional for adults.
+function _isMinorDob(value){
+  if (!value) return false;
+  const dob = new Date(value + 'T00:00:00');
+  if (isNaN(dob.getTime())) return false;
+  const eighteenAgo = new Date();
+  eighteenAgo.setFullYear(eighteenAgo.getFullYear() - 18);
+  return dob >= eighteenAgo;
+}
+
+function _syncParentRequirement(){
+  const parent = $('#f_parent');
+  const label  = $('#f_parent_label');
+  if (!parent) return;
+  const minor = _isMinorDob($('#f_dob') && $('#f_dob').value);
+  parent.required = minor;
+  if (minor) parent.setAttribute('aria-required', 'true');
+  else parent.removeAttribute('aria-required');
+  if (label) label.textContent = minor ? 'Parent / Guardian Name *' : 'Parent / Guardian Name (optional)';
+}
+
 function applyDobBounds() {
   const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const y = nowIST.getFullYear(), m = String(nowIST.getMonth()+1).padStart(2,'0'), d = String(nowIST.getDate()).padStart(2,'0');
   const todayIST = `${y}-${m}-${d}`;
-  const eighteen = new Date(nowIST); eighteen.setFullYear(eighteen.getFullYear()-18);
-  const ey = eighteen.getFullYear(), em = String(eighteen.getMonth()+1).padStart(2,'0'), ed = String(eighteen.getDate()).padStart(2,'0');
   const dob = $('#f_dob');
   dob.max = todayIST;
-  dob.min = `${ey}-${em}-${ed}`;
+  dob.removeAttribute('min'); // adults & elderly patients are supported now
   if (!dob.__bound) {
     dob.addEventListener('change', () => {
       if (dob.value && dob.value > dob.max) { dob.value = dob.max; alert('Date of birth cannot be in the future.'); }
-      if (dob.value && dob.value < dob.min) { dob.value = dob.min; alert('This is a pediatric clinic — patient must be under 18.'); }
+      _syncParentRequirement();
     });
     dob.__bound = true;
   }
+  _syncParentRequirement();
 }
 
 function goTo(step){
@@ -1549,9 +1573,11 @@ function goTo(step){
 function validateStep2(){
   const form = $('#step2');
   clearFormErrors(form);
+  _syncParentRequirement();
+  const parentRequired = $('#f_parent') && $('#f_parent').required;
   const checks = [
     ['#f_name',    v => !!v.trim(),                "Please enter the patient's name"],
-    ['#f_parent',  v => !!v.trim(),                "Please enter the parent / guardian's name"],
+    ['#f_parent',  v => !parentRequired || !!v.trim(), "Parent / guardian name is required for patients under 18"],
     ['#f_dob',     v => !!v,                       'Please select date of birth'],
     ['#f_gender',  v => !!v,                       'Please select a gender'],
     ['#f_phone',   v => /^[6-9]\d{9}$/.test(v),    'Please enter a valid 10-digit Indian phone number'],
@@ -1570,7 +1596,6 @@ function validateStep2(){
   }
   const dob = $('#f_dob');
   if (dob.value && dob.value > dob.max) { setFieldError(dob, 'Date of birth cannot be in the future.'); firstInvalid = firstInvalid || dob; }
-  if (dob.value && dob.value < dob.min) { setFieldError(dob, 'This is a pediatric clinic — patient must be under 18.'); firstInvalid = firstInvalid || dob; }
   if (firstInvalid) { firstInvalid.focus(); return; }
   goTo(3);
 }
@@ -1643,7 +1668,7 @@ function renderSummary(){
   const P = 'https://neokidspro.in';
   if (isOnline) {
     $('#tncText').innerHTML =
-      `I confirm I am the parent or legal guardian of the child being booked, and I give my ` +
+      `I confirm I am the patient being booked, or the parent / legal guardian of the patient being booked, and I give my ` +
       `<strong>explicit consent to a video teleconsultation</strong> with a Registered Medical ` +
       `Practitioner (RMP) under India's ` +
       `<a href="${P}/telemedicine-guidelines/" target="_blank" rel="noopener">NeoKidsPro Telemedicine Guidelines</a> ` +
@@ -1659,14 +1684,14 @@ function renderSummary(){
       `<a href="${P}/refund-cancellation-policy/" target="_blank" rel="noopener">Refund &amp; Cancellation Policy</a>.`;
   } else {
     $('#tncText').innerHTML =
-      `I confirm I am the parent or legal guardian of the child being booked and agree to ` +
+      `I confirm I am the patient being booked, or the parent / legal guardian of the patient being booked, and I agree to ` +
       `NeoKidsPro's ` +
       `<a href="${P}/terms-of-service/" target="_blank" rel="noopener">Terms of Service</a>, ` +
       `<a href="${P}/privacy-policy/" target="_blank" rel="noopener">Privacy Policy</a> &amp; ` +
       `<a href="${P}/data-protection-policy/" target="_blank" rel="noopener">Data Protection Policy</a>, ` +
       `and the ` +
       `<a href="${P}/refund-cancellation-policy/" target="_blank" rel="noopener">Refund &amp; Cancellation Policy</a> ` +
-      `for this in-clinic paediatric consultation.`;
+      `for this in-person consultation.`;
   }
   tnc.onchange = () => { $('#btnSubmit').disabled = !tnc.checked; };
 }
@@ -1994,6 +2019,9 @@ async function bootFromQueryString(){
     if (p.gender)      $('#f_gender').value  = p.gender;
     if (p.phone)       $('#f_phone').value   = p.phone;
     if (prefill.primaryProblem) $('#f_problem').value = prefill.primaryProblem + ' (follow-up)';
+    // v3.4.14 — DOB was set programmatically above (no change event fires),
+    // so re-sync the parent/guardian required-state for minors vs adults.
+    if (typeof _syncParentRequirement === 'function') _syncParentRequirement();
     const banner = document.createElement('div');
     banner.setAttribute('role','note');
     banner.className = 'bw-recall-banner';
