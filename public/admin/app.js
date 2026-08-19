@@ -1902,24 +1902,31 @@ async function loadAdmCertificates(){
       wrap.innerHTML = '<div class="np-empty"><div class="np-empty__title">No certificates yet</div><div class="np-empty__sub">Certificates issued by doctors will appear here.</div></div>';
       return;
     }
-    wrap.innerHTML = rows.map(function(c){
+    var CERT_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>';
+    wrap.innerHTML = '<div class="np-cert-list">' + rows.map(function(c){
       var patientName = c.patientNameSnapshot || (c.patient && c.patient.name) || '—';
       var doctorName = c.doctorName || (c.doctor && c.doctor.name) || '';
       var tpl = (c.templateKey || 'GENERAL').replace(/_/g, ' ');
-      return '<article class="np-history-row">'
-        + '<div class="np-history-row__date"><div><b>' + _admEsc(_admFmtDate(c.issuedAt || c.createdAt)) + '</b></div>'
-        + '<div class="np-mut" style="font-size:.78rem;">' + _admEsc(c.certificateNumber || '') + '</div></div>'
-        + '<div class="np-history-row__body">'
-        + '<div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; flex-wrap:wrap;">'
-        + '<div><b>' + _admEsc(patientName) + '</b>'
-        + '<span class="np-badge np-badge--mint" style="margin-left:.4rem;">' + _admEsc(tpl) + '</span>'
-        + (doctorName ? '<div class="np-mut" style="font-size:.8rem;">Dr. ' + _admEsc(doctorName) + '</div>' : '')
+      var when = _admFmtDate(c.issuedAt || c.createdAt);
+      return '<article class="np-cert-card">'
+        + '<div class="np-cert-card__icon">' + CERT_ICON + '</div>'
+        + '<div class="np-cert-card__main">'
+        + '<div class="np-cert-card__top">'
+        + '<span class="np-cert-card__name">' + _admEsc(patientName) + '</span>'
+        + '<span class="np-badge np-badge--mint">' + _admEsc(tpl) + '</span>'
         + '</div>'
+        + '<div class="np-cert-card__meta">'
+        + (doctorName ? '<span>Dr. ' + _admEsc(doctorName) + '</span>' : '')
+        + (c.certificateNumber ? '<span class="np-cert-card__num">' + _admEsc(c.certificateNumber) + '</span>' : '')
+        + '<span>' + _admEsc(when) + '</span>'
+        + '</div>'
+        + (c.reason ? '<div class="np-cert-card__reason">' + _admEsc(c.reason) + '</div>' : '')
+        + '</div>'
+        + '<div class="np-cert-card__actions">'
         + '<button type="button" class="np-btn np-btn--sm" onclick="viewAdmCert(\'' + _admEsc(c.id) + '\')">View</button>'
         + '</div>'
-        + (c.reason ? '<div class="np-mut" style="font-size:.82rem; margin-top:.15rem;">' + _admEsc(c.reason) + '</div>' : '')
-        + '</div></article>';
-    }).join('');
+        + '</article>';
+    }).join('') + '</div>';
   } catch(ex){
     wrap.innerHTML = '<div class="np-error">' + _admEsc(ex.message || 'Failed to load certificates') + '</div>';
   }

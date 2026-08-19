@@ -11,9 +11,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/admin/styles.css"/>
+<link rel="stylesheet" href="/admin/styles.css?v=3.5.0"/>
 
-<link rel="stylesheet" href="/assets/neokids-theme.css"/>
+<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.5.0"/>
 <script>
   try {
     var t = localStorage.getItem('np-theme');
@@ -607,10 +607,10 @@
           </div>
         </div>
         <div class="np-inline-panel" style="margin-top:.75rem; padding:.75rem; border-radius:8px;">
-          <div style="font-weight:600; font-size:.85rem; color:#0F2A47; margin-bottom:.4rem;">
+          <div class="np-ink" style="font-weight:600; font-size:.85rem; margin-bottom:.4rem;">
             Revenue split (per-doctor)
           </div>
-          <div style="font-size:.7rem; color:#6B7280; margin-bottom:.5rem;">
+          <div class="np-mut" style="font-size:.7rem; margin-bottom:.5rem;">
             Clinic + Doctor must sum to 100%. TDS applies to the doctor's gross share.
           </div>
           <div class="np-grid-2">
@@ -643,17 +643,17 @@
 <div id="doctorKycPanel" class="np-inline-panel" style="margin-top:1rem; padding:.85rem; border-radius:8px;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.5rem;">
             <div>
-              <div style="font-weight:600; font-size:.9rem; color:#0F2A47;">KYC Documents</div>
-              <div style="font-size:.72rem; color:#6B7280;">Admin uploads onboarding documents on behalf of the doctor.</div>
+              <div class="np-ink" style="font-weight:600; font-size:.9rem;">KYC Documents</div>
+              <div class="np-mut" style="font-size:.72rem;">Admin uploads onboarding documents on behalf of the doctor.</div>
             </div>
             <span id="kycStatusBadge" class="np-badge np-badge--slate"><span class="np-badge__dot"></span>PENDING</span>
           </div>
 
-          <div id="kycCreateHint" class="hidden" style="font-size:.78rem; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; padding:.5rem .65rem; border-radius:6px; margin-bottom:.5rem;">
+          <div id="kycCreateHint" class="np-callout np-callout--warning hidden" style="font-size:.78rem; margin-bottom:.5rem;">
             Save the doctor first, then re-open this form to upload KYC documents.
           </div>
 
-          <div id="kycRejectionBox" class="hidden" style="font-size:.78rem; color:#B91C1C; background:#FEF2F2; border:1px solid #FECACA; padding:.5rem .65rem; border-radius:6px; margin-bottom:.5rem;">
+          <div id="kycRejectionBox" class="np-callout np-callout--danger hidden" style="font-size:.78rem; margin-bottom:.5rem;">
             <b>Rejection reason:</b> <span id="kycRejectionText"></span>
           </div>
 
@@ -700,17 +700,17 @@
             </div>
           </div>
 
-          <div id="kycVerifyBlock" class="hidden" style="margin-top:.5rem; padding-top:.5rem; border-top:1px dashed #E5E7EB;">
+          <div id="kycVerifyBlock" class="hidden" style="margin-top:.5rem; padding-top:.5rem; border-top:1px dashed var(--nk-border);">
             <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
               <button type="button" class="np-btn np-btn--primary np-btn--sm" onclick="verifyKyc('VERIFIED')">✓ Verify KYC</button>
-              <button type="button" class="np-btn np-btn--sm" style="color:#B91C1C;" onclick="verifyKyc('REJECTED')">✕ Reject KYC</button>
+              <button type="button" class="np-btn np-btn--sm np-btn--danger" onclick="verifyKyc('REJECTED')">✕ Reject KYC</button>
               <span id="kycVerifiedAt" class="np-mut" style="font-size:.72rem; align-self:center;"></span>
             </div>
           </div>
         </div>
 
 <div id="doctorFormError" class="np-error hidden"></div>
-        <div class="np-field" style="font-size:.75rem; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; padding:.55rem .75rem; border-radius:8px;">
+        <div class="np-callout np-callout--warning" style="font-size:.78rem; margin-bottom:.85rem;">
           Best practice: leave the temporary password blank and let the doctor set their own via the email invite.
         </div>
         <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">

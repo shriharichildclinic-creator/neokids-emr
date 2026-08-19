@@ -248,29 +248,12 @@ html,body{
    /assets/neokids-theme.css. Do not redeclare `.np-btn` / `.np-badge` here —
    this was the root cause of Admin vs Doctor panel inconsistency and of the
    v3.3.2 page-level patch below (now removed). */
-.np-btn:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); border-color: var(--nk-teal-200); }
 
 .np-field{ display:flex; flex-direction:column; gap:.35rem; margin-bottom:.85rem; }
 .np-field__label{ font-size:.78rem; font-weight:600; color:var(--np-ink); }
 .np-field__hint{ font-size:.72rem; color:var(--np-muted); }
-.np-input, .np-select, .np-textarea, input.np-input, select.np-select, textarea.np-textarea{
-  width:100%;
-  padding:.6rem .8rem;
-  border-radius:10px;
-  border:1px solid var(--np-border);
-  background: var(--nk-card);
-  font-size:.88rem;
-  color: var(--np-text);
-  font-family: inherit;
-}
-
-select.np-select, .np-select{ padding-right:2rem; appearance:auto; }
-.np-textarea{ min-height: 70px; resize: vertical; }
-.np-input:focus, .np-select:focus, .np-textarea:focus{
-  outline:none;
-  border-color: var(--np-primary);
-  box-shadow: 0 0 0 3px rgba(137,188,189,.15);
-}
+/* Form-control box model (padding, radius, border, chevron, focus ring)
+   is defined ONCE, for both panels, in /assets/neokids-theme.css. */
 /* .np-error is defined once, for both panels, in neokids-theme.css. */
 
 .np-password-wrap{ position:relative; display:block; }
@@ -290,13 +273,13 @@ select.np-select, .np-select{ padding-right:2rem; appearance:auto; }
   border:0;
   border-radius:8px;
   background:transparent;
-  color:var(--np-muted, #64748B);
+  color:var(--nk-muted);
   cursor:pointer;
   transition: background .15s ease, color .15s ease;
 }
 .np-password-toggle:hover{
   background: rgba(137,188,189,.12);
-  color: var(--np-primary, #4DA8FF);
+  color: var(--np-primary);
 }
 .np-password-toggle:focus{
   outline:none;
@@ -755,7 +738,7 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   flex-direction:column;
   gap:.5rem;
   min-height:112px;
-  background:#F7FAFD;
+  background: var(--nk-surface);
   border:1px solid var(--np-border);
   border-radius:10px;
   padding:.7rem .75rem;

@@ -73,6 +73,12 @@
   --np-card-shadow: var(--nk-shadow-sm);
   --np-card-shadow-hover: var(--nk-shadow-md);
   --np-radius-card: 18px;
+
+  /* Legacy alias family used by older page stylesheets. Aliased to the
+     --nk-* tokens — the single source of truth — so a hardcoded light
+     hex can never leak through during a theme swap. */
+  --np-surface-2: #F6F8FB;
+  --np-text-mut: var(--nk-muted);
 }
 
 html,body{
@@ -367,15 +373,100 @@ h1,h2,h3{
 .from-brand-primary{ --tw-gradient-from: var(--nk-teal-400) !important; }
 .to-brand-primary  { --tw-gradient-to:   var(--nk-teal-600) !important; }
 
-/* .np-input / .np-select / .np-textarea base box model (width, padding,
-   border-radius, border, transition) is defined once in styles.css.
-   This block only layers the focus ring — it must NOT redeclare
-   border-radius/border/background, that duplication was the source of
-   the v3.3.x "stretched inputs" Settings bug. */
-.np-input:focus, .np-select:focus, .np-textarea:focus{
+/* ==========================================================================
+   CANONICAL FORM CONTROL COMPONENT
+   Single source of truth for every text input, select and textarea across
+   both panels. Previously declared three times with different padding,
+   border-radius and chevron reservations — the root cause of clipped
+   dropdown text ("All ty…") and mismatched control heights. Page
+   stylesheets must not redeclare this box model.
+   ========================================================================== */
+.np-input, .np-select, .np-textarea, .np-select-native,
+input.np-input, select.np-select, textarea.np-textarea, select.np-select-native{
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: .6rem .8rem;
+  border-radius: 10px;
+  border: 1px solid var(--nk-border);
+  background: var(--nk-card);
+  font-size: .88rem;
+  line-height: 1.4;
+  color: var(--nk-text);
+  font-family: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.np-input:focus, .np-select:focus, .np-textarea:focus, .np-select-native:focus{
   border-color: var(--nk-teal-400);
   box-shadow: var(--nk-ring-primary);
   outline: none;
+}
+/* One select treatment everywhere: custom chevron + guaranteed right-hand
+   clearance so the selected option never renders under the arrow. The
+   background shorthand is deliberate — a later background-color on :focus
+   can never reset the image layer (that reset was the "jumping chevron"
+   regression in Previous Records). */
+select.np-select, select.np-input, .np-select{
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.35rem;
+  background: var(--nk-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right .85rem center;
+  background-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+select.np-select:focus, select.np-input:focus, .np-select:focus{
+  background: var(--nk-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right .85rem center;
+  background-size: 12px;
+}
+/* Native-arrow selects (hour/AM-PM pickers) keep the OS glyph but still
+   reserve room so the value never sits underneath it. */
+.np-select-native{ appearance: auto; -webkit-appearance: auto; padding-right: 2rem; }
+.np-textarea{ min-height: 80px; resize: vertical; }
+/* Date/time pickers: explicit height keeps them level with text inputs
+   and buttons; color-scheme keeps the calendar/clock indicator visible
+   in dark mode (previously rendered black-on-dark). */
+.np-input[type="date"], .np-input[type="time"], .np-input[type="datetime-local"]{
+  min-height: 40px;
+}
+html[data-theme="dark"] .np-input[type="date"],
+html[data-theme="dark"] .np-input[type="time"],
+html[data-theme="dark"] .np-input[type="datetime-local"]{
+  color-scheme: dark;
+}
+/* ==========================================================================
+   CANONICAL FILE FIELD COMPONENT
+   Native <input type="file"> chrome styled once for both themes — the
+   OS-rendered "No file chosen" text and the file-selector button were the
+   mismatched, low-contrast controls reported in the KYC upload section.
+   ========================================================================== */
+input[type="file"].np-input{
+  padding: .45rem .5rem;
+  color: var(--nk-text);
+  font-size: .82rem;
+}
+input[type="file"].np-input::-webkit-file-upload-button,
+input[type="file"].np-input::file-selector-button{
+  background: var(--nk-card);
+  color: var(--nk-text);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  padding: .4rem .75rem;
+  margin-right: .6rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+input[type="file"].np-input::-webkit-file-upload-button:hover,
+input[type="file"].np-input::file-selector-button:hover{
+  background: var(--nk-teal-50);
+  border-color: var(--nk-teal-200);
+  color: var(--nk-teal-700);
 }
 .np-field__label{ color: var(--nk-ink); font-weight: 600; font-size: .82rem; }
 .np-field__hint { color: var(--nk-muted); font-size: .76rem; }
@@ -667,8 +758,22 @@ html[data-theme="dark"] .np-callout--danger svg{ color:#FECDD3; }
 
 .np-modal{ background: rgba(15,46,58,.55); backdrop-filter: blur(4px); }
 .np-modal__panel{ border-radius: 22px; box-shadow: var(--nk-shadow-lg); }
-.np-modal__head{ border-bottom: 1px solid var(--nk-border-soft); }
+/* Canonical modal header rhythm — single source of truth for head padding
+   and the title/subtitle stack, so a subtitle can never crowd the divider
+   (the Edit Previous Record "Update the fields below…" defect). */
+.np-modal__head{
+  padding: 1.05rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--nk-border-soft);
+}
 .np-modal__title{ color: var(--nk-ink); }
+.np-modal__subtitle{
+  margin-top: .3rem;
+  line-height: 1.45;
+  font-size: .85rem;
+  color: var(--nk-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .np-modal__close:hover{ background: var(--nk-teal-50); color: var(--nk-teal-700); }
 
 .np-drawer__backdrop{ background: rgba(15,46,58,.55); backdrop-filter: blur(4px); }
@@ -781,6 +886,8 @@ html[data-theme="dark"]{
   --np-mint: rgba(137,188,189,.18);
   --np-card-shadow: var(--nk-shadow-sm);
   --np-card-shadow-hover: var(--nk-shadow-md);
+  --np-surface-2: #12222C;
+  --np-text-mut: var(--nk-muted);
 
   color-scheme: dark;
 }
@@ -926,7 +1033,7 @@ html[data-theme="dark"] .np-textarea,
 html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]),
 html[data-theme="dark"] select,
 html[data-theme="dark"] textarea{
-  background:#0E1A22 !important;
+  background-color:#0E1A22 !important;
   color: var(--nk-text) !important;
   border-color: var(--nk-border) !important;
 }
@@ -1269,7 +1376,7 @@ html[data-theme="dark"] input[type="email"],
 html[data-theme="dark"] input[type="tel"],
 html[data-theme="dark"] input[type="password"],
 html[data-theme="dark"] input[type="url"]{
-  background:#0E1A22 !important;
+  background-color:#0E1A22 !important;
   color: var(--nk-text) !important;
   border-color: var(--nk-border) !important;
 }
@@ -1488,14 +1595,6 @@ html[data-theme="dark"] .np-setting-card__hint{ color: var(--nk-muted); }
   .np-filter-actions--right{ width: 100%; justify-content: flex-end; }
   .np-filter-actions .np-btn,
   .np-filter-actions--right .np-btn{ min-width: 0; flex: 0 1 auto; }
-}
-
-/* Dropdown right-padding for select icons \u2014 consistent everywhere */
-.np-select,
-select.np-select,
-.np-filterbar select{
-  padding-right: 2.35rem !important;
-  background-position: right .85rem center !important;
 }
 
 /* ---------- Overflow / dropdown / popover ---------- */
@@ -1906,7 +2005,7 @@ html[data-theme="dark"] .np-history-rx__date,
 html[data-theme="dark"] .np-rx-card__sub{ color: var(--nk-muted); }
 html[data-theme="dark"] input[type="date"],
 html[data-theme="dark"] input[type="time"]{
-  background: #0E1A22 !important;
+  background-color: #0E1A22 !important;
   border-color: var(--nk-border) !important;
   color: var(--nk-text) !important;
   color-scheme: dark;
@@ -2119,7 +2218,7 @@ html[data-theme="dark"] .np-search input,
 html[data-theme="dark"] input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]):not([type=range]),
 html[data-theme="dark"] select,
 html[data-theme="dark"] textarea{
-  background: #0E1A22 !important;
+  background-color: #0E1A22 !important;
   color: var(--nk-text) !important;
   border-color: var(--nk-border) !important;
 }
@@ -2162,3 +2261,103 @@ html[data-theme="dark"] textarea{
     align-self: start;
   }
 }
+
+/* ===================================================================
+   v3.5 — Full design-system unification
+   Dark select chevron, KYC upload cards, and the Medical Certificates
+   card list. All colors come from --nk-* tokens; nothing below uses a
+   hardcoded light surface.
+   =================================================================== */
+
+/* Dark-mode select chevron — a lighter glyph, swapped via background-image
+   only (dark input rules above set background-color, so the light-theme
+   image layer would otherwise survive with a low-contrast stroke). */
+html[data-theme="dark"] select.np-select,
+html[data-theme="dark"] select.np-input,
+html[data-theme="dark"] .np-select{
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2391A6B0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+}
+
+/* ---------- KYC upload cards (admin doctor modal) ---------- */
+html[data-theme="dark"] .np-kyc-card{
+  background: #0E1A22;
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-kyc-card__title{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-kyc-card__status{ color: var(--nk-muted); }
+html[data-theme="dark"] .np-kyc-card__link{ color: var(--nk-teal-300); }
+
+/* ---------- Medical Certificates card list (admin oversight) ---------- */
+.np-cert-list{ display: flex; flex-direction: column; gap: .65rem; }
+.np-cert-card{
+  display: flex;
+  align-items: flex-start;
+  gap: .85rem;
+  background: var(--nk-card);
+  border: 1px solid var(--nk-border-soft);
+  border-radius: var(--nk-radius);
+  padding: .85rem 1rem;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.np-cert-card:hover{
+  border-color: var(--nk-teal-200);
+  box-shadow: var(--nk-shadow-sm);
+}
+.np-cert-card__icon{
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-600);
+  border: 1px solid var(--nk-border-soft);
+}
+.np-cert-card__main{ flex: 1 1 auto; min-width: 0; }
+.np-cert-card__top{
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.np-cert-card__name{
+  font-weight: 700;
+  color: var(--nk-ink);
+  overflow-wrap: anywhere;
+}
+.np-cert-card__meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: .15rem .75rem;
+  margin-top: .25rem;
+  font-size: .8rem;
+  color: var(--nk-muted);
+}
+.np-cert-card__num{
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .76rem;
+}
+.np-cert-card__reason{
+  margin-top: .35rem;
+  font-size: .84rem;
+  color: var(--nk-text);
+  overflow-wrap: anywhere;
+}
+.np-cert-card__actions{ flex: none; align-self: center; }
+@media (max-width: 560px){
+  .np-cert-card{ flex-wrap: wrap; }
+  .np-cert-card__actions{ width: 100%; align-self: stretch; }
+  .np-cert-card__actions .np-btn{ width: 100%; }
+}
+html[data-theme="dark"] .np-cert-card{
+  background: var(--nk-card);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-cert-card__icon{
+  background: rgba(137,188,189,.14);
+  color: var(--nk-teal-300);
+  border-color: var(--nk-border);
+}
+html[data-theme="dark"] .np-cert-card__reason{ color: var(--nk-text); }
