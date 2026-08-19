@@ -386,7 +386,9 @@ async function onOnlineBookingConfirmed(appointment) {
     const meetRes = await meet.createMeetLink({
       summary: `NeoKidsPro Consultation - ${a.patient.name}`,
       description: `Online consultation with Dr. ${a.doctor.name}\nReason: ${a.primaryProblem}`,
-      startISO, endISO
+      startISO, endISO,
+      doctorEmail: a.doctor.email,
+      patientEmail: a.patient.email
     });
     meetLink    = meetRes.meetLink;
     meetEventId = meetRes.eventId || meetEventId;
@@ -531,7 +533,9 @@ async function onAppointmentRescheduled(appointment) {
       const res = await meet.createMeetLink({
         summary: `[RESCHEDULED] NeoKidsPro Consultation - ${a.patient.name}`,
         description: `Rescheduled consultation with Dr. ${a.doctor.name}`,
-        startISO, endISO
+        startISO, endISO,
+        doctorEmail: a.doctor.email,
+        patientEmail: a.patient.email
       });
       meetLink    = res.meetLink;
       meetEventId = res.eventId || null;
@@ -981,7 +985,9 @@ async function processReminders() {
         const res = await meet.createMeetLink({
           summary: `NeoKidsPro Consultation - ${a.patient.name}`,
           description: `Online consultation with Dr. ${a.doctor.name}\nReason: ${a.primaryProblem}`,
-          startISO, endISO
+          startISO, endISO,
+          doctorEmail: a.doctor.email,
+          patientEmail: a.patient.email
         });
         meetLink = res.meetLink;
         meetEventId = res.eventId || null;

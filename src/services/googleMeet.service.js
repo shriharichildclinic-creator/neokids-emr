@@ -40,25 +40,30 @@
  * BUG 3 — "Ask to join" / "Wait until a host lets you in" for EVERY join
  * -------------------------------------------------------------
  * Root cause: the calendar event that creates the Meet space is owned by a
- * single API/service Google account. Nobody ever actually signs into that
- * account inside an actual Meet call, so there is no real person available
- * to admit anyone from the waiting room — the doctor and the patient are
- * both just "guests" from Meet's point of view. A Meet space's default
- * access type (`RESTRICTED`) requires every joiner to either be the
- * organizer or an explicit calendar invitee; since `attendees` is
- * deliberately left empty (see note below on privacy), EVERYONE knocks and
- * nobody is present to let them in — an effective deadlock.
+ * single API/service Google account, and (in the original version of this
+ * file) `attendees` was left empty. A Meet space's default access type
+ * (`RESTRICTED`) lets in the organizer AND any explicit calendar invitee
+ * without knocking — everyone else knocks. With no invitees and no real
+ * person ever signed into the organizer account inside an actual Meet
+ * call, BOTH the doctor and the patient were just anonymous guests, so
+ * both knocked, and nobody was present to let either of them in.
  *
- * FIX: immediately after creating the event/space, call the separate
- * Google Meet REST API (meet.googleapis.com/v2) to PATCH the space's
- * `config.accessType` to `OPEN` ("Anyone with the link can join without
- * knocking"). This does NOT require adding attendees, so the existing
- * privacy behavior (no calendar invite emails, no auto-add to anyone's
- * calendar) is fully preserved. It DOES require one additional OAuth
- * scope — `meetings.space.settings` — which means the refresh token must
- * be re-issued (see scripts/get-refresh-token.js). Until that happens this
- * degrades gracefully: the calendar event/Meet link is still created, we
- * just log a warning and the space keeps its old "ask to join" behavior.
+ * PRIMARY FIX (works on any Google account, free or paid):
+ *   Add the doctor and patient as calendar `attendees` (with
+ *   `sendUpdates: 'none'` so no invite email is sent). Once they're
+ *   invited guests, Google's default RESTRICTED rule lets them straight
+ *   in without knocking. This is the fix that actually matters here.
+ *
+ * BONUS FIX (Workspace-only, best-effort, safe to ignore if it fails):
+ *   Immediately after creating the event, PATCH the space's
+ *   `config.accessType` to `OPEN` via the separate Google Meet REST API
+ *   (meet.googleapis.com/v2) — "anyone with the link, no invite needed."
+ *   This requires the `meetings.space.settings` OAuth scope AND, per
+ *   Google's own docs, a paid Google Workspace account — it is NOT
+ *   available on a plain personal @gmail.com account. If it fails (which
+ *   is expected/fine on a personal account), we just log a warning and
+ *   fall back to the attendee-based fix above, which already solves the
+ *   reported problem without costing anything.
  *
  * CODE CHANGES IN THIS FILE
  * -------------------------------------------------------------
@@ -69,9 +74,10 @@
  *  - When Meet creation fails for ANY reason, return a structured
  *    error object instead of throwing. Callers (automation.service)
  *    already handle a null meetLink gracefully.
- *  - Keep existing privacy guarantees: no attendees, sendUpdates:none.
- *  - NEW: after creating the event, PATCH the Meet space to
- *    accessType=OPEN so neither doctor nor patient has to knock.
+ *  - Add doctor + patient as calendar attendees (sendUpdates:none) so
+ *    Google recognizes them as invitees and lets them skip the knock.
+ *  - NEW: after creating the event, also best-effort PATCH the Meet
+ *    space to accessType=OPEN (Workspace accounts only).
  */
 const logger = require('../utils/logger');
 
@@ -164,7 +170,7 @@ function isInvalidGrant(err) {
   return /invalid_grant/i.test(msg) || /Token has been expired or revoked/i.test(msg);
 }
 
-async function createMeetLink({ summary, description, startISO, endISO }) {
+async function createMeetLink({ summary, description, startISO, endISO, doctorEmail, patientEmail }) {
   if (!hasGoogleCreds()) {
     const code = Math.random().toString(36).slice(2, 6) + '-'
                + Math.random().toString(36).slice(2, 6) + '-'
@@ -175,9 +181,19 @@ async function createMeetLink({ summary, description, startISO, endISO }) {
   try {
     const calendar = getCalendarClient();
 
-    // NOTE: `attendees` is DELIBERATELY OMITTED below. Do not add it back.
-    // Adding even one attendee triggers Google's auto-invite + auto-add-to-
-    // their-calendar behavior.
+    // BUG 3 fix (free-tier, no Workspace needed): add the doctor and
+    // patient as calendar guests so Meet recognizes them as "invitees" —
+    // Google's default access rule lets invitees skip the knock, and
+    // only strangers get asked to wait. `sendUpdates: 'none'` below
+    // suppresses the invite EMAIL, so this stays low-friction; the only
+    // trade-off is the event may show up on the guest's own Google
+    // Calendar (governed by their own account's auto-add setting, not
+    // something we control). That's a reasonable trade for online
+    // consultations actually being joinable.
+    const attendees = [doctorEmail, patientEmail]
+      .filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+      .map(email => ({ email }));
+
     const event = await calendar.events.insert({
       calendarId: 'primary',
       conferenceDataVersion: 1,
@@ -190,6 +206,7 @@ async function createMeetLink({ summary, description, startISO, endISO }) {
         end:   { dateTime: endISO,   timeZone: 'Asia/Kolkata' },
         guestsCanInviteOthers: false,
         guestsCanSeeOtherGuests: false,
+        ...(attendees.length ? { attendees } : {}),
         conferenceData: {
           createRequest: {
             requestId: `neokids-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
@@ -202,10 +219,13 @@ async function createMeetLink({ summary, description, startISO, endISO }) {
     const meetLink = event.data.hangoutLink || null;
     const eventId  = event.data.id || null;
 
-    // BUG 3 fix — open the space so nobody has to "ask to join". Best
-    // effort: if this fails, the appointment/meeting still gets created
-    // and returned normally, just with the old knock-to-join behavior.
-    let accessType = 'RESTRICTED';
+    // Bonus, best-effort: if this Google account happens to be a paid
+    // Workspace account, also flip the space fully OPEN (anyone with the
+    // link, no invite needed at all). On a personal @gmail.com account
+    // this call is expected to fail — that's fine, the attendee-based
+    // fix above already solves the "ask to join" problem for the doctor
+    // and patient regardless of account type.
+    let accessType = attendees.length ? 'RESTRICTED (invited guests skip the knock)' : 'RESTRICTED';
     if (meetLink) {
       const meetingCode = (meetLink.match(/meet\.google\.com\/(.+)$/) || [])[1];
       const patch = await setSpaceOpenAccess(getOAuth2Client(), meetingCode);
