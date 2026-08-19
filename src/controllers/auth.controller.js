@@ -1,22 +1,18 @@
 /* =====================================================================
    auth.controller.js
    ---------------------------------------------------------------------
-   Issue 24 — anti-enumeration on /api/auth/forgot-password.
+   Anti-enumeration on /api/auth/forgot-password.
 
-   Previously:
-     - real email           → 200 { success:true, ... }
-     - fake but valid email → 200 { success:true, ... }
-     - malformed string     → 400 { error:"Invalid input", details:{...} }
+   The endpoint always returns the same 200 success payload for ANY
+   input (valid email, unknown email, malformed string, or a missing
+   body). A response that varies by input shape would let an attacker
+   diff responses to learn whether an email "passed validation and was
+   processed as a real lookup" — a classic enumeration oracle. The real
+   lookup + email send only happens when the input is a valid email;
+   internal-only details are written to the server log instead.
 
-   The third response is a free oracle: anyone diffing the response can
-   tell that their input "passed RFC validation and was processed as a
-   real lookup". We now ALWAYS return the same 200 success payload for
-   ANY input on this endpoint (including completely missing body), and
-   only do the real lookup + email when the input happens to be a valid
-   email — internal-only details are written to the server log instead.
-
-   Issue 7 (login) behaviour is preserved: all login failure paths still
-   return the same 401 INVALID body.
+   Login failure paths follow the same principle: every failure returns
+   the same 401 INVALID body regardless of which check failed.
    ===================================================================== */
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
@@ -76,7 +72,9 @@ async function sendPasswordEmail({ to, name, rawToken, purpose }) {
 }
 
 exports.login = asyncHandler(async (req, res) => {
-  // Issue 7 — uniform 401 for every login failure path.
+  // Every login failure path returns this same body — the client
+  // should never be able to distinguish "no such user" from "wrong
+  // password" from "malformed input".
   const INVALID = { error: 'Invalid credentials' };
 
   const parsed = loginSchema.safeParse(req.body);
@@ -132,7 +130,7 @@ exports.me = asyncHandler(async (req, res) => {
 });
 
 /* ──────────────────────────────────────────────────────────────────────
- * Issue 24 — forgot-password: uniform response for ALL inputs.
+ * forgot-password: uniform response for ALL inputs.
  *
  * Strategy:
  *   1. Parse with safeParse. NEVER let validation failure escape to a

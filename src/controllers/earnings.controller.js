@@ -12,14 +12,9 @@
      GET /settlements/:id/invoice      — download own settlement invoice
    ===================================================================== */
 
-const fs = require('fs');
-const path = require('path');
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
 const revenueSvc = require('../services/revenue.service');
-const pdfSvc = require('../services/pdf.service');
-
-const STORAGE = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage');
 
 function parsePeriod(req) {
   // Default to "current month" if caller omits the period.
@@ -90,17 +85,6 @@ exports.downloadMyInvoice = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invoice not available — settlement is not yet PAID' });
   }
 
-  const filename = `settlement_${s.id}.pdf`;
-  const filepath = path.join(STORAGE, 'invoices', filename);
-
-  if (!fs.existsSync(filepath)) {
-    const { rows } = await revenueSvc.getDoctorBreakdown({
-      doctorId: s.doctorId, year: s.periodYear, month: s.periodMonth
-    });
-    await pdfSvc.generateSettlementInvoice({
-      settlement: s, doctor: s.doctor, rows, invoiceNumber: s.invoiceNumber
-    });
-  }
-
+  const filepath = await revenueSvc.ensureSettlementInvoicePdf(s);
   res.download(filepath, `${s.invoiceNumber}.pdf`);
 });

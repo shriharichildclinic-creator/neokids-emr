@@ -17,11 +17,11 @@ function humanType(t){
 }
 function fmt(d){ if(!d) return '—'; const x = new Date(d); return x.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); }
 
-// v3.4.12 — the doctor UI stores type-specific extras (findings,
-// scanType, vaccine details, referral fields, admission/discharge
-// dates, summary) as a JSON tail appended to `notes`. This helper
-// splits the tail off so the printed PDF shows clean notes plus the
-// extras as their own sections — without needing a schema change.
+// The doctor UI stores type-specific extras (findings, scanType,
+// vaccine details, referral fields, admission/discharge dates, summary)
+// as a JSON tail appended to `notes`. This helper splits the tail off
+// so the printed PDF shows clean notes plus the extras as their own
+// sections — without needing a schema change.
 const EXTRAS_MARK_START = '\n\n<!--HR_EXTRAS_V1:';
 const EXTRAS_MARK_END   = ':HR_EXTRAS_V1-->';
 function extractExtras(notes){
@@ -85,10 +85,10 @@ async function generateHistoricalRecordPdf(record){
       doc.font('Helvetica').fontSize(10).text(body, L, y, { width: W }); y = doc.y + 10;
     };
 
-    // v3.4.12 — render only the sections that belong to this record
-    // type; unpack the JSON extras tail from `notes` first so the raw
-    // marker never appears in the PDF and type-specific fields appear
-    // as their own sections.
+    // Render only the sections that belong to this record type; unpack
+    // the JSON extras tail from `notes` first so the raw marker never
+    // appears in the PDF and type-specific fields appear as their own
+    // sections.
     const parsed = extractExtras(record.notes);
     const extras = parsed.extras || {};
     const cleanNotes = parsed.notes;

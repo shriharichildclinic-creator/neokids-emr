@@ -81,13 +81,13 @@ function resolveSignaturePath(doctor) {
 // fits on one page, and use flowing relative y offsets (never absolute).
 function drawSignatureBlock(doc, doctor, opts = {}) {
   const sigPath   = resolveSignaturePath(doctor);
-  // v3.3.9: nudged right per doctor feedback ("slightly too far toward
-  // center"). blockW is trimmed from 220 to 200 to keep a ~10pt print-safe
-  // buffer from the true page edge at the new position — this only
-  // affects the text-wrap/image-fit *container* width, not the size of
-  // anything rendered inside it (name/qualification text and the
-  // signature image are both comfortably narrower than either value, so
-  // nothing changes visually except the horizontal position).
+  // Positioned right-of-center per doctor feedback ("slightly too far
+  // toward center"). blockW is trimmed from 220 to 200 to keep a ~10pt
+  // print-safe buffer from the true page edge at this position — this
+  // only affects the text-wrap/image-fit *container* width, not the
+  // size of anything rendered inside it (name/qualification text and
+  // the signature image are both comfortably narrower than either
+  // value, so nothing changes visually except the horizontal position).
   const leftX     = doc.page.width - 210;   // block's left edge — every element shares this x
   const blockW    = 200;                    // shared width for text wrapping + image box
   const sigMaxH   = 46;                     // signature image never exceeds this height
@@ -175,7 +175,7 @@ async function generateInvoice(appointment) {
     doc.fontSize(11).font('Helvetica');
     doc.text(`Dr. ${appointment.doctor.name}`, 320, 192);
     doc.text(appointment.doctor.specialization || 'Pediatrician', 320, 207);
-    // Issue 5 — appointment date + time on the invoice.
+    // Appointment date + time on the invoice.
     doc.fillColor('#555').fontSize(9)
        .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
     doc.fillColor('#333');

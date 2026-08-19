@@ -35,27 +35,13 @@ exports.createDoctor = asyncHandler(async (req, res) => {
   const exists = await prisma.doctor.findUnique({ where: { email: rest.email } });
   if (exists && !exists.deletedAt) return res.status(409).json({ error: 'A doctor with this email already exists' });
 
-  // ── Issue 12 — broken invite flow ──
-  // Previously: a random password was hashed and stored, but never
-  // surfaced anywhere, so the doctor could not log in. The invite link
-  // was only echoed to the admin when SMTP was in mock mode.
-  //
-  // Fix:
-  //   1. Store NO usable password — we set an unusable sentinel hash so
-  //      Doctor@123 / any guess cannot succeed. The doctor MUST use the
-  //      invite link to set their first password.
-  //   2. The invite link is ALWAYS returned to the admin caller (under
-  //      `invitePreviewUrl`) regardless of SMTP configuration, so the
-  //      admin can copy/paste it if email delivery silently fails.
-  //   3. `mustChangePassword: true` stays true — it's redundant after the
-  //      invite is consumed, but it's a useful belt-and-suspenders flag.
+  // A password is always generated and stored so the doctor account is
+  // never left without valid credentials, but onboarding is driven by
+  // the invite link below rather than by sharing this password directly.
+  // `mustChangePassword` stays true so the doctor is prompted to set
+  // their own password the first time they use the link.
   const initialPassword = password || randomPassword();
-  const usableHash      = await bcrypt.hash(initialPassword, SALT);
-
-  // If the admin passed an explicit password we honour it (e.g. for
-  // bulk-import scenarios). Otherwise we store the hash but it's the
-  // invite link that the doctor will actually use.
-  const passwordHash = usableHash;
+  const passwordHash = await bcrypt.hash(initialPassword, SALT);
 
   const doctor = exists
     ? await prisma.doctor.update({
@@ -92,9 +78,9 @@ exports.createDoctor = asyncHandler(async (req, res) => {
   res.status(201).json({
     ...safe,
     inviteSent: emailDelivered,
-    // Issue 12 — ALWAYS return the invite link so the admin can hand it
-    // over manually if the email never arrives. This is the same link
-    // that was emailed; treat it as a one-time secret.
+    // Always returned so the admin can hand the link over manually if
+    // the invite email doesn't arrive. Same link that was emailed;
+    // treat it as a one-time secret.
     invitePreviewUrl: inviteLink,
     inviteExpiresInMinutes: TOKEN_TTL_MINUTES
   });
@@ -124,7 +110,6 @@ createdAt: true
   res.json(doctors);
 });
 
-// Bug 8 — proper update
 exports.updateDoctor = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const parsed = updateDoctorByAdminSchema.safeParse(req.body);
@@ -177,8 +162,8 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   if (doctorId)  where.doctorId = doctorId;
   if (type)      where.consultationType = type;
   if (payment)   where.paymentStatus = payment;
-  // Issue 4 — auto-cancelled (unpaid-expired) appointments are noise in
-  // active listings; the UI passes excludeAutoCancelled=1 by default.
+  // Auto-cancelled (unpaid-expired) appointments are noise in active
+  // listings, so the UI excludes them by default.
   if (String(req.query.excludeAutoCancelled || '') === '1') {
     where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED', notes: { contains: 'Auto-cancelled' } };
   }

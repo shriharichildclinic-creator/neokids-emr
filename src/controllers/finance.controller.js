@@ -10,7 +10,7 @@
      GET    /invoices                        — list settlement invoices
      GET    /invoices/:settlementId/download — stream PDF
 
-   Issue 29 — parsePeriod is now:
+   parsePeriod behaviour:
      • Forgiving:  GET /revenue-report with NO params defaults to the
                    *current* UTC year+month, matching how the admin UI
                    actually uses the endpoint on first paint.
@@ -23,16 +23,12 @@
                    { requireExplicit: true }.
    ===================================================================== */
 
-const fs = require('fs');
-const path = require('path');
 const { v4: uuid } = require('uuid');
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
 const revenueSvc = require('../services/revenue.service');
 const pdfSvc = require('../services/pdf.service');
 const logger = require('../utils/logger');
-
-const STORAGE = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage');
 
 /* ---------- Validation helpers ---------- */
 
@@ -339,18 +335,7 @@ exports.downloadInvoice = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'No invoice — settlement is not PAID yet' });
   }
 
-  const filename = `settlement_${s.id}.pdf`;
-  const filepath = path.join(STORAGE, 'invoices', filename);
-
-  if (!fs.existsSync(filepath)) {
-    const { rows } = await revenueSvc.getDoctorBreakdown({
-      doctorId: s.doctorId, year: s.periodYear, month: s.periodMonth
-    });
-    await pdfSvc.generateSettlementInvoice({
-      settlement: s, doctor: s.doctor, rows, invoiceNumber: s.invoiceNumber
-    });
-  }
-
+  const filepath = await revenueSvc.ensureSettlementInvoicePdf(s);
   res.download(filepath, `${s.invoiceNumber}.pdf`);
 });
 

@@ -7,18 +7,16 @@
      2. Translate "framework-ish" errors (Prisma, body-parser, multer,
         JSON parse, Zod) into clean, predictable HTTP responses.
 
-   Issue 25 — Log severity now matches the actual nature of the error.
+   Log severity matches the actual nature of the error.
    ===========================================================
-   Previously EVERY error — including expected 4xx business errors
-   like "Doctor not found", "Selected slot is no longer available",
-   "Invalid date format" — was logged with:
+   Every error is classified by nature rather than logged uniformly:
+   expected 4xx business errors like "Doctor not found", "Selected slot
+   is no longer available", or "Invalid date format" are operational,
+   not incidents, and are logged at a lower severity so that real
+   unhandled errors stay visible in the log stream instead of being
+   drowned out.
 
-       [ERROR] Unhandled error: ...
-
-   That made real unhandled errors invisible in the log stream and
-   trained ops to ignore the ERROR channel.
-
-   New severity rules:
+   Severity rules:
      • 5xx, unexpected/unknown errors      → logger.error ("Unhandled error")
      • Recognised library errors (Prisma
        known codes, Zod, Multer, JSON
@@ -26,8 +24,8 @@
      • Operational errors thrown by us
        with statusCode/status < 500        → logger.info  ("Client error")
 
-   Real unhandled production errors are now the ONLY entries in the
-   ERROR channel and become trivially alertable.
+   This keeps the ERROR channel reserved for genuinely unhandled
+   production errors, which makes it trivially alertable.
 
    Every error response still looks like:
 
@@ -165,7 +163,7 @@ function notFound(appOrReq, maybeRes, maybeNext) {
   };
 }
 
-/* ─── Issue 25 — severity-aware logging helper ─────────────────────── */
+/* ─── Severity-aware logging helper ─────────────────────── */
 //
 // Decide how loud this error should be in the log stream.
 //   level = 'error'  → unexpected / 5xx / unrecognised. Page-able.
@@ -268,7 +266,7 @@ const errorHandler = (err, req, res, _next) => {
   }
 
   // 7. Zod errors that escaped controller-level handling.
-  // v3.4.4: ALWAYS include `details.flatten()` so the frontend can show
+  // Always includes `details.flatten()` so the frontend can show
   // the specific failing field instead of a generic "Invalid Input".
   if (err && err.name === 'ZodError') {
     logAtLevel(classify(err, 400, true), 'Client error (Zod validation)', meta);

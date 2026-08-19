@@ -83,9 +83,9 @@ exports.cashfree = async (req, res) => {
         return res.json({ received: true });
       }
 
-      // Bug 1 hardening — re-verify with Cashfree before confirming.
-      // The webhook is signed, but a replay/forgery beyond our control could
-      // still arrive. Server-to-server check + amount match is bulletproof.
+      // Re-verify with Cashfree before confirming payment. The webhook
+      // is signed, but a replay/forgery beyond our control could still
+      // arrive. Server-to-server check + amount match is authoritative.
       const verdict = await cashfreeService
         .isOrderTrulyPaid(orderId, appt.feeAtBooking)
         .catch(e => ({ paid: false, reason: `verify-error:${e.message}` }));

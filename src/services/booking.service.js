@@ -7,9 +7,10 @@ const logger = require('../utils/logger');
 
 // NOTE: automation is NOT required at the top level — it creates a circular dep:
 //   booking → automation → slot → expirePending → (back to booking context)
-// This causes whatsapp.service to be a partially-initialized {} when Node resolves
-// the cycle, making whatsapp.sendWhatsApp undefined ("not a function").
-// FIX: require automation lazily inside each function that needs it.
+// This would cause whatsapp.service to be a partially-initialized {} when
+// Node resolves the cycle, making whatsapp.sendWhatsApp undefined
+// ("not a function"). automation is required lazily inside each function
+// that needs it to avoid this.
 
 const UNPAID_BOOKING_EXPIRY_MINUTES = parseInt(process.env.UNPAID_BOOKING_EXPIRY_MINUTES || '15', 10);
 
@@ -121,7 +122,8 @@ async function bookAppointment(input) {
     throw Object.assign(new Error('Consultation mode not supported by this doctor'), { statusCode: 400 });
   }
 
-  // ── Issue 11 — distinguish off-grid, outside-hours, and taken slots ──
+  // Distinguishes off-grid, outside-hours, and taken slots so the
+  // caller gets a specific reason rather than a generic failure.
   // Working-hours check (per consultationType)
   const fromKey = consultationType === 'ONLINE' ? 'availableFromOnline' : 'availableFromOffline';
   const toKey   = consultationType === 'ONLINE' ? 'availableToOnline'   : 'availableToOffline';
@@ -172,7 +174,9 @@ async function bookAppointment(input) {
   const endTime = minutesToTime(startMin + duration);
   const feeAtBooking = consultationType === 'ONLINE' ? doctor.onlineConsultFee : doctor.physicalConsultFee;
 
-  // Bug 1 — resolve patient by (phone + child name), not by phone alone.
+  // Resolve the patient by (phone + child name), not by phone alone —
+  // this is what allows siblings to share a parent's phone number
+  // while remaining separate patient records.
   const patient = await findOrCreatePatient({
     patientName, phone, email, parentName, dateOfBirth, gender
   });

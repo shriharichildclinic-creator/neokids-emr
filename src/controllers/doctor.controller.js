@@ -71,9 +71,9 @@ exports.me = asyncHandler(async (req, res) => {
 });
 
 exports.updateAvailability = asyncHandler(async (req, res) => {
-  // v3.4.14 — consultation-mode-aware availability.
-  // An ONLINE-only doctor cannot save offline hours (and vice versa) so the
-  // settings UI stays clean and stale mode-specific values never get written.
+  // Availability fields are validated against the doctor's consultation
+  // modes: an ONLINE-only doctor cannot save offline hours (and vice versa),
+  // so stale mode-specific values never get written.
   const current = await prisma.doctor.findUnique({ where: { id: req.user.id }, select: { consultationModes: true } });
   if (!current) return res.status(404).json({ error: 'Doctor not found' });
   const schema = updateDoctorAvailabilitySchemaForMode(current.consultationModes);
@@ -88,7 +88,7 @@ exports.updateAvailability = asyncHandler(async (req, res) => {
 });
 
 exports.updateFees = asyncHandler(async (req, res) => {
-  // v3.4.14 — consultation-mode-aware fees (same guard as availability).
+  // Same consultation-mode guard as updateAvailability, applied to fees.
   const current = await prisma.doctor.findUnique({ where: { id: req.user.id }, select: { consultationModes: true } });
   if (!current) return res.status(404).json({ error: 'Doctor not found' });
   const schema = updateDoctorFeesSchemaForMode(current.consultationModes);
@@ -170,7 +170,8 @@ exports.appointmentDetail = asyncHandler(async (req, res) => {
   if (!appt) return res.status(404).json({ error: 'Appointment not found' });
   const apptSigned = withSignedUrls(appt, req.user.id);
 
-  // Bug 2/5 — past visits for THIS child only (siblings are separate rows).
+  // Past visits for this patient (child) only — siblings are separate
+  // patient rows and are never merged into this history.
   const history = await prisma.appointment.findMany({
     where: {
       patientId: appt.patientId,
@@ -192,7 +193,7 @@ exports.appointmentDetail = asyncHandler(async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────
-// Bug 2/5 — Patient Identity: search + dedicated history endpoint
+// Patient search + dedicated per-patient history endpoint
 // ────────────────────────────────────────────────────────────────────
 exports.searchPatients = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim();
@@ -405,7 +406,7 @@ exports.patientHistory = asyncHandler(async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────────
-// Bug 3 — Prescription
+// Prescription creation
 // ────────────────────────────────────────────────────────────────────
 exports.createPrescription = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -440,7 +441,8 @@ exports.createPrescription = asyncHandler(async (req, res) => {
     include: { prescription: true, patient: true, doctor: true }
   });
 
-  // Bug 3 — return rich payload so the frontend can render a real success card.
+  // Returns a rich payload so the frontend can render a real success card
+  // instead of a bare acknowledgement.
   const signedPrescriptionUrl = signApptFileUrl(refreshed, 'prescription', req.user.id);
   res.json({
     success: true,
@@ -577,8 +579,8 @@ exports.cancelAppointment = asyncHandler(async (req, res) => {
   if (appt.status === 'COMPLETED') {
     return res.status(400).json({ error: 'Cannot cancel a completed appointment' });
   }
-  // ── Issue 13 — cancelling a CANCELLED appointment is a conflict, not a no-op.
-  // The UI needs to distinguish "I just cancelled this" from
+  // Cancelling an already-cancelled appointment is a conflict, not a
+  // no-op — the UI needs to distinguish "I just cancelled this" from
   // "this was already cancelled in another tab / by someone else".
   if (appt.status === 'CANCELLED') {
     return res.status(409).json({
@@ -669,8 +671,8 @@ exports.stats = asyncHandler(async (req, res) => {
 });
 
 exports.updateClinic = asyncHandler(async (req, res) => {
-  // v3.4.14 — clinic/practice location only makes sense for doctors who see
-  // patients in person. ONLINE-only doctors have no clinic to configure.
+  // Practice location only makes sense for doctors who see patients in
+  // person — ONLINE-only doctors have no clinic to configure.
   const me = await prisma.doctor.findUnique({ where: { id: req.user.id }, select: { consultationModes: true } });
   if (!me) return res.status(404).json({ error: 'Doctor not found' });
   if (String(me.consultationModes).toUpperCase() === 'ONLINE') {

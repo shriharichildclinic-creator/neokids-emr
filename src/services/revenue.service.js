@@ -23,6 +23,8 @@
    a Cashfree order, so they are naturally excluded.
    ===================================================================== */
 
+const fs = require('fs');
+const path = require('path');
 const prisma = require('../config/prisma');
 
 /* ---------- Number helpers (₹ has 2 dp, never use float arithmetic) ---------- */
@@ -440,6 +442,32 @@ async function getDoctorBreakdown({ doctorId, year, month }) {
   return { doctor, period: { year: Number(year), month: Number(month) }, rows };
 }
 
+/**
+ * Returns the on-disk path to a settlement's invoice PDF, generating it
+ * first if it doesn't exist yet. Shared by both the admin finance
+ * controller and the doctor earnings controller, since a settlement
+ * invoice is generated lazily on first download regardless of who
+ * requests it.
+ */
+async function ensureSettlementInvoicePdf(settlement) {
+  const pdfSvc = require('./pdf.service');
+  const storageDir = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage');
+  const filepath = path.join(storageDir, 'invoices', `settlement_${settlement.id}.pdf`);
+
+  if (!fs.existsSync(filepath)) {
+    const { rows } = await getDoctorBreakdown({
+      doctorId: settlement.doctorId,
+      year: settlement.periodYear,
+      month: settlement.periodMonth
+    });
+    await pdfSvc.generateSettlementInvoice({
+      settlement, doctor: settlement.doctor, rows, invoiceNumber: settlement.invoiceNumber
+    });
+  }
+
+  return filepath;
+}
+
 module.exports = {
   // pure maths
   splitOne,
@@ -453,5 +481,6 @@ module.exports = {
   getMonthlyRevenueReport,
   getDoctorBreakdown,
   // mutations
-  generateSettlement
+  generateSettlement,
+  ensureSettlementInvoicePdf
 };

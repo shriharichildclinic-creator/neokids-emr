@@ -185,12 +185,12 @@ exports.listForPatient = asyncH(async (req, res) => {
 
 // GET /doctor/previous-records
 // -----------------------------------------------------------------
-// v3.4.6 — Historical Records list for the doctor panel refactor.
-// Returns every record this doctor has authored, with optional
-// text search (patient name / diagnosis / notes / medications /
-// treatment / title), date-range filter, recordType filter, and
-// pagination. Legacy per-patient endpoint above is untouched so
-// existing callers (patient history timeline) keep working.
+// Historical records list for the doctor panel. Returns every
+// record this doctor has authored, with optional text search
+// (patient name / diagnosis / notes / medications / treatment /
+// title), date-range filter, recordType filter, and pagination.
+// The legacy per-patient endpoint above is untouched so existing
+// callers (patient history timeline) keep working.
 // -----------------------------------------------------------------
 exports.listAllForDoctor = asyncH(async (req, res) => {
   const q         = String(req.query.q || '').trim();

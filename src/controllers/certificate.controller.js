@@ -27,11 +27,11 @@ const { buildSignedFileUrl } = require('../utils/fileTokens');
 const automation = require('../services/automation.service');
 const certDates = require('../services/certificate-date.service');
 
-// v3.4.4 — Single deterministic date flow (Option A).
+// Single deterministic date flow (Option A).
 // Inputs the doctor controls:   any of {restDays, fromDate, toDateOverride, toDate}
-// Inputs NEVER consulted anymore: reverse-derivation, dual-mode, legacy DAY_COUNT.
+// Inputs never consulted:       reverse-derivation, dual-mode, legacy DAY_COUNT.
 // Helper kept only for legacy DATE_RANGE rows that pre-existed the rewrite —
-// new writes ALWAYS go through certDates.normalizeCertificateDates().
+// new writes always go through certDates.normalizeCertificateDates().
 function resolveDurationType(d) {
   return d && d.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
 }
@@ -77,7 +77,7 @@ async function deliverCertificate(cert, { sendWhatsapp = true, sendEmail = true 
   return automation.onCertificateIssued({ certificate: full, pdfRes, sendWhatsapp, sendEmail });
 }
 
-// v3.4.0 — expanded catalog. Keep keys in sync with
+// Full certificate-type catalog. Keep keys in sync with
 // pdf.service.js CERT_TEMPLATES and validators.medicalCertificateSchema.
 const TEMPLATES = [
   { key: 'GENERAL',           label: 'General Medical Certificate' },
@@ -230,8 +230,8 @@ exports.create = asyncHandler(async (req, res) => {
       fromDate: dates.fromDate,
       toDate:   dates.toDate,
       additionalNotes: d.additionalNotes || null,
-      // v3.4.0 — snapshot consultation mode so the certificate layout is
-      // frozen at issue time even if the appointment is edited later.
+      // Snapshot consultation mode so the certificate layout is frozen
+      // at issue time even if the appointment is edited later.
       // Appointment-linked: from the appointment. Standalone: doctor's pick.
       consultationType: appointment ? (appointment.consultationType || null) : (d.consultationType || null),
       patientNameSnapshot: patient.name,
@@ -263,23 +263,20 @@ exports.createForAppointment = asyncHandler(async (req, res) => {
 // The doctor can correct the wording/dates; the PDF is regenerated so the
 // download always reflects the latest content.
 //
-// v3.4.10 FIX — Update Certificate 500 root-cause:
-//   The previous implementation ran TWO conflicting date-normalization
-//   passes back-to-back. The second one (certDates.normalizeCertificateDates)
-//   only returns { fromDate, toDate, restDays } and does NOT touch
-//   durationType/certificateDate — so it silently overwrote the correct
-//   values set by the first pass and, when restDays was unset, wiped
-//   fromDate/toDate to null. Combined with SINGLE_DAY payloads that omit
-//   fromDate/toDate entirely, Prisma then received an inconsistent record
-//   and PDF regeneration threw — surfacing as "Internal Server Error".
-//
-//   New flow (single pass, deterministic):
-//     1. Merge existing row + client patch into one view.
-//     2. Decide durationType from the merged view.
-//     3. For SINGLE_DAY  → write certificateDate, null fromDate/toDate.
-//        For DATE_RANGE  → run normalizeCertificateDates, null certificateDate.
-//     4. Regenerate PDF; PDF failure NEVER 500s the update (falls back to
-//        an empty pdfUrl and surfaces a warning to the client).
+// Date handling must run as a SINGLE deterministic pass, not two
+// conflicting normalization passes back-to-back: a second pass that
+// only returns { fromDate, toDate, restDays } (without touching
+// durationType/certificateDate) would silently overwrite values set by
+// the first pass, and can null out fromDate/toDate when restDays is
+// unset — especially with SINGLE_DAY payloads that omit fromDate/toDate
+// entirely. That inconsistency reaches Prisma and breaks PDF
+// regeneration. The flow below avoids that:
+//   1. Merge existing row + client patch into one view.
+//   2. Decide durationType from the merged view.
+//   3. For SINGLE_DAY  → write certificateDate, null fromDate/toDate.
+//      For DATE_RANGE  → run normalizeCertificateDates, null certificateDate.
+//   4. Regenerate PDF; PDF failure never fails the update (falls back to
+//      an empty pdfUrl and surfaces a warning to the client).
 exports.update = asyncHandler(async (req, res) => {
   const where = { id: req.params.id };
   if (req.user.role === 'DOCTOR') where.doctorId = req.user.id;
@@ -289,11 +286,10 @@ exports.update = asyncHandler(async (req, res) => {
   });
   if (!existing) return res.status(404).json({ error: 'Certificate not found' });
 
-  // v3.4.11 FIX — medicalCertificateSchema is a ZodEffects (built with
-  // .refine()), which has no .partial() method; calling it here threw a
-  // TypeError on every request and surfaced as a 500 "Internal Server
-  // Error" on "Update Certificate". medicalCertificateUpdateSchema is a
-  // plain partial ZodObject derived from the same base fields.
+  // medicalCertificateSchema is a ZodEffects (built with .refine()),
+  // which has no .partial() method, so it can't be used directly for a
+  // partial update. medicalCertificateUpdateSchema is a plain partial
+  // ZodObject derived from the same base fields and is used here instead.
   const parsed = medicalCertificateUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });

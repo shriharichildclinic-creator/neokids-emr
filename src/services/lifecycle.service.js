@@ -82,13 +82,13 @@ let _lastVaccinationScanDay = null;
 
 async function runLifecycleJobs() {
   try {
-    await expirePendingAppointments();        // Bug 10
-    await autoCompletePassedAppointments();   // Bug 9
+    await expirePendingAppointments();
+    await autoCompletePassedAppointments();
     const automation = require('./automation.service');
     await automation.processReminders();
-    await automation.processFollowUpRecalls();   // Bug 3 — soft recall
+    await automation.processFollowUpRecalls();   // soft recall for missed follow-ups
 
-    // ── NEW: Vaccination reminders (daily scan) ──
+    // Vaccination reminders (daily scan)
     const today = new Date().toISOString().slice(0, 10);
     if (_lastVaccinationScanDay !== today) {
       const vacc = require('./vaccination.service');

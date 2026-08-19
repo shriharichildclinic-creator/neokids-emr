@@ -244,7 +244,7 @@ exports.paymentStatusPage = (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────
-// Bug 3 — Follow-up recall prefill
+// Follow-up recall prefill
 // Returns the minimum patient identity needed to pre-fill the booking
 // widget from a recall link, plus the recommending doctor's id and the
 // original primaryProblem string. No PHI beyond what the patient already

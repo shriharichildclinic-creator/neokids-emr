@@ -1,13 +1,12 @@
-// slot.service.js — fixed version
-// ROOT CAUSE of Issue 2: The unique constraint is @@unique([doctorId, date, startTime])
-// but it does NOT include consultationType. So an ONLINE and OFFLINE booking
-// for the same doctor/date/startTime would clash at DB level — correct.
-// BUT the slot query filtered status: { notIn: ['CANCELLED', 'NO_SHOW'] }
-// which correctly blocks PENDING slots. The real bug was the widget default
-// mode was 'ONLINE' but the doctor had offline hours only — slots showed
-// but booking failed. Fixed by ensuring consultationType filter is applied
-// to booked check so ONLINE and OFFLINE share the same slot lock (correct
-// since the doctor can only be in one place at a time).
+// slot.service.js
+//
+// The unique constraint is @@unique([doctorId, date, startTime]) and does
+// NOT include consultationType, so an ONLINE and OFFLINE booking for the
+// same doctor/date/startTime clash at the DB level — correct, since a
+// doctor can only be in one place at a time. The slot-availability check
+// below applies the same rule: a booked slot is locked regardless of
+// consultationType, so ONLINE and OFFLINE share one slot lock per
+// doctor/date/startTime.
 
 const prisma = require('../config/prisma');
 const { parseDateOnly, getTodayDateString, getCurrentTimeMinutes } = require('../utils/date');
@@ -27,7 +26,7 @@ function minutesToTime(min) {
 }
 
 async function getLiveSlots(doctorId, dateStr, consultationType) {
-  // Issue 6 — defense in depth: never trust the caller. If the controller
+  // Defense in depth: never trust the caller. If the controller
   // forgets to validate, refuse anything that isn't a recognised mode
   // instead of silently mapping it to OFFLINE.
   if (consultationType !== 'ONLINE' && consultationType !== 'OFFLINE') {
@@ -37,8 +36,8 @@ async function getLiveSlots(doctorId, dateStr, consultationType) {
     );
   }
 
-  // Issue 5 — defense in depth: reject past dates at the service layer
-  // so the slot listing can never disagree with the booking validator.
+  // Defense in depth: reject past dates at the service layer so the
+  // slot listing can never disagree with the booking validator.
   if (dateStr < getTodayDateString()) {
     return [];
   }
@@ -57,7 +56,7 @@ async function getLiveSlots(doctorId, dateStr, consultationType) {
 
   const date = parseDateOnly(dateStr);
 
-  // FIX: Use UTC day from stored UTC-midnight date — consistent with parseDateOnly
+  // Use the UTC day from the stored UTC-midnight date, consistent with parseDateOnly.
   const dayName = DAY_MAP[new Date(date).getUTCDay()];
   const workingDays = (doctor.workingDays || '').split(',').map((s) => s.trim()).filter(Boolean);
   if (!workingDays.includes(dayName)) return [];
@@ -77,9 +76,10 @@ async function getLiveSlots(doctorId, dateStr, consultationType) {
     slots.push({ startTime: minutesToTime(cur), endTime: minutesToTime(cur + duration) });
   }
 
-  // FIX: Block slot if ANY active appointment exists for this doctor+date+startTime
-  // regardless of consultationType — a doctor cannot do two appointments at once.
-  // PENDING is included — slot is locked the moment booking is created.
+  // Block the slot if ANY active appointment exists for this
+  // doctor+date+startTime, regardless of consultationType — a doctor
+  // cannot do two appointments at once. PENDING is included — the slot
+  // is locked the moment a booking is created.
   const bookedAppointments = await prisma.appointment.findMany({
     where: {
       doctorId,

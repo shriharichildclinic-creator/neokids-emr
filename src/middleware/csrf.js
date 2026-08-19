@@ -1,16 +1,16 @@
 /* =====================================================================
-   csrf.js — Issue 28: CSRF / cross-origin write protection
+   csrf.js — CSRF / cross-origin write protection
    ---------------------------------------------------------------------
    The app uses Authorization: Bearer (JWT in localStorage) instead of
    cookies, so the classic browser-driven CSRF attack (cookie auto-attach
    from a malicious page) is NOT applicable. However, two related risks
    remain:
 
-     (a) A malicious page that obtained the token via XSS — see Bug #10
-         — could call any API from any origin. We can't stop that
-         specific attacker (they already own the page), but we CAN stop
-         the *non-XSS* CSRF cousin where a stranger's tab calls our API
-         from a non-allowed origin and gets useful side-effects.
+     (a) A malicious page that obtained the token via XSS could call any
+         API from any origin. We can't stop that specific attacker (they
+         already own the page), but we CAN stop the *non-XSS* CSRF
+         cousin where a stranger's tab calls our API from a non-allowed
+         origin and gets useful side-effects.
 
      (b) Some browsers (and Postman scripts) call our API without an
          Origin header at all. We allow that ONLY for same-origin /
