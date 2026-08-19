@@ -30,10 +30,35 @@
  *   3. Make sure GOOGLE_REDIRECT_URI EXACTLY matches a redirect URI
  *      registered on the OAuth client (https://api.neokidspro.in/auth/google/callback).
  *      A trailing slash mismatch alone will break refresh.
- *   4. Scope must include both:
+ *   4. Scope must include ALL of:
  *        https://www.googleapis.com/auth/calendar.events
  *        https://www.googleapis.com/auth/calendar
- *      otherwise events.insert with conferenceData fails.
+ *        https://www.googleapis.com/auth/meetings.space.settings   <-- NEW, see BUG 3
+ *      otherwise events.insert with conferenceData fails (first two) or the
+ *      "ask to join" fix below silently no-ops (third).
+ *
+ * BUG 3 — "Ask to join" / "Wait until a host lets you in" for EVERY join
+ * -------------------------------------------------------------
+ * Root cause: the calendar event that creates the Meet space is owned by a
+ * single API/service Google account. Nobody ever actually signs into that
+ * account inside an actual Meet call, so there is no real person available
+ * to admit anyone from the waiting room — the doctor and the patient are
+ * both just "guests" from Meet's point of view. A Meet space's default
+ * access type (`RESTRICTED`) requires every joiner to either be the
+ * organizer or an explicit calendar invitee; since `attendees` is
+ * deliberately left empty (see note below on privacy), EVERYONE knocks and
+ * nobody is present to let them in — an effective deadlock.
+ *
+ * FIX: immediately after creating the event/space, call the separate
+ * Google Meet REST API (meet.googleapis.com/v2) to PATCH the space's
+ * `config.accessType` to `OPEN` ("Anyone with the link can join without
+ * knocking"). This does NOT require adding attendees, so the existing
+ * privacy behavior (no calendar invite emails, no auto-add to anyone's
+ * calendar) is fully preserved. It DOES require one additional OAuth
+ * scope — `meetings.space.settings` — which means the refresh token must
+ * be re-issued (see scripts/get-refresh-token.js). Until that happens this
+ * degrades gracefully: the calendar event/Meet link is still created, we
+ * just log a warning and the space keeps its old "ask to join" behavior.
  *
  * CODE CHANGES IN THIS FILE
  * -------------------------------------------------------------
@@ -45,6 +70,8 @@
  *    error object instead of throwing. Callers (automation.service)
  *    already handle a null meetLink gracefully.
  *  - Keep existing privacy guarantees: no attendees, sendUpdates:none.
+ *  - NEW: after creating the event, PATCH the Meet space to
+ *    accessType=OPEN so neither doctor nor patient has to knock.
  */
 const logger = require('../utils/logger');
 
@@ -56,9 +83,55 @@ function hasGoogleCreds() {
   );
 }
 
+// ── BUG 3 fix: open up the Meet space so nobody has to "ask to join" ──
+// Uses the standalone Google Meet REST API (v2), NOT the Calendar API.
+// Requires the `meetings.space.settings` OAuth scope on top of the
+// existing Calendar scopes. If that scope is missing, Google returns a
+// 403 PERMISSION_DENIED — we catch that specifically and log a clear
+// remediation message instead of failing the whole booking flow.
+async function setSpaceOpenAccess(oauth2, meetingCode) {
+  if (!meetingCode) return { ok: false, reason: 'NO_MEETING_CODE' };
+  try {
+    const { token } = await oauth2.getAccessToken();
+    if (!token) return { ok: false, reason: 'NO_ACCESS_TOKEN' };
+
+    const res = await fetch(
+      `https://meet.googleapis.com/v2/spaces/${encodeURIComponent(meetingCode)}?updateMask=config.accessType`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ config: { accessType: 'OPEN' } })
+      }
+    );
+
+    if (res.ok) return { ok: true };
+
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403) {
+      logger.error(
+        '[GoogleMeet] Could not set accessType=OPEN (403 PERMISSION_DENIED). ' +
+        'The refresh token is missing the "meetings.space.settings" scope. ' +
+        'Re-issue GOOGLE_REFRESH_TOKEN with that scope added — see ' +
+        'scripts/get-refresh-token.js. Meeting links will keep showing ' +
+        '"Ask to join" until this is fixed.'
+      );
+      return { ok: false, reason: 'MISSING_SCOPE' };
+    }
+    logger.warn(`[GoogleMeet] spaces.patch(accessType=OPEN) failed (${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
+    return { ok: false, reason: 'PATCH_FAILED' };
+  } catch (e) {
+    logger.warn(`[GoogleMeet] spaces.patch(accessType=OPEN) threw: ${e.message || e}`);
+    return { ok: false, reason: 'PATCH_THREW' };
+  }
+}
+
 let _calendarClient = null;
-function getCalendarClient() {
-  if (_calendarClient) return _calendarClient;
+let _oauth2Client   = null;
+function getOAuth2Client() {
+  if (_oauth2Client) return _oauth2Client;
   const { google } = require('googleapis');
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -74,7 +147,14 @@ function getCalendarClient() {
     }
   });
 
-  _calendarClient = google.calendar({ version: 'v3', auth: oauth2 });
+  _oauth2Client = oauth2;
+  return _oauth2Client;
+}
+
+function getCalendarClient() {
+  if (_calendarClient) return _calendarClient;
+  const { google } = require('googleapis');
+  _calendarClient = google.calendar({ version: 'v3', auth: getOAuth2Client() });
   return _calendarClient;
 }
 
@@ -89,7 +169,7 @@ async function createMeetLink({ summary, description, startISO, endISO }) {
     const code = Math.random().toString(36).slice(2, 6) + '-'
                + Math.random().toString(36).slice(2, 6) + '-'
                + Math.random().toString(36).slice(2, 6);
-    return { meetLink: `https://meet.google.com/${code}`, eventId: `mock_${Date.now()}`, mock: true };
+    return { meetLink: `https://meet.google.com/${code}`, eventId: `mock_${Date.now()}`, accessType: 'OPEN', mock: true };
   }
 
   try {
@@ -119,10 +199,20 @@ async function createMeetLink({ summary, description, startISO, endISO }) {
       }
     });
 
-    return {
-      meetLink: event.data.hangoutLink || null,
-      eventId: event.data.id || null
-    };
+    const meetLink = event.data.hangoutLink || null;
+    const eventId  = event.data.id || null;
+
+    // BUG 3 fix — open the space so nobody has to "ask to join". Best
+    // effort: if this fails, the appointment/meeting still gets created
+    // and returned normally, just with the old knock-to-join behavior.
+    let accessType = 'RESTRICTED';
+    if (meetLink) {
+      const meetingCode = (meetLink.match(/meet\.google\.com\/(.+)$/) || [])[1];
+      const patch = await setSpaceOpenAccess(getOAuth2Client(), meetingCode);
+      if (patch.ok) accessType = 'OPEN';
+    }
+
+    return { meetLink, eventId, accessType };
   } catch (err) {
     if (isInvalidGrant(err)) {
       logger.error(
@@ -130,9 +220,10 @@ async function createMeetLink({ summary, description, startISO, endISO }) {
         'Generate a new GOOGLE_REFRESH_TOKEN — see scripts/get-refresh-token.js. ' +
         'Underlying error: ' + (err.message || err)
       );
-      // Drop the cached client so the next attempt picks up a new env value
+      // Drop the cached clients so the next attempt picks up a new env value
       // (after the operator updates .env and restarts).
       _calendarClient = null;
+      _oauth2Client = null;
       return { meetLink: null, eventId: null, error: 'INVALID_GRANT' };
     }
     logger.error('[GoogleMeet] events.insert failed:', err.message || err);
@@ -155,6 +246,7 @@ async function deleteMeetEvent(eventId) {
     if (isInvalidGrant(e)) {
       logger.warn(`[GoogleMeet] Cannot delete event ${eventId}: refresh token invalid.`);
       _calendarClient = null;
+      _oauth2Client = null;
       return;
     }
     logger.warn(`Failed to delete previous Google Meet event ${eventId}: ${e.message}`);

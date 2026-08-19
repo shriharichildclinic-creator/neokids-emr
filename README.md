@@ -246,9 +246,23 @@ Requires approved message templates for production use.
 
 ## 🌍 Google Meet Setup
 
-1. Google Cloud Console → create OAuth credentials (Calendar API enabled)
-2. Generate a refresh token via OAuth Playground for the clinic's Google account
+1. Google Cloud Console → create OAuth credentials, and **enable both**:
+   - Google Calendar API
+   - Google Meet API (needed so the app can set each meeting's access to
+     "Anyone with the link can join" — without this, doctors and patients
+     get stuck on "Ask to join" / "Wait until a host lets you in").
+2. Generate a refresh token that includes **all three** scopes below by
+   running `node scripts/get-refresh-token.js` (don't use the generic
+   OAuth Playground flow — it won't request the Meet scope):
+   - `https://www.googleapis.com/auth/calendar.events`
+   - `https://www.googleapis.com/auth/calendar`
+   - `https://www.googleapis.com/auth/meetings.space.settings`
 3. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` in `.env`
+
+> If your existing `GOOGLE_REFRESH_TOKEN` was issued before the Meet scope
+> was added, meeting links will still be created but will keep showing
+> "Ask to join" — the server log will show `403 PERMISSION_DENIED` /
+> `MISSING_SCOPE` from `googleMeet.service.js`. Re-run step 2 to fix it.
 
 ---
 
