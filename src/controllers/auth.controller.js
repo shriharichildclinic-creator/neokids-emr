@@ -39,6 +39,18 @@ const FORGOT_GENERIC = Object.freeze({
   message: 'If the account exists, a reset link has been sent.'
 });
 
+// SECURITY FIX (audit finding #4) — login user-enumeration via timing.
+// Before this fix, /login returned instantly for an unknown email (one
+// DB miss) but took ~100ms+ for a known email (bcrypt.compare). An
+// attacker measuring response time could tell which emails are
+// registered. We now run a dummy bcrypt comparison against a fixed
+// synthetic hash whenever no account matches, so both paths take the
+// same amount of bcrypt work. (It is precomputed once at boot — never
+// inside the request path, which would itself be a DoS vector.)
+const DUMMY_HASH = bcrypt.hashSync(
+  'timing-equalizer-not-a-real-password', 12
+);
+
 function buildPasswordLink(rawToken) {
   // The password reset / invite page is served by the EMR itself
   // (not the WordPress patient site at APP_URL). Prefer an explicit
@@ -97,6 +109,12 @@ exports.login = asyncHandler(async (req, res) => {
   }
 
   const doctor = await prisma.doctor.findFirst({ where: { email, deletedAt: null } });
+  if (!admin && !doctor) {
+    // Unknown email: burn one bcrypt round so the response time matches
+    // the known-email/wrong-password path (finding #4).
+    await bcrypt.compare(password, DUMMY_HASH);
+    return res.status(401).json(INVALID);
+  }
   if (doctor) {
     const ok = await bcrypt.compare(password, doctor.passwordHash);
     if (!ok) return res.status(401).json(INVALID);

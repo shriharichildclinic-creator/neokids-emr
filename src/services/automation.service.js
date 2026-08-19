@@ -958,22 +958,46 @@ async function processReminders() {
   for (const a of appts) {
     const startMinutes = timeToMinutes(a.startTime);
     const delta = startMinutes - nowMinutes;
-    if (delta < 28 || delta > 33) continue;
+    // FIX (audit finding #7): the old window was delta ∈ [28,33] — five
+    // one-minute ticks. The cron runs every 5 min, so any tick that ran
+    // even slightly late (or an appointment booked inside the window)
+    // fell through the gap and the patient never got a reminder. The
+    // window is now [15,45] minutes: every CONFIRMED appointment crosses
+    // it for ~30 minutes (≈6 consecutive ticks), and the atomic claim
+    // below guarantees exactly one send. Env-tunable without a redeploy.
+    const winMin = parseInt(process.env.REMINDER_WINDOW_MIN_MINUTES || '15', 10);
+    const winMax = parseInt(process.env.REMINDER_WINDOW_MAX_MINUTES || '45', 10);
+    if (delta < winMin || delta > winMax) continue;
 
-    const sent = await prisma.notificationLog.findFirst({
-      where: {
-        appointmentId: a.id,
-        template: {
-          in: [
-            'neokids_reminder_online',  'neokids_reminder_offline',
-            'neokids_reminder_online_v2','neokids_reminder_offline_v2',
-            'doctor_reminder_online',   'doctor_reminder_offline'
-          ]
-        },
-        status: 'SENT'
-      }
-    });
-    if (sent) continue;
+    // FIX (audit finding #6): the old dedup was read-then-write (TOCTOU):
+    // two overlapping cron ticks could both see "no SENT log" and both
+    // send. We now atomically CLAIM the reminder by inserting a SENT
+    // marker row keyed to this appointment+template-group BEFORE sending.
+    // The create relies on the @@unique([appointmentId, template, channel,
+    // direction]) constraint below; the loser gets P2002 and skips. If
+    // the actual send then throws, safeWa logs a FAILED row but the claim
+    // stands — a missed reminder is recoverable manually, a duplicate
+    // spam to a patient is not.
+    // The claim is a single non-null `claimKey` (unique-indexed) so the
+    // dedup works on MySQL, where NULLs in a composite unique key are
+    // treated as distinct and would NOT have prevented the double-send.
+    const claimKey = `reminder_claim_${a.id}_${a.consultationType}`;
+    try {
+      await prisma.notificationLog.create({
+        data: {
+          claimKey,
+          appointmentId: a.id,
+          channel: 'WHATSAPP',
+          recipient: a.patient.phone,
+          template: `__reminder_claim__${a.consultationType}`,
+          direction: 'PATIENT',
+          status: 'SENT'
+        }
+      });
+    } catch (e) {
+      if (e && e.code === 'P2002') continue;  // already claimed by another tick
+      throw e;
+    }
 
     const isOnline = a.consultationType === 'ONLINE';
 

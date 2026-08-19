@@ -106,9 +106,12 @@ exports.uploadDrawn = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findUnique({ where: { id: req.user.id } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
 
-  const match = parsed.data.dataUrl.match(/^data:image\/(png|svg\+xml);base64,(.+)$/i);
-  const subtype = (match[1] || 'png').toLowerCase();
-  const ext = subtype === 'svg+xml' ? 'svg' : 'png';
+  // SECURITY FIX (audit hardening): SVG signatures were accepted and
+    // later embedded into generated PDFs / served back to browsers.
+    // SVG is an active content type (can carry <script>) — removed from
+    // the whitelist. PNG remains the only accepted drawn format.
+    const match = parsed.data.dataUrl.match(/^data:image\/png;base64,(.+)$/i);
+  const ext = 'png';
   const buf = Buffer.from(match[2], 'base64');
   if (!buf.length) return res.status(400).json({ error: 'Empty signature image' });
   if (buf.length > 1024 * 1024) return res.status(400).json({ error: 'Signature image must be under 1 MB' });

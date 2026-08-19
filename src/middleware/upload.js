@@ -19,12 +19,20 @@ const profileStorage = multer.diskStorage({
 
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+const allowedProfileExts = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
 const uploadProfileImage = multer({
   storage: profileStorage,
   limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!allowedImageTypes.has(file.mimetype)) {
       return cb(Object.assign(new Error('Only JPG, PNG, and WebP images are allowed'), { statusCode: 400 }));
+    }
+    // Defence in depth: mimetype is client-supplied, so also whitelist
+    // the extension that lands on disk.
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!allowedProfileExts.has(ext)) {
+      return cb(Object.assign(new Error('Only .jpg, .jpeg, .png, .webp files are allowed'), { statusCode: 400 }));
     }
     cb(null, true);
   }
@@ -47,6 +55,8 @@ const allowedKycTypes = new Set([
   'application/pdf'
 ]);
 
+const allowedKycExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.pdf']);
+
 const uploadKycDocuments = multer({
   storage: kycStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -54,6 +64,13 @@ const uploadKycDocuments = multer({
     if (!allowedKycTypes.has(file.mimetype)) {
       return cb(Object.assign(
         new Error('Only JPG, PNG, WebP, or PDF files are allowed for KYC documents'),
+        { statusCode: 400 }
+      ));
+    }
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!allowedKycExts.has(ext)) {
+      return cb(Object.assign(
+        new Error('Only .jpg, .jpeg, .png, .webp, .pdf files are allowed for KYC documents'),
         { statusCode: 400 }
       ));
     }
@@ -88,6 +105,8 @@ const signatureStorage = multer.diskStorage({
 // JPEG as a fallback for doctors who don't have a transparent asset.
 const allowedSignatureTypes = new Set(['image/png', 'image/jpeg']);
 
+const allowedSignatureExts = new Set(['.png', '.jpg', '.jpeg']);
+
 const uploadSignature = multer({
   storage: signatureStorage,
   limits: { fileSize: 1 * 1024 * 1024 }, // 1 MB
@@ -95,6 +114,13 @@ const uploadSignature = multer({
     if (!allowedSignatureTypes.has(file.mimetype)) {
       return cb(Object.assign(
         new Error('Only PNG (transparent preferred) or JPEG images are allowed for signatures'),
+        { statusCode: 400 }
+      ));
+    }
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!allowedSignatureExts.has(ext)) {
+      return cb(Object.assign(
+        new Error('Only .png, .jpg, .jpeg files are allowed for signatures'),
         { statusCode: 400 }
       ));
     }
@@ -119,6 +145,8 @@ const allowedHistoricalRxTypes = new Set([
   'image/jpeg', 'image/png', 'application/pdf'
 ]);
 
+const allowedHistoricalRxExts = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
+
 const uploadHistoricalPrescription = multer({
   storage: historicalRxStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -126,6 +154,13 @@ const uploadHistoricalPrescription = multer({
     if (!allowedHistoricalRxTypes.has(file.mimetype)) {
       return cb(Object.assign(
         new Error('Only PDF, JPG, or PNG files are allowed for historical prescriptions'),
+        { statusCode: 400 }
+      ));
+    }
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!allowedHistoricalRxExts.has(ext)) {
+      return cb(Object.assign(
+        new Error('Only .pdf, .jpg, .jpeg, .png files are allowed for historical prescriptions'),
         { statusCode: 400 }
       ));
     }

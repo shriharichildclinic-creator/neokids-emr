@@ -80,7 +80,32 @@ async function decrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
 // hammering the scan every 5 minutes.
 let _lastVaccinationScanDay = null;
 
+// SECURITY/RELIABILITY FIX (audit finding #6): runLifecycleJobs is on a
+// 5-minute setInterval AND is invoked once at boot. If a tick overruns
+// the interval (slow WhatsApp/email sends, DB stall), the next tick used
+// to start while the previous one was still mid-flight — sending
+// duplicate reminders and double-crediting revenue. This in-process
+// re-entrancy guard skips the overlapping tick. (The 5-min cron is
+// single-process by design; for multi-instance deploys, add a DB-level
+// advisory lock as well.)
+let _jobsInFlight = false;
+let _jobsStartedAt = 0;
+const JOB_WATCHDOG_MS = parseInt(process.env.LIFECYCLE_JOB_WATCHDOG_MS || '600000', 10); // 10 min
+
 async function runLifecycleJobs() {
+  if (_jobsInFlight) {
+    // Watchdog: a crashed/hung tick (e.g. a WhatsApp API call that never
+    // resolves) must not wedge reminders for the rest of the day.
+    if (Date.now() - _jobsStartedAt > JOB_WATCHDOG_MS) {
+      logger.error('Lifecycle jobs watchdog: previous run exceeded ' + JOB_WATCHDOG_MS + 'ms — resetting lock');
+      _jobsInFlight = false;
+    } else {
+      logger.warn('Lifecycle jobs skipped — previous run still in progress');
+      return;
+    }
+  }
+  _jobsInFlight = true;
+  _jobsStartedAt = Date.now();
   try {
     await expirePendingAppointments();
     await autoCompletePassedAppointments();
@@ -101,6 +126,8 @@ async function runLifecycleJobs() {
     }
   } catch (error) {
     logger.error('Lifecycle job failed', error);
+  } finally {
+    _jobsInFlight = false;
   }
 }
 

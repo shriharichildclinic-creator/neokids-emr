@@ -144,6 +144,15 @@ function monthRange(year, month) {
 function buildEligibleApptWhere({ doctorId, start, end, paymentTypeFilter } = {}) {
   const where = {
     paymentStatus:   'PAID',
+    // SECURITY/FINANCE FIX (audit finding #3): a doctor-cancelled (or
+    // otherwise cancelled) appointment must NEVER contribute to a
+    // settlement or payout, even if it was previously PAID. Payment and
+    // appointment status are independent columns; requiring PAID alone
+    // used to let a cancelled-but-paid consultation flow into the
+    // doctor's settlement before any refund was processed. Statuses
+    // like NO_SHOW are future-proofed out by the same allow-list:
+    // only CONFIRMED/COMPLETED rows can settle.
+    status:          { in: ['CONFIRMED', 'COMPLETED'] },
     cashfreeOrderId: { not: null },        // ← excludes all cash transactions
     date:            { gte: start, lt: end }
   };

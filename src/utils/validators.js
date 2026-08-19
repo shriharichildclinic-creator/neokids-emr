@@ -356,8 +356,9 @@ const previousRecordSchema = z.object({
 });
 
 const drawnSignatureSchema = z.object({
-  dataUrl: z.string().min(50).max(2_000_000).refine(v => /^data:image\/(png|svg\+xml);base64,/i.test(v), {
-    message: 'dataUrl must be a base64 PNG or SVG image'
+  dataUrl: z.string().min(50).max(2_000_000).refine(v => /^data:image\/png;base64,/i.test(v), {
+    // PNG only — SVG is an active content type and is no longer accepted.
+    message: 'dataUrl must be a base64 PNG image'
   })
 });
 

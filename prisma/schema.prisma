@@ -358,8 +358,11 @@ model NotificationLog {
   errorMessage  String?  @db.Text
   createdAt     DateTime @default(now())
 
+  claimKey String?
+
   @@index([appointmentId])
   @@index([status])
+  @@unique([claimKey], name: "unique_reminder_claim")
   @@map("notification_logs")
 }
 

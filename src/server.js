@@ -115,8 +115,17 @@ app.use(express.urlencoded({ extended: true }));
 // ─── Static assets ────────────────────────────────────────────────────
 app.use('/files/profile-images',
   express.static(path.join(__dirname, '..', 'storage', 'profile-images')));
-app.use('/files/kyc-documents',
-  express.static(path.join(__dirname, '..', 'storage', 'kyc-documents')));
+// SECURITY FIX (audit finding #2): KYC documents (Aadhaar / PAN /
+// cancelled cheque / medical registration certificates) used to be
+// served by a PUBLIC express.static mount — anyone who knew or guessed
+// the stored UUID filename could download a doctor's identity documents
+// with zero authentication. The mount is REMOVED. KYC files are now
+// only readable through the authenticated route
+//   GET /api/admin/kyc/:doctorId/:kind   (ADMIN JWT required)
+// registered in admin.routes.js. No rewrite needed in the admin panel:
+// the stored aadhaarUrl/panUrl/... values are still returned in the KYC
+// API payload, and the admin UI rewrites them to the protected route
+// (see public/admin/app.js setKycFieldStatus).
 app.use('/files/signatures',
   express.static(path.join(__dirname, '..', 'storage', 'signatures')));
 

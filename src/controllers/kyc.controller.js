@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
+const logger = require('../utils/logger');
 
 const STORAGE_ROOT  = path.resolve(process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'));
 const KYC_DIR       = path.join(STORAGE_ROOT, 'kyc-documents');
@@ -240,4 +241,49 @@ exports.myKycStatus = asyncHandler(async (req, res) => {
     },
     updatedAt: kyc.updatedAt
   });
+});
+
+/* =====================================================================
+   GET /api/admin/kyc/:doctorId/:kind   (audit finding #2)
+   Streams ONE KYC document (aadhaar | pan | cancelledCheque |
+   medicalRegCert) to an authenticated ADMIN. This replaces the removed
+   public express.static mount on /files/kyc-documents: KYC identity
+   documents are now readable ONLY with an admin JWT, and the filename
+   is resolved strictly inside KYC_DIR (path-traversal safe).
+   ===================================================================== */
+const KYC_KIND_TO_COLUMN = {
+  aadhaar:         'aadhaarUrl',
+  pan:             'panUrl',
+  cancelledCheque: 'cancelledChequeUrl',
+  medicalRegCert:  'medicalRegCertUrl'
+};
+
+exports.streamKycDocument = asyncHandler(async (req, res) => {
+  const { doctorId, kind } = req.params;
+  const column = KYC_KIND_TO_COLUMN[kind];
+  if (!column) return res.status(400).json({ error: 'Invalid KYC document kind' });
+
+  const kyc = await prisma.doctorKyc.findUnique({
+    where: { doctorId },
+    select: { [column]: true }
+  });
+  const stored = kyc && kyc[column];
+  if (!stored) return res.status(404).json({ error: 'Document not found' });
+
+  const disk = publicUrlToDiskPath(stored);
+  if (!disk || !fs.existsSync(disk)) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+
+  const ext = path.extname(disk).toLowerCase();
+  const mime = ext === '.pdf' ? 'application/pdf'
+             : ext === '.png' ? 'image/png'
+             : ext === '.webp' ? 'image/webp'
+             : 'image/jpeg';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `inline; filename="${kind}_${doctorId}${ext}"`);
+  // Identity documents must never be cached by browsers or intermediaries.
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  fs.createReadStream(disk).pipe(res);
 });

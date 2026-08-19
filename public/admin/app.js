@@ -1550,13 +1550,28 @@ function kycBadge(status){
 }
 
 function setKycFieldStatus(elId, viewElId, url){
+  // SECURITY FIX (audit finding #2): KYC documents are no longer served
+  // by a public static mount. Rewrite the stored /files/kyc-documents/...
+  // URL to the authenticated admin route (Bearer header attached by the
+  // panel's fetch; for <a> navigation we fall back to the fetch+blob
+  // helper below when the browser cannot attach headers).
+
   const statusEl = $('#' + elId);
   const viewEl   = $('#' + viewElId);
   if (!statusEl || !viewEl) return;
   if (url) {
     statusEl.textContent = '— uploaded ✓';
     statusEl.style.color = '#0F8A4F';
-    viewEl.href = url;
+    const fname = String(url).split('/').pop();
+    const KIND_BY_VIEW = {
+      kycAadhaarView: 'aadhaar',
+      kycPanView: 'pan',
+      kycChequeView: 'cancelledCheque',
+      kycMedCertView: 'medicalRegCert'
+    };
+    const kind = KIND_BY_VIEW[viewElId] || '';
+    viewEl.href = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) +
+                  '/' + encodeURIComponent(kind);
     viewEl.classList.remove('hidden');
   } else {
     statusEl.textContent = '— not uploaded';
@@ -1565,6 +1580,24 @@ function setKycFieldStatus(elId, viewElId, url){
     viewEl.removeAttribute('href');
   }
 }
+
+// KYC document links need the admin Bearer token, which a plain <a href>
+// navigation cannot send. Intercept clicks on any protected KYC link,
+// fetch with Authorization, and open the resulting blob instead.
+document.addEventListener('click', async (ev) => {
+  const a = ev.target.closest('a[href^="/api/admin/kyc/"]');
+  if (!a) return;
+  ev.preventDefault();
+  try {
+    const res = await fetch(a.href, {
+      headers: { Authorization: 'Bearer ' + (localStorage.getItem('nkp_admin_token') || '') }
+    });
+    if (!res.ok) { alert('Could not open document (HTTP ' + res.status + ')'); return; }
+    const blob = await res.blob();
+    const obj = URL.createObjectURL(blob);
+    window.open(obj, '_blank', 'noopener');
+  } catch (e) { alert('Could not open document: ' + e.message); }
+});
 
 async function loadKycForDoctor(doctorId){
   __currentKycDoctorId = doctorId;

@@ -64,7 +64,13 @@ async function findOrCreatePatient({ patientName, phone, email, parentName, date
   const cleanParent = canonicalizeName(parentName);
   const nameKey = normalizeName(cleanName);
 
-  return prisma.$transaction(async (tx) => {
+  // SECURITY/CONCURRENCY FIX (audit finding #5): two concurrent bookings
+  // for the same child could both miss the (phone,name) lookup and both
+  // insert a duplicate Patient row. Running the find-or-create inside a
+  // SERIALIZABLE transaction makes the DB abort the losing transaction
+  // (P2034) so the retry below re-reads and finds the winner's row
+  // instead of inserting a duplicate.
+  const attempt = () => prisma.$transaction(async (tx) => {
     const candidates = await tx.patient.findMany({
       where: { phone },
       orderBy: { createdAt: 'asc' }
@@ -94,7 +100,19 @@ async function findOrCreatePatient({ patientName, phone, email, parentName, date
         gender
       }
     });
-  });
+  }, { isolationLevel: 'Serializable' });
+
+  try {
+    return await attempt();
+  } catch (e) {
+    // P2034 = serialization conflict / deadlock — the other concurrent
+    // booking won. Retry ONCE: the re-read inside the txn now sees the
+    // winner's row and attaches to it instead of duplicating.
+    if (e && e.code === 'P2034') {
+      return attempt();
+    }
+    throw e;
+  }
 }
 
 async function bookAppointment(input) {
@@ -206,7 +224,29 @@ async function bookAppointment(input) {
     });
   } catch (e) {
     if (e.code === 'P2002') {
-      throw Object.assign(new Error('Slot already booked. Please pick another time.'), { statusCode: 409 });
+      // The (doctorId, date, startTime) unique slot was taken. Before
+      // erroring, check whether the existing row is OUR OWN live booking
+      // for the SAME patient — i.e. the user double-clicked / retried the
+      // same booking. If so, return the existing appointment idempotently
+      // instead of a confusing 409. A different patient's row (or a
+      // cancelled one we couldn't reuse) still surfaces as SLOT_TAKEN.
+      const existing = await prisma.appointment.findFirst({
+        where: { doctorId, date: appointmentDate, startTime },
+        include: { doctor: true, patient: true }
+      });
+      if (
+        existing &&
+        existing.patientId === patient.id &&
+        existing.status !== 'CANCELLED' &&
+        existing.paymentStatus !== 'FAILED'
+      ) {
+        return {
+          appointment: existing,
+          requiresPayment: existing.paymentStatus === 'UNPAID',
+          idempotentReplay: true
+        };
+      }
+      throw Object.assign(new Error('Slot already booked. Please pick another time.'), { statusCode: 409, code: 'SLOT_TAKEN' });
     }
     throw e;
   }

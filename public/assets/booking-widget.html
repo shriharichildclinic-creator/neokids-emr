@@ -1833,14 +1833,40 @@ async function submitBooking(){
       requestParentFullscreen(true);
       cashfree.checkout({ paymentSessionId: res.cashfree.paymentSessionId, redirectTarget: '_modal' })
         .then(async r => {
+          // FIX (audit finding #9): checkout() resolves when the Cashfree
+          // modal CLOSES — for a successful payment AND for a user who
+          // simply dismissed/cancelled it. The old code did nothing unless
+          // confirmPaymentWithServer() returned true, so a cancelled
+          // checkout left the widget on a stuck "Verifying payment…"
+          // spinner with no way back. Now we treat a non-paid resolution
+          // as an immediate cancel/abandon: tear down the overlay, stop
+          // the spinner, and show the failure screen with a retry path.
+          // startPaymentPolling below still catches a genuinely slow
+          // webhook for the rare case the user paid but the modal closed
+          // before the redirect fired.
           const paid = await confirmPaymentWithServer(appt.id);
           if (paid) {
             nukeCashfreeOverlay();
             const bar = document.getElementById('payStatusBar'); if (bar) bar.style.display = 'none';
             showSuccess(appt, true, '✅ Payment confirmed! Consultation booked.');
+          } else {
+            nukeCashfreeOverlay();
+            requestParentFullscreen(false);
+            const bar = document.getElementById('payStatusBar'); if (bar) bar.style.display = 'none';
+            showFailure(appt, 'USER_DROPPED',
+              'The payment window was closed before the transaction completed. No amount has been charged. You can pick the same slot and try again.');
           }
         })
-        .catch(e => { requestParentFullscreen(false); console.warn('[Cashfree] checkout rejected:', e); });
+        .catch(e => {
+          // FIX (audit finding #9): a rejected checkout promise (SDK error
+          // or immediate dismiss) also used to leave the spinner running.
+          nukeCashfreeOverlay();
+          requestParentFullscreen(false);
+          const bar = document.getElementById('payStatusBar'); if (bar) bar.style.display = 'none';
+          console.warn('[Cashfree] checkout rejected:', e);
+          showFailure(appt, 'CHECKOUT_CLOSED',
+            'The payment window was closed or could not be opened. No amount has been charged. Please try booking again.');
+        });
 
       startPaymentPolling(appt, orderId);
 

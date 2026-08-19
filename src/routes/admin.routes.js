@@ -25,6 +25,10 @@ router.post('/doctors/:id/kyc',         uploadKycDocuments.fields(KYC_FIELDS), k
 router.get('/doctors/:id/kyc',          kyc.getKyc);
 router.patch('/doctors/:id/kyc/status', kyc.updateKycStatus);
 
+// Protected KYC document streaming (replaces the removed public static
+// mount on /files/kyc-documents — audit finding #2). Admin JWT required.
+router.get('/kyc/:doctorId/:kind', kyc.streamKycDocument);
+
 // Appointments
 router.get('/appointments', c.listAppointments);
 

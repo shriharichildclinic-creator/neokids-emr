@@ -375,6 +375,8 @@ router.get('/share/:token', asyncHandler(async (req, res) => {
   }
   if (!fsShare.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
   res.setHeader('Content-Type', mime);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
   res.setHeader('Content-Disposition', (req.query.dl === '1' ? 'attachment' : 'inline') + '; filename="' + String(name).replace(/"/g, '') + '"');
   fsShare.createReadStream(fp).pipe(res);
 }));
@@ -390,6 +392,8 @@ router.get('/share-record/:token', asyncHandler(async (req, res) => {
   }).join('');
   const pdf = r.pdfUrl ? '<p><a href="' + r.pdfUrl + '" target="_blank">View Record Summary PDF</a></p>' : '';
   res.setHeader('Content-Type', 'text/html');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
   res.send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medical Record - NeoKidsPro</title></head><body style="font-family:sans-serif;max-width:640px;margin:40px auto;padding:0 16px"><h2>Medical Record Shared</h2><p><b>Patient:</b> ' + (r.patient ? r.patient.name : '') + '<br/><b>Record:</b> ' + (r.title || r.recordType || 'Historical Record') + '<br/><b>Date:</b> ' + new Date(r.recordDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + '</p>' + pdf + '<h3>Attachments</h3><ul>' + (rows || '<li>No attachments</li>') + '</ul><p style="color:#777;font-size:12px">Secure link - expires in 7 days. NeoKidsPro EMR.</p></body></html>');
 }));
 
