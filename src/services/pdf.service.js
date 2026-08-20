@@ -411,7 +411,7 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
     const lines = [
       ['Total Consultations', `${settlement.totalConsultations} appt(s)`, settlement.totalConsultations, false],
       ['Total Revenue Collected', 'Cashfree only', settlement.totalRevenue, true],
-      [`Clinic Share (${Number(settlement.clinicSharePercent)}%)`, 'of total', settlement.clinicShareAmount, true],
+      [`NeoKidsPro Share (${Number(settlement.clinicSharePercent)}%)`, 'of total', settlement.clinicShareAmount, true],
       [`Doctor Gross Share (${Number(settlement.doctorSharePercent)}%)`, 'of total', settlement.doctorGrossAmount, true],
       [`TDS Deducted (${Number(settlement.tdsPercent)}%)`, 'of doctor gross', settlement.tdsAmount, true]
     ];
