@@ -28,7 +28,7 @@ const BRAND = {
   tagline:     'Paediatric Care, Simplified',
   primaryUrl:  (process.env.NEOKIDS_URL || 'https://neokidspro.in').replace(/\/+$/, ''),
   vaxUrl:      (process.env.VACC_PORTAL_URL || 'https://vaxiclinics.com').replace(/\/+$/, ''),
-  supportEmail: process.env.SUPPORT_EMAIL || 'support@neokidspro.in',
+  supportEmail: process.env.SUPPORT_EMAIL || 'admin@neokidspro.in',
   supportPhone: process.env.SUPPORT_PHONE || '',
   colors: {
     primary:   '#4DA8FF',
