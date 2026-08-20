@@ -24,11 +24,6 @@ async function autoCompletePassedAppointments() {
 
   if (!toComplete.length) return 0;
 
-  // Double-credit race fix: the row transition is an atomic CLAIM
-  // (updateMany with status:'CONFIRMED' in the WHERE). Revenue is
-  // credited ONLY for rows this run actually transitioned (count === 1).
-  // If the doctor's manual "Mark Complete" won the race, that path
-  // credits the revenue instead and count is 0 here.
   const byDoctor = {};
   let completedCount = 0;
   for (const a of toComplete) {
@@ -37,7 +32,6 @@ async function autoCompletePassedAppointments() {
       data: {
         status: 'COMPLETED',
         completedAt: new Date(),
-        // Offline CASH_PENDING → CASH_COLLECTED on auto-complete
         ...(a.paymentStatus === 'CASH_PENDING' ? { paymentStatus: 'CASH_COLLECTED' } : {})
       }
     });
@@ -62,7 +56,6 @@ async function autoCompletePassedAppointments() {
   return completedCount;
 }
 
-// Manual completion path (still used by doctor's "Mark Complete" button)
 async function incrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
   if (!['PAID', 'CASH_PENDING', 'CASH_COLLECTED'].includes(paymentStatus)) return;
   await prisma.doctor.update({
@@ -79,27 +72,40 @@ async function decrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
   });
 }
 
-// Vaccination reminders run at most once per calendar day per process.
-// The dedup lives in NotificationLog, but this cheap guard avoids
-// hammering the scan every 5 minutes.
+// =====================================================================
+// Vaccination reminder gating  (v3.5.2 timing fix)
+// ---------------------------------------------------------------------
+// The vaccination scan is now gated by TWO conditions, evaluated inside
+// vaccination.service.processVaccinationReminders():
+//
+//   1. Ops switch  — VACC_REMINDERS_ENABLED must not be 'false'.
+//   2. Delivery window — the current wall-clock time in Asia/Kolkata
+//      must be inside [VACC_WINDOW_START_HOUR_IST, VACC_WINDOW_END_HOUR_IST).
+//      Default 18:00–20:00 IST.
+//
+// The lifecycle cron still fires every 5 minutes for appointment
+// reminders (which are 30-min-before-appointment, timezone-agnostic
+// on the appointment's own start time), but vaccination reminders will
+// no-op every tick that is outside the window. The `alreadyScannedToday`
+// flag ensures that inside the window we don't loop-send on every 5-min
+// tick — the FIRST tick inside the window fires, and further ticks skip
+// because vaccinations were already dispatched today.
+//
+// This is the fix for the "reminders arriving around 5:20 AM" bug: the
+// day used to roll at 00:00 UTC = 05:30 IST, and the first cron tick
+// after that boundary would send. Now the same tick sees `hour=5`, the
+// service returns `skippedWindow=true`, no reminder goes out. The
+// ~18:00 IST tick is the one that dispatches.
+// =====================================================================
 let _lastVaccinationScanDay = null;
 
-// SECURITY/RELIABILITY FIX (audit finding #6): runLifecycleJobs is on a
-// 5-minute setInterval AND is invoked once at boot. If a tick overruns
-// the interval (slow WhatsApp/email sends, DB stall), the next tick used
-// to start while the previous one was still mid-flight — sending
-// duplicate reminders and double-crediting revenue. This in-process
-// re-entrancy guard skips the overlapping tick. (The 5-min cron is
-// single-process by design; for multi-instance deploys, add a DB-level
-// advisory lock as well.)
+// Re-entrancy guard for the whole lifecycle tick (revenue race protection).
 let _jobsInFlight = false;
 let _jobsStartedAt = 0;
 const JOB_WATCHDOG_MS = parseInt(process.env.LIFECYCLE_JOB_WATCHDOG_MS || '600000', 10); // 10 min
 
 async function runLifecycleJobs() {
   if (_jobsInFlight) {
-    // Watchdog: a crashed/hung tick (e.g. a WhatsApp API call that never
-    // resolves) must not wedge reminders for the rest of the day.
     if (Date.now() - _jobsStartedAt > JOB_WATCHDOG_MS) {
       logger.error('Lifecycle jobs watchdog: previous run exceeded ' + JOB_WATCHDOG_MS + 'ms — resetting lock');
       _jobsInFlight = false;
@@ -114,24 +120,27 @@ async function runLifecycleJobs() {
     await expirePendingAppointments();
     await autoCompletePassedAppointments();
     const automation = require('./automation.service');
-    await automation.processReminders();
-    await automation.processFollowUpRecalls();   // soft recall for missed follow-ups
+    await automation.processReminders();                 // 30-min appointment reminders
+    await automation.processFollowUpRecalls();           // soft follow-up recall
 
-    // Vaccination reminders (daily scan). ROOT CAUSE FIX: the previous
-    // implementation awaited processVaccinationReminders() and then set
-    // the day stamp — but that function swallows every per-patient send
-    // failure (each channel is independently try/caught into
-    // NotificationLog) and never throws, so the day stamp was set even on
-    // a fully broken Meta config. A boot-time stamp race could then skip
-    // the entire day's sends until after midnight. The stamp is now set
-    // ONLY when the scan returned without throwing, and the watchdog
-    // window above guarantees a wedged tick unlocks within 10 minutes.
-    // For an on-demand run, POST /api/admin/jobs/vaccination-reminders/run.
-    const today = new Date().toISOString().slice(0, 10);
-    if (_lastVaccinationScanDay !== today) {
-      const vacc = require('./vaccination.service');
+    // Vaccination reminder scan.
+    //   • Only ONE successful scan per calendar day (IST) — the service
+    //     itself dedups per (patient, vaccine, dueDate) so a duplicate
+    //     run is safe, but this saves DB roundtrips on every 5-min tick
+    //     for the ~22h/day the window is closed.
+    //   • Delivery-window gate lives inside the service; a tick outside
+    //     18:00–20:00 IST returns {skippedWindow:true} and we do NOT
+    //     stamp `_lastVaccinationScanDay`, so the next in-window tick
+    //     will still run.
+    const vacc = require('./vaccination.service');
+    const istDay = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date());
+    if (_lastVaccinationScanDay !== istDay) {
       const result = await vacc.processVaccinationReminders();
-      if (result && !result.disabled) _lastVaccinationScanDay = today;
+      if (result && !result.disabled && !result.skippedWindow) {
+        _lastVaccinationScanDay = istDay;
+      }
     }
   } catch (error) {
     logger.error('Lifecycle job failed', error);

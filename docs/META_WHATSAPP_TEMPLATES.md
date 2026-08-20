@@ -1,116 +1,48 @@
-# Meta WhatsApp Business Templates — Complete Inventory
+# Meta WhatsApp Business Templates — Complete Inventory (v3.5.2)
 
-This document lists **every** Meta WhatsApp Cloud API template the EMR requires, including the existing production templates and the **three new templates** introduced by the notification-system extension.
+This document lists **every** Meta WhatsApp Cloud API template the EMR requires, including the existing production templates and the templates introduced by the vaccination-reminder / notification-system extensions.
 
 Templates are managed in **Meta Business Manager → WhatsApp Manager → Message Templates**.
 
 ---
 
-## 1. New templates introduced by this release
+## ⭐ NEW / UPDATED — Vaccination reminder template (v3.5.2)
 
-| # | Template name | Category | Language | Header | Body vars | Buttons |
-|---|---|---|---|---|---|---|
-| N1 | `neokids_prescription_pdf`   | UTILITY | en | DOCUMENT | 2 | — |
-| N2 | `neokids_invoice_pdf`        | UTILITY | en | DOCUMENT | 3 | — |
-| N3 | `neokids_vacc_reminder_v2`   | UTILITY | en | TEXT (none) | 5 | 1 static URL button |
-| N4 | `medical_certificate_ready`  | UTILITY | en | DOCUMENT | 3 | — |
+The vaccination reminder template has been **updated** in v3.5.2. The variable order and count are UNCHANGED (still 5 body variables, 1 static URL button), but the copy inside the body has been expanded so the disclaimer + action guidance the product spec requires travel inside the template. **You must resubmit the template to Meta** with the exact body below and wait for approval before switching WA_TPL_VACCINATION to point at it.
 
----
+### `neokids_vacc_reminder_v2`
 
-### N1. `neokids_prescription_pdf`
+> If you resubmit under a new name (recommended, e.g. `neokids_vacc_reminder_v3`), update `.env` → `WA_TPL_VACCINATION=neokids_vacc_reminder_v3`. Code defaults to `neokids_vacc_reminder_v2`.
 
-- **Category:** Utility
-- **Language:** English
-- **Header:** `DOCUMENT` (dynamic — the media id of the uploaded PDF is supplied at send time)
-- **Body (2 vars):**
+- **Category:** `Utility`
+- **Language:** `English (en)`
+- **Header:** *None* (text-only)
+- **Body (5 variables) — paste EXACTLY, including the blank lines:**
+
+```
+Hi {{1}}'s parent, this is a friendly reminder that {{1}}'s vaccination {{2}} falls due on {{3}} as per the standard vaccination schedule for your child's age.
+
+{{5}}
+
+What you should do:
+- If the vaccination is due, or if you are unsure whether your child has already received it, please consult your nearest healthcare provider or vaccination centre.
+- Book an online consultation with a pediatrician through NeoKidsPro at https://neokidspro.in for questions on schedule, eligibility, missed doses, catch-up vaccinations, or vaccine safety.
+- If you are in Mumbai, you can also use our dedicated vaccination portal https://vaxiclinics.com — VaxiClinics offers vaccination guidance and, where available, home-vaccination visit services.
+- Please do not delay or skip vaccinations without medical advice; timely immunization protects children against serious vaccine-preventable diseases.
+
+This reminder is intended to help parents stay informed and should not replace professional medical advice.
+
+— {{4}}, NeoKidsPro
+```
+
+- **Footer (optional but recommended):**
   ```
-  Hi {{1}}, your prescription from Dr. {{2}} is attached.
-  Please follow the medication and advice as noted. For any questions,
-  reply to this message.
-
-  — NeoKidsPro
+  Reply STOP to opt out of vaccination reminders.
   ```
-- **Buttons:** none.
-- **Sample values for approval:**
-  - `{{1}}` = `Aarav`
-  - `{{2}}` = `Vishal Parmar`
-
----
-
-### N2. `neokids_invoice_pdf`
-
-- **Category:** Utility
-- **Language:** English
-- **Header:** `DOCUMENT`
-- **Body (3 vars):**
-  ```
-  Hi {{1}}, thank you for choosing NeoKidsPro.
-  Your invoice {{2}} for ₹{{3}} is attached.
-
-  — NeoKidsPro
-  ```
-- **Buttons:** none.
-- **Sample values for approval:**
-  - `{{1}}` = `Aarav`
-  - `{{2}}` = `INV-3F2A9B10`
-  - `{{3}}` = `500.00`
-
----
-
-### N4. `medical_certificate_ready`  (v3.4.0)
-
-- **Category:** Utility
-- **Language:** English
-- **Header:** `DOCUMENT` (dynamic — media id of the uploaded certificate PDF supplied at send time; filename `medical_certificate_<certNumber>.pdf`)
-- **Body (3 vars):**
-  ```
-  Hello {{1}},
-
-  Your medical certificate from {{2}} is ready.
-
-  Certificate Date: {{3}}
-
-  If you have any questions, please contact the clinic.
-
-  Regards,
-  {{2}}
-  ```
-- **Buttons:** none.
-- **Variable mapping (code: `whatsapp-media.service.js → sendCertificatePdf`):**
-  - `{{1}}` = Patient name
-  - `{{2}}` = Clinic name (falls back to `Dr. <name>` when the doctor has no clinic configured)
-  - `{{3}}` = Certificate date — the single-day date, else the rest-period start, else the issue date
-- **Sample values for approval:**
-  - `{{1}}` = `Aarav Sharma`
-  - `{{2}}` = `NeoKidsPro Pediatric Clinic`
-  - `{{3}}` = `17 Aug 2026`
-- **Env override:** `WA_TPL_CERTIFICATE_PDF` (defaults to `medical_certificate_ready`)
-
----
-
-### N3. `neokids_vacc_reminder_v2`
-
-> Replaces the deprecated `neokids_vaccination_reminder` (4-var). Create this
-> template in Meta and submit for approval; the code defaults to this name
-> (`WA_TPL_VACCINATION` env override available). The old template is NOT
-> used anywhere once this is approved.
-
-- **Category:** Utility
-- **Language:** English
-- **Header:** none (text-only).
-- **Body (5 vars) — paste EXACTLY:**
-  ```
-  Hi {{1}}'s parent, this is a friendly reminder that {{1}}'s vaccination
-  {{2}} falls due on {{3}} as per the standard vaccination schedule for
-  your child's age.
-
-  {{5}}
-
-  For appointments or more information, please visit the Vaccination
-  Portal.
-
-  — {{4}}, NeoKidsPro
-  ```
+- **Buttons:** ONE **static** Call-to-action → Visit website button.
+  - Type: **Static URL** (no dynamic suffix — the button URL is fixed)
+  - Label: `Visit Vaccination Portal`
+  - URL:   `https://vaxiclinics.com/`
 - **Variable mapping (code: `vaccination.service.js → sendReminderForVaccine`):**
   - `{{1}}` = Child name
   - `{{2}}` = Vaccine name (e.g. `DTwP/DTaP - 2`)
@@ -118,26 +50,54 @@ Templates are managed in **Meta Business Manager → WhatsApp Manager → Messag
   - `{{4}}` = Doctor name (`VACC_DOCTOR_NAME` env, default `Dr. Vishal Parmar`)
   - `{{5}}` = Mandatory disclaimer, sent verbatim from the code:
     ```
-    We do not have information regarding which vaccinations have already
-    been administered to your child. This reminder is generated based on
-    your child's age and standard vaccination schedules and should not be
-    considered confirmation that a vaccine is pending. Please consult your
-    pediatrician. Visit the Vaccination Portal for appointments or more
-    information.
+    This is an automated reminder generated from your child's recorded date of birth and standard vaccination schedules. We do not maintain records of vaccinations administered outside NeoKidsPro and cannot confirm whether this vaccine is pending, overdue, or already completed. Please consult a qualified pediatrician.
     ```
-- **Buttons:** one **static** Call-to-action URL button:
-  - Label: `Visit Vaccination Portal`
-  - URL: `https://vaxiclinics.com/` (static — no dynamic suffix)
-- **Sample values for approval:**
+- **Sample values for Meta approval:**
   - `{{1}}` = `Aarav`
   - `{{2}}` = `DTwP/DTaP - 2`
-  - `{{3}}` = `24 Jul 2026`
+  - `{{3}}` = `27 Aug 2026`
   - `{{4}}` = `Dr. Vishal Parmar`
   - `{{5}}` = the disclaimer text above (verbatim)
 
 ---
 
-## 2. Existing templates (retained, unchanged)
+## ⭐ Ready-to-paste JSON payload (what the code sends to Meta)
+
+You do **NOT** need to code this — the service builds it — but here is the exact payload for reference / debugging:
+
+```jsonc
+POST https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages
+Authorization: Bearer {META_ACCESS_TOKEN}
+Content-Type: application/json
+
+{
+  "messaging_product": "whatsapp",
+  "to": "919XXXXXXXXX",
+  "type": "template",
+  "template": {
+    "name": "neokids_vacc_reminder_v2",
+    "language": { "code": "en" },
+    "components": [
+      {
+        "type": "body",
+        "parameters": [
+          { "type": "text", "text": "Aarav" },
+          { "type": "text", "text": "DTwP/DTaP - 2" },
+          { "type": "text", "text": "27 Aug 2026" },
+          { "type": "text", "text": "Dr. Vishal Parmar" },
+          { "type": "text", "text": "This is an automated reminder generated from your child's recorded date of birth and standard vaccination schedules. We do not maintain records of vaccinations administered outside NeoKidsPro and cannot confirm whether this vaccine is pending, overdue, or already completed. Please consult a qualified pediatrician." }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The URL button is **static**, so no `type:"button"` component is sent (this is intentional — Meta only requires a button-component in the request when the button URL has a dynamic suffix). The button URL is fixed at the template level.
+
+---
+
+## Existing templates (retained, unchanged)
 
 These templates already exist in Meta and continue to be used exactly as before. Names must match Meta verbatim.
 
@@ -154,116 +114,31 @@ These templates already exist in Meta and continue to be used exactly as before.
 | 9 | `doctor_reminder_offline` | 3 | — |
 | 10 | `neokids_online_appt_confirm_v2` | 6 | Meet suffix |
 | 11 | `doctor_reminder_online` | 3 | Meet suffix |
+| 12 | `neokids_prescription_pdf` | 2 | — (DOCUMENT header) |
+| 13 | `neokids_invoice_pdf` | 3 | — (DOCUMENT header) |
+| 14 | `medical_certificate_ready` | 3 | — (DOCUMENT header) |
 
 ---
 
-## 3. How to create and submit for approval
+## How to submit the new vaccination template
 
-Do this once per template listed in section 1.
-
-1. Log in to **[business.facebook.com](https://business.facebook.com/)** with the WhatsApp Business Account (WABA) owner.
-2. Left sidebar → **WhatsApp Manager** → open the WABA → **Message templates** → **Create template**.
-3. Fill in:
-   - **Category:** `Utility` (all three new templates are transactional).
-   - **Name:** copy the exact name from section 1 (lowercase, underscores).
-   - **Language:** `English` (matches `META_LANG_CODE=en`).
-4. **Header:**
-   - For `neokids_prescription_pdf` and `neokids_invoice_pdf`, choose **Media → Document**. Do **not** upload a sample document — the code supplies the media id at send time.
-   - For `neokids_vaccination_reminder`, choose **None**.
-5. **Body:** paste the body text from section 1 exactly, including the `{{n}}` placeholders.
-6. **Footer:** optional — you can add `Reply STOP to opt-out.` for the vaccination template to comply with opt-out best practices.
-7. **Buttons:**
-   - For `neokids_vaccination_reminder`, add **Call-to-action → Visit website → Dynamic URL**, base `https://neokidspro.in/assets/booking-widget.html?`, and the button label `Book Vaccination`.
-   - Other two templates: no buttons.
-8. Provide **sample values** exactly as listed in section 1. Meta rejects templates whose samples don’t satisfy their content policies (do NOT put placeholders like “xxx” or “test”).
-9. Click **Submit**. Approval typically takes 1–60 minutes.
-10. Once **Approved**, no code change is required — the names in `.env` (see `WA_TPL_PRESCRIPTION_PDF`, `WA_TPL_INVOICE_PDF`, `WA_TPL_VACCINATION`) already point to them.
-
-### Sending via API (documentation only — code already handles this)
-
-The template with a document header is sent as:
-
-```jsonc
-POST /v19.0/{PHONE_NUMBER_ID}/messages
-{
-  "messaging_product": "whatsapp",
-  "to": "919XXXXXXXXX",
-  "type": "template",
-  "template": {
-    "name": "neokids_prescription_pdf",
-    "language": { "code": "en" },
-    "components": [
-      {
-        "type": "header",
-        "parameters": [
-          { "type": "document",
-            "document": { "id": "<uploaded_media_id>",
-                          "filename": "prescription_3F2A9B10.pdf" } }
-        ]
-      },
-      {
-        "type": "body",
-        "parameters": [
-          { "type": "text", "text": "Aarav" },
-          { "type": "text", "text": "Vishal Parmar" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-The media id comes from a prior `POST /v19.0/{PHONE_NUMBER_ID}/media` multipart upload (handled by `whatsapp-media.service.js`).
-
----
-
-## 4. Email template — vaccination reminder
-
-The email template is generated at runtime by `vaccination.service.js → buildEmailHtml`. Its shape:
-
-- **Subject:** `Vaccination reminder for {ChildName} — {Vaccine} due {Date}`
-- **HTML body:**
-
-  ```
-  Dear {ParentName},
-
-  This is a friendly reminder that {ChildName}'s next vaccination
-  ({VaccineName}) falls due on {DueDate} as per the standard
-  vaccination schedule for your child's age.
-
-    Vaccine       : {VaccineName}
-    Scheduled at  : {AgeLabel, e.g. "6 weeks"}
-    Due date      : {DueDate}
-
-  ┌ MANDATORY DISCLAIMER (highlighted box) ─────────────────────┐
-  │ We do not have information regarding which vaccinations      │
-  │ have already been administered to your child. This reminder  │
-  │ is generated based on your child's age and standard          │
-  │ vaccination schedules and should not be considered           │
-  │ confirmation that a vaccine is pending. Please consult your  │
-  │ pediatrician. Visit the Vaccination Portal for appointments  │
-  │ or more information.                                         │
-  └──────────────────────────────────────────────────────────────┘
-
-  To book a vaccination consultation with {DoctorName}, or for
-  more information, please visit the Vaccination Portal:
-
-     [ 📅 Visit the Vaccination Portal ]    ← button
-
-  If the button doesn't work, open this link:
-  {PortalLink}
-  ```
-
-The template supports the following variables (populated automatically):
-
-| Variable | Source |
-|---|---|
-| `{ParentName}` | `Patient.parentName` (fallback: “Parent”) |
-| `{ChildName}` | `Patient.name` |
-| `{VaccineName}` | e.g. `DTwP/DTaP - 2` |
-| `{AgeLabel}` | e.g. `10 weeks` |
-| `{DueDate}` | Localised, `DD MMM YYYY` |
-| `{DoctorName}` | `VACC_DOCTOR_NAME` env — default **Dr. Vishal Parmar** |
-| `{PortalLink}` | `VACC_PORTAL_URL` env — default `https://vaxiclinics.com/` |
-
-Nothing needs to be uploaded to any external system for the email template — SMTP delivery uses the existing `email.service.js` transport (SendGrid / SMTP / mock).
+1. Log in to **[business.facebook.com](https://business.facebook.com/)** with the WABA owner account.
+2. Left sidebar → **WhatsApp Manager** → open your WABA → **Message templates** → **Create template**.
+3. Fill:
+   - **Category:** `Utility`
+   - **Name:** `neokids_vacc_reminder_v2` (or `_v3` if resubmitting)
+   - **Language:** `English`
+4. **Header:** *None*.
+5. **Body:** paste the body block from the section above **exactly**, including the placeholders `{{1}}..{{5}}` and the blank lines.
+6. **Footer:** `Reply STOP to opt out of vaccination reminders.`
+7. **Buttons:** click **Add button → Call-to-action → Visit website**, then:
+   - Type: **Static**
+   - Button text: `Visit Vaccination Portal`
+   - Website URL: `https://vaxiclinics.com/`
+8. Fill the sample values shown above (Meta rejects templates whose samples don't satisfy content policy — do NOT use `test`, `xxx`, etc.).
+9. **Submit**. Approval usually takes 1–60 minutes.
+10. Once **Approved**, set (or confirm) in `.env`:
+    ```
+    WA_TPL_VACCINATION=neokids_vacc_reminder_v2
+    ```
+    No code change is required.

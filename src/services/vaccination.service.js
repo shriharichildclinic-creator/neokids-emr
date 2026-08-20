@@ -1,54 +1,115 @@
 // =====================================================================
-// vaccination.service.js — Vaccination reminder automation
+// vaccination.service.js — Vaccination reminder automation  (v3.5.2)
 // ---------------------------------------------------------------------
-// Given a Patient's dateOfBirth, this service:
-//   1. Expands the IAP vaccination schedule into concrete due dates.
-//   2. Picks the reminders whose due date falls inside the "approaching"
-//      window (default: 7 days from today, once per vaccine per due date).
-//   3. Sends a WhatsApp template reminder + an Email reminder.
+// FIXES IN THIS VERSION vs v3.5.1
+// ────────────────────────────────
+//  (T) TIMING — Reminders used to fire from a 5-minute lifecycle tick
+//      that only checked "have we scanned today?". Because the day
+//      rolls at 00:00 UTC = 05:30 IST, the first tick after midnight
+//      UTC (around 05:20–05:35 IST) would send the day's batch. This
+//      is the "5:20 AM" bug. The scan now refuses to run unless the
+//      current wall-clock time in Asia/Kolkata is inside the
+//      parent-friendly window (default 18:00–20:00 IST). All the
+//      gating logic lives in `isWithinDeliveryWindow()`.
 //
-// Reuses:
-//   - whatsapp.service.sendWhatsAppWithFallback  (primary + text fallback)
-//   - email.service.sendEmail
-//   - NotificationLog table for dedup and delivery auditing
+//  (D) DEDUP — The dedup key was correct in payload but had NO DB
+//      uniqueness. Concurrent ticks/manual runs could double-send.
+//      We now use the `claimKey` column (already unique-indexed for
+//      appointment reminders) with a `VACC:<patientId>:<code>:<dueDate>`
+//      key. A duplicate insert throws P2002 and we skip the send.
+//      This kills Scenario A: multiple consultations for the same
+//      child NEVER trigger a second reminder for the same vaccine.
+//
+//  (R) RECIPIENT — Reminders already only iterated `Patient`, but the
+//      code did not clearly show it. We added explicit filters that
+//      DROP any row where the phone/email looks like a staff account
+//      (matches @neokidspro.in, admin@, doctor@, staff@) so an
+//      accidentally-created "Patient" test row for a doctor never gets
+//      one. Doctors, Admins, and staff live in separate tables and
+//      are never queried by this service.
+//
+//  (C) CONTENT — The disclaimer + call-to-action block was expanded
+//      to match the product spec: DOB-derived nature, no admin-record
+//      guarantee, consult-pediatrician clause, NeoKidsPro booking
+//      link, VaxiClinics link with home-vaccination hint, and a
+//      "do not delay / not medical advice" line.
+//
+//  (B) BRAND EMAIL — The email now uses the shared branded shell
+//      (`email-brand.service.js`) — mobile responsive, NeoKidsPro
+//      colours/typography, trust footer.
 //
 // Ops switches (.env):
-//   VACC_REMINDERS_ENABLED=false   → disables the scan entirely
-//   VACC_APPROACH_DAYS=7           → approach window in days
-//   VACC_DOCTOR_NAME               → doctor name used in email copy
-//   VACC_PORTAL_URL                → vaccination portal link
-//   WA_TPL_VACCINATION             → Meta template name override
+//   VACC_REMINDERS_ENABLED=false     → disables the scan entirely
+//   VACC_APPROACH_DAYS=7             → approach window in days
+//   VACC_WINDOW_START_HOUR_IST=18    → earliest send hour, IST (24h)
+//   VACC_WINDOW_END_HOUR_IST=20      → last hour reminders may send
+//   VACC_DOCTOR_NAME                 → doctor name used in copy
+//   VACC_PORTAL_URL                  → vaccination portal link
+//   NEOKIDS_URL                      → NeoKidsPro booking link
+//   WA_TPL_VACCINATION               → Meta template name override
 // =====================================================================
 
 const prisma   = require('../config/prisma');
 const logger   = require('../utils/logger');
 const whatsapp = require('./whatsapp.service');
 const email    = require('./email.service');
+const { renderBrandedEmail, BRAND, esc } = require('./email-brand.service');
 const { formatDateOnly } = require('../utils/date');
 
 const PROVIDER_DOCTOR_NAME = process.env.VACC_DOCTOR_NAME || 'Dr. Vishal Parmar';
-const CLINIC_NAME = process.env.CLINIC_NAME || 'NeoKidsPro Clinic';
+const CLINIC_NAME          = process.env.CLINIC_NAME       || 'NeoKidsPro Clinic';
 
-// Vaccination Portal used by the email CTA and the WhatsApp static button.
+// External URLs
 const VACCINATION_PORTAL_URL =
   (process.env.VACC_PORTAL_URL || 'https://vaxiclinics.com/').replace(/\/+$/, '') + '/';
+const NEOKIDSPRO_URL =
+  (process.env.NEOKIDS_URL || 'https://neokidspro.in/').replace(/\/+$/, '') + '/';
 
+// Meta template name (v2 supersedes older 4-var one)
 const WA_TPL_VACCINATION =
   process.env.WA_TPL_VACCINATION || 'neokids_vacc_reminder_v2';
 
 const APPROACH_DAYS = parseInt(process.env.VACC_APPROACH_DAYS || '7', 10);
 
-// Mandatory disclaimer shown in every vaccination reminder. The EMR does
-// NOT track administered doses — reminders are age/schedule derived only.
-const DISCLAIMER =
-  'We do not have information regarding which vaccinations have already been ' +
-  'administered to your child. This reminder is generated based on your ' +
-  "child's age and standard vaccination schedules and should not be " +
-  'considered confirmation that a vaccine is pending. Please consult your ' +
-  'pediatrician. Visit the Vaccination Portal for appointments or more information.';
+// Parent-friendly delivery window in IST (Asia/Kolkata). Both bounds
+// inclusive on the hour boundary. Default 18:00–20:00 IST.
+const WINDOW_START_HOUR = parseInt(process.env.VACC_WINDOW_START_HOUR_IST || '18', 10);
+const WINDOW_END_HOUR   = parseInt(process.env.VACC_WINDOW_END_HOUR_IST   || '20', 10);
+const IST_TZ = 'Asia/Kolkata';
+
+// Concise disclaimer used INSIDE the WhatsApp template (Meta caps body
+// length; the fuller advice appears in email + WhatsApp trailing text).
+const DISCLAIMER_SHORT =
+  "This is an automated reminder generated from your child's recorded " +
+  'date of birth and standard vaccination schedules. We do not maintain ' +
+  'records of vaccinations administered outside NeoKidsPro and cannot ' +
+  'confirm whether this vaccine is pending, overdue, or already ' +
+  'completed. Please consult a qualified pediatrician.';
+
+// Longer version for email + WhatsApp plain-text follow-up.
+const ACTION_GUIDANCE_LINES = [
+  'If the vaccination is due — or if you are unsure whether your child ' +
+  'has already received it — please consult your nearest healthcare ' +
+  'provider or vaccination centre.',
+  'For questions on your child’s vaccination schedule, eligibility, ' +
+  'missed doses, catch-up vaccinations, or vaccine safety, you can book ' +
+  'an online consultation with a pediatrician through NeoKidsPro: ' +
+  NEOKIDSPRO_URL,
+  'For pediatric vaccination guidance, appointments, and support, visit ' +
+  'NeoKidsPro.',
+  'If you are located in Mumbai, you may also use our dedicated ' +
+  'vaccination portal at ' + VACCINATION_PORTAL_URL + ' — VaxiClinics ' +
+  'provides vaccination guidance and, where available, home-vaccination ' +
+  'visit services.',
+  'Please do not delay or skip vaccinations without medical advice; ' +
+  'timely immunization protects children against serious ' +
+  'vaccine-preventable diseases.',
+  'This reminder is intended to help parents stay informed and should ' +
+  'not replace professional medical advice.'
+];
 
 // =====================================================================
-// Vaccination schedule (IAP standard for India)
+// Vaccination schedule (IAP standard for India) — unchanged
 // =====================================================================
 const SCHEDULE = [
   { code: 'BCG',        name: 'BCG',                              ageDays: 0,    doseLabel: 'Birth' },
@@ -105,6 +166,7 @@ const SCHEDULE = [
   { code: 'Tdap',       name: 'Tdap',                             ageDays: 3652, doseLabel: '10 years' }
 ];
 
+// ─── Helpers ───────────────────────────────────────────────────────────
 function addDays(date, days) {
   const d = new Date(date);
   d.setUTCDate(d.getUTCDate() + days);
@@ -127,40 +189,87 @@ function pickApproaching(scheduleExpanded, referenceDate = new Date()) {
   });
 }
 
-// ─── Logging + dedup ───
-// One (patient, vaccine, dueDate) combination is ever sent once; the dedup
-// key travels inside the payload JSON, never in errorMessage.
-async function alreadySentToday(patientId, code, dueDate) {
-  const key = `VACC:${code}:${isoDay(dueDate)}`;
-  const row = await prisma.notificationLog.findFirst({
-    where: {
-      template: WA_TPL_VACCINATION,
-      recipient: { contains: patientId },
-      status: 'SENT',
-      payload: { path: '$.dedupKey', equals: key }
-    }
+/**
+ * Returns true when the current wall-clock time in Asia/Kolkata is
+ * inside the parent-friendly delivery window. This is the single gate
+ * that prevents the "5:20 AM" bug — every dispatcher (cron + manual
+ * admin trigger + test script) is expected to consult this function
+ * BEFORE calling processVaccinationReminders() unless it explicitly
+ * overrides via { force: true }.
+ */
+function isWithinDeliveryWindow(now = new Date()) {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: IST_TZ, hour: '2-digit', hour12: false
   });
-  return !!row;
+  const parts = fmt.formatToParts(now).reduce((acc, p) => (
+    p.type !== 'literal' ? (acc[p.type] = p.value, acc) : acc
+  ), {});
+  const hour = Number(parts.hour === '24' ? 0 : parts.hour);
+  return hour >= WINDOW_START_HOUR && hour < WINDOW_END_HOUR;
 }
-async function logSent(patientId, phoneOrEmail, channel, code, dueDate, payload) {
-  const key = `VACC:${code}:${isoDay(dueDate)}`;
+
+/**
+ * Returns true when the record LOOKS like a real parent/guardian,
+ * false when it looks like a doctor/admin/staff account that leaked
+ * into the Patient table. Belt-and-braces filter on top of the fact
+ * that we only ever query the `Patient` model.
+ */
+function isEligibleRecipient(patient) {
+  if (!patient) return false;
+
+  // Must have at least one channel of contact.
+  if (!patient.phone && !patient.email) return false;
+
+  const em = (patient.email || '').trim().toLowerCase();
+  const nm = (patient.name  || '').trim().toLowerCase();
+
+  const STAFF_LOCAL_PARTS = ['admin', 'doctor', 'staff', 'support', 'info', 'noreply', 'no-reply'];
+  const STAFF_DOMAINS     = (process.env.STAFF_EMAIL_DOMAINS || 'neokidspro.in,vaxiclinics.com')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  if (em) {
+    const [local, domain] = em.split('@');
+    if (STAFF_LOCAL_PARTS.includes(local)) return false;
+    if (domain && STAFF_DOMAINS.includes(domain)) return false;
+  }
+  if (STAFF_LOCAL_PARTS.some(k => nm.startsWith(k))) return false;
+
+  return true;
+}
+
+// ─── Dedup via unique claimKey ─────────────────────────────────────────
+// One (patient, vaccine, dueDate) combination is ever sent once —
+// enforced at the DB level by the @@unique([claimKey]) index. Two
+// concurrent runs cannot both send: the second insert throws P2002 and
+// we bail out of that reminder.
+function vaccClaimKey(patientId, code, dueDate) {
+  return `VACC:${patientId}:${code}:${isoDay(dueDate)}`;
+}
+
+async function claimReminder(patientId, code, dueDate, recipient) {
+  const claimKey = vaccClaimKey(patientId, code, dueDate);
   try {
     await prisma.notificationLog.create({
       data: {
+        claimKey,
         appointmentId: null,
-        channel,
-        recipient: `${phoneOrEmail} [${patientId}]`,
+        channel: 'CLAIM',
+        recipient: `${recipient || ''} [${patientId}]`,
         template: WA_TPL_VACCINATION,
         direction: 'PATIENT',
         status: 'SENT',
-        payload: { ...(payload || {}), dedupKey: key },
-        errorMessage: null
+        payload: { dedupKey: claimKey, kind: 'vaccination_claim' }
       }
     });
-  } catch (e) { logger.error('vaccine log failed', e); }
+    return { ok: true, claimKey };
+  } catch (e) {
+    if (e && e.code === 'P2002') return { ok: false, reason: 'already_claimed', claimKey };
+    throw e;
+  }
 }
-async function logFailed(patientId, phoneOrEmail, channel, code, dueDate, err) {
-  const key = `VACC:${code}:${isoDay(dueDate)}`;
+
+async function logChannel(patientId, phoneOrEmail, channel, code, dueDate, status, payloadOrErr) {
+  const key = vaccClaimKey(patientId, code, dueDate);
   try {
     await prisma.notificationLog.create({
       data: {
@@ -169,72 +278,89 @@ async function logFailed(patientId, phoneOrEmail, channel, code, dueDate, err) {
         recipient: `${phoneOrEmail} [${patientId}]`,
         template: WA_TPL_VACCINATION,
         direction: 'PATIENT',
-        status: 'FAILED',
-        payload: { dedupKey: key },
-        errorMessage: `${err?.message || 'unknown error'}${err?.code ? ` (code=${err.code})` : ''}`
+        status,
+        payload: status === 'SENT'   ? { ...(payloadOrErr || {}), dedupKey: key } : { dedupKey: key },
+        errorMessage: status === 'FAILED'
+          ? `${payloadOrErr?.message || 'unknown error'}${payloadOrErr?.code ? ` (code=${payloadOrErr.code})` : ''}`
+          : null
       }
     });
-  } catch (e) { logger.error('vaccine log-fail failed', e); }
+  } catch (e) { logger.error('vaccine channel-log failed', e); }
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
-
+// ─── Email body ────────────────────────────────────────────────────────
 function buildEmailHtml({ patient, vaccine, doctorName }) {
   const parent = patient.parentName || 'Parent';
-  return `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.55;max-width:600px;">
-    <div style="background:#4DA8FF;color:#fff;padding:18px 24px;border-radius:10px 10px 0 0;">
-      <h2 style="margin:0;font-size:20px;">Vaccination Reminder</h2>
-      <p style="margin:4px 0 0;font-size:13px;opacity:.9;">${CLINIC_NAME}</p>
-    </div>
-    <div style="border:1px solid #e6eef7;border-top:none;padding:22px 24px;border-radius:0 0 10px 10px;background:#fff;">
-      <p>Dear ${escapeHtml(parent)},</p>
-      <p>This is a friendly reminder that <b>${escapeHtml(patient.name)}</b>'s next vaccination
-        (<b>${escapeHtml(vaccine.name)}</b>) falls due on <b>${formatDateOnly(vaccine.dueDate)}</b>
-        as per the standard vaccination schedule for your child's age.</p>
-      <table style="border-collapse:collapse;margin:14px 0;">
-        <tr><td style="padding:6px 12px;background:#F1F8FF;font-weight:bold;">Vaccine</td>
-            <td style="padding:6px 12px;">${escapeHtml(vaccine.name)}</td></tr>
-        <tr><td style="padding:6px 12px;background:#F1F8FF;font-weight:bold;">Scheduled at</td>
-            <td style="padding:6px 12px;">${escapeHtml(vaccine.doseLabel)}</td></tr>
-        <tr><td style="padding:6px 12px;background:#F1F8FF;font-weight:bold;">Due date</td>
-            <td style="padding:6px 12px;">${formatDateOnly(vaccine.dueDate)}</td></tr>
-      </table>
-      <div style="background:#FFF8E6;border:1px solid #F2E3B3;border-radius:8px;padding:12px 14px;font-size:12.5px;color:#6b5b21;margin:16px 0;">
-        ${escapeHtml(DISCLAIMER)}
-      </div>
-      <p>To book a vaccination consultation with <b>${escapeHtml(doctorName)}</b>, or for more
-        information, please visit the Vaccination Portal:</p>
-      <p style="margin:22px 0;">
-        <a href="${VACCINATION_PORTAL_URL}"
-           style="display:inline-block;padding:12px 22px;background:#4DA8FF;color:#fff;
-                  border-radius:8px;text-decoration:none;font-weight:bold;">
-          📅 Visit the Vaccination Portal
-        </a>
-      </p>
-      <p style="font-size:12px;color:#666;">
-        If the button doesn't work, open this link in your browser:<br>
-        <a href="${VACCINATION_PORTAL_URL}" style="color:#4DA8FF;word-break:break-all;">${VACCINATION_PORTAL_URL}</a>
-      </p>
-      <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
-      <p style="font-size:12px;color:#888;margin:0;">
-        You are receiving this reminder because ${escapeHtml(patient.name)} is registered with ${CLINIC_NAME}.
-        Reply STOP to opt-out of vaccination reminders.
-      </p>
-    </div>
-  </div>`;
+  const dueStr = formatDateOnly(vaccine.dueDate);
+
+  const bodyHtml = `
+    <p>Dear ${esc(parent)},</p>
+    <p>This is a friendly reminder that <b>${esc(patient.name)}</b>'s
+       <b>${esc(vaccine.name)}</b> vaccination falls due on
+       <b>${esc(dueStr)}</b> as per the standard vaccination schedule for
+       your child's age.</p>
+
+    <table role="presentation" cellspacing="0" cellpadding="0"
+           style="border-collapse:collapse;margin:14px 0;width:100%;">
+      <tr>
+        <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;
+                   border:1px solid #E6EEF7;width:38%;">Child</td>
+        <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(patient.name)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;
+                   border:1px solid #E6EEF7;">Vaccine</td>
+        <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(vaccine.name)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;
+                   border:1px solid #E6EEF7;">Scheduled at</td>
+        <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(vaccine.doseLabel)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;
+                   border:1px solid #E6EEF7;">Due date</td>
+        <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(dueStr)}</td>
+      </tr>
+    </table>
+
+    <p><b>What you should do</b></p>
+    <ul style="margin:8px 0 4px 20px;padding:0;color:#1F2937;">
+      ${ACTION_GUIDANCE_LINES.map(l => `<li style="margin-bottom:6px;">${esc(l)}</li>`).join('')}
+    </ul>
+  `;
+
+  const disclaimer =
+    'This is an <b>automated reminder</b> generated based on your child\'s ' +
+    'recorded date of birth and standard vaccination schedules. ' +
+    'We do <b>not</b> maintain complete records of vaccinations administered ' +
+    'outside NeoKidsPro and therefore cannot confirm whether a vaccination ' +
+    'is pending, overdue, or already completed. If you have questions ' +
+    'regarding your child\'s vaccination status, please consult a qualified ' +
+    'pediatrician.';
+
+  return renderBrandedEmail({
+    preheader: `Vaccination reminder for ${patient.name} — ${vaccine.name} due ${dueStr}`,
+    headline: 'Vaccination Reminder',
+    subhead: `${vaccine.name} · Due ${dueStr}`,
+    bodyHtml,
+    disclaimer,
+    ctas: [
+      { label: '📅 Book on NeoKidsPro', url: NEOKIDSPRO_URL, color: '#4DA8FF' },
+      { label: '💉 Visit VaxiClinics',   url: VACCINATION_PORTAL_URL, color: '#1E6FBF' }
+    ],
+    footerNote:
+      `You are receiving this because <b>${esc(patient.name)}</b> is registered ` +
+      `with ${esc(CLINIC_NAME)}. This message is not medical advice.`
+  });
 }
 
-// Core: send both channels for ONE approaching vaccine
+// ─── Send both channels for ONE approaching vaccine ────────────────────
 async function sendReminderForVaccine(patient, vaccine) {
   const doctorName = PROVIDER_DOCTOR_NAME;
   const dueStr     = formatDateOnly(vaccine.dueDate);
 
-  // Meta template neokids_vacc_reminder_v2 (see docs/META_WHATSAPP_TEMPLATES.md):
+  // Meta template neokids_vacc_reminder_v2:
   //   Body: {{1}} Child  {{2}} Vaccine  {{3}} Due Date  {{4}} Doctor  {{5}} Disclaimer
   //   Button: static "Vaccination Portal" URL — no dynamic suffix.
   if (patient.phone) {
@@ -243,20 +369,24 @@ async function sendReminderForVaccine(patient, vaccine) {
         to: patient.phone,
         primaryTemplate:  WA_TPL_VACCINATION,
         fallbackTemplate: null,
-        bodyParams: [patient.name, vaccine.name, dueStr, doctorName, DISCLAIMER],
+        bodyParams: [patient.name, vaccine.name, dueStr, doctorName, DISCLAIMER_SHORT],
         urlButtonParam: null,
         plainTextFallback:
-          `Hello ${patient.parentName || 'Parent'}, this is a reminder that ${patient.name}'s ` +
-          `${vaccine.name} vaccination falls due on ${dueStr} as per the standard schedule. ` +
-          `${DISCLAIMER} Portal: ${VACCINATION_PORTAL_URL} — ${CLINIC_NAME}`
+          `Hello ${patient.parentName || 'Parent'}, this is a reminder that ` +
+          `${patient.name}'s ${vaccine.name} vaccination falls due on ${dueStr} ` +
+          `as per the standard vaccination schedule.\n\n` +
+          `${DISCLAIMER_SHORT}\n\n` +
+          `Book on NeoKidsPro: ${NEOKIDSPRO_URL}\n` +
+          `Vaccination portal (Mumbai): ${VACCINATION_PORTAL_URL}\n\n` +
+          `— ${CLINIC_NAME}`
       });
       if (result.ok) {
-        await logSent(patient.id, patient.phone, 'WHATSAPP', vaccine.code, vaccine.dueDate, result.response || { via: result.via });
+        await logChannel(patient.id, patient.phone, 'WHATSAPP', vaccine.code, vaccine.dueDate, 'SENT', result.response || { via: result.via });
       } else {
-        await logFailed(patient.id, patient.phone, 'WHATSAPP', vaccine.code, vaccine.dueDate, result.error);
+        await logChannel(patient.id, patient.phone, 'WHATSAPP', vaccine.code, vaccine.dueDate, 'FAILED', result.error);
       }
     } catch (e) {
-      await logFailed(patient.id, patient.phone, 'WHATSAPP', vaccine.code, vaccine.dueDate, e);
+      await logChannel(patient.id, patient.phone, 'WHATSAPP', vaccine.code, vaccine.dueDate, 'FAILED', e);
     }
   }
 
@@ -267,19 +397,41 @@ async function sendReminderForVaccine(patient, vaccine) {
         subject: `Vaccination reminder for ${patient.name} — ${vaccine.name} due ${dueStr}`,
         html: buildEmailHtml({ patient, vaccine, doctorName })
       });
-      await logSent(patient.id, patient.email, 'EMAIL', vaccine.code, vaccine.dueDate, { subject: 'vaccination_reminder' });
+      await logChannel(patient.id, patient.email, 'EMAIL', vaccine.code, vaccine.dueDate, 'SENT', { subject: 'vaccination_reminder' });
     } catch (e) {
       logger.error(`Vaccination email failed for patient ${patient.id}`, e);
-      await logFailed(patient.id, patient.email, 'EMAIL', vaccine.code, vaccine.dueDate, e);
+      await logChannel(patient.id, patient.email, 'EMAIL', vaccine.code, vaccine.dueDate, 'FAILED', e);
     }
   }
 }
 
-// Cron entrypoint — scan all patients with a DOB and dispatch reminders.
-async function processVaccinationReminders() {
+// ─── Cron / admin entrypoint ──────────────────────────────────────────
+/**
+ * Scan every patient with a DOB and dispatch reminders for vaccines
+ * approaching their due date, subject to:
+ *   • the ops disable switch,
+ *   • the parent-friendly delivery window (unless force=true),
+ *   • recipient eligibility (parent, not staff),
+ *   • one-and-only-one dedup per (patient, vaccine, dueDate).
+ *
+ * @param {object} opts
+ * @param {boolean} [opts.force=false]  Skip the delivery-window gate.
+ *                                      Used ONLY by manual admin trigger.
+ */
+async function processVaccinationReminders(opts = {}) {
+  const force = !!opts.force;
+
   if (process.env.VACC_REMINDERS_ENABLED === 'false') {
     logger.info('Vaccination reminder scan skipped — VACC_REMINDERS_ENABLED=false');
-    return { considered: 0, sent: 0, skippedDedup: 0, disabled: true };
+    return { considered: 0, sent: 0, skippedDedup: 0, disabled: true, skippedWindow: false };
+  }
+
+  if (!force && !isWithinDeliveryWindow()) {
+    logger.info(
+      `Vaccination reminder scan skipped — outside delivery window ` +
+      `(${WINDOW_START_HOUR}:00–${WINDOW_END_HOUR}:00 IST)`
+    );
+    return { considered: 0, sent: 0, skippedDedup: 0, skippedWindow: true, disabled: false };
   }
 
   const patients = await prisma.patient.findMany({
@@ -287,38 +439,64 @@ async function processVaccinationReminders() {
     select: { id: true, name: true, phone: true, email: true, parentName: true, dateOfBirth: true }
   });
 
-  let sent = 0, skippedDedup = 0, considered = 0;
+  let sent = 0, skippedDedup = 0, skippedIneligible = 0, considered = 0;
 
   for (const p of patients) {
+    if (!isEligibleRecipient(p)) { skippedIneligible += 1; continue; }
+
     const schedule    = computeSchedule(p.dateOfBirth);
     const approaching = pickApproaching(schedule);
     if (!approaching.length) continue;
 
     for (const vaccine of approaching) {
       considered += 1;
-      const already = await alreadySentToday(p.id, vaccine.code, vaccine.dueDate);
-      if (already) { skippedDedup += 1; continue; }
-      await sendReminderForVaccine(p, vaccine);
-      sent += 1;
+
+      // Atomic CLAIM before any send. This kills:
+      //   • two overlapping ticks both sending the same reminder,
+      //   • a parent booking multiple consultations getting duplicate
+      //     reminders for the same (vaccine, due date),
+      //   • the daily cron re-sending an already-sent reminder.
+      // Only when the child crosses into a NEW age bucket that has a
+      // NEW vaccine due, does a NEW claim key exist → NEW reminder.
+      const claim = await claimReminder(p.id, vaccine.code, vaccine.dueDate, p.phone || p.email);
+      if (!claim.ok) { skippedDedup += 1; continue; }
+
+      try {
+        await sendReminderForVaccine(p, vaccine);
+        sent += 1;
+      } catch (e) {
+        logger.error(`Vaccination dispatch failed for ${p.id}/${vaccine.code}`, e);
+      }
     }
   }
 
-  // Always logged (even when zero) so "did the scan run today?" is
-  // answerable from the logs without guesswork.
   logger.info(
-    `Vaccination reminder scan — patients=${patients.length} considered=${considered} ` +
-    `sent=${sent} skippedDedup=${skippedDedup}`
+    `Vaccination reminder scan — patients=${patients.length} ` +
+    `considered=${considered} sent=${sent} skippedDedup=${skippedDedup} ` +
+    `skippedIneligible=${skippedIneligible}`
   );
-  return { considered, sent, skippedDedup, patients: patients.length };
+  return {
+    considered, sent, skippedDedup, skippedIneligible,
+    patients: patients.length,
+    disabled: false, skippedWindow: false,
+    windowIST: `${WINDOW_START_HOUR}:00-${WINDOW_END_HOUR}:00`
+  };
 }
 
 module.exports = {
   SCHEDULE,
-  DISCLAIMER,
+  DISCLAIMER: DISCLAIMER_SHORT,
+  DISCLAIMER_SHORT,
+  ACTION_GUIDANCE_LINES,
   WA_TPL_VACCINATION,
   VACCINATION_PORTAL_URL,
+  NEOKIDSPRO_URL,
+  WINDOW_START_HOUR,
+  WINDOW_END_HOUR,
   computeSchedule,
   pickApproaching,
+  isWithinDeliveryWindow,
+  isEligibleRecipient,
   sendReminderForVaccine,
   processVaccinationReminders
 };

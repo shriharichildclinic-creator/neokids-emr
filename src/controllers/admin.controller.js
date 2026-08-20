@@ -482,13 +482,20 @@ exports.analytics = asyncHandler(async (req, res) => {
 
 // Manually trigger the vaccination reminder scan (bypasses the daily guard).
 // Used for end-to-end testing and for verifying WhatsApp/Email wiring.
+// By default this respects the parent-friendly delivery window (18:00–20:00 IST);
+// pass ?force=1 (or { force: true } in the body) to override it for QA.
 exports.runVaccinationReminders = asyncHandler(async (req, res) => {
   const vacc = require('../services/vaccination.service');
-  const result = await vacc.processVaccinationReminders();
+  const force = String(req.query.force || req.body?.force || '').toLowerCase() === '1'
+              || String(req.query.force || req.body?.force || '').toLowerCase() === 'true';
+  const result = await vacc.processVaccinationReminders({ force });
   res.json({
     ok: true,
     template: vacc.WA_TPL_VACCINATION,
     portalUrl: vacc.VACCINATION_PORTAL_URL,
+    neokidsUrl: vacc.NEOKIDSPRO_URL,
+    deliveryWindowIST: `${vacc.WINDOW_START_HOUR}:00-${vacc.WINDOW_END_HOUR}:00`,
+    forced: force,
     waProvider: (process.env.WA_PROVIDER || 'MOCK').toUpperCase(),
     smtpConfigured: !!process.env.SMTP_HOST,
     metaConfigured: !!(process.env.META_PHONE_NUMBER_ID && process.env.META_ACCESS_TOKEN),
