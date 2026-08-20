@@ -425,6 +425,157 @@ const medicalCertificateSchema = medicalCertificateBaseSchema.refine(
 // for an update but would fail the "create" refine).
 const medicalCertificateUpdateSchema = medicalCertificateBaseSchema.partial();
 
+// ─────────────────────────────────────────────────────────────────────
+// v4.0.0 — Receptionist, Medical Centre & Pharmacy module
+// ─────────────────────────────────────────────────────────────────────
+const staffStatus = z.enum(['ACTIVE', 'SUSPENDED']);
+const staffPhone = z.preprocess(
+  v => (typeof v === 'string' ? v.replace(/\D/g, '').replace(/^91/, '') : v),
+  phoneSchema
+);
+
+const createReceptionistSchema = z.object({
+  name: z.string().trim().min(2).max(120).pipe(safeText('name')),
+  phone: staffPhone,
+  email: z.string().trim().toLowerCase().email(),
+  password: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), strongPassword.optional()),
+  status: staffStatus.optional(),
+  canManageConsultations: z.boolean().optional(),
+  canManagePharmacy: z.boolean().optional(),
+  canIssueCertificates: z.boolean().optional(),
+  assignments: z.array(z.object({
+    doctorId: z.string().uuid(),
+    medicalCentreId: z.string().uuid()
+  })).min(1, 'Assign at least one doctor and medical centre').max(50)
+});
+
+const updateReceptionistSchema = z.object({
+  name: z.string().trim().min(2).max(120).pipe(safeText('name')).optional(),
+  phone: staffPhone.optional(),
+  password: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), strongPassword.optional()),
+  status: staffStatus.optional(),
+  canManageConsultations: z.boolean().optional(),
+  canManagePharmacy: z.boolean().optional(),
+  canIssueCertificates: z.boolean().optional(),
+  assignments: z.array(z.object({
+    doctorId: z.string().uuid(),
+    medicalCentreId: z.string().uuid()
+  })).min(1).max(50).optional()
+});
+
+const medicalCentreSchema = z.object({
+  name: z.string().trim().min(2).max(160).pipe(safeText('clinic name')),
+  address: safeOptStr('address'),
+  phone: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().optional()),
+  email: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().email().optional()),
+  city: safeOptStr('city'),
+  state: safeOptStr('state'),
+  pincode: safeOptStr('pincode'),
+  mapUrl: safeOptStr('mapUrl'),
+  isActive: z.boolean().optional()
+});
+const updateMedicalCentreSchema = medicalCentreSchema.partial();
+
+const createPharmacyUserSchema = z.object({
+  name: z.string().trim().min(2).max(120).pipe(safeText('name')),
+  phone: staffPhone,
+  email: z.string().trim().toLowerCase().email(),
+  password: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), strongPassword.optional()),
+  status: staffStatus.optional(),
+  medicalCentreId: z.string().uuid().optional(),
+  doctorIds: z.array(z.string().uuid()).min(1, 'Assign at least one doctor').max(50)
+});
+const updatePharmacyUserSchema = z.object({
+  name: z.string().trim().min(2).max(120).pipe(safeText('name')).optional(),
+  phone: staffPhone.optional(),
+  password: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), strongPassword.optional()),
+  status: staffStatus.optional(),
+  medicalCentreId: z.string().uuid().nullable().optional(),
+  doctorIds: z.array(z.string().uuid()).min(1).max(50).optional()
+});
+
+const staffPatientCreateSchema = z.object({
+  name: z.string().trim().min(2).max(120).pipe(safeText('name')),
+  phone: staffPhone,
+  email: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().email().optional()),
+  parentName: safeOptStr('parentName'),
+  dateOfBirth: dateSchema.optional().or(z.literal('')),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
+  address: safeOptStr('address')
+});
+
+const receptionistBookSchema = z.object({
+  patientId: z.string().uuid().optional(),
+  patientName: z.string().min(2).optional(),
+  phone: phoneSchema.optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  parentName: safeOptStr('parentName'),
+  dateOfBirth: dateSchema.optional().or(z.literal('')),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
+  address: safeOptStr('address'),
+  doctorId: z.string().uuid(),
+  medicalCentreId: z.string().uuid().optional(),
+  date: dateSchema,
+  startTime: timeSchema,
+  consultationType: z.enum(['ONLINE', 'OFFLINE']),
+  primaryProblem: z.string().min(3).max(2000),
+  isWalkIn: z.boolean().optional()
+}).refine(d => !!d.patientId || (!!d.patientName && !!d.phone), {
+  message: 'Either patientId or (patientName + phone) is required', path: ['patientId']
+});
+
+const receptionistInvoiceSchema = z.object({
+  appointmentId: z.string().uuid(),
+  amount: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().nonnegative().optional()),
+  paymentMethod: z.enum(['CASH', 'CARD', 'UPI', 'ONLINE', 'OTHER']).optional(),
+  notes: safeOptStr('notes')
+});
+
+const staffRescheduleSchema = z.object({
+  date: dateSchema,
+  startTime: timeSchema,
+  reason: z.string().min(3).max(500)
+});
+
+const pharmacyItemSchema = z.object({
+  name: z.string().trim().min(1).max(160).pipe(safeText('medicine name')),
+  batchNumber: safeOptStr('batchNumber'),
+  unit: safeOptStr('unit'),
+  mrp: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().nonnegative().optional()),
+  purchasePrice: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().nonnegative().optional()),
+  sellingPrice: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().nonnegative().optional()),
+  stock: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().int().min(0).optional()),
+  expiryDate: dateSchema.optional().or(z.literal('')),
+  manufacturer: safeOptStr('manufacturer'),
+  medicalCentreId: z.string().uuid().optional(),
+  isActive: z.boolean().optional()
+});
+const updatePharmacyItemSchema = pharmacyItemSchema.partial();
+
+const pharmacyStockSchema = z.object({
+  delta: z.preprocess(v => Number(v), z.number().int().refine(v => v !== 0, 'delta cannot be 0')),
+  reason: safeOptStr('reason')
+});
+
+const pharmacyBillSchema = z.object({
+  patientId: z.string().uuid().optional(),
+  customerName: safeOptStr('customerName'),
+  customerPhone: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().optional()),
+  prescriptionId: z.string().uuid().optional(),
+  doctorId: z.string().uuid().optional(),
+  medicalCentreId: z.string().uuid().optional(),
+  paymentMethod: z.enum(['CASH', 'CARD', 'UPI', 'ONLINE', 'OTHER']).optional(),
+  discount: z.preprocess(v => (v === '' || v === null || v === undefined ? 0 : Number(v)), z.number().nonnegative().optional()),
+  tax: z.preprocess(v => (v === '' || v === null || v === undefined ? 0 : Number(v)), z.number().nonnegative().optional()),
+  notes: safeOptStr('notes'),
+  items: z.array(z.object({
+    itemId: z.string().uuid().optional(),
+    name: z.string().min(1),
+    quantity: z.preprocess(v => Number(v), z.number().int().min(1)),
+    unitPrice: z.preprocess(v => Number(v), z.number().nonnegative())
+  })).min(1, 'At least one item is required')
+});
+
 module.exports = {
   loginSchema,
   slotQuerySchema,
@@ -445,5 +596,19 @@ module.exports = {
   previousRecordSchema,
   drawnSignatureSchema,
   medicalCertificateSchema,
-  medicalCertificateUpdateSchema
+  medicalCertificateUpdateSchema,
+  createReceptionistSchema,
+  updateReceptionistSchema,
+  medicalCentreSchema,
+  updateMedicalCentreSchema,
+  createPharmacyUserSchema,
+  updatePharmacyUserSchema,
+  staffPatientCreateSchema,
+  receptionistBookSchema,
+  receptionistInvoiceSchema,
+  staffRescheduleSchema,
+  pharmacyItemSchema,
+  updatePharmacyItemSchema,
+  pharmacyStockSchema,
+  pharmacyBillSchema
 };

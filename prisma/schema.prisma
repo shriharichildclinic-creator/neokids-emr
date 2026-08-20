@@ -64,6 +64,9 @@ model Doctor {
   settlements  DoctorSettlement[]
   kyc          DoctorKyc?
   certificates MedicalCertificate[]
+  receptionistAssignments ReceptionistAssignment[]
+  pharmacyUserDoctors PharmacyUserDoctor[]
+  pharmacyBills PharmacyBill[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -84,6 +87,7 @@ model Patient {
   appointments Appointment[]
   previousRecords PreviousRecord[]
   certificates MedicalCertificate[]
+  pharmacyBills PharmacyBill[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -147,6 +151,13 @@ model Appointment {
   addedById              String?
   addedByRole            String?
 
+  arrivedAt              DateTime?
+  medicalCentreId        String?
+  createdByReceptionistId String?
+  createdByReceptionist  Receptionist? @relation(fields: [createdByReceptionistId], references: [id], onDelete: SetNull)
+  medicalCentre          MedicalCentre? @relation("CentreAppointments", fields: [medicalCentreId], references: [id], onDelete: SetNull)
+  consultationInvoice    ConsultationInvoice?
+
   doctor            Doctor        @relation(fields: [doctorId], references: [id])
   patient           Patient       @relation(fields: [patientId], references: [id])
   prescription      Prescription?
@@ -166,6 +177,9 @@ model Appointment {
   @@index([doctorId, paymentStatus, date])
   @@index([settlementId])
   @@index([source])
+  @@index([medicalCentreId])
+  @@index([createdByReceptionistId])
+  @@index([arrivedAt])
   @@map("appointments")
 }
 
@@ -185,6 +199,8 @@ model Prescription {
   // Feature 1A — flag if this prescription record represents a manually
   // uploaded historical prescription (as opposed to a system-generated one).
   source         String      @default("NEOKIDSPRO")
+  createdById    String?
+  createdByRole  String?
   appointment    Appointment @relation(fields: [appointmentId], references: [id])
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -334,6 +350,8 @@ model MedicalCertificate {
   issuedAt          DateTime  @default(now())
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  issuedById        String?
+  issuedByRole      String?
 
   appointment       Appointment? @relation(fields: [appointmentId], references: [id])
   patient           Patient      @relation(fields: [patientId], references: [id])
@@ -429,6 +447,241 @@ model DoctorSettlement {
   @@index([status])
   @@index([doctorId, status])
   @@map("doctor_settlements")
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// v4.0.0 — Receptionist, Medical Centre & Pharmacy module
+// ═════════════════════════════════════════════════════════════════════
+
+model MedicalCentre {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?  @db.Text
+  phone     String?
+  email     String?
+  city      String?
+  state     String?
+  pincode   String?
+  mapUrl    String?  @db.Text
+  isActive  Boolean  @default(true)
+
+  receptionistAssignments ReceptionistAssignment[]
+  appointments            Appointment[]        @relation("CentreAppointments")
+  pharmacyUsers           PharmacyUser[]
+  pharmacyItems           PharmacyItem[]
+  pharmacyBills           PharmacyBill[]
+  consultationInvoices    ConsultationInvoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("medical_centres")
+}
+
+model Receptionist {
+  id                 String    @id @default(uuid())
+  name               String
+  phone              String
+  email              String    @unique
+  passwordHash       String
+  status             String    @default("ACTIVE") // ACTIVE | SUSPENDED
+  canManageConsultations Boolean @default(true)
+  canManagePharmacy  Boolean   @default(false)
+  canIssueCertificates Boolean @default(false)
+  mustChangePassword Boolean   @default(false)
+  deletedAt          DateTime?
+
+  assignments         ReceptionistAssignment[]
+  createdAppointments Appointment[]
+  consultationInvoices ConsultationInvoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@map("receptionists")
+}
+
+model ReceptionistAssignment {
+  id              String        @id @default(uuid())
+  receptionistId  String
+  doctorId        String
+  medicalCentreId String
+  createdAt       DateTime      @default(now())
+
+  receptionist  Receptionist  @relation(fields: [receptionistId], references: [id], onDelete: Cascade)
+  doctor        Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  medicalCentre MedicalCentre @relation(fields: [medicalCentreId], references: [id], onDelete: Cascade)
+
+  @@unique([receptionistId, doctorId, medicalCentreId])
+  @@index([doctorId])
+  @@index([medicalCentreId])
+  @@map("receptionist_assignments")
+}
+
+model PharmacyUser {
+  id               String    @id @default(uuid())
+  name             String
+  phone            String
+  email            String    @unique
+  passwordHash     String
+  status           String    @default("ACTIVE")
+  medicalCentreId  String?
+  mustChangePassword Boolean @default(false)
+  deletedAt        DateTime?
+
+  medicalCentre MedicalCentre?      @relation(fields: [medicalCentreId], references: [id], onDelete: SetNull)
+  doctors       PharmacyUserDoctor[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@index([medicalCentreId])
+  @@map("pharmacy_users")
+}
+
+model PharmacyUserDoctor {
+  id             String   @id @default(uuid())
+  pharmacyUserId String
+  doctorId       String
+  createdAt      DateTime @default(now())
+
+  pharmacyUser PharmacyUser @relation(fields: [pharmacyUserId], references: [id], onDelete: Cascade)
+  doctor       Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([pharmacyUserId, doctorId])
+  @@index([doctorId])
+  @@map("pharmacy_user_doctors")
+}
+
+model ConsultationInvoice {
+  id              String   @id @default(uuid())
+  invoiceNumber   String   @unique
+  appointmentId   String   @unique
+  doctorId        String
+  patientId       String
+  receptionistId  String?
+  medicalCentreId String?
+  amount          Decimal  @db.Decimal(10, 2)
+  status          String   @default("PAID") // PAID | PENDING
+  paymentMethod   String   @default("CASH")
+  notes           String?  @db.Text
+  pdfUrl          String?
+
+  appointment   Appointment    @relation(fields: [appointmentId], references: [id])
+  receptionist  Receptionist?  @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
+  medicalCentre MedicalCentre? @relation(fields: [medicalCentreId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([doctorId])
+  @@index([medicalCentreId])
+  @@index([patientId])
+  @@index([createdAt])
+  @@map("consultation_invoices")
+}
+
+model PharmacyItem {
+  id              String    @id @default(uuid())
+  medicalCentreId String?
+  name            String
+  batchNumber     String?
+  unit            String    @default("strip")
+  mrp             Decimal   @default(0) @db.Decimal(10, 2)
+  purchasePrice   Decimal   @default(0) @db.Decimal(10, 2)
+  sellingPrice    Decimal   @default(0) @db.Decimal(10, 2)
+  stock           Int       @default(0)
+  expiryDate      DateTime?
+  manufacturer    String?
+  isActive        Boolean   @default(true)
+
+  medicalCentre MedicalCentre?     @relation(fields: [medicalCentreId], references: [id], onDelete: SetNull)
+  billItems     PharmacyBillItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([medicalCentreId])
+  @@index([name])
+  @@index([expiryDate])
+  @@map("pharmacy_items")
+}
+
+model PharmacyBill {
+  id              String   @id @default(uuid())
+  billNumber      String   @unique
+  medicalCentreId String?
+  patientId       String?
+  prescriptionId  String?
+  doctorId        String?
+  createdById     String?
+  createdByRole   String?
+  customerName    String?
+  customerPhone   String?
+  subtotal        Decimal  @default(0) @db.Decimal(10, 2)
+  discount        Decimal  @default(0) @db.Decimal(10, 2)
+  tax             Decimal  @default(0) @db.Decimal(10, 2)
+  total           Decimal  @default(0) @db.Decimal(10, 2)
+  paymentMethod   String   @default("CASH")
+  status          String   @default("PAID")
+  pdfUrl          String?
+  notes           String?  @db.Text
+
+  medicalCentre MedicalCentre?     @relation(fields: [medicalCentreId], references: [id], onDelete: SetNull)
+  doctor        Doctor?            @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  patient       Patient?           @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  items         PharmacyBillItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([medicalCentreId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([createdAt])
+  @@map("pharmacy_bills")
+}
+
+model PharmacyBillItem {
+  id        String   @id @default(uuid())
+  billId    String
+  itemId    String?
+  name      String
+  quantity  Int
+  unitPrice Decimal  @default(0) @db.Decimal(10, 2)
+  total     Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  bill PharmacyBill  @relation(fields: [billId], references: [id], onDelete: Cascade)
+  item PharmacyItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([billId])
+  @@index([itemId])
+  @@map("pharmacy_bill_items")
+}
+
+model StaffAuditLog {
+  id              String   @id @default(uuid())
+  actorId         String
+  actorRole       String
+  actorName       String?
+  action          String
+  entityType      String?
+  entityId        String?
+  summary         String?
+  meta            Json?
+  medicalCentreId String?
+  doctorId        String?
+  createdAt       DateTime @default(now())
+
+  @@index([actorId])
+  @@index([actorRole])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("staff_audit_logs")
 }
 
 model DoctorKyc {

@@ -130,11 +130,17 @@ function paymentBadge(p){
 }
 // Feature 1 — visual distinction for manually added (historical) records.
 function sourceBadge(source){
+  if (source === 'CLINIC_RECEPTION')
+    return `<span class="np-badge np-badge--violet" title="Booked at the clinic front desk"><span class="np-badge__dot"></span>Clinic reception</span>`;
+  if (source === 'NEOKIDSPRO')
+    return `<span class="np-badge np-badge--mint" title="Booked online by the patient"><span class="np-badge__dot"></span>NeoKidsPro online</span>`;
   if (source === 'MANUAL')
     return `<span class="np-badge np-badge--purple" title="Added manually by clinic staff"><span class="np-badge__dot"></span>Manual Record</span>`;
   return '';
 }
 function rxSourceBadge(source){
+  if (source === 'CLINIC_RECEPTION')
+    return `<span class="np-badge np-badge--violet" title="Entered at the clinic front desk"><span class="np-badge__dot"></span>Entered by reception</span>`;
   if (source === 'MANUAL')
     return `<span class="np-badge np-badge--purple" title="Uploaded by clinic staff (not generated in NeoKidsPro)"><span class="np-badge__dot"></span>Historical Rx</span>`;
   return '';
@@ -1172,7 +1178,7 @@ async function loadPatientHistoryInto(slot, patientId){
     const rxHtml = (h.prescriptions || []).map(rx => `
       <article class="np-history-rx">
         <div class="np-row" style="justify-content:space-between; align-items:center; margin-bottom:.25rem;">
-          <b>${escapeHtml(fmtDate(rx.visitDate))}</b> ${rxSourceBadge(rx.source)}
+          <b>${escapeHtml(fmtDate(rx.visitDate))}</b> ${rxSourceBadge(rx.source)}${rx.createdByRole === 'RECEPTIONIST' ? ' <span class="np-badge np-badge--violet" title="Entered at the clinic front desk"><span class="np-badge__dot"></span>by reception</span>' : ''}
           ${rx.pdfUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(rx.pdfUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
           ${rx.manualUrl ? `<a class="np-btn np-btn--sm" href="${escapeHtml(rx.manualUrl)}" target="_blank" rel="noopener">View uploaded file</a>` : ''}
         </div>

@@ -88,6 +88,18 @@
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
           Certificates
         </button>
+        <button class="np-nav-item" data-view="centresView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4"/></svg>
+          Medical Centres
+        </button>
+        <button class="np-nav-item" data-view="receptionistsView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+          Receptionists
+        </button>
+        <button class="np-nav-item" data-view="pharmUsersView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v4M14 2v4M8 6h8v4a4 4 0 0 1-8 0V6z"/><path d="M12 14v8"/></svg>
+          Pharmacy Users
+        </button>
 
         <div class="np-sidebar__section">Finance</div>
         <button class="np-nav-item" data-view="revenueView" type="button">
@@ -103,12 +115,20 @@
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           Invoices
         </button>
+        <button class="np-nav-item" data-view="recInvoicesView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
+          Reception Invoices
+        </button>
 
         <div class="np-sidebar__section">Monitor</div>
         <button class="np-nav-item" data-view="notifView" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           Notification Logs
           <span id="navBadgeFailed" class="np-nav-badge hidden">0</span>
+        </button>
+        <button class="np-nav-item" data-view="auditView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+          Staff Audit
         </button>
 
         <div class="np-sidebar__section">Account</div>
@@ -531,10 +551,78 @@
           </div>
         </section>
 
+<section id="centresView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Medical Centres</div><div class="np-panel__subtitle">Clinics & branches — used for receptionist/pharmacy assignment</div></div>
+              <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="openCentreModal()">+ Add Centre</button>
+            </div>
+            <div class="np-panel__body"><div id="centresList"></div></div>
+          </div>
+        </section>
+
+        <section id="receptionistsView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Receptionists</div><div class="np-panel__subtitle">Front-desk accounts — created & managed by Admin only</div></div>
+              <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="openReceptionistModal()">+ Add Receptionist</button>
+            </div>
+            <div class="np-panel__body"><div id="receptionistsList"></div></div>
+          </div>
+        </section>
+
+        <section id="pharmUsersView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Pharmacy Users</div><div class="np-panel__subtitle">Medical-store accounts — separate from receptionist permissions</div></div>
+              <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="openPharmUserModal()">+ Add Pharmacy User</button>
+            </div>
+            <div class="np-panel__body"><div id="pharmUsersList"></div></div>
+          </div>
+        </section>
+
+        <section id="recInvoicesView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Reception Consultation Invoices</div><div class="np-panel__subtitle">Invoices generated at clinic front desks</div></div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="loadRecInvoices()">Refresh</button>
+            </div>
+            <div class="np-panel__body">
+              <div class="np-table-wrap"><table class="np-table">
+                <thead><tr><th>Invoice #</th><th>Patient</th><th>Doctor</th><th>Clinic</th><th>Receptionist</th><th style="text-align:right">Amount</th><th>Date</th><th style="text-align:right">PDF</th></tr></thead>
+                <tbody id="recInvTbody"></tbody>
+              </table></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="auditView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Staff Audit Trail</div><div class="np-panel__subtitle">Who created appointments, registered patients, generated invoices & modified records</div></div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="loadAudit()">Refresh</button>
+            </div>
+            <div class="np-panel__body">
+              <form id="auditFilters" class="np-filterbar" novalidate>
+                <select id="auditRole" class="np-select"><option value="">All roles</option><option value="ADMIN">Admin</option><option value="RECEPTIONIST">Receptionist</option><option value="PHARMACY">Pharmacy</option></select>
+                <select id="auditAction" class="np-select"><option value="">All actions</option><option value="APPOINTMENT_CREATED">Appointment created</option><option value="APPOINTMENT_RESCHEDULED">Rescheduled</option><option value="APPOINTMENT_CANCELLED">Cancelled</option><option value="PATIENT_REGISTERED">Patient registered</option><option value="PATIENT_ARRIVED">Patient arrived</option><option value="INVOICE_GENERATED">Invoice generated</option><option value="INVOICE_SENT">Invoice sent</option><option value="CERTIFICATE_ISSUED">Certificate issued</option><option value="PRESCRIPTION_CREATED">Prescription created</option><option value="PHARMACY_BILL_CREATED">Pharmacy bill</option></select>
+                <input id="auditFrom" type="date" class="np-select"/><input id="auditTo" type="date" class="np-select"/>
+                <button class="np-btn np-btn--primary np-btn--sm" type="submit">Apply</button>
+              </form>
+              <div class="np-table-wrap"><table class="np-table">
+                <thead><tr><th>When</th><th>Actor</th><th>Role</th><th>Action</th><th>Summary</th></tr></thead>
+                <tbody id="auditTbody"></tbody>
+              </table></div>
+            </div>
+          </div>
+        </section>
+
       </div>
     </main>
   </div>
 </div>
+
+<div id="staffModalHost"></div>
 
 
 <div id="admCertModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="admCertModalTitle">
@@ -794,3 +882,4 @@
 <script src="/assets/np-ui.js"></script>
 <script src="app.js"></script>
 <script src="finance.js"></script>
+<script src="staff.js"></script>

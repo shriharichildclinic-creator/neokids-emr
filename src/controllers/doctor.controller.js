@@ -319,6 +319,8 @@ exports.patientHistory = asyncHandler(async (req, res) => {
       advice: v.prescription.advice,
       investigations: v.prescription.investigations,
       followUpDate: v.prescription.followUpDate,
+      // v4.0.0 — who entered the prescription (doctor vs clinic reception)
+      createdByRole: v.prescription.createdByRole || null,
       // Feature 1A — flag + uploaded-file link for historical prescriptions
       source: v.prescription.source || 'NEOKIDSPRO',
       manualUrl: v.manualPrescriptionUrl || null,
@@ -431,7 +433,7 @@ exports.createPrescription = asyncHandler(async (req, res) => {
   const rx = await prisma.prescription.upsert({
     where: { appointmentId: id },
     update: data,
-    create: { appointmentId: id, ...data }
+    create: { appointmentId: id, ...data, createdById: req.user.id, createdByRole: 'DOCTOR' }
   });
 
   const delivery = await automation.onPrescriptionCreated(appt, rx);

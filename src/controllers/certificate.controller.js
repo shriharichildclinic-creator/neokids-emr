@@ -410,3 +410,8 @@ exports.send = asyncHandler(async (req, res) => {
   });
   res.json({ success: true, delivery });
 });
+
+// v4.0.0 — internals reused by the Receptionist Portal certificate issuer
+// (same PDF + delivery pipeline as the doctor flow, attribution stamped by
+// the caller).
+exports._internal = { deliverCertificate, nextCertNumber, TEMPLATES };

@@ -708,11 +708,193 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// v4.0.0 — Consultation invoice generated from the Receptionist Portal.
+// Intentionally mirrors generateInvoice's layout (same header band, mint
+// table header, signature block, footer) so front-desk invoices are
+// visually identical to the payment-generated ones.
+// ─────────────────────────────────────────────────────────────────────
+async function generateConsultationInvoice({ invoice, appointment, patient, doctor, medicalCentre }) {
+  ensureDir(path.join(STORAGE, 'invoices'));
+  const filename = `consultation_invoice_${invoice.id}.pdf`;
+  const filepath = path.join(STORAGE, 'invoices', filename);
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
+    const stream = fs.createWriteStream(filepath);
+    doc.pipe(stream);
+    drawHeader(doc, 'INVOICE');
+
+    doc.fontSize(11).font('Helvetica').fillColor('#333');
+    doc.text(`Invoice No: ${invoice.invoiceNumber}`, 50, 110);
+    doc.text(`Date: ${dayjs(invoice.createdAt).format('DD MMM YYYY')}`, 50, 125);
+    doc.text(`Payment: ${invoice.paymentMethod || 'CASH'} · ${invoice.status}`, 50, 140);
+
+    doc.fontSize(12).font('Helvetica-Bold').text('Bill To:', 50, 175);
+    doc.fontSize(11).font('Helvetica');
+    doc.text(patient.name, 50, 192);
+    doc.text(`Phone: +91 ${patient.phone}`, 50, 207);
+    if (patient.email) doc.text(`Email: ${patient.email}`, 50, 222);
+
+    doc.fontSize(12).font('Helvetica-Bold').text('Consultation By:', 320, 175);
+    doc.fontSize(11).font('Helvetica');
+    doc.text(`Dr. ${doctor.name}`, 320, 192);
+    doc.text(doctor.specialization || 'Pediatrician', 320, 207);
+    doc.fillColor('#555').fontSize(9)
+       .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
+    doc.fillColor('#333');
+
+    const clinicName = (medicalCentre && medicalCentre.name) || doctor.clinicName || null;
+    const clinicAddr = (medicalCentre && medicalCentre.address) || doctor.clinicAddress || null;
+    let cy = 245;
+    if (clinicName) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#555').text(`Clinic: ${clinicName}`, 50, cy);
+      cy += 12;
+      if (clinicAddr) {
+        doc.font('Helvetica').text(String(clinicAddr), 50, cy, { width: 300 });
+        cy += 24;
+      }
+    }
+    if (invoice.receptionist && invoice.receptionist.name) {
+      doc.fontSize(9).font('Helvetica').fillColor('#777').text(`Billed by: ${invoice.receptionist.name} (Clinic Reception)`, 50, cy);
+      cy += 12;
+    }
+
+    const tableTop = Math.max(285, cy + 12);
+    doc.rect(50, tableTop, doc.page.width - 100, 25).fill(BRAND_MINT);
+    doc.fillColor('#000').fontSize(11).font('Helvetica-Bold');
+    doc.text('Description', 60, tableTop + 8);
+    doc.text('Date', 280, tableTop + 8);
+    doc.text('Type', 380, tableTop + 8);
+    doc.text('Amount (₹)', 460, tableTop + 8);
+
+    doc.font('Helvetica').fontSize(11);
+    const rowY = tableTop + 35;
+    doc.text('Consultation Fee', 60, rowY);
+    doc.text(dayjs(appointment.date).format('DD MMM YYYY'), 280, rowY);
+    doc.text(appointment.consultationType, 380, rowY);
+    doc.text(`${Number(invoice.amount).toFixed(2)}`, 460, rowY);
+
+    doc.moveTo(50, rowY + 30).lineTo(doc.page.width - 50, rowY + 30).stroke();
+    doc.font('Helvetica-Bold').fontSize(12);
+    doc.text('Total Paid:', 380, rowY + 45);
+    doc.text(`₹ ${Number(invoice.amount).toFixed(2)}`, 460, rowY + 45);
+
+    drawSignatureBlock(doc, doctor, { y: doc.page.height - 185 });
+
+    doc.fontSize(9).font('Helvetica').fillColor('#888');
+    doc.text('Thank you for choosing NeoKidsPro. This is a computer-generated invoice.',
+             50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
+
+    doc.end();
+    stream.on('finish', () => resolve({
+      filepath, filename,
+      url: `/api/files/consultation-invoices/${invoice.id}.pdf`
+    }));
+    stream.on('error', reject);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// v4.0.0 — Pharmacy bill invoice. Same visual system as the consultation
+// invoice, but the line-item table is medicine rows (name / qty / rate /
+// amount) and totals include discount + tax.
+// ─────────────────────────────────────────────────────────────────────
+async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
+  ensureDir(path.join(STORAGE, 'pharmacy-invoices'));
+  const filename = `pharmacy_invoice_${bill.id}.pdf`;
+  const filepath = path.join(STORAGE, 'pharmacy-invoices', filename);
+
+  const centreName = (medicalCentre && medicalCentre.name) || 'NeoKidsPro Pharmacy';
+  const centreAddr = medicalCentre && medicalCentre.address;
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
+    const stream = fs.createWriteStream(filepath);
+    doc.pipe(stream);
+    drawHeader(doc, 'PHARMACY BILL');
+
+    doc.fontSize(11).font('Helvetica').fillColor('#333');
+    doc.text(`Bill No: ${bill.billNumber}`, 50, 110);
+    doc.text(`Date: ${dayjs(bill.createdAt).format('DD MMM YYYY, hh:mm A')}`, 50, 125);
+    doc.text(`Payment: ${bill.paymentMethod || 'CASH'}`, 50, 140);
+
+    doc.fontSize(12).font('Helvetica-Bold').text('Customer:', 50, 175);
+    doc.fontSize(11).font('Helvetica');
+    doc.text(bill.customerName || (bill.patient && bill.patient.name) || 'Walk-in customer', 50, 192);
+    const phone = bill.customerPhone || (bill.patient && bill.patient.phone);
+    if (phone) doc.text(`Phone: +91 ${phone}`, 50, 207);
+
+    doc.fontSize(12).font('Helvetica-Bold').text('Store:', 320, 175);
+    doc.fontSize(11).font('Helvetica');
+    doc.text(centreName, 320, 192, { width: 225 });
+    if (centreAddr) doc.fontSize(9).fillColor('#555').text(String(centreAddr), 320, 207, { width: 225 });
+    if (doctor) doc.fillColor('#555').fontSize(9).text(`Ref. Doctor: Dr. ${doctor.name}`, 320, 235, { width: 225 });
+    doc.fillColor('#333');
+
+    const tableTop = 270;
+    doc.rect(50, tableTop, doc.page.width - 100, 25).fill(BRAND_MINT);
+    doc.fillColor('#000').fontSize(11).font('Helvetica-Bold');
+    doc.text('Medicine', 60, tableTop + 8);
+    doc.text('Qty', 330, tableTop + 8);
+    doc.text('Rate (₹)', 390, tableTop + 8);
+    doc.text('Amount (₹)', 470, tableTop + 8);
+
+    doc.font('Helvetica').fontSize(10);
+    let rowY = tableTop + 32;
+    const items = Array.isArray(bill.items) ? bill.items : [];
+    items.forEach((it, i) => {
+      if (i % 2 === 0) {
+        doc.rect(50, rowY - 2, doc.page.width - 100, 20).fill('#F8FAFB').fillColor('#000');
+      }
+      doc.text(String(it.name || ''), 60, rowY + 3, { width: 260, lineBreak: false, ellipsis: true });
+      doc.text(String(it.quantity), 330, rowY + 3);
+      doc.text(Number(it.unitPrice).toFixed(2), 390, rowY + 3);
+      doc.text(Number(it.total).toFixed(2), 470, rowY + 3);
+      rowY += 20;
+    });
+
+    rowY += 10;
+    doc.moveTo(50, rowY).lineTo(doc.page.width - 50, rowY).stroke();
+    rowY += 12;
+    doc.font('Helvetica').fontSize(11).fillColor('#333');
+    doc.text('Subtotal:', 380, rowY);
+    doc.text(`₹ ${Number(bill.subtotal).toFixed(2)}`, 460, rowY);
+    rowY += 16;
+    if (Number(bill.discount) > 0) {
+      doc.text('Discount:', 380, rowY);
+      doc.text(`- ₹ ${Number(bill.discount).toFixed(2)}`, 460, rowY);
+      rowY += 16;
+    }
+    if (Number(bill.tax) > 0) {
+      doc.text('Tax:', 380, rowY);
+      doc.text(`₹ ${Number(bill.tax).toFixed(2)}`, 460, rowY);
+      rowY += 16;
+    }
+    doc.font('Helvetica-Bold').fontSize(12).fillColor('#000');
+    doc.text('Total Paid:', 380, rowY + 6);
+    doc.text(`₹ ${Number(bill.total).toFixed(2)}`, 460, rowY + 6);
+
+    doc.fontSize(9).font('Helvetica').fillColor('#888');
+    doc.text('Thank you for your purchase. This is a computer-generated bill. Medicines once sold are subject to store exchange policy.',
+             50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
+
+    doc.end();
+    stream.on('finish', () => resolve({
+      filepath, filename,
+      url: `/api/files/pharmacy-invoices/${bill.id}.pdf`
+    }));
+    stream.on('error', reject);
+  });
+}
+
 module.exports = {
   generateInvoice,
   generatePrescription,
   generateSettlementInvoice,
   generateMedicalCertificate,
+  generateConsultationInvoice,
+  generatePharmacyInvoice,
   // exported for tests / future document types
   resolveSignaturePath,
   drawSignatureBlock

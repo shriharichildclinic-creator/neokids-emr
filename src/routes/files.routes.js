@@ -103,6 +103,69 @@ async function isAllowed(cred, kind, appointmentId) {
     return !!owns;
   }
 
+  // v4.0.0 — receptionist access is scoped to their assigned doctors; a
+  // pharmacy-invoice additionally requires the canManagePharmacy toggle.
+  if (role === 'RECEPTIONIST') {
+    if (kind === 'consultation-invoice') {
+      const inv = await prisma.consultationInvoice.findUnique({
+        where: { id: appointmentId },
+        select: { receptionistId: true, doctorId: true }
+      });
+      if (!inv) return false;
+      if (inv.receptionistId === cred.user.id) return true;
+      const asn = await prisma.receptionistAssignment.findFirst({
+        where: { receptionistId: cred.user.id, doctorId: inv.doctorId },
+        select: { id: true }
+      });
+      return !!asn;
+    }
+    if (kind === 'pharmacy-invoice') {
+      const rec = await prisma.receptionist.findFirst({
+        where: { id: cred.user.id, deletedAt: null },
+        select: { canManagePharmacy: true }
+      });
+      return !!rec && rec.canManagePharmacy;
+    }
+    if (kind === 'certificate') {
+      const cert = await prisma.medicalCertificate.findUnique({
+        where: { id: appointmentId },
+        select: { doctorId: true, issuedById: true, issuedByRole: true }
+      });
+      if (!cert) return false;
+      if (cert.issuedByRole === 'RECEPTIONIST' && cert.issuedById === cred.user.id) return true;
+      const asn = await prisma.receptionistAssignment.findFirst({
+        where: { receptionistId: cred.user.id, doctorId: cert.doctorId },
+        select: { id: true }
+      });
+      return !!asn;
+    }
+    const appt = await prisma.appointment.findFirst({
+      where: { id: appointmentId },
+      select: { doctorId: true }
+    });
+    if (!appt) return false;
+    const asn = await prisma.receptionistAssignment.findFirst({
+      where: { receptionistId: cred.user.id, doctorId: appt.doctorId },
+      select: { id: true }
+    });
+    return !!asn;
+  }
+
+  if (role === 'PHARMACY') {
+    if (kind !== 'pharmacy-invoice') return false;
+    const bill = await prisma.pharmacyBill.findUnique({
+      where: { id: appointmentId },
+      select: { medicalCentreId: true }
+    });
+    if (!bill) return false;
+    if (!bill.medicalCentreId) return true;
+    const pu = await prisma.pharmacyUser.findFirst({
+      where: { id: cred.user.id, deletedAt: null },
+      select: { medicalCentreId: true }
+    });
+    return !!pu && pu.medicalCentreId === bill.medicalCentreId;
+  }
+
   return false;
 }
 
@@ -348,6 +411,54 @@ router.get('/previous-records/:id', asyncHandler(async (req, res) => {
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   res.setHeader('Cache-Control', 'private, no-store, max-age=0');
   fs.createReadStream(filepath).pipe(res);
+}));
+
+/* ─────────────────────────────────────────────────────────────────────
+   GET /api/files/consultation-invoices/:idAndExt   (v4.0.0)
+   Receptionist-issued consultation invoice PDFs.
+   ───────────────────────────────────────────────────────────────────── */
+router.get('/consultation-invoices/:idAndExt', asyncHandler(async (req, res) => {
+  const id = String(req.params.idAndExt || '').replace(/\.pdf$/i, '');
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid invoice id' });
+
+  const cred = readCredential(req);
+  const allowed = await isAllowed(cred, 'consultation-invoice', id);
+  if (!allowed) return res.status(401).json({ error: 'Authentication required' });
+
+  const filepath = path.join(STORAGE, 'invoices', `consultation_invoice_${id}.pdf`);
+  if (!fs.existsSync(filepath)) {
+    try {
+      const staffDocs = require('../services/staff-docs.service');
+      await staffDocs.generateAndStoreInvoicePdf(id, null);
+    } catch (e) {
+      logger.error('consultation invoice regenerate failed', { id, err: e.message });
+    }
+  }
+  return sendPdf(res, filepath, `consultation_invoice_${id}.pdf`);
+}));
+
+/* ─────────────────────────────────────────────────────────────────────
+   GET /api/files/pharmacy-invoices/:idAndExt   (v4.0.0)
+   Pharmacy bill PDFs.
+   ───────────────────────────────────────────────────────────────────── */
+router.get('/pharmacy-invoices/:idAndExt', asyncHandler(async (req, res) => {
+  const id = String(req.params.idAndExt || '').replace(/\.pdf$/i, '');
+  if (!UUID_RE.test(id)) return res.status(400).json({ error: 'Invalid bill id' });
+
+  const cred = readCredential(req);
+  const allowed = await isAllowed(cred, 'pharmacy-invoice', id);
+  if (!allowed) return res.status(401).json({ error: 'Authentication required' });
+
+  const filepath = path.join(STORAGE, 'pharmacy-invoices', `pharmacy_invoice_${id}.pdf`);
+  if (!fs.existsSync(filepath)) {
+    try {
+      const staffDocs = require('../services/staff-docs.service');
+      await staffDocs.generateAndStoreBillPdf(id, null);
+    } catch (e) {
+      logger.error('pharmacy invoice regenerate failed', { id, err: e.message });
+    }
+  }
+  return sendPdf(res, filepath, `pharmacy_invoice_${id}.pdf`);
 }));
 
 

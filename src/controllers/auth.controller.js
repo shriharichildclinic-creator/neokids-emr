@@ -83,6 +83,20 @@ async function sendPasswordEmail({ to, name, rawToken, purpose }) {
   return link;
 }
 
+// v4.0.0 — shared staff login path for RECEPTIONIST / PHARMACY accounts.
+// Identical failure shape to doctor/admin login (no enumeration oracle).
+async function staffLogin(res, user, role, password, INVALID) {
+  if (user.status !== 'ACTIVE') return res.status(401).json(INVALID);
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) return res.status(401).json(INVALID);
+  const token = signToken({ id: user.id, role, email: user.email });
+  return res.json({
+    token,
+    role,
+    user: { id: user.id, name: user.name, email: user.email, mustChangePassword: user.mustChangePassword }
+  });
+}
+
 exports.login = asyncHandler(async (req, res) => {
   // Every login failure path returns this same body — the client
   // should never be able to distinguish "no such user" from "wrong
@@ -108,8 +122,12 @@ exports.login = asyncHandler(async (req, res) => {
     });
   }
 
-  const doctor = await prisma.doctor.findFirst({ where: { email, deletedAt: null } });
-  if (!admin && !doctor) {
+  const [doctor, receptionist, pharmacyUser] = await Promise.all([
+    prisma.doctor.findFirst({ where: { email, deletedAt: null } }),
+    prisma.receptionist.findFirst({ where: { email, deletedAt: null } }),
+    prisma.pharmacyUser.findFirst({ where: { email, deletedAt: null } })
+  ]);
+  if (!doctor && !receptionist && !pharmacyUser) {
     // Unknown email: burn one bcrypt round so the response time matches
     // the known-email/wrong-password path (finding #4).
     await bcrypt.compare(password, DUMMY_HASH);
@@ -131,6 +149,8 @@ exports.login = asyncHandler(async (req, res) => {
       }
     });
   }
+  if (receptionist) return staffLogin(res, receptionist, 'RECEPTIONIST', password, INVALID);
+  if (pharmacyUser) return staffLogin(res, pharmacyUser, 'PHARMACY', password, INVALID);
 
   return res.status(401).json(INVALID);
 });
@@ -139,6 +159,20 @@ exports.me = asyncHandler(async (req, res) => {
   if (req.user.role === 'ADMIN') {
     const admin = await prisma.admin.findUnique({ where: { id: req.user.id } });
     return res.json({ role: 'ADMIN', user: admin && { id: admin.id, name: admin.name, email: admin.email, mustChangePassword: admin.mustChangePassword } });
+  }
+
+  if (req.user.role === 'RECEPTIONIST') {
+    const r = await prisma.receptionist.findFirst({ where: { id: req.user.id, deletedAt: null } });
+    if (!r) return res.status(404).json({ error: 'Not found' });
+    const { passwordHash, ...rest } = r;
+    return res.json({ role: 'RECEPTIONIST', user: rest });
+  }
+
+  if (req.user.role === 'PHARMACY') {
+    const p = await prisma.pharmacyUser.findFirst({ where: { id: req.user.id, deletedAt: null } });
+    if (!p) return res.status(404).json({ error: 'Not found' });
+    const { passwordHash, ...rest } = p;
+    return res.json({ role: 'PHARMACY', user: rest });
   }
 
   const doctor = await prisma.doctor.findFirst({ where: { id: req.user.id, deletedAt: null } });
@@ -183,10 +217,13 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
   const { email } = parsed.data;
   const admin = await prisma.admin.findUnique({ where: { email } });
   const doctor = admin ? null : await prisma.doctor.findFirst({ where: { email, deletedAt: null } });
+  const receptionist = (admin || doctor) ? null : await prisma.receptionist.findFirst({ where: { email, deletedAt: null } });
+  const pharmacyUser = (admin || doctor || receptionist) ? null : await prisma.pharmacyUser.findFirst({ where: { email, deletedAt: null } });
 
-  if (admin || doctor) {
-    const userType = admin ? 'ADMIN' : 'DOCTOR';
-    const user = admin || doctor;
+  const matched = admin || doctor || receptionist || pharmacyUser;
+  if (matched) {
+    const userType = admin ? 'ADMIN' : doctor ? 'DOCTOR' : receptionist ? 'RECEPTIONIST' : 'PHARMACY';
+    const user = matched;
     await revokeActivePasswordTokens(userType, user.id, ['RESET']);
     const { rawToken } = await createPasswordToken({
       userType,
@@ -218,17 +255,17 @@ exports.resetPassword = asyncHandler(async (req, res) => {
   const token = await consumePasswordToken({ rawToken: parsed.data.token, purposes: ['RESET', 'INVITE'] });
   const passwordHash = await bcrypt.hash(parsed.data.password, SALT);
 
-  if (token.userType === 'ADMIN') {
-    await prisma.admin.update({
-      where: { id: token.userId },
-      data: { passwordHash, mustChangePassword: false }
-    });
-  } else {
-    await prisma.doctor.update({
-      where: { id: token.userId },
-      data: { passwordHash, mustChangePassword: false }
-    });
-  }
+  const resetRepo = {
+    ADMIN: prisma.admin,
+    DOCTOR: prisma.doctor,
+    RECEPTIONIST: prisma.receptionist,
+    PHARMACY: prisma.pharmacyUser
+  }[token.userType];
+  if (!resetRepo) return res.status(400).json({ error: 'Invalid or expired password token' });
+  await resetRepo.update({
+    where: { id: token.userId },
+    data: { passwordHash, mustChangePassword: false }
+  });
 
   await revokeActivePasswordTokens(token.userType, token.userId, ['RESET', 'INVITE']);
   res.json({ success: true, message: 'Password updated successfully' });
@@ -238,8 +275,13 @@ exports.changePassword = asyncHandler(async (req, res) => {
   const parsed = changePasswordSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
 
-  const isAdmin = req.user.role === 'ADMIN';
-  const repo = isAdmin ? prisma.admin : prisma.doctor;
+  const repo = {
+    ADMIN: prisma.admin,
+    DOCTOR: prisma.doctor,
+    RECEPTIONIST: prisma.receptionist,
+    PHARMACY: prisma.pharmacyUser
+  }[req.user.role];
+  if (!repo) return res.status(403).json({ error: 'Forbidden: insufficient permissions' });
   const user = await repo.findUnique({ where: { id: req.user.id } });
   if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -252,7 +294,7 @@ exports.changePassword = asyncHandler(async (req, res) => {
     data: { passwordHash, mustChangePassword: false }
   });
 
-  await revokeActivePasswordTokens(isAdmin ? 'ADMIN' : 'DOCTOR', req.user.id, ['RESET', 'INVITE']);
+  await revokeActivePasswordTokens(req.user.role, req.user.id, ['RESET', 'INVITE']);
   res.json({ success: true, message: 'Password changed successfully' });
 });
 

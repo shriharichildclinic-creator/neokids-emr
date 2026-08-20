@@ -78,9 +78,130 @@ async function main() {
     }
   });
 
+  // v4.0.0 — Receptionist / Medical Centre / Pharmacy demo wiring.
+  // Optional: only seeded when the matching env passwords are set, so the
+  // base seed keeps working for existing deployments.
+  let centre = await prisma.medicalCentre.findFirst({ where: { name: 'NeoKidsPro Main Clinic' } });
+  if (!centre) {
+    centre = await prisma.medicalCentre.create({
+      data: {
+        name: 'NeoKidsPro Main Clinic',
+        address: '12, Green Park Main Road',
+        city: 'New Delhi',
+        state: 'Delhi',
+        pincode: '110016',
+        phone: '9876500000',
+        email: 'clinic@neokidspro.in',
+        isActive: true
+      }
+    });
+  }
+
+  const offlineDoctorEmail = 'dr.mehta@neokidspro.in';
+  const offlineDoctorPwd = process.env.DOCTOR2_SEED_PASSWORD;
+  let offlineDoctor = null;
+  if (offlineDoctorPwd && offlineDoctorPwd.trim().length >= 8) {
+    const hash = await bcrypt.hash(offlineDoctorPwd, SALT);
+    offlineDoctor = await prisma.doctor.upsert({
+      where: { email: offlineDoctorEmail },
+      update: {},
+      create: {
+        name: 'Rahul Mehta',
+        email: offlineDoctorEmail,
+        passwordHash: hash,
+        phone: '9812345678',
+        specialization: 'Pediatrician',
+        qualification: 'MBBS, DCH',
+        experience: 8,
+        consultationModes: 'BOTH',
+        onlineConsultFee: 400,
+        physicalConsultFee: 700,
+        registrationNumber: 'DMC-45678',
+        clinicName: 'NeoKidsPro Main Clinic',
+        clinicAddress: '12, Green Park Main Road, New Delhi 110016',
+        availableFromOffline: '10:00',
+        availableToOffline: '18:00',
+        availableFromOnline: '09:00',
+        availableToOnline: '12:00',
+        workingDays: 'MON,TUE,WED,THU,FRI,SAT',
+        slotDuration: 15,
+        isAvailable: true,
+        mustChangePassword: true
+      }
+    });
+  }
+
+  const recPwd = process.env.RECEPTIONIST_SEED_PASSWORD;
+  if (recPwd && recPwd.trim().length >= 8) {
+    const hash = await bcrypt.hash(recPwd, SALT);
+    const receptionist = await prisma.receptionist.upsert({
+      where: { email: 'reception@neokidspro.in' },
+      update: {},
+      create: {
+        name: 'Front Desk',
+        phone: '9876500001',
+        email: 'reception@neokidspro.in',
+        passwordHash: hash,
+        status: 'ACTIVE',
+        canManageConsultations: true,
+        canManagePharmacy: true,
+        canIssueCertificates: true,
+        mustChangePassword: true
+      }
+    });
+    if (offlineDoctor) {
+      await prisma.receptionistAssignment.upsert({
+        where: {
+          receptionistId_doctorId_medicalCentreId: {
+            receptionistId: receptionist.id,
+            doctorId: offlineDoctor.id,
+            medicalCentreId: centre.id
+          }
+        },
+        update: {},
+        create: {
+          receptionistId: receptionist.id,
+          doctorId: offlineDoctor.id,
+          medicalCentreId: centre.id
+        }
+      });
+    }
+  }
+
+  const phPwd = process.env.PHARMACY_SEED_PASSWORD;
+  if (phPwd && phPwd.trim().length >= 8) {
+    const hash = await bcrypt.hash(phPwd, SALT);
+    const pharma = await prisma.pharmacyUser.upsert({
+      where: { email: 'pharmacy@neokidspro.in' },
+      update: {},
+      create: {
+        name: 'Medical Store',
+        phone: '9876500002',
+        email: 'pharmacy@neokidspro.in',
+        passwordHash: hash,
+        status: 'ACTIVE',
+        medicalCentreId: centre.id,
+        mustChangePassword: true
+      }
+    });
+    if (offlineDoctor) {
+      await prisma.pharmacyUserDoctor.upsert({
+        where: {
+          pharmacyUserId_doctorId: {
+            pharmacyUserId: pharma.id,
+            doctorId: offlineDoctor.id
+          }
+        },
+        update: {},
+        create: { pharmacyUserId: pharma.id, doctorId: offlineDoctor.id }
+      });
+    }
+  }
+
   // Print the email only — never echo the password back.
   console.log(`✓ Admin seeded: ${adminEmail}`);
   console.log(`✓ Doctor seeded: ${doctorEmail}`);
+  console.log(`✓ Medical centre seeded: ${centre.name}`);
   console.log('\nSeed complete. Both users must change their password on first login.');
 }
 

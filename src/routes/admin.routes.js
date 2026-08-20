@@ -1,5 +1,6 @@
 const router = require('express').Router();
-const c    = require('../controllers/admin.controller');
+const c      = require('../controllers/admin.controller');
+const clinic = require('../controllers/admin-clinic.controller');
 const fin  = require('../controllers/finance.controller');
 const kyc  = require('../controllers/kyc.controller');
 const cert = require('../controllers/certificate.controller');
@@ -43,6 +44,32 @@ router.get('/notifications/templates', c.listNotificationTemplates);
 
 // Automation — manual trigger for the vaccination reminder scan (testing/ops)
 router.post('/jobs/vaccination-reminders/run', c.runVaccinationReminders);
+
+// v4.0.0 — Medical Centres (clinics / branches)
+router.post('/medical-centres',       clinic.createCentre);
+router.get('/medical-centres',        clinic.listCentres);
+router.put('/medical-centres/:id',    clinic.updateCentre);
+router.delete('/medical-centres/:id', clinic.deleteCentre);
+
+// v4.0.0 — Receptionists (created by Admin only; no self-registration)
+router.post('/receptionists',       clinic.createReceptionist);
+router.get('/receptionists',        clinic.listReceptionists);
+router.get('/receptionists/:id',    clinic.getReceptionist);
+router.put('/receptionists/:id',    clinic.updateReceptionist);
+router.delete('/receptionists/:id', clinic.deleteReceptionist);
+
+// v4.0.0 — Pharmacy users (separate role; no receptionist permissions)
+router.post('/pharmacy-users',       clinic.createPharmacyUser);
+router.get('/pharmacy-users',        clinic.listPharmacyUsers);
+router.get('/pharmacy-users/:id',    clinic.getPharmacyUser);
+router.put('/pharmacy-users/:id',    clinic.updatePharmacyUser);
+router.delete('/pharmacy-users/:id', clinic.deletePharmacyUser);
+
+// v4.0.0 — Front-desk finance & audit
+router.get('/available-offline-doctors', c.availableOfflineDoctors);
+router.get('/consultation-invoices',     c.consultationInvoices);
+router.get('/pharmacy/bills',            clinic.listPharmacyBillsAdmin);
+router.get('/audit-trail',               c.auditTrail);
 
 // Revenue Management
 router.get('/finance/revenue-report', fin.revenueReport);

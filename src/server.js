@@ -29,6 +29,8 @@ const { runLifecycleJobs } = require('./services/lifecycle.service');
 const authRoutes    = require('./routes/auth.routes');
 const adminRoutes   = require('./routes/admin.routes');
 const doctorRoutes  = require('./routes/doctor.routes');
+const receptionistRoutes = require('./routes/receptionist.routes');
+const pharmacyRoutes     = require('./routes/pharmacy.routes');
 const publicRoutes  = require('./routes/public.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const filesRoutes   = require('./routes/files.routes');
@@ -152,9 +154,11 @@ const staticOpts = {
     }
   },
 };
-app.use('/doctor', express.static(path.join(__dirname, '..', 'public', 'doctor'), staticOpts));
-app.use('/admin',  express.static(path.join(__dirname, '..', 'public', 'admin'),  staticOpts));
-app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets'), staticOpts));
+app.use('/doctor',       express.static(path.join(__dirname, '..', 'public', 'doctor'),       staticOpts));
+app.use('/admin',        express.static(path.join(__dirname, '..', 'public', 'admin'),        staticOpts));
+app.use('/receptionist', express.static(path.join(__dirname, '..', 'public', 'receptionist'), staticOpts));
+app.use('/pharmacy',     express.static(path.join(__dirname, '..', 'public', 'pharmacy'),     staticOpts));
+app.use('/assets',       express.static(path.join(__dirname, '..', 'public', 'assets'),       staticOpts));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'NeoKidsPro EMR', version: '1.2.3', time: new Date().toISOString() });
@@ -163,8 +167,8 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'NeoKidsPro EMR API',
-    version: '1.2.3',
-    panels: { admin: '/admin', doctor: '/doctor' }
+    version: '4.0.0',
+    panels: { admin: '/admin', doctor: '/doctor', receptionist: '/receptionist', pharmacy: '/pharmacy' }
   });
 });
 
@@ -176,12 +180,14 @@ app.get('/payment-status', publicCtrl.paymentStatusPage);
 app.use(makeCsrfGuard());
 
 // Mount limiters + routers
-app.use('/api/auth',     publicLimiter,        authRoutes);
-app.use('/api/public',   publicLimiter,        publicRoutes);
-app.use('/api/admin',    authenticatedLimiter, adminRoutes);
-app.use('/api/doctor',   authenticatedLimiter, doctorRoutes);
-app.use('/api/files',    authenticatedLimiter, filesRoutes);
-app.use('/api/webhooks', webhookRoutes);
+app.use('/api/auth',         publicLimiter,        authRoutes);
+app.use('/api/public',       publicLimiter,        publicRoutes);
+app.use('/api/admin',        authenticatedLimiter, adminRoutes);
+app.use('/api/doctor',       authenticatedLimiter, doctorRoutes);
+app.use('/api/receptionist', authenticatedLimiter, receptionistRoutes);
+app.use('/api/pharmacy',     authenticatedLimiter, pharmacyRoutes);
+app.use('/api/files',        authenticatedLimiter, filesRoutes);
+app.use('/api/webhooks',     webhookRoutes);
 
 app.use(notFound(app));
 app.use(errorHandler);

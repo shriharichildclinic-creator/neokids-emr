@@ -95,6 +95,7 @@ exports.listDoctors = asyncHandler(async (req, res) => {
       specialization: true, qualification: true, experience: true, bio: true,
       consultationModes: true, onlineConsultFee: true, physicalConsultFee: true,
       clinicName: true, clinicAddress: true, clinicMapUrl: true,
+      registrationNumber: true, availableFromOffline: true, availableToOffline: true,
      isAvailable: true, mustChangePassword: true, consults: true, revenue: true,
 
 // Revenue Management
@@ -477,6 +478,99 @@ exports.analytics = asyncHandler(async (req, res) => {
     notificationsTotal:  notifTotal,
     notificationsFailed: notifFailed,
     daily: Object.values(daily)
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────
+// v4.0.0 — Doctors available for offline consultations (receptionist &
+// pharmacy assignment pickers). Returns the clinic/registration details
+// the front desk needs verbatim from the doctor's own account/admin data.
+// ────────────────────────────────────────────────────────────────────
+exports.availableOfflineDoctors = asyncHandler(async (req, res) => {
+  const doctors = await prisma.doctor.findMany({
+    where: { deletedAt: null, isAvailable: true, consultationModes: { in: ['OFFLINE', 'BOTH'] } },
+    orderBy: { name: 'asc' },
+    select: {
+      id: true, name: true, email: true, phone: true,
+      specialization: true, qualification: true, registrationNumber: true,
+      clinicName: true, clinicAddress: true, clinicMapUrl: true,
+      physicalConsultFee: true, onlineConsultFee: true, slotDuration: true,
+      workingDays: true, availableFromOffline: true, availableToOffline: true,
+      consultationModes: true, photoUrl: true
+    }
+  });
+  res.json(doctors);
+});
+
+// v4.0.0 — Consultation invoices issued by receptionists (read-only admin).
+exports.consultationInvoices = asyncHandler(async (req, res) => {
+  const { doctorId, centreId, from, to, q } = req.query;
+  const where = {};
+  if (doctorId) where.doctorId = doctorId;
+  if (centreId) where.medicalCentreId = centreId;
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from + 'T00:00:00.000Z');
+    if (to)   where.createdAt.lte = new Date(to + 'T23:59:59.999Z');
+  }
+  if (q && String(q).trim().length >= 2) {
+    const term = String(q).trim();
+    where.OR = [
+      { invoiceNumber: { contains: term } },
+      { appointment: { is: { patient: { is: { name: { contains: term } } } } } }
+    ];
+  }
+  const rows = await prisma.consultationInvoice.findMany({
+    where,
+    include: {
+      appointment: { include: {
+        patient: { select: { id: true, name: true, phone: true } },
+        doctor:  { select: { id: true, name: true, specialization: true } }
+      } },
+      medicalCentre: true,
+      receptionist: { select: { id: true, name: true } }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: Math.min(Math.max(parseInt(req.query.limit || '200', 10) || 200, 1), 500)
+  });
+  const { buildSignedFileUrl } = require('../utils/fileTokens');
+  res.json(rows.map(r => ({
+    ...r,
+    pdfUrl: buildSignedFileUrl({ kind: 'consultation-invoice', appointmentId: r.id, userId: req.user.id, role: req.user.role })
+  })));
+});
+
+// v4.0.0 — Staff audit trail (who created/modified what).
+exports.auditTrail = asyncHandler(async (req, res) => {
+  const { role, action, actorId, from, to, q } = req.query;
+  const where = {};
+  if (role)    where.actorRole = role;
+  if (action)  where.action = action;
+  if (actorId) where.actorId = actorId;
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from + 'T00:00:00.000Z');
+    if (to)   where.createdAt.lte = new Date(to + 'T23:59:59.999Z');
+  }
+  if (q && String(q).trim().length >= 2) {
+    const term = String(q).trim();
+    where.OR = [
+      { actorName: { contains: term } },
+      { summary:   { contains: term } },
+      { entityId:  { contains: term } }
+    ];
+  }
+  const take = Math.min(Math.max(parseInt(req.query.limit || '50', 10) || 50, 1), 200);
+  const page = Math.max(parseInt(req.query.page || '1', 10) || 1, 1);
+  const skip = (page - 1) * take;
+  const [rows, totalCount] = await Promise.all([
+    prisma.staffAuditLog.findMany({ where, orderBy: { createdAt: 'desc' }, take, skip }),
+    prisma.staffAuditLog.count({ where })
+  ]);
+  res.json({
+    rows, page, limit: take, total: totalCount,
+    totalPages: Math.max(Math.ceil(totalCount / take), 1),
+    hasMore: skip + rows.length < totalCount
   });
 });
 

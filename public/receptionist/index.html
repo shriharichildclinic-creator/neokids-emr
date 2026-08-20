@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NeoKidsPro · Receptionist Portal</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/admin/styles.css?v=3.5.0"/>
+<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.5.0"/>
+<script>try{var t=localStorage.getItem('np-theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.setAttribute('data-theme','dark');}catch(_){}</script>
+</head>
+<body>
+<div id="loginScreen" class="np-login">
+  <div class="np-login__card">
+    <div class="np-login__logo"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
+    <h1 class="np-login__title">Receptionist Portal</h1>
+    <p class="np-login__subtitle">Clinic front desk · NeoKidsPro</p>
+    <form id="loginForm" novalidate>
+      <div class="np-field"><label class="np-field__label">Email</label><input id="email" type="email" required class="np-input" autocomplete="username"/></div>
+      <div class="np-field"><label class="np-field__label">Password</label><input id="password" type="password" required class="np-input" autocomplete="current-password"/></div>
+      <div id="loginError" class="np-error hidden"></div>
+      <button type="submit" class="np-btn np-btn--primary" style="width:100%;padding:.7rem;">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<div id="dashboard" class="hidden">
+<div class="np-shell">
+<aside id="sidebar" class="np-sidebar">
+  <div class="np-sidebar__brand"><div class="np-sidebar__logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div><div><div class="np-sidebar__title">NeoKidsPro</div><div class="np-sidebar__subtitle">Reception</div></div></div>
+  <nav class="np-sidebar__nav">
+    <div class="np-sidebar__section">Front Desk</div>
+    <button class="np-nav-item active" data-view="dashView">Dashboard</button>
+    <button class="np-nav-item" data-view="apptsView">Appointments</button>
+    <button class="np-nav-item" data-view="patientsView">Patients</button>
+    <button class="np-nav-item" data-view="invoicesView">Consultation Invoices</button>
+    <button class="np-nav-item" data-view="certsView" id="navCerts">Certificates</button>
+    <div class="np-sidebar__section" id="pharmSection" style="display:none;">Medical Store</div>
+    <button class="np-nav-item" data-view="rxView" id="navRx" style="display:none;">Prescriptions</button>
+    <button class="np-nav-item" data-view="pharmBillsView" id="navPharmBills" style="display:none;">Pharmacy Bills</button>
+    <div class="np-sidebar__section">Account</div>
+    <button class="np-nav-item" data-view="settingsView">Settings</button>
+  </nav>
+  <div class="np-sidebar__footer"><div>NeoKidsPro · v4.0</div><div>Receptionist Portal</div></div>
+</aside>
+<main class="np-main">
+  <header class="np-header"><div class="np-header__inner">
+    <div class="np-header__title"><div id="pageTitle" class="np-header__page-title">Dashboard</div><div id="pageSubtitle" class="np-header__page-subtitle">Front desk overview</div></div>
+    <div class="np-profile"><button class="np-profile__trigger" type="button"><div class="np-profile__avatar"><span id="userInitials">R</span></div><div class="np-profile__meta"><div class="np-profile__name" id="userName">Reception</div><div class="np-profile__role">Receptionist</div></div></button></div>
+  </div></header>
+  <div class="np-content">
+    <section id="dashView" class="tab-pane"><div id="kpiGrid" class="np-kpi-grid"></div><div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Today's queue</div><div class="np-panel__subtitle">Mark arrivals and manage the day</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBookModal()">+ New appointment</button></div><div id="todayList" class="np-panel__body" style="padding:0;"></div></div></section>
+    <section id="apptsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Appointments</div><div class="np-panel__subtitle">Your assigned doctors & clinics</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBookModal()">+ Book / Walk-in</button></div><div class="np-panel__body"><form id="apptFilters" class="np-filterbar" novalidate><input id="fDate" type="date" class="np-select"/><select id="fDoctor" class="np-select"><option value="">All doctors</option></select><select id="fStatus" class="np-select"><option value="">All statuses</option><option>PENDING</option><option>CONFIRMED</option><option>COMPLETED</option><option>CANCELLED</option></select><input id="fQ" type="search" class="np-input" placeholder="Search patient/phone" style="max-width:220px"/><button class="np-btn np-btn--primary np-btn--sm" type="submit">Apply</button></form><div class="np-table-wrap"><table class="np-table"><thead><tr><th>Date/Time</th><th>Patient</th><th>Doctor</th><th>Source</th><th>Status</th><th>Payment</th><th style="text-align:right">Actions</th></tr></thead><tbody id="apptsTbody"></tbody></table></div></div></div></section>
+    <section id="patientsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Patients</div><div class="np-panel__subtitle">Search or register patients for your clinic</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openPatientModal()">+ Register patient</button></div><div class="np-panel__body"><div class="np-search" style="max-width:420px;margin-bottom:1rem;"><input id="patientSearch" type="search" class="np-input" placeholder="Search name or phone"/></div><div id="patientsList"></div></div></div></section>
+    <section id="invoicesView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Consultation Invoices</div><div class="np-panel__subtitle">Generated at reception · PDF / print / WhatsApp / email</div></div><button class="np-btn np-btn--ghost np-btn--sm" onclick="loadInvoices()">Refresh</button></div><div class="np-panel__body"><div class="np-table-wrap"><table class="np-table"><thead><tr><th>Invoice #</th><th>Patient</th><th>Doctor</th><th>Clinic</th><th style="text-align:right">Amount</th><th>Date</th><th style="text-align:right">Actions</th></tr></thead><tbody id="invTbody"></tbody></table></div></div></div></section>
+    <section id="certsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Medical Certificates</div><div class="np-panel__subtitle">Issued in the assigned doctor's name</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openCertModal()">+ Issue certificate</button></div><div class="np-panel__body" id="certsList"></div></div></section>
+    <section id="rxView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Prescriptions (Medical Store)</div><div class="np-panel__subtitle">Offline prescriptions from your assigned doctors</div></div><button class="np-btn np-btn--ghost np-btn--sm" onclick="loadRx()">Refresh</button></div><div class="np-panel__body" id="rxList"></div></div></section>
+    <section id="pharmBillsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Pharmacy Bills</div><div class="np-panel__subtitle">Independent from consultation billing</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBillModal()">+ New bill</button></div><div class="np-panel__body"><div class="np-table-wrap"><table class="np-table"><thead><tr><th>Bill #</th><th>Customer</th><th style="text-align:right">Total</th><th>Date</th><th style="text-align:right">Actions</th></tr></thead><tbody id="pharmBillsTbody"></tbody></table></div></div></div></section>
+    <section id="settingsView" class="tab-pane hidden"><div class="np-panel" style="max-width:560px;"><div class="np-panel__head"><div><div class="np-panel__title">Change password</div><div class="np-panel__subtitle">Update your receptionist account password</div></div></div><div class="np-panel__body"><form id="passwordForm"><div class="np-field"><label class="np-field__label">Current password</label><input name="currentPassword" type="password" required class="np-input"/></div><div class="np-grid-2"><div class="np-field"><label class="np-field__label">New password</label><input name="newPassword" type="password" required minlength="8" class="np-input"/></div><div class="np-field"><label class="np-field__label">Confirm</label><input name="confirmPassword" type="password" required minlength="8" class="np-input"/></div></div><button class="np-btn np-btn--primary np-btn--sm" type="submit">Update password</button></form><hr style="margin:1rem 0;opacity:.2"/><button class="np-btn np-btn--ghost np-btn--sm" onclick="logout()">Sign out</button></div></div></section>
+  </div>
+</main>
+</div>
+</div>
+<div id="modalHost"></div>
+<script src="/assets/np-ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

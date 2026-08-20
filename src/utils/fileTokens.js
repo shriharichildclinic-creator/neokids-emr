@@ -81,7 +81,9 @@ function buildSignedFileUrl({ kind, appointmentId, userId, role, ttlSec }) {
     invoice: 'invoices',
     prescription: 'prescriptions',
     certificate: 'certificates',
-    'previous-record': 'previous-records'
+    'previous-record': 'previous-records',
+    'consultation-invoice': 'consultation-invoices',
+    'pharmacy-invoice': 'pharmacy-invoices'
   };
   const segment = segmentMap[kind];
   if (!segment) return null;

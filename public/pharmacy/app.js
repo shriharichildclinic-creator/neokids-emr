@@ -1,0 +1,81 @@
+const API = '/api';
+let TOKEN = localStorage.getItem('np_pharmacy_token');
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+let __me=null, __items=[];
+
+async function api(path, opts={}){ const headers={'Content-Type':'application/json',...(TOKEN&&{Authorization:'Bearer '+TOKEN}),...(opts.headers||{})}; const r=await fetch(API+path,{...opts,headers}); let d=null; try{d=await r.json();}catch(_){}
+  if(r.status===401&&TOKEN){localStorage.removeItem('np_pharmacy_token');TOKEN=null;showLogin();throw new Error('Session expired');}
+  if(!r.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status)); return d; }
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(m,k){ if(window.NPToast&&NPToast[k||'success'])NPToast[k||'success'](m); else alert(m); }
+function fmtDate(d){ if(!d)return''; return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function inr(n){ return '₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2}); }
+
+const VIEWS={dashView:['Dashboard','Store overview'],rxView:['Prescriptions','Offline prescriptions'],invView:['Inventory','Medicines & stock'],billsView:['Bills','Sales & invoices'],settingsView:['Settings','Account']};
+function setView(v){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
+  if(v==='dashView')loadDash(); if(v==='rxView')loadRx(); if(v==='invView')loadInv(); if(v==='billsView')loadBills(); }
+$$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+
+$('#loginForm').addEventListener('submit',async e=>{e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='PHARMACY')throw new Error('Not a pharmacy account'); TOKEN=d.token; localStorage.setItem('np_pharmacy_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
+function logout(){ localStorage.removeItem('np_pharmacy_token'); TOKEN=null; showLogin(); }
+function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
+async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); try{ const me=await api('/auth/me'); __me=me.user||me; $('#userName').textContent=__me.name; $('#userInitials').textContent=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); }catch(e){} setView('dashView'); }
+
+async function loadDash(){ try{ const s=await api('/pharmacy/stats');
+  $('#kpiGrid').innerHTML=[{k:'blue',l:'Medicines in stock',v:s.totalItems},{k:'amber',l:'Low stock (≤10)',v:s.lowStock},{k:'red',l:'Expiring ≤30 days',v:s.expiringSoon},{k:'green',l:'Bills today',v:s.todayBills},{k:'mint',l:'Revenue today',v:inr(s.todayRevenue)}].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div></div>`).join('');
+  const bills=await api('/pharmacy/bills'); $('#recentBills').innerHTML=(bills.slice(0,8).map(b=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(b.billNumber)}</div><div class="np-appt-row__meta">${esc(b.customerName||'Walk-in')} · ${esc(fmtDate(b.createdAt))}</div></div><div class="np-appt-row__right"><b>${inr(b.total)}</b></div></div>`).join('')||'<div class="np-empty"><div class="np-empty__sub">No bills yet.</div></div>');
+ }catch(e){ $('#kpiGrid').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+
+async function loadRx(){ const list=$('#rxList'); const f=$('#rxFilter').value; try{ const rows=await api('/pharmacy/prescriptions'+(f?('?dispensed='+f):''));
+  list.innerHTML=rows.length?rows.map(rx=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(rx.patient.name)} ${rx.dispensed?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Dispensed</span>':'<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Pending</span>'}</div><div class="np-appt-row__assign">Dr. ${esc(rx.doctor.name)} · ${esc(fmtDate(rx.visitDate))}</div><div class="np-appt-row__meta">${(rx.medications||[]).map(m=>esc(m.name)+' '+esc(m.dose||'')+' '+esc(m.frequency||'')).join('<br/>')}</div></div><div class="np-appt-row__right"><span class="np-badge ${rx.createdByRole==='RECEPTIONIST'?'np-badge--violet':'np-badge--mint'}">${rx.createdByRole==='RECEPTIONIST'?'by reception':'by doctor'}</span>${!rx.dispensed?` <button class="np-btn np-btn--sm np-btn--primary" onclick="openBillModal('${rx.id}')">Dispense & bill</button>`:''}</div></div>`).join(''):'<div class="np-empty"><div class="np-empty__title">No prescriptions</div></div>';
+ }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+
+async function loadInv(q){ const tb=$('#invTbody'); try{ __items=await api('/pharmacy/inventory'+(q?('?q='+encodeURIComponent(q)):''));
+  tb.innerHTML=__items.length?__items.map(i=>`<tr><td><b>${esc(i.name)}</b><div class="np-mut" style="font-size:.75rem">${esc(i.manufacturer||'')}</div></td><td>${esc(i.batchNumber||'—')}</td><td style="text-align:right">${inr(i.sellingPrice)}</td><td style="text-align:right"><b class="${i.stock<=10?'np-error':''}">${i.stock}</b></td><td>${i.expiryDate?esc(fmtDate(i.expiryDate)):'—'}</td><td style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openItemModal('${i.id}')">Edit</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="adjustStock('${i.id}')">Stock</button> <button class="np-btn np-btn--sm np-btn--ghost np-btn--danger" onclick="delItem('${i.id}')">Remove</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No medicines</div></div></td></tr>';
+ }catch(e){ tb.innerHTML=`<tr><td colspan="6"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+$('#invSearch').addEventListener('input',e=>{clearTimeout(window.__is); window.__is=setTimeout(()=>loadInv(e.target.value.trim()),300);});
+
+function openItemModal(id){ const it=id?__items.find(x=>x.id===id):null;
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">${it?'Edit':'Add'} medicine</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="iForm"><div class="np-grid-2">
+  <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Name *</label><input name="name" required class="np-input" value="${it?esc(it.name):''}"/></div>
+  <div class="np-field"><label class="np-field__label">Batch #</label><input name="batchNumber" class="np-input" value="${it?esc(it.batchNumber||''):''}"/></div>
+  <div class="np-field"><label class="np-field__label">Unit</label><input name="unit" class="np-input" value="${it?esc(it.unit||'strip'):'strip'}"/></div>
+  <div class="np-field"><label class="np-field__label">Selling price (₹)</label><input name="sellingPrice" type="number" step="0.01" class="np-input" value="${it?it.sellingPrice:''}"/></div>
+  <div class="np-field"><label class="np-field__label">MRP (₹)</label><input name="mrp" type="number" step="0.01" class="np-input" value="${it?it.mrp:''}"/></div>
+  <div class="np-field"><label class="np-field__label">Stock</label><input name="stock" type="number" class="np-input" value="${it?it.stock:'0'}"/></div>
+  <div class="np-field"><label class="np-field__label">Expiry</label><input name="expiryDate" type="date" class="np-input" value="${it&&it.expiryDate?String(it.expiryDate).slice(0,10):''}"/></div>
+  <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Manufacturer</label><input name="manufacturer" class="np-input" value="${it?esc(it.manufacturer||''):''}"/></div></div>
+  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Save</button></div></form></div></div></div>`;
+  $('#iForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries()); try{ if(it){ await api('/pharmacy/inventory/'+it.id,{method:'PUT',body:JSON.stringify(raw)});} else { await api('/pharmacy/inventory',{method:'POST',body:JSON.stringify(raw)});} toast('Saved'); closeModal(); loadInv(); }catch(err){toast(err.message,'error');} });
+}
+function closeModal(){ $('#modalHost').innerHTML=''; }
+async function adjustStock(id){ const d=prompt('Stock adjustment (+/- quantity):'); if(!d)return; const n=parseInt(d,10); if(!n)return; try{ await api('/pharmacy/inventory/'+id+'/stock',{method:'POST',body:JSON.stringify({delta:n,reason:'Manual adjustment'})}); toast('Stock updated'); loadInv(); }catch(e){toast(e.message,'error');} }
+async function delItem(id){ if(!confirm('Remove this medicine from active inventory?'))return; try{ await api('/pharmacy/inventory/'+id,{method:'DELETE'}); toast('Removed'); loadInv(); }catch(e){toast(e.message,'error');} }
+
+async function loadBills(){ const tb=$('#billsTbody'); try{ const rows=await api('/pharmacy/bills'); tb.innerHTML=rows.length?rows.map(b=>`<tr><td><b>${esc(b.billNumber)}</b></td><td>${esc(b.customerName||'')}</td><td style="text-align:right">${(b.items||[]).length}</td><td style="text-align:right"><b>${inr(b.total)}</b></td><td>${esc(fmtDate(b.createdAt))}</td><td style="text-align:right;white-space:nowrap">${b.pdfUrl?`<a class="np-btn np-btn--sm" href="${b.pdfUrl}" target="_blank">PDF</a> `:''}<button class="np-btn np-btn--sm" onclick="printPdf('${b.pdfUrl||''}')">Print</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="sendBill('${b.id}')">Send</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="6"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+function printPdf(url){ if(!url){toast('No PDF yet','warn');return;} const w=window.open(url,'_blank'); if(w){w.addEventListener('load',()=>{try{w.print();}catch(_){}});} }
+async function sendBill(id){ const wa=confirm('Send bill on WhatsApp?'); const em=confirm('Send bill by email?'); if(!wa&&!em)return; const ch=[]; if(wa)ch.push('whatsapp'); if(em)ch.push('email'); try{ const r=await api('/pharmacy/bills/'+id+'/send',{method:'POST',body:JSON.stringify({channels:ch})}); toast('Delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); }catch(e){toast(e.message,'error');} }
+
+async function openBillModal(rxId){
+  try{ __items=await api('/pharmacy/inventory'); }catch(_){}
+  const opts=__items.map(i=>`<option value="${i.id}" data-price="${i.sellingPrice}" data-name="${esc(i.name)}">${esc(i.name)} (₹${Number(i.sellingPrice).toFixed(2)} · stock ${i.stock})</option>`).join('');
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">New bill</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="billForm">
+  <div class="np-grid-2"><div class="np-field"><label class="np-field__label">Customer name</label><input name="customerName" class="np-input"/></div><div class="np-field"><label class="np-field__label">Customer phone</label><input name="customerPhone" maxlength="10" class="np-input"/></div></div>
+  <div id="billLines"></div><button type="button" class="np-btn np-btn--sm np-btn--ghost" onclick="addBillLine()">+ Add item</button>
+  <div class="np-grid-2" style="margin-top:.75rem"><div class="np-field"><label class="np-field__label">Discount (₹)</label><input name="discount" type="number" step="0.01" value="0" class="np-input"/></div><div class="np-field"><label class="np-field__label">Tax (₹)</label><input name="tax" type="number" step="0.01" value="0" class="np-input"/></div></div>
+  <div class="np-field"><label class="np-field__label">Payment method</label><select name="paymentMethod" class="np-select"><option value="CASH">Cash</option><option value="UPI">UPI</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></div>
+  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Generate bill</button></div></form></div></div></div>`;
+  window.__billItemOpts=opts; addBillLine();
+  $('#billForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries());
+    const lines=$$('#billLines .bill-line').map(l=>({ itemId:l.querySelector('.bl-item').value||undefined, name:l.querySelector('.bl-item').selectedOptions[0]?.dataset.name||l.querySelector('.bl-name').value, quantity:Number(l.querySelector('.bl-qty').value||1), unitPrice:Number(l.querySelector('.bl-price').value||0) })).filter(l=>l.name);
+    if(!lines.length){toast('Add at least one item','error');return;}
+    try{ const r=await api('/pharmacy/bills',{method:'POST',body:JSON.stringify({ customerName:raw.customerName||'', customerPhone:raw.customerPhone||'', paymentMethod:raw.paymentMethod, prescriptionId:rxId||undefined, discount:Number(raw.discount||0), tax:Number(raw.tax||0), items:lines })}); toast('Bill created'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadBills(); }catch(err){toast(err.message,'error');} });
+}
+function addBillLine(){ const host=$('#billLines'); const div=document.createElement('div'); div.className='bill-line np-row'; div.style.cssText='gap:.5rem;align-items:flex-end;margin-bottom:.5rem;'; div.innerHTML=`<div class="np-field" style="flex:2"><select class="np-select bl-item"><option value="">— manual —</option>${window.__billItemOpts}</select><input class="np-input bl-name" placeholder="Medicine name" style="margin-top:.35rem"/></div><div class="np-field"><label class="np-field__label">Qty</label><input type="number" class="np-input bl-qty" value="1" min="1"/></div><div class="np-field"><label class="np-field__label">Price</label><input type="number" step="0.01" class="np-input bl-price" value="0"/></div>`; host.appendChild(div);
+  div.querySelector('.bl-item').addEventListener('change',e=>{ const o=e.target.selectedOptions[0]; if(o&&o.value){ div.querySelector('.bl-name').value=o.dataset.name; div.querySelector('.bl-price').value=o.dataset.price; } });
+}
+
+$('#passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const d=Object.fromEntries(new FormData(e.target).entries()); if(d.newPassword!==d.confirmPassword){toast('Passwords do not match','error');return;} try{ await api('/auth/change-password',{method:'POST',body:JSON.stringify(d)}); toast('Password changed'); e.target.reset(); }catch(err){toast(err.message,'error');}});
+
+(async()=>{ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.add('hidden'); if(TOKEN){ try{ const me=await api('/auth/me'); if(me&&me.role==='PHARMACY') return showDashboard(); localStorage.removeItem('np_pharmacy_token'); TOKEN=null; }catch{} } showLogin(); })();
