@@ -105,7 +105,7 @@ async function loadRevenue() {
     const g = data.grandTotals;
     $('#revKpiGrid').innerHTML = [
       kpi('Total Revenue',     compactInr(g.totalRevenue), inr(g.totalRevenue), 'blue'),
-      kpi('NeoKidsPro Share',      compactInr(g.clinicShare),  inr(g.clinicShare),  'mint'),
+      kpi('Clinic Share',      compactInr(g.clinicShare),  inr(g.clinicShare),  'mint'),
       kpi('Doctor Gross',      compactInr(g.doctorGross),  inr(g.doctorGross),  'cream'),
       kpi('TDS Deducted',      compactInr(g.tds),          inr(g.tds),          'coral'),
       kpi('Net to Doctors',    compactInr(g.doctorNet),    inr(g.doctorNet),    'blue'),
@@ -142,7 +142,7 @@ async function loadRevenue() {
           </td>
           <td data-label="Consults" style="text-align:right;">${r.totals.consultations}</td>
           <td data-label="Total Revenue" style="text-align:right;">${inr(r.totals.totalRevenue)}</td>
-          <td data-label="NeoKidsPro Share" style="text-align:right;">${inr(r.totals.clinicShare)}</td>
+          <td data-label="Clinic Share" style="text-align:right;">${inr(r.totals.clinicShare)}</td>
           <td data-label="Doctor Gross" style="text-align:right;">${inr(r.totals.doctorGross)}</td>
           <td data-label="TDS" style="text-align:right; color:#B45309;">${inr(r.totals.tds)}</td>
           <td data-label="Doctor Net" style="text-align:right; font-weight:600;">${inr(r.totals.doctorNet)}</td>
@@ -260,7 +260,7 @@ async function openSettlement(id) {
     const summary = `
       <div class="np-kpi-grid" style="margin-bottom:1rem;">
         ${kpi('Total Revenue', inr(s.totalRevenue), `${s.totalConsultations} appt(s)`, 'blue')}
-        ${kpi('NeoKidsPro Share',  inr(s.clinicShareAmount), `${Number(s.clinicSharePercent)}% of revenue`, 'mint')}
+        ${kpi('Clinic Share',  inr(s.clinicShareAmount), `${Number(s.clinicSharePercent)}% of revenue`, 'mint')}
         ${kpi('Doctor Gross',  inr(s.doctorGrossAmount), `${Number(s.doctorSharePercent)}% of revenue`, 'cream')}
         ${kpi('TDS Deducted',  inr(s.tdsAmount), `${Number(s.tdsPercent)}% of gross`, 'coral')}
         ${kpi('Doctor Net',    inr(s.doctorNetAmount), 'Final payable', 'blue')}

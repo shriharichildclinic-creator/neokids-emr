@@ -825,7 +825,6 @@ async function onCertificateIssued({ certificate, pdfRes, sendWhatsapp = true, s
   const doctor  = certificate.doctor;
   const certDate = dayjs(certificate.certificateDate || certificate.fromDate || certificate.issuedAt).format('DD MMM YYYY');
   const doctorLabel = `Dr. ${doctor.name}`;
-  const clinicLabel = doctor.clinicName || doctorLabel;
   const delivery = { whatsapp: 'skipped', email: 'skipped' };
 
   if (sendEmail) {
@@ -841,7 +840,7 @@ async function onCertificateIssued({ certificate, pdfRes, sendWhatsapp = true, s
                  <p>Your medical certificate has been generated and is attached to this email.</p>
                  <p>Please find the certificate attached as a PDF.</p>
                  <p style="color:#555;font-size:13px;">Certificate ID: ${certificate.certificateNumber} · Date: ${certDate}</p>
-                 <p>Regards,<br>${doctorLabel}${doctor.clinicName ? `<br>${doctor.clinicName}` : ''}</p>`,
+                 <p>Regards,<br>${doctorLabel}</p>`,
           attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
         })
       });

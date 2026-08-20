@@ -191,11 +191,11 @@ async function sendPrescriptionPdf({ appointment, filepath, publicUrl }) {
 // Meta template contract (docs/META_WHATSAPP_TEMPLATES.md):
 //   Header : Document (the PDF itself)
 //   Body   : Hello {{1}},
-//            Your medical certificate from {{2}} is ready.
+//            Your medical certificate issued by {{2}} is ready.
 //            Certificate Date: {{3}}
-//            If you have any questions, please contact the clinic.
+//            If you have any questions, please reach out to your doctor.
 //            Regards, {{2}}
-//   {{1}} = Patient Name, {{2}} = Doctor/Clinic Name, {{3}} = Certificate Date
+//   {{1}} = Patient Name, {{2}} = Issuing Doctor Name (never clinic/hospital name), {{3}} = Certificate Date
 async function sendCertificatePdf({ certificate, doctor, patient, filepath }) {
   const dayjs  = require('dayjs');
   const to      = patient.phone;
@@ -213,7 +213,7 @@ async function sendCertificatePdf({ certificate, doctor, patient, filepath }) {
     filename: fname,
     bodyParams: [
       patient.name,                                     // {{1}} patient
-      (doctor && doctor.clinicName) || `Dr. ${(doctor && doctor.name) || '—'}`, // {{2}} clinic / doctor
+      `Dr. ${(doctor && doctor.name) || '—'}`,           // {{2}} issuing doctor (never clinic name)
       dayjs(certDate).format('DD MMM YYYY')             // {{3}} certificate date
     ]
   });

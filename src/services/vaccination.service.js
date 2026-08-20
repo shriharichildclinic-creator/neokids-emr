@@ -56,8 +56,11 @@ const email    = require('./email.service');
 const { renderBrandedEmail, BRAND, esc } = require('./email-brand.service');
 const { formatDateOnly } = require('../utils/date');
 
-const PROVIDER_DOCTOR_NAME = process.env.VACC_DOCTOR_NAME || 'Dr. Vishal Parmar';
-const CLINIC_NAME          = process.env.CLINIC_NAME       || 'NeoKidsPro Clinic';
+// NOTE: Vaccination reminders are system-generated, age-based reminders
+// from NeoKidsPro — NOT a personal message from a doctor. No doctor name
+// is interpolated anywhere in this flow (WhatsApp, email, or plain-text
+// fallback). VACC_DOCTOR_NAME is intentionally not read here.
+const CLINIC_NAME = process.env.CLINIC_NAME || 'NeoKidsPro Clinic';
 
 // External URLs
 const VACCINATION_PORTAL_URL =
@@ -65,9 +68,10 @@ const VACCINATION_PORTAL_URL =
 const NEOKIDSPRO_URL =
   (process.env.NEOKIDS_URL || 'https://neokidspro.in/').replace(/\/+$/, '') + '/';
 
-// Meta template name (v2 supersedes older 4-var one)
+// Meta template name — v1 is the first submission of the doctor-free
+// template (no {{4}} doctor variable; 4 body vars total).
 const WA_TPL_VACCINATION =
-  process.env.WA_TPL_VACCINATION || 'neokids_vacc_reminder_v2';
+  process.env.WA_TPL_VACCINATION || 'neokids_vacc_reminder_v1';
 
 const APPROACH_DAYS = parseInt(process.env.VACC_APPROACH_DAYS || '7', 10);
 
@@ -99,8 +103,8 @@ const ACTION_GUIDANCE_LINES = [
   'NeoKidsPro.',
   'If you are located in Mumbai, you may also use our dedicated ' +
   'vaccination portal at ' + VACCINATION_PORTAL_URL + ' — VaxiClinics ' +
-  'provides vaccination guidance and, where available, home-vaccination ' +
-  'visit services.',
+  'provides vaccination guidance, administers vaccinations for children ' +
+  'in Mumbai, and offers home-vaccination visits where available.',
   'Please do not delay or skip vaccinations without medical advice; ' +
   'timely immunization protects children against serious ' +
   'vaccine-preventable diseases.',
@@ -289,7 +293,7 @@ async function logChannel(patientId, phoneOrEmail, channel, code, dueDate, statu
 }
 
 // ─── Email body ────────────────────────────────────────────────────────
-function buildEmailHtml({ patient, vaccine, doctorName }) {
+function buildEmailHtml({ patient, vaccine }) {
   const parent = patient.parentName || 'Parent';
   const dueStr = formatDateOnly(vaccine.dueDate);
 
@@ -357,11 +361,10 @@ function buildEmailHtml({ patient, vaccine, doctorName }) {
 
 // ─── Send both channels for ONE approaching vaccine ────────────────────
 async function sendReminderForVaccine(patient, vaccine) {
-  const doctorName = PROVIDER_DOCTOR_NAME;
-  const dueStr     = formatDateOnly(vaccine.dueDate);
+  const dueStr = formatDateOnly(vaccine.dueDate);
 
-  // Meta template neokids_vacc_reminder_v2:
-  //   Body: {{1}} Child  {{2}} Vaccine  {{3}} Due Date  {{4}} Doctor  {{5}} Disclaimer
+  // Meta template neokids_vacc_reminder_v1 (doctor-free — system reminder):
+  //   Body: {{1}} Child  {{2}} Vaccine  {{3}} Due Date  {{4}} Disclaimer
   //   Button: static "Vaccination Portal" URL — no dynamic suffix.
   if (patient.phone) {
     try {
@@ -369,15 +372,17 @@ async function sendReminderForVaccine(patient, vaccine) {
         to: patient.phone,
         primaryTemplate:  WA_TPL_VACCINATION,
         fallbackTemplate: null,
-        bodyParams: [patient.name, vaccine.name, dueStr, doctorName, DISCLAIMER_SHORT],
+        bodyParams: [patient.name, vaccine.name, dueStr, DISCLAIMER_SHORT],
         urlButtonParam: null,
         plainTextFallback:
           `Hello ${patient.parentName || 'Parent'}, this is a reminder that ` +
           `${patient.name}'s ${vaccine.name} vaccination falls due on ${dueStr} ` +
           `as per the standard vaccination schedule.\n\n` +
           `${DISCLAIMER_SHORT}\n\n` +
-          `Book on NeoKidsPro: ${NEOKIDSPRO_URL}\n` +
-          `Vaccination portal (Mumbai): ${VACCINATION_PORTAL_URL}\n\n` +
+          `Book an online consultation on NeoKidsPro: ${NEOKIDSPRO_URL}\n` +
+          `In Mumbai? VaxiClinics administers vaccinations and offers home visits ` +
+          `where available: ${VACCINATION_PORTAL_URL}\n\n` +
+          `This is an automated reminder, not medical advice.\n` +
           `— ${CLINIC_NAME}`
       });
       if (result.ok) {
@@ -395,7 +400,7 @@ async function sendReminderForVaccine(patient, vaccine) {
       await email.sendEmail({
         to: patient.email,
         subject: `Vaccination reminder for ${patient.name} — ${vaccine.name} due ${dueStr}`,
-        html: buildEmailHtml({ patient, vaccine, doctorName })
+        html: buildEmailHtml({ patient, vaccine })
       });
       await logChannel(patient.id, patient.email, 'EMAIL', vaccine.code, vaccine.dueDate, 'SENT', { subject: 'vaccination_reminder' });
     } catch (e) {

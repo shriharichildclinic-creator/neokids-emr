@@ -197,7 +197,7 @@ const VIEW_META = {
   dashboardView:   { title:'Dashboard',          sub:'Overview of your clinic' },
   doctorsView:     { title:'Doctors',            sub:'Manage clinic doctors and their performance' },
   apptsView:       { title:'Appointments',       sub:'All bookings across the clinic' },
-  revenueView:     { title:'Revenue Reports',    sub:'Monthly NeoKidsPro revenue — Cashfree only' },
+  revenueView:     { title:'Revenue Reports',    sub:'Monthly clinic revenue — Cashfree only' },
   settlementsView: { title:'Doctor Settlements', sub:'Generate, review, and pay monthly doctor settlements' },
   invoicesView:    { title:'Invoices',           sub:'Settlement invoices issued to doctors' },
   notifView:       { title:'Notification Logs',  sub:'Audit WhatsApp & email deliveries' },

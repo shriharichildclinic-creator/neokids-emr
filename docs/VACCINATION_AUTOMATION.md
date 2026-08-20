@@ -2,7 +2,7 @@
 
 ## One-paragraph summary
 
-Every 5 minutes the server runs a lifecycle cron. **Only during 18:00–20:00 IST** (parent-friendly window, configurable) does that cron let the vaccination scan actually dispatch. When it runs, the scan reads every Patient with a `dateOfBirth`, expands the IAP paediatric vaccination schedule against that DOB, and picks any vaccine whose due date falls in the next 7 days. For each such (patient, vaccine, due-date), it atomically inserts a unique **claim row** in `NotificationLog` (unique DB index) — if that claim already exists (from an earlier tick, a previous day, or a parallel run), the reminder is silently skipped. If the claim wins, the service sends **one WhatsApp** (via the approved `neokids_vacc_reminder_v2` Meta template) **and one Email** (branded NeoKidsPro template) **only to the child's registered parent contact** — never to doctors, admins, or staff (they live in separate tables and staff-looking emails/names are filtered out). Both messages include the mandatory disclaimer, the "consult a paediatrician" clause, the NeoKidsPro booking link, and the VaxiClinics vaccination-portal link. Once sent, that same (patient, vaccine, due-date) can **never** be sent again — the parent gets the next reminder only when the child reaches a **new age bucket** for which a **new** vaccine becomes due.
+Every 5 minutes the server runs a lifecycle cron. **Only during 18:00–20:00 IST** (parent-friendly window, configurable) does that cron let the vaccination scan actually dispatch. When it runs, the scan reads every Patient with a `dateOfBirth`, expands the IAP paediatric vaccination schedule against that DOB, and picks any vaccine whose due date falls in the next 7 days. For each such (patient, vaccine, due-date), it atomically inserts a unique **claim row** in `NotificationLog` (unique DB index) — if that claim already exists (from an earlier tick, a previous day, or a parallel run), the reminder is silently skipped. If the claim wins, the service sends **one WhatsApp** (via the `neokids_vacc_reminder_v1` Meta template, once approved) **and one Email** (branded NeoKidsPro template) **only to the child's registered parent contact** — never to doctors, admins, or staff (they live in separate tables and staff-looking emails/names are filtered out). Both messages are system-generated (no doctor name anywhere) and include the mandatory disclaimer, the "consult a healthcare provider" clause, the NeoKidsPro booking link, and the VaxiClinics vaccination-portal link (guidance, in-person vaccination, and home visits in Mumbai). Once sent, that same (patient, vaccine, due-date) can **never** be sent again — the parent gets the next reminder only when the child reaches a **new age bucket** for which a **new** vaccine becomes due.
 
 ---
 
@@ -40,10 +40,9 @@ Run `node scripts/test-vaccination-reminders.js --force` twice back-to-back; the
 | `VACC_APPROACH_DAYS` | `7` | How many days ahead of due date the reminder fires. |
 | `VACC_WINDOW_START_HOUR_IST` | `18` | Earliest hour (24h IST) reminders can send. |
 | `VACC_WINDOW_END_HOUR_IST` | `20` | Exclusive upper bound. |
-| `VACC_DOCTOR_NAME` | `Dr. Vishal Parmar` | Name interpolated into WhatsApp `{{4}}`. |
 | `VACC_PORTAL_URL` | `https://vaxiclinics.com/` | VaxiClinics link. |
 | `NEOKIDS_URL` | `https://neokidspro.in/` | NeoKidsPro booking link. |
-| `WA_TPL_VACCINATION` | `neokids_vacc_reminder_v2` | Meta template name. |
+| `WA_TPL_VACCINATION` | `neokids_vacc_reminder_v1` | Meta template name. |
 | `STAFF_EMAIL_DOMAINS` | `neokidspro.in,vaxiclinics.com` | Comma-list of domains never eligible. |
 | `CLINIC_NAME` | `NeoKidsPro Clinic` | Shown in copy. |
 
