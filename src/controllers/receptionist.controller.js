@@ -96,13 +96,11 @@ exports.searchPatients = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json([]);
   const scope = await staffAccess.getPatientScope(req.user.id);
+  if (!scope.length) return res.json([]);
   const digits = q.replace(/\D/g, '');
   const or = [{ name: { contains: q } }];
   if (digits.length >= 4) or.push({ phone: { contains: digits } });
-  if (scope.length) or[0] = { name: { contains: q } };
-  const where = scope.length
-    ? { AND: [{ OR: or }, { id: { in: scope } }] }
-    : { OR: or };
+  const where = { AND: [{ OR: or }, { id: { in: scope } }] };
   const rows = await prisma.patient.findMany({
     where,
     orderBy: [{ name: 'asc' }],
@@ -270,7 +268,7 @@ exports.createAppointment = asyncHandler(async (req, res) => {
         feeAtBooking,
         status: 'CONFIRMED',
         paymentStatus: 'CASH_PENDING',
-        source: 'CLINIC_RECEPTION',
+        source: d.isWalkIn ? 'WALK_IN' : 'CLINIC_RECEPTION',
         medicalCentreId,
         createdByReceptionistId: me.id,
         addedById: me.id,
@@ -434,7 +432,16 @@ exports.generateInvoice = asyncHandler(async (req, res) => {
     });
   }
 
-  const amount = (d.amount !== undefined && d.amount !== null) ? d.amount : Number(appt.feeAtBooking);
+  const feeAtBooking = Number(appt.feeAtBooking);
+  let amount = (d.amount !== undefined && d.amount !== null) ? d.amount : feeAtBooking;
+  if (d.amount !== undefined && d.amount !== null && Math.abs(d.amount - feeAtBooking) > 0.01) {
+    if (d.amount > feeAtBooking) {
+      return res.status(400).json({ error: `Amount cannot exceed the doctor's consultation fee (₹${feeAtBooking.toFixed(2)})` });
+    }
+    if (!d.notes || !d.notes.trim()) {
+      return res.status(400).json({ error: 'A note is required when the invoice amount differs from the consultation fee' });
+    }
+  }
   const invoiceNumber = await staffDocs.nextInvoiceNumber();
   let invoice;
   try {
@@ -602,7 +609,7 @@ exports.listCertificates = asyncHandler(async (req, res) => {
   const rows = await prisma.medicalCertificate.findMany({
     where: { doctorId: { in: doctorIds } },
     include: {
-      patient: { select: { id: true, name: true, phone: true } },
+      patient: { select: { id: true, name: true, phone: true, email: true } },
       doctor: { select: { id: true, name: true, specialization: true } },
       appointment: { select: { id: true, date: true, startTime: true, consultationType: true } }
     },
@@ -653,6 +660,8 @@ async function issueCertificateInternal(req, res, me, body) {
     if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
     patient = await prisma.patient.findUnique({ where: { id: d.patientId } });
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
+    const linked = await staffAccess.patientHasDoctorLink(patient.id, doctor.id);
+    if (!linked) return res.status(403).json({ error: 'This patient has no visit history with the selected doctor' });
   }
 
   const certSvc = require('./certificate.controller')._internal;

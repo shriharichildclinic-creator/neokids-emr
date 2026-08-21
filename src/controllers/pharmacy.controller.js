@@ -19,7 +19,8 @@ async function resolveActor(req, res) {
     const u = await staffAccess.getPharmacyUser(req.user.id);
     if (!u) { res.status(401).json({ error: 'Account not found' }); return null; }
     if (u.status !== 'ACTIVE') { res.status(403).json({ error: 'Account is suspended' }); return null; }
-    return { user: u, role, centreId: u.medicalCentreId || null, name: u.name };
+    if (!u.medicalCentreId) { res.status(403).json({ error: 'Your account has no clinic assigned — contact an admin' }); return null; }
+    return { user: u, role, centreId: u.medicalCentreId, name: u.name };
   }
   const u = await staffAccess.getReceptionist(req.user.id);
   if (!u) { res.status(401).json({ error: 'Account not found' }); return null; }
@@ -159,11 +160,13 @@ exports.searchPatients = asyncHandler(async (req, res) => {
   if (!actor) return;
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json([]);
+  const scope = await staffAccess.getPharmacyPatientScope(actor.user.id);
+  if (!scope.length) return res.json([]);
   const digits = q.replace(/\D/g, '');
   const or = [{ name: { contains: q } }];
   if (digits.length >= 4) or.push({ phone: { contains: digits } });
   const rows = await prisma.patient.findMany({
-    where: { OR: or },
+    where: { AND: [{ OR: or }, { id: { in: scope } }] },
     orderBy: [{ name: 'asc' }],
     take: 20
   });
@@ -281,6 +284,9 @@ exports.deactivateItem = asyncHandler(async (req, res) => {
   if (!actor) return;
   const existing = await prisma.pharmacyItem.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Item not found' });
+  if (actor.centreId && existing.medicalCentreId && existing.medicalCentreId !== actor.centreId) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
   const updated = await prisma.pharmacyItem.update({ where: { id: existing.id }, data: { isActive: false } });
   await audit.log({
     actor: { id: actor.user.id, role: actor.role, name: actor.name },
@@ -312,7 +318,7 @@ exports.listBills = asyncHandler(async (req, res) => {
   }
   const rows = await prisma.pharmacyBill.findMany({
     where,
-    include: { items: true, medicalCentre: true, doctor: { select: { id: true, name: true } } },
+    include: { items: true, medicalCentre: true, doctor: { select: { id: true, name: true } }, patient: { select: { id: true, email: true } } },
     orderBy: { createdAt: 'desc' },
     take: 300
   });
@@ -376,11 +382,28 @@ exports.createBill = asyncHandler(async (req, res) => {
   const subtotal = computed.reduce((s, i) => s + i.total, 0);
   const discount = Number(d.discount || 0);
   const tax = Number(d.tax || 0);
+  if (discount > subtotal) {
+    return res.status(400).json({ error: `Discount (₹${discount.toFixed(2)}) cannot exceed the bill subtotal (₹${subtotal.toFixed(2)})` });
+  }
   const total = Math.round(Math.max(0, subtotal - discount + tax) * 100) / 100;
   const billNumber = await staffDocs.nextBillNumber();
   const centreId = d.medicalCentreId || actor.centreId || null;
 
   const bill = await prisma.$transaction(async (tx) => {
+    for (const line of computed) {
+      if (line.itemId) {
+        const dec = await tx.pharmacyItem.updateMany({
+          where: { id: line.itemId, stock: { gte: line.quantity } },
+          data: { stock: { decrement: line.quantity } }
+        });
+        if (dec.count === 0) {
+          const stock = stockMap.get(line.itemId);
+          const err = new Error(`Insufficient stock for ${stock ? stock.name : line.name} — it may have just been sold in another bill`);
+          err.statusCode = 409;
+          throw err;
+        }
+      }
+    }
     const created = await tx.pharmacyBill.create({
       data: {
         billNumber,
@@ -400,14 +423,6 @@ exports.createBill = asyncHandler(async (req, res) => {
       },
       include: { items: true }
     });
-    for (const line of computed) {
-      if (line.itemId) {
-        await tx.pharmacyItem.update({
-          where: { id: line.itemId },
-          data: { stock: { decrement: line.quantity } }
-        });
-      }
-    }
     return created;
   });
 
@@ -440,6 +455,9 @@ exports.sendBill = asyncHandler(async (req, res) => {
   if (!actor) return;
   const bill = await prisma.pharmacyBill.findUnique({ where: { id: req.params.id } });
   if (!bill) return res.status(404).json({ error: 'Bill not found' });
+  if (actor.centreId && bill.medicalCentreId && bill.medicalCentreId !== actor.centreId) {
+    return res.status(404).json({ error: 'Bill not found' });
+  }
   const channels = Array.isArray(req.body && req.body.channels) ? req.body.channels : ['whatsapp', 'email'];
   const delivery = await staffDocs.deliverPharmacyBill(bill.id, { channels, user: { id: actor.user.id, role: actor.role } });
   await audit.log({

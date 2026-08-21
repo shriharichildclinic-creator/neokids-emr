@@ -332,7 +332,7 @@ let _currentMarkPaidSettlement = null;
       $('#markPaidSummary').innerHTML = `
         <div><strong>Doctor:</strong> ${drNameHtml(s.doctor.name)}</div>
         <div><strong>Period:</strong> ${period}</div>
-        <div><strong>Net Payable:</strong> <span style="color:#15803D; font-weight:700;">${inr(s.doctorNetAmount)}</span></div>
+        <div><strong>Net Payable:</strong> <span class="np-amount-positive">${inr(s.doctorNetAmount)}</span></div>
         <div style="font-size:.7rem; color:var(--np-muted); margin-top:.35rem;">
           A settlement invoice PDF will be generated automatically.
         </div>

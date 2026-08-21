@@ -64,10 +64,12 @@ async function generateHistoricalRecordPdf(record){
 
     const L = 50, W = 495;
     doc.fontSize(18).font('Helvetica-Bold').text('NeoKidsPro — Historical Medical Record', L, 50);
-    doc.moveTo(L, 78).lineTo(L+W, 78).lineWidth(1).stroke('#333');
+    doc.fontSize(9).font('Helvetica').fillColor('#666').text('Pediatric Network of Doctors · neokidspro.in', L, 72);
+    doc.fillColor('#000');
+    doc.moveTo(L, 90).lineTo(L+W, 90).lineWidth(1).stroke('#333');
 
     doc.fontSize(10).font('Helvetica');
-    let y = 95;
+    let y = 107;
     const row = (k, v) => { doc.font('Helvetica-Bold').text(k, L, y, { width: 140 }); doc.font('Helvetica').text(String(v || '—'), L+145, y, { width: W-145 }); y = doc.y + 4; };
 
     row('Patient:', record.patient ? record.patient.name : '');

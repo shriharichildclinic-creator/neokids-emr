@@ -21,16 +21,78 @@ function todayIso(){ return new Date().toISOString().slice(0,10); }
 function statusBadge(s){ const m={CONFIRMED:'np-badge--green',PENDING:'np-badge--amber',COMPLETED:'np-badge--blue',CANCELLED:'np-badge--red'}; return `<span class="np-badge ${m[s]||'np-badge--slate'}"><span class="np-badge__dot"></span>${esc(s||'—')}</span>`; }
 function sourceBadge(s){
   if (s==='CLINIC_RECEPTION') return `<span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Reception</span>`;
+  if (s==='WALK_IN') return `<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Walk-in</span>`;
   if (s==='NEOKIDSPRO') return `<span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span>`;
   if (s==='MANUAL') return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Manual</span>`;
   return '';
 }
 function payBadge(p){ const m={PAID:['np-badge--green','Paid'],CASH_COLLECTED:['np-badge--green','Cash collected'],CASH_PENDING:['np-badge--amber','Cash pending'],UNPAID:['np-badge--amber','Unpaid']}; const x=m[p]; return x?`<span class="np-badge ${x[0]}"><span class="np-badge__dot"></span>${x[1]}</span>`:`<span class="np-badge np-badge--slate">${esc(p||'—')}</span>`; }
 
+// Single source of truth for which appointment actions are visible.
+// Used by both the dashboard "today" list and the full appointments table
+// so buttons never appear/disappear inconsistently between the two views.
+function apptActionsHtml(a){
+  const open = a.status!=='CANCELLED' && a.status!=='COMPLETED';
+  const btns=[];
+  if(!a.arrivedAt && open) btns.push(`<button class="np-btn np-btn--sm np-btn--primary" onclick="markArrived('${a.id}')">Mark arrived</button>`);
+  if(open){
+    btns.push(`<button class="np-btn np-btn--sm" onclick="resched('${a.id}')">Reschedule</button>`);
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="cancelAppt('${a.id}')">Cancel</button>`);
+  }
+  if(!a.consultationInvoice && a.status!=='CANCELLED'){
+    btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`);
+  } else if(a.consultationInvoice){
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceSendModal('${a.consultationInvoice.id}','${a.patient.phone||''}','${esc(a.patient.email||'')}')">Send invoice</button>`);
+  }
+  if(__me.canIssueCertificates && a.status!=='CANCELLED'){
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertModal('${a.id}')">Certificate</button>`);
+  }
+  return btns.join(' ');
+}
+
+// Real modal (no browser confirm() popups) for choosing delivery channels.
+// Only shows a channel if the patient actually has that contact detail on file,
+// and never sends anything until the user explicitly clicks Send.
+function openInvoiceSendModal(invoiceId, phone, email){
+  const hasPhone = !!phone; const hasEmail = !!email;
+  if(!hasPhone && !hasEmail){ toast('Patient has no phone or email on file — cannot send','error'); return; }
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Send invoice</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body">
+    <div class="np-row" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+      ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendChWa" checked/> Send via WhatsApp</label>`:''}
+      ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendChEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
+    </div>
+    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendInvoiceConfirm">Send</button></div>
+  </div></div></div>`;
+  $('#sendInvoiceConfirm').addEventListener('click', async ()=>{
+    const channels=[];
+    if(hasPhone && $('#sendChWa').checked) channels.push('whatsapp');
+    if(hasEmail && $('#sendChEm') && $('#sendChEm').checked) channels.push('email');
+    if(!channels.length){ toast('Choose at least one channel','error'); return; }
+    closeModal();
+    try{
+      const r=await api('/receptionist/invoices/'+invoiceId+'/send',{method:'POST',body:JSON.stringify({channels})});
+      toast('Invoice sent — WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email);
+      loadAppointments(); loadInvoices();
+    }catch(e){ toast(e.message,'error'); }
+  });
+}
+
 const VIEWS = { dashView:['Dashboard','Today at your clinic'], apptsView:['Appointments','Bookings for your doctors'], patientsView:['Patients','Search & register'], invoicesView:['Consultation Invoices','Reception billing'], certsView:['Certificates','Issued in the doctor name'], rxView:['Prescriptions','Offline prescriptions'], pharmBillsView:['Pharmacy Bills','Medicine sales'], settingsView:['Settings','Account'] };
 function setView(v){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
   if(v==='dashView')loadDashboard(); if(v==='apptsView')loadAppointments(); if(v==='patientsView')loadPatients(); if(v==='invoicesView')loadInvoices(); if(v==='certsView')loadCerts(); if(v==='rxView')loadRx(); if(v==='pharmBillsView')loadPharmBills(); }
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+
+function setupSidebar(){
+  const sidebar=$('#sidebar'), backdrop=$('#sidebarBackdrop'), toggle=$('#sidebarToggle');
+  if(!sidebar||!toggle||!backdrop) return;
+  if(toggle.__bound) return; toggle.__bound=true;
+  function open(){ sidebar.classList.add('is-open'); backdrop.classList.add('is-open'); document.body.classList.add('np-drawer-open'); }
+  function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); document.body.classList.remove('np-drawer-open'); }
+  toggle.addEventListener('click',()=>sidebar.classList.contains('is-open')?close():open());
+  backdrop.addEventListener('click',close);
+  window.addEventListener('resize',()=>{ if(window.innerWidth>1023) close(); });
+  $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>{ if(window.matchMedia('(max-width:1023px)').matches) close(); }));
+}
 
 $('#loginForm').addEventListener('submit', async e=>{ e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='RECEPTIONIST')throw new Error('Not a receptionist account'); TOKEN=d.token; localStorage.setItem('np_reception_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
 function logout(){ localStorage.removeItem('np_reception_token'); TOKEN=null; showLogin(); }
@@ -38,6 +100,7 @@ function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen')
 
 async function showDashboard(){
   $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden');
+  setupSidebar();
   try{
     const meRes = await api('/auth/me'); __me = meRes.user || meRes;
     $('#userName').textContent = __me.name; $('#userInitials').textContent = __me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
@@ -66,8 +129,7 @@ async function loadDashboard(){
       <div class="np-appt-row"><div class="np-appt-row__time"><div class="np-appt-row__time-h">${esc(fmtTime(a.startTime))}</div><div class="np-appt-row__time-d">${esc(fmtDate(a.date))}</div></div>
       <div class="np-appt-row__body"><div class="np-appt-row__name">${esc(a.patient.name)} ${a.arrivedAt?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Arrived</span>':''}</div><div class="np-appt-row__assign">Dr. ${esc(a.doctor.name)}</div><div class="np-appt-row__meta">${esc(a.primaryProblem||'')}</div></div>
       <div class="np-appt-row__right">${statusBadge(a.status)} ${sourceBadge(a.source)}
-        ${!a.arrivedAt && a.status!=='CANCELLED' && a.status!=='COMPLETED' ? `<button class="np-btn np-btn--sm np-btn--primary" onclick="markArrived('${a.id}')">Mark arrived</button>`:''}
-        ${!a.consultationInvoice && a.status!=='CANCELLED' ? `<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`:''}
+        ${apptActionsHtml(a)}
       </div></div>`).join('') : '<div class="np-empty"><div class="np-empty__title">No appointments today</div></div>';
   }catch(e){ $('#kpiGrid').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; }
 }
@@ -76,23 +138,38 @@ async function loadAppointments(){
   const tb=$('#apptsTbody'); tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:1.4rem" class="np-mut">Loading…</td></tr>';
   const qs=new URLSearchParams(); if($('#fDate').value)qs.set('date',$('#fDate').value); if($('#fDoctor').value)qs.set('doctorId',$('#fDoctor').value); if($('#fStatus').value)qs.set('status',$('#fStatus').value); if($('#fQ').value.trim().length>=2)qs.set('q',$('#fQ').value.trim());
   try{ const rows=await api('/receptionist/appointments?'+(qs.toString()||'')); __appts=rows;
-    tb.innerHTML = rows.length ? rows.map(a=>`<tr><td><b>${esc(fmtDate(a.date))}</b><div class="np-mut" style="font-size:.78rem">${esc(fmtTime(a.startTime))}</div></td>
-      <td><b>${esc(a.patient.name)}</b><div class="np-mut" style="font-size:.78rem">+91 ${esc(a.patient.phone||'')}</div></td>
-      <td>Dr. ${esc(a.doctor.name)}</td><td>${sourceBadge(a.source)}</td><td>${statusBadge(a.status)}</td><td>${payBadge(a.paymentStatus)}</td>
-      <td style="text-align:right;white-space:nowrap">
-        ${a.status==='CONFIRMED'||a.status==='PENDING'?`<button class="np-btn np-btn--sm" onclick="resched('${a.id}')">Reschedule</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="cancelAppt('${a.id}')">Cancel</button>`:''}
-        ${!a.consultationInvoice && a.status!=='CANCELLED'?`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`:''}
-        ${__me.canIssueCertificates?`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertModal('${a.id}')">Certificate</button>`:''}
+    tb.innerHTML = rows.length ? rows.map(a=>`<tr><td data-label="Date/Time"><b>${esc(fmtDate(a.date))}</b><div class="np-mut" style="font-size:.78rem">${esc(fmtTime(a.startTime))}</div></td>
+      <td data-label="Patient"><b>${esc(a.patient.name)}</b><div class="np-mut" style="font-size:.78rem">+91 ${esc(a.patient.phone||'')}</div></td>
+      <td data-label="Doctor">Dr. ${esc(a.doctor.name)}</td><td data-label="Source">${sourceBadge(a.source)}</td><td data-label="Status">${statusBadge(a.status)}</td><td data-label="Payment">${payBadge(a.paymentStatus)}</td>
+      <td data-label="Actions" style="text-align:right;white-space:nowrap">
+        ${apptActionsHtml(a)}
       </td></tr>`).join('') : '<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No appointments match</div></div></td></tr>';
   }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
 }
 $('#apptFilters').addEventListener('submit',e=>{e.preventDefault();loadAppointments();});
 
 async function markArrived(id){ try{ await api('/receptionist/appointments/'+id+'/arrive',{method:'POST',body:'{}'}); toast('Patient marked arrived'); loadDashboard(); }catch(e){toast(e.message,'error');} }
-async function resched(id){ const date=prompt('New date (YYYY-MM-DD):',todayIso()); if(!date)return; const startTime=prompt('New start time (HH:MM):',''); if(!startTime)return; const reason=prompt('Reason for reschedule:'); if(!reason||reason.trim().length<3){toast('Reason required (min 3 chars)','error');return;} try{ await api('/receptionist/appointments/'+id+'/reschedule',{method:'POST',body:JSON.stringify({date,startTime,reason})}); toast('Rescheduled'); loadAppointments(); }catch(e){toast(e.message,'error');} }
-async function cancelAppt(id){ const reason=prompt('Cancellation reason:'); if(!reason||reason.trim().length<3){toast('Reason required (min 3 chars)','error');return;} try{ await api('/receptionist/appointments/'+id+'/cancel',{method:'POST',body:JSON.stringify({reason})}); toast('Cancelled'); loadAppointments(); }catch(e){toast(e.message,'error');} }
-async function genInvoice(id){ try{ const r=await api('/receptionist/appointments/'+id+'/invoice',{method:'POST',body:JSON.stringify({})}); toast(r.existing?'Invoice already exists — opening':'Invoice generated'); if(r.pdfUrl|| (r.invoice&&r.invoice.pdfUrl)) window.open(r.pdfUrl||r.invoice.pdfUrl,'_blank'); sendInvoicePrompt(r.invoice.id); loadAppointments(); }catch(e){toast(e.message,'error');} }
-async function sendInvoicePrompt(id){ const wa=confirm('Send invoice to patient on WhatsApp?'); const em=confirm('Also send by email (if on file)?'); if(!wa&&!em)return; try{ const ch=[]; if(wa)ch.push('whatsapp'); if(em)ch.push('email'); const r=await api('/receptionist/invoices/'+id+'/send',{method:'POST',body:JSON.stringify({channels:ch})}); toast('Invoice delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); }catch(e){toast(e.message,'error');} }
+function resched(id){
+  const appt=__appts.find(a=>a.id===id);
+  const docId=appt&&appt.doctor?appt.doctor.id:'';
+  const curDate=appt?String(appt.date).slice(0,10):todayIso();
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Reschedule appointment</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="reschedForm">
+  <div class="np-field"><label class="np-field__label">New date *</label><input name="date" type="date" required class="np-input" value="${curDate}"/></div>
+  <div class="np-field"><label class="np-field__label">Available slot *</label><select name="startTime" required class="np-select" id="reschedSlotSel"><option value="">Loading…</option></select></div>
+  <div class="np-field"><label class="np-field__label">Reason *</label><textarea name="reason" required minlength="3" class="np-textarea" placeholder="Min 3 characters"></textarea></div>
+  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Reschedule</button></div></form></div></div></div>`;
+  const f=$('#reschedForm');
+  async function refreshReschedSlots(){ const date=f.date.value; if(!date||!docId){ $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; return; } try{ const r=await api(`/receptionist/slots?doctorId=${docId}&date=${date}&type=OFFLINE`); $('#reschedSlotSel').innerHTML=(r.slots||[]).filter(s=>s.available).map(s=>`<option value="${s.startTime}">${fmtTime(s.startTime)}</option>`).join('')||'<option value="">No slots available</option>'; }catch(e){ $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; } }
+  f.date.addEventListener('change',refreshReschedSlots); refreshReschedSlots();
+  f.addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(f).entries()); if(!raw.reason||raw.reason.trim().length<3){toast('Reason required (min 3 chars)','error');return;} try{ await api('/receptionist/appointments/'+id+'/reschedule',{method:'POST',body:JSON.stringify({date:raw.date,startTime:raw.startTime,reason:raw.reason})}); toast('Rescheduled'); closeModal(); loadAppointments(); loadDashboard(); }catch(err){toast(err.message,'error');} });
+}
+function cancelAppt(id){
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Cancel appointment</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="cancelForm">
+  <div class="np-field"><label class="np-field__label">Cancellation reason *</label><textarea name="reason" required minlength="3" class="np-textarea" placeholder="Min 3 characters"></textarea></div>
+  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Back</button><button class="np-btn np-btn--primary" type="submit">Confirm cancellation</button></div></form></div></div></div>`;
+  $('#cancelForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries()); if(!raw.reason||raw.reason.trim().length<3){toast('Reason required (min 3 chars)','error');return;} try{ await api('/receptionist/appointments/'+id+'/cancel',{method:'POST',body:JSON.stringify({reason:raw.reason})}); toast('Cancelled'); closeModal(); loadAppointments(); loadDashboard(); }catch(err){toast(err.message,'error');} });
+}
+async function genInvoice(id){ try{ const r=await api('/receptionist/appointments/'+id+'/invoice',{method:'POST',body:JSON.stringify({})}); toast(r.existing?'Invoice already exists':'Invoice generated'); loadAppointments(); loadDashboard(); }catch(e){toast(e.message,'error');} }
 
 // Patients
 async function loadPatients(q){ const list=$('#patientsList'); try{ const rows=await api('/receptionist/patients'+(q?('?q='+encodeURIComponent(q)):'')); list.innerHTML=rows.length?rows.map(p=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(p.name)}</div><div class="np-appt-row__meta">+91 ${esc(p.phone||'')}${p.parentName?' · Guardian: '+esc(p.parentName):''}</div></div><div class="np-appt-row__right"><button class="np-btn np-btn--sm" onclick="openBookModal(null,'${p.id}')">Book</button></div></div>`).join(''):'<div class="np-empty"><div class="np-empty__sub">Type a name or phone to search, or register a new patient.</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
@@ -149,17 +226,35 @@ async function openBookModal(_, patientId){
 }
 
 // Invoices
-async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td><b>${esc(i.invoiceNumber)}</b></td><td>${esc(i.appointment.patient.name)}</td><td>Dr. ${esc(i.appointment.doctor.name)}</td><td>${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td style="text-align:right"><b>${inr(i.amount)}</b></td><td>${esc(fmtDate(i.createdAt))}</td><td style="text-align:right;white-space:nowrap">${i.pdfUrl?`<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a> `:''}<button class="np-btn np-btn--sm" onclick="printPdf('${i.pdfUrl||''}')">Print</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="sendInvoicePrompt('${i.id}')">Send</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td><td data-label="Patient">${esc(i.appointment.patient.name)}</td><td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td><td data-label="Clinic">${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td><td data-label="Date">${esc(fmtDate(i.createdAt))}</td><td data-label="Actions" style="text-align:right;white-space:nowrap">${i.pdfUrl?`<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a> `:''}<button class="np-btn np-btn--sm" onclick="printPdf('${i.pdfUrl||''}')">Print</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceSendModal('${i.id}','${i.appointment.patient.phone||''}','${esc(i.appointment.patient.email||'')}')">Send</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 function printPdf(url){ if(!url){toast('Generate the invoice first','warn');return;} const w=window.open(url,'_blank'); if(w){w.addEventListener('load',()=>{try{w.print();}catch(_){}});} }
 
 // Certificates
-async function loadCerts(){ const list=$('#certsList'); try{ const rows=await api('/receptionist/certificates'); list.innerHTML=rows.length?'<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Cert ID</th><th>Patient</th><th>Doctor</th><th>Template</th><th>Issued</th><th></th></tr></thead><tbody>'+rows.map(c=>`<tr><td>${esc(c.certificateNumber)}</td><td>${esc(c.patientNameSnapshot||(c.patient&&c.patient.name)||'')}</td><td>Dr. ${esc((c.doctor&&c.doctor.name)||'')}</td><td>${esc((c.templateKey||'').replace(/_/g,' '))}</td><td>${esc(fmtDate(c.issuedAt))}</td><td>${c.pdfUrl?`<a class="np-btn np-btn--sm" href="${c.pdfUrl}" target="_blank">PDF</a>`:''} <button class="np-btn np-btn--sm np-btn--ghost" onclick="sendCert('${c.id}')">Send</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="np-empty"><div class="np-empty__title">No certificates yet</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
-async function sendCert(id){ const wa=confirm('Send on WhatsApp?'); const em=confirm('Send by email?'); if(!wa&&!em)return; const ch=[]; if(wa)ch.push('whatsapp'); if(em)ch.push('email'); try{ const r=await api('/receptionist/certificates/'+id+'/send',{method:'POST',body:JSON.stringify({channels:ch})}); toast('Delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); }catch(e){toast(e.message,'error');} }
+async function loadCerts(){ const list=$('#certsList'); try{ const rows=await api('/receptionist/certificates'); list.innerHTML=rows.length?'<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Cert ID</th><th>Patient</th><th>Doctor</th><th>Template</th><th>Issued</th><th>Actions</th></tr></thead><tbody>'+rows.map(c=>`<tr><td data-label="Cert ID">${esc(c.certificateNumber)}</td><td data-label="Patient">${esc(c.patientNameSnapshot||(c.patient&&c.patient.name)||'')}</td><td data-label="Doctor">Dr. ${esc((c.doctor&&c.doctor.name)||'')}</td><td data-label="Template">${esc((c.templateKey||'').replace(/_/g,' '))}</td><td data-label="Issued">${esc(fmtDate(c.issuedAt))}</td><td data-label="Actions">${c.pdfUrl?`<a class="np-btn np-btn--sm" href="${c.pdfUrl}" target="_blank">PDF</a>`:''} <button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertSendModal('${c.id}','${esc((c.patient&&c.patient.phone)||'')}','${esc((c.patient&&c.patient.email)||'')}')">Send</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="np-empty"><div class="np-empty__title">No certificates yet</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+function openCertSendModal(certId, phone, email){
+  const hasPhone=!!phone; const hasEmail=!!email;
+  if(!hasPhone && !hasEmail){ toast('Patient has no phone or email on file — cannot send','error'); return; }
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Send certificate</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body">
+    <div class="np-row" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+      ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendCertWa" checked/> Send via WhatsApp</label>`:''}
+      ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendCertEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
+    </div>
+    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendCertConfirm">Send</button></div>
+  </div></div></div>`;
+  $('#sendCertConfirm').addEventListener('click', async ()=>{
+    const channels=[];
+    if(hasPhone && $('#sendCertWa').checked) channels.push('whatsapp');
+    if(hasEmail && $('#sendCertEm') && $('#sendCertEm').checked) channels.push('email');
+    if(!channels.length){ toast('Choose at least one channel','error'); return; }
+    closeModal();
+    try{ const r=await api('/receptionist/certificates/'+certId+'/send',{method:'POST',body:JSON.stringify({channels})}); toast('Delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); }catch(e){ toast(e.message,'error'); }
+  });
+}
 async function openCertModal(appointmentId){
   let tpls=[]; try{ tpls=await api('/receptionist/certificates/templates'); }catch(_){}
   const docOpts=__doctors.map(d=>`<option value="${d.id}">Dr. ${esc(d.name)}</option>`).join('');
   $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Issue medical certificate</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="cForm"><div class="np-grid-2">
-  ${appointmentId?'':'<div class="np-field"><label class="np-field__label">Doctor *</label><select name="doctorId" class="np-select">'+docOpts+'</select></div><div class="np-field"><label class="np-field__label">Patient ID *</label><input name="patientId" required class="np-input" placeholder="UUID from Patients"/></div>'}
+  ${appointmentId?'':'<div class="np-field"><label class="np-field__label">Doctor *</label><select name="doctorId" class="np-select">'+docOpts+'</select></div><div class="np-field"><label class="np-field__label">Patient *</label><input id="certPatient" class="np-input" placeholder="Search by name or phone" list="certPatients" autocomplete="off"/><datalist id="certPatients"></datalist><input type="hidden" id="certPatientId"/></div>'}
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Template</label><select name="templateKey" class="np-select">${tpls.map(t=>`<option value="${t.key}">${esc(t.label)}</option>`).join('')}</select></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Reason *</label><textarea name="reason" required class="np-textarea"></textarea></div>
   <div class="np-field"><label class="np-field__label">Diagnosis</label><input name="diagnosis" class="np-input"/></div>
@@ -167,15 +262,24 @@ async function openCertModal(appointmentId){
   <div class="np-field"><label class="np-field__label">From date</label><input name="fromDate" type="date" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">To date</label><input name="toDate" type="date" class="np-input"/></div></div>
   <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Issue & generate PDF</button></div></form></div></div></div>`;
+  if(!appointmentId){
+    const cP=$('#certPatient');
+    cP.addEventListener('input',e=>{ $('#certPatientId').value=''; clearTimeout(window.__cp); const q=e.target.value.trim(); if(q.length<2)return; window.__cp=setTimeout(async()=>{ try{ const rows=await api('/receptionist/patients?q='+encodeURIComponent(q)); $('#certPatients').innerHTML=rows.map(p=>`<option value="${esc(p.name)} — ${esc(p.phone)}" data-id="${p.id}"></option>`).join(''); window.__cplist=rows; }catch(_){}} ,250); });
+  }
   $('#cForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries()); const payload={ templateKey:raw.templateKey, reason:raw.reason, diagnosis:raw.diagnosis||'', restDays:raw.restDays===''?undefined:Number(raw.restDays), fromDate:raw.fromDate||'', toDate:raw.toDate||'' };
     const url = appointmentId? '/receptionist/appointments/'+appointmentId+'/certificate' : '/receptionist/certificates';
-    if(!appointmentId){ payload.doctorId=raw.doctorId; payload.patientId=raw.patientId; }
+    if(!appointmentId){
+      let pid=$('#certPatientId').value||null; const typed=$('#certPatient').value.trim();
+      if(!pid && window.__cplist){ const match=window.__cplist.find(p=>`${p.name} — ${p.phone}`===typed); if(match) pid=match.id; }
+      if(!pid){ toast('Select a patient from the search results','error'); return; }
+      payload.doctorId=raw.doctorId; payload.patientId=pid;
+    }
     try{ const r=await api(url,{method:'POST',body:JSON.stringify(payload)}); toast('Certificate issued'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadCerts(); }catch(err){toast(err.message,'error');} });
 }
 
 // Pharmacy (receptionist with permission)
 async function loadRx(){ const list=$('#rxList'); try{ const rows=await api('/receptionist/pharmacy/prescriptions'); list.innerHTML=rows.length?rows.map(rx=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(rx.patient.name)} ${rx.dispensed?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Dispensed</span>':'<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Pending</span>'}</div><div class="np-appt-row__assign">Dr. ${esc(rx.doctor.name)} · ${esc(fmtDate(rx.visitDate))}</div><div class="np-appt-row__meta">${(rx.medications||[]).map(m=>esc(m.name)+' '+esc(m.dose||'')).join(', ')}</div></div><div class="np-appt-row__right"><span class="np-badge np-badge--slate">${esc(rx.createdByRole==='RECEPTIONIST'?'by reception':'by doctor')}</span>${!rx.dispensed?` <button class="np-btn np-btn--sm np-btn--primary" onclick="openBillModal(null,'${rx.id}')">Dispense</button>`:''}</div></div>`).join(''):'<div class="np-empty"><div class="np-empty__title">No offline prescriptions</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
-async function loadPharmBills(){ const tb=$('#pharmBillsTbody'); try{ const rows=await api('/receptionist/pharmacy/bills'); tb.innerHTML=rows.length?rows.map(b=>`<tr><td><b>${esc(b.billNumber)}</b></td><td>${esc(b.customerName||'')}</td><td style="text-align:right"><b>${inr(b.total)}</b></td><td>${esc(fmtDate(b.createdAt))}</td><td style="text-align:right">${b.pdfUrl?`<a class="np-btn np-btn--sm" href="${b.pdfUrl}" target="_blank">PDF</a>`:''}</td></tr>`).join(''):'<tr><td colspan="5"><div class="np-empty"><div class="np-empty__title">No bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="5"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+async function loadPharmBills(){ const tb=$('#pharmBillsTbody'); try{ const rows=await api('/receptionist/pharmacy/bills'); tb.innerHTML=rows.length?rows.map(b=>`<tr><td data-label="Bill #"><b>${esc(b.billNumber)}</b></td><td data-label="Customer">${esc(b.customerName||'')}</td><td data-label="Total" style="text-align:right"><b>${inr(b.total)}</b></td><td data-label="Date">${esc(fmtDate(b.createdAt))}</td><td data-label="Actions" style="text-align:right">${b.pdfUrl?`<a class="np-btn np-btn--sm" href="${b.pdfUrl}" target="_blank">PDF</a>`:''}</td></tr>`).join(''):'<tr><td colspan="5"><div class="np-empty"><div class="np-empty__title">No bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="5"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 async function openBillModal(_, rxId){
   let items=[]; try{ items=await api('/receptionist/pharmacy/inventory'); }catch(_){}
   const opts=items.map(i=>`<option value="${i.id}" data-price="${i.sellingPrice}" data-name="${esc(i.name)}">${esc(i.name)} (₹${Number(i.sellingPrice).toFixed(2)} · stock ${i.stock})</option>`).join('');
@@ -193,9 +297,20 @@ async function openBillModal(_, rxId){
     try{ const r=await api('/receptionist/pharmacy/bills',{method:'POST',body:JSON.stringify({ customerName:raw.customerName||'', customerPhone:raw.customerPhone||'', prescriptionId:rxId||undefined, discount:Number(raw.discount||0), tax:Number(raw.tax||0), items:lines })}); toast('Bill created'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadPharmBills(); }catch(err){toast(err.message,'error');} });
 }
 function addBillLine(){ const host=$('#billLines'); const div=document.createElement('div'); div.className='bill-line np-row'; div.style.cssText='gap:.5rem;align-items:flex-end;margin-bottom:.5rem;'; div.innerHTML=`<div class="np-field" style="flex:2"><select class="np-select bl-item"><option value="">— manual —</option>${window.__billItemOpts}</select><input class="np-input bl-name" placeholder="Medicine name" style="margin-top:.35rem"/></div><div class="np-field"><label class="np-field__label">Qty</label><input type="number" class="np-input bl-qty" value="1" min="1"/></div><div class="np-field"><label class="np-field__label">Price</label><input type="number" step="0.01" class="np-input bl-price" value="0"/></div>`; host.appendChild(div);
-  div.querySelector('.bl-item').addEventListener('change',e=>{ const o=e.target.selectedOptions[0]; if(o&&o.value){ div.querySelector('.bl-name').value=o.dataset.name; div.querySelector('.bl-price').value=o.dataset.price; } });
+  const itemSel=div.querySelector('.bl-item'); const nameInput=div.querySelector('.bl-name');
+  itemSel.addEventListener('change',e=>{ const o=e.target.selectedOptions[0]; if(o&&o.value){ nameInput.value=o.dataset.name; nameInput.readOnly=true; div.querySelector('.bl-price').value=o.dataset.price; } else { nameInput.value=''; nameInput.readOnly=false; } });
 }
 
 $('#passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const d=Object.fromEntries(new FormData(e.target).entries()); if(d.newPassword!==d.confirmPassword){toast('Passwords do not match','error');return;} try{ await api('/auth/change-password',{method:'POST',body:JSON.stringify(d)}); toast('Password changed'); e.target.reset(); }catch(err){toast(err.message,'error');}});
+
+function wireThemeSwitch(){
+  const opts=$$('#setting-appearance [data-theme-choice]');
+  if(!opts.length || !window.NPTheme) return;
+  function paint(){ const mode=window.NPTheme.current?window.NPTheme.current():(document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light'); opts.forEach(el=>{ const active=el.dataset.themeChoice===mode; el.classList.toggle('is-active',active); el.setAttribute('aria-checked',active?'true':'false'); }); }
+  opts.forEach(el=>el.addEventListener('click',()=>{ window.NPTheme.set(el.dataset.themeChoice); paint(); }));
+  document.addEventListener('np-theme-change', paint);
+  paint();
+}
+wireThemeSwitch();
 
 (async()=>{ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.add('hidden'); if(TOKEN){ try{ const me=await api('/auth/me'); if(me&&me.role==='RECEPTIONIST') return showDashboard(); localStorage.removeItem('np_reception_token'); TOKEN=null; }catch{} } showLogin(); })();

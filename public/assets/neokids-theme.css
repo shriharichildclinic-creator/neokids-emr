@@ -426,6 +426,38 @@ select.np-select:focus, select.np-input:focus, .np-select:focus{
 /* Native-arrow selects (hour/AM-PM pickers) keep the OS glyph but still
    reserve room so the value never sits underneath it. */
 .np-select-native{ appearance: auto; -webkit-appearance: auto; padding-right: 2rem; }
+/* File inputs (KYC docs, doctor photo/signature, historical-record
+   attachments) were inheriting the same fixed padding/height box model
+   as text inputs. That model fights the browser's own internal
+   button+filename layout instead of sizing around it, which is what
+   was clipping the filename to things like "No fi...osen". File inputs
+   get their own, lighter treatment plus a themed selector button so it
+   reads as part of the design system instead of raw OS chrome. */
+input[type="file"].np-input{
+  display: flex;
+  align-items: center;
+  height: auto;
+  min-height: 40px;
+  padding: .35rem .6rem;
+  overflow: hidden;
+}
+input[type="file"].np-input::file-selector-button{
+  font-family: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  padding: .4rem .7rem;
+  margin-right: .6rem;
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--nk-text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+input[type="file"].np-input::file-selector-button:hover{ background: var(--nk-teal-50); }
+html[data-theme="dark"] input[type="file"].np-input::file-selector-button{
+  background: #142531; color: var(--nk-text); border-color: var(--nk-border);
+}
 .np-textarea{ min-height: 80px; resize: vertical; }
 /* Date/time pickers: explicit height keeps them level with text inputs
    and buttons; color-scheme keeps the calendar/clock indicator visible
@@ -972,6 +1004,7 @@ html[data-theme="dark"] .np-card,
 html[data-theme="dark"] .np-kpi,
 html[data-theme="dark"] .np-table-wrap,
 html[data-theme="dark"] .np-modal__panel,
+html[data-theme="dark"] .np-modal__card,
 html[data-theme="dark"] .np-drawer__panel,
 html[data-theme="dark"] .np-doc-card{
   background: var(--nk-card) !important;
@@ -2032,7 +2065,8 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb{
 }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover{ background: #406877; }
 
-html[data-theme="dark"] .np-modal__panel{
+html[data-theme="dark"] .np-modal__panel,
+html[data-theme="dark"] .np-modal__card{
   background: var(--nk-card) !important;
   color: var(--nk-text) !important;
   border: 1px solid var(--nk-border) !important;

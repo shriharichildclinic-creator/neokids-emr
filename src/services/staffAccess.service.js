@@ -120,6 +120,35 @@ async function getPharmacyAssignments(pharmacyUserId) {
   });
 }
 
+async function patientHasDoctorLink(patientId, doctorId) {
+  const [appt, cert] = await Promise.all([
+    prisma.appointment.findFirst({ where: { patientId, doctorId }, select: { id: true } }),
+    prisma.medicalCertificate.findFirst({ where: { patientId, doctorId }, select: { id: true } })
+  ]);
+  return !!(appt || cert);
+}
+
+async function getPharmacyPatientScope(pharmacyUserId) {
+  const doctorIds = await getPharmacyDoctorIds(pharmacyUserId);
+  if (!doctorIds.length) return [];
+  const [appts, certs] = await Promise.all([
+    prisma.appointment.findMany({
+      where: { doctorId: { in: doctorIds } },
+      select: { patientId: true },
+      distinct: ['patientId']
+    }),
+    prisma.medicalCertificate.findMany({
+      where: { doctorId: { in: doctorIds } },
+      select: { patientId: true },
+      distinct: ['patientId']
+    })
+  ]);
+  const ids = new Set();
+  appts.forEach(a => ids.add(a.patientId));
+  certs.forEach(c => ids.add(c.patientId));
+  return [...ids];
+}
+
 module.exports = {
   getReceptionist,
   getAssignments,
@@ -130,7 +159,9 @@ module.exports = {
   isAssignedDoctor,
   canAccessAppointment,
   getPatientScope,
+  patientHasDoctorLink,
   getPharmacyUser,
   getPharmacyDoctorIds,
-  getPharmacyAssignments
+  getPharmacyAssignments,
+  getPharmacyPatientScope
 };

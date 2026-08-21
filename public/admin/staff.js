@@ -34,14 +34,14 @@ async function loadCentres(){
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __centres = await api('/admin/medical-centres');
-    host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table np-table--fixed"><colgroup><col style="width:16%"><col style="width:30%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
       __centres.map(c => `<tr>
-        <td><b>${esc(c.name)}</b></td>
-        <td class="np-mut" style="font-size:.82rem">${esc([c.address, c.city, c.state, c.pincode].filter(Boolean).join(', ') || '—')}</td>
-        <td class="np-mut" style="font-size:.82rem">${esc([c.phone, c.email].filter(Boolean).join(' · ') || '—')}</td>
-        <td class="np-mut" style="font-size:.82rem">${(c._count && c._count.receptionistAssignments) || 0} reception · ${(c._count && c._count.appointments) || 0} appts</td>
-        <td>${c.isActive ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Inactive</span>'}</td>
-        <td style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : ''}</td>
+        <td data-label="Name"><b>${esc(c.name)}</b></td>
+        <td data-label="Address" class="np-mut" style="font-size:.82rem">${esc([c.address, c.city, c.state, c.pincode].filter(Boolean).join(', ') || '—')}</td>
+        <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc([c.phone, c.email].filter(Boolean).join(' · ') || '—')}</td>
+        <td data-label="Staff / Appts" class="np-mut" style="font-size:.82rem">${(c._count && c._count.receptionistAssignments) || 0} reception · ${(c._count && c._count.appointments) || 0} appts</td>
+        <td data-label="Status">${c.isActive ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Inactive</span>'}</td>
+        <td data-label="Actions" class="np-table__nowrap" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : ''}</td>
       </tr>`).join('') + '</tbody></table></div>'
       : '<div class="np-empty"><div class="np-empty__title">No medical centres yet</div><div class="np-empty__sub">Create your first clinic to assign receptionists.</div></div>';
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
@@ -66,12 +66,15 @@ function openCentreModal(id){
     </form></div></div></div>`;
   $('#centreForm').addEventListener('submit', async e => {
     e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn.disabled) return; // already submitting — ignore a second click/Enter
+    btn.disabled = true;
     const raw = Object.fromEntries(new FormData(e.target).entries());
     try {
       if (c) await api('/admin/medical-centres/' + c.id, { method:'PUT', body: JSON.stringify(raw) });
       else   await api('/admin/medical-centres', { method:'POST', body: JSON.stringify(raw) });
       toast('Medical centre saved'); closeStaffModal(); loadCentres();
-    } catch(err){ toast(err.message, 'error'); }
+    } catch(err){ toast(err.message, 'error'); btn.disabled = false; }
   });
 }
 window.openCentreModal = openCentreModal;
@@ -91,16 +94,16 @@ async function loadReceptionists(){
     __receptionists = await api('/admin/receptionists');
     host.innerHTML = __receptionists.length ? '<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Name</th><th>Contact</th><th>Assignments (Doctor @ Clinic)</th><th>Permissions</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
       __receptionists.map(r => `<tr>
-        <td><b>${esc(r.name)}</b></td>
-        <td class="np-mut" style="font-size:.82rem">${esc(r.email)}<br/>+91 ${esc(r.phone)}</td>
-        <td style="font-size:.8rem">${(r.assignments || []).map(a => `<div>Dr. ${esc(a.doctor.name)} <span class="np-mut">@ ${esc(a.medicalCentre.name)}</span></div>`).join('') || '—'}</td>
-        <td style="font-size:.78rem">
+        <td data-label="Name"><b>${esc(r.name)}</b></td>
+        <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(r.email)}<br/>+91 ${esc(r.phone)}</td>
+        <td data-label="Assignments (Doctor @ Clinic)" style="font-size:.8rem">${(r.assignments || []).map(a => `<div>Dr. ${esc(a.doctor.name)} <span class="np-mut">@ ${esc(a.medicalCentre.name)}</span></div>`).join('') || '—'}</td>
+        <td data-label="Permissions" style="font-size:.78rem">
           ${r.canManageConsultations ? '<span class="np-badge np-badge--blue">Consultations</span>' : ''}
           ${r.canManagePharmacy ? '<span class="np-badge np-badge--mint">Pharmacy</span>' : ''}
           ${r.canIssueCertificates ? '<span class="np-badge np-badge--violet">Certificates</span>' : ''}
         </td>
-        <td>${r.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
-        <td style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openReceptionistModal('${r.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deleteReceptionist('${r.id}')">Deactivate</button></td>
+        <td data-label="Status">${r.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
+        <td data-label="Actions" style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openReceptionistModal('${r.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deleteReceptionist('${r.id}')">Deactivate</button></td>
       </tr>`).join('') + '</tbody></table></div>'
       : '<div class="np-empty"><div class="np-empty__title">No receptionists yet</div><div class="np-empty__sub">Receptionists cannot self-register — create their accounts here.</div></div>';
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
@@ -141,12 +144,15 @@ async function openReceptionistModal(id){
   $('#recForm').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target;
+    const btn = f.querySelector('button[type="submit"]');
+    if (btn.disabled) return; // already submitting — ignore a second click/Enter
     const raw = Object.fromEntries(new FormData(f).entries());
     const assignments = $$('#asnRows .asn-row').map(row => ({
       doctorId: row.querySelector('.asn-doctor').value,
       medicalCentreId: row.querySelector('.asn-centre').value
     })).filter(a => a.doctorId && a.medicalCentreId);
     if (!assignments.length) { toast('Add at least one doctor + clinic assignment', 'error'); return; }
+    btn.disabled = true;
     const payload = {
       name: raw.name, phone: raw.phone,
       status: raw.status,
@@ -168,7 +174,7 @@ async function openReceptionistModal(id){
         toast('Receptionist saved');
       }
       closeStaffModal(); loadReceptionists();
-    } catch(err){ toast(err.message, 'error'); }
+    } catch(err){ toast(err.message, 'error'); btn.disabled = false; }
   });
 }
 window.openReceptionistModal = openReceptionistModal;
@@ -207,12 +213,12 @@ async function loadPharmUsers(){
     __pharmUsers = await api('/admin/pharmacy-users');
     host.innerHTML = __pharmUsers.length ? '<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Name</th><th>Contact</th><th>Centre</th><th>Responsible doctors</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
       __pharmUsers.map(u => `<tr>
-        <td><b>${esc(u.name)}</b></td>
-        <td class="np-mut" style="font-size:.82rem">${esc(u.email)}<br/>+91 ${esc(u.phone)}</td>
-        <td>${esc(u.medicalCentre ? u.medicalCentre.name : '—')}</td>
-        <td style="font-size:.8rem">${(u.doctors || []).map(d => `<div>Dr. ${esc(d.doctor.name)}</div>`).join('') || '—'}</td>
-        <td>${u.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
-        <td style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openPharmUserModal('${u.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deletePharmUser('${u.id}')">Deactivate</button></td>
+        <td data-label="Name"><b>${esc(u.name)}</b></td>
+        <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(u.email)}<br/>+91 ${esc(u.phone)}</td>
+        <td data-label="Centre">${esc(u.medicalCentre ? u.medicalCentre.name : '—')}</td>
+        <td data-label="Responsible doctors" style="font-size:.8rem">${(u.doctors || []).map(d => `<div>Dr. ${esc(d.doctor.name)}</div>`).join('') || '—'}</td>
+        <td data-label="Status">${u.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
+        <td data-label="Actions" style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openPharmUserModal('${u.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deletePharmUser('${u.id}')">Deactivate</button></td>
       </tr>`).join('') + '</tbody></table></div>'
       : '<div class="np-empty"><div class="np-empty__title">No pharmacy users yet</div></div>';
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
@@ -251,9 +257,12 @@ async function openPharmUserModal(id){
   $('#puForm').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target;
+    const btn = f.querySelector('button[type="submit"]');
+    if (btn.disabled) return; // already submitting — ignore a second click/Enter
     const raw = Object.fromEntries(new FormData(f).entries());
     const doctorIds = $$('input[name="pdoc"]:checked', f).map(x => x.value);
     if (!doctorIds.length) { toast('Assign at least one doctor', 'error'); return; }
+    btn.disabled = true;
     const payload = { name: raw.name, phone: raw.phone, status: raw.status, doctorIds };
     payload.medicalCentreId = raw.medicalCentreId || null;
     if (!u) payload.email = (raw.email || '').trim().toLowerCase();
@@ -269,7 +278,7 @@ async function openPharmUserModal(id){
         toast('Pharmacy user saved');
       }
       closeStaffModal(); loadPharmUsers();
-    } catch(err){ toast(err.message, 'error'); }
+    } catch(err){ toast(err.message, 'error'); btn.disabled = false; }
   });
 }
 window.openPharmUserModal = openPharmUserModal;

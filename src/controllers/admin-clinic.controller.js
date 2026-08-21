@@ -137,23 +137,33 @@ exports.createReceptionist = asyncHandler(async (req, res) => {
   const initialPassword = d.password || randomPassword();
   const passwordHash = await bcrypt.hash(initialPassword, SALT);
 
-  const receptionist = await prisma.receptionist.create({
-    data: {
-      name: d.name,
-      phone: d.phone,
-      email: d.email,
-      passwordHash,
-      status: d.status || 'ACTIVE',
-      canManageConsultations: d.canManageConsultations !== false,
-      canManagePharmacy: !!d.canManagePharmacy,
-      canIssueCertificates: !!d.canIssueCertificates,
-      mustChangePassword: true,
-      assignments: {
-        create: d.assignments.map(a => ({ doctorId: a.doctorId, medicalCentreId: a.medicalCentreId }))
-      }
-    },
-    include: { assignments: { include: { doctor: { select: { id: true, name: true } }, medicalCentre: true } } }
-  });
+  let receptionist;
+  try {
+    receptionist = await prisma.receptionist.create({
+      data: {
+        name: d.name,
+        phone: d.phone,
+        email: d.email,
+        passwordHash,
+        status: d.status || 'ACTIVE',
+        canManageConsultations: d.canManageConsultations !== false,
+        canManagePharmacy: !!d.canManagePharmacy,
+        canIssueCertificates: !!d.canIssueCertificates,
+        mustChangePassword: true,
+        assignments: {
+          create: d.assignments.map(a => ({ doctorId: a.doctorId, medicalCentreId: a.medicalCentreId }))
+        }
+      },
+      include: { assignments: { include: { doctor: { select: { id: true, name: true } }, medicalCentre: true } } }
+    });
+  } catch (e) {
+    // Two submissions for the same email can both pass the exists-check above
+    // before either commits (double-click, slow network + retry). The email
+    // column's unique constraint is the real guard; translate its rejection
+    // into the same friendly message instead of a generic DB error.
+    if (e.code === 'P2002') return res.status(409).json({ error: 'A receptionist with this email already exists' });
+    throw e;
+  }
 
   const { inviteLink, emailDelivered } = await sendStaffInvite({ user: receptionist, userType: 'RECEPTIONIST', roleLabel: 'Receptionist' });
   await audit.log({
@@ -275,19 +285,29 @@ exports.createPharmacyUser = asyncHandler(async (req, res) => {
   const initialPassword = d.password || randomPassword();
   const passwordHash = await bcrypt.hash(initialPassword, SALT);
 
-  const user = await prisma.pharmacyUser.create({
-    data: {
-      name: d.name,
-      phone: d.phone,
-      email: d.email,
-      passwordHash,
-      status: d.status || 'ACTIVE',
-      medicalCentreId: d.medicalCentreId || null,
-      mustChangePassword: true,
-      doctors: { create: d.doctorIds.map(id => ({ doctorId: id })) }
-    },
-    include: { doctors: { include: { doctor: { select: { id: true, name: true } } } }, medicalCentre: true }
-  });
+  let user;
+  try {
+    user = await prisma.pharmacyUser.create({
+      data: {
+        name: d.name,
+        phone: d.phone,
+        email: d.email,
+        passwordHash,
+        status: d.status || 'ACTIVE',
+        medicalCentreId: d.medicalCentreId || null,
+        mustChangePassword: true,
+        doctors: { create: d.doctorIds.map(id => ({ doctorId: id })) }
+      },
+      include: { doctors: { include: { doctor: { select: { id: true, name: true } } } }, medicalCentre: true }
+    });
+  } catch (e) {
+    // Two submissions for the same email can both pass the exists-check above
+    // before either commits (double-click, slow network + retry). The email
+    // column's unique constraint is the real guard; translate its rejection
+    // into the same friendly message instead of a generic DB error.
+    if (e.code === 'P2002') return res.status(409).json({ error: 'A pharmacy user with this email already exists' });
+    throw e;
+  }
 
   const { inviteLink, emailDelivered } = await sendStaffInvite({ user, userType: 'PHARMACY', roleLabel: 'Pharmacy user' });
   await audit.log({

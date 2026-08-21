@@ -307,21 +307,29 @@ async function onPhysicalBookingConfirmed(appointment) {
   const a = appointment;
   const dirSuffix = getDirectionsUrlSuffix(a.doctor);
 
-  // Meta template neokids_booking_confirms_offline_v2:
-  //   {{1}} Patient Name  {{2}} Doctor Name  {{3}} Date  {{4}} Time  {{5}} Fee
-  // (URL button takes Maps suffix as its single param)
-  await safeWa({
-    appointmentId: a.id, to: a.patient.phone, direction: 'PATIENT',
-    templateName: 'neokids_booking_confirms_offline_v2',
-    bodyParams: [
-      a.patient.name,
-      a.doctor.name,
-      fmtDate(a.date),
-      fmtTime(a.startTime),
-      Number(a.feeAtBooking).toFixed(0)
-    ],
-    urlButtonParam: dirSuffix
-  });
+  // Walk-ins are registered by reception while the patient is standing
+  // at the desk — the patient-facing WhatsApp confirmation exists to get
+  // someone THERE (it carries a Maps directions button), which is moot
+  // when they've already arrived. Skipped for a.source === 'WALK_IN';
+  // the doctor's new-booking WhatsApp below still fires either way, since
+  // the doctor still needs to know a patient was added to their queue.
+  if (a.source !== 'WALK_IN') {
+    // Meta template neokids_booking_confirms_offline_v2:
+    //   {{1}} Patient Name  {{2}} Doctor Name  {{3}} Date  {{4}} Time  {{5}} Fee
+    // (URL button takes Maps suffix as its single param)
+    await safeWa({
+      appointmentId: a.id, to: a.patient.phone, direction: 'PATIENT',
+      templateName: 'neokids_booking_confirms_offline_v2',
+      bodyParams: [
+        a.patient.name,
+        a.doctor.name,
+        fmtDate(a.date),
+        fmtTime(a.startTime),
+        Number(a.feeAtBooking).toFixed(0)
+      ],
+      urlButtonParam: dirSuffix
+    });
+  }
 
   if (a.doctor.phone) {
     // Meta template doctor_new_booking_offline: 5 body vars

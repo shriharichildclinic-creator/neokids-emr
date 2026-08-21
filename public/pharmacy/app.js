@@ -17,10 +17,22 @@ function setView(v){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); cons
   if(v==='dashView')loadDash(); if(v==='rxView')loadRx(); if(v==='invView')loadInv(); if(v==='billsView')loadBills(); }
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 
+function setupSidebar(){
+  const sidebar=$('#sidebar'), backdrop=$('#sidebarBackdrop'), toggle=$('#sidebarToggle');
+  if(!sidebar||!toggle||!backdrop) return;
+  if(toggle.__bound) return; toggle.__bound=true;
+  function open(){ sidebar.classList.add('is-open'); backdrop.classList.add('is-open'); document.body.classList.add('np-drawer-open'); }
+  function close(){ sidebar.classList.remove('is-open'); backdrop.classList.remove('is-open'); document.body.classList.remove('np-drawer-open'); }
+  toggle.addEventListener('click',()=>sidebar.classList.contains('is-open')?close():open());
+  backdrop.addEventListener('click',close);
+  window.addEventListener('resize',()=>{ if(window.innerWidth>1023) close(); });
+  $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>{ if(window.matchMedia('(max-width:1023px)').matches) close(); }));
+}
+
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='PHARMACY')throw new Error('Not a pharmacy account'); TOKEN=d.token; localStorage.setItem('np_pharmacy_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
 function logout(){ localStorage.removeItem('np_pharmacy_token'); TOKEN=null; showLogin(); }
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
-async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); try{ const me=await api('/auth/me'); __me=me.user||me; $('#userName').textContent=__me.name; $('#userInitials').textContent=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); }catch(e){} setView('dashView'); }
+async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); try{ const me=await api('/auth/me'); __me=me.user||me; $('#userName').textContent=__me.name; $('#userInitials').textContent=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); }catch(e){} setView('dashView'); }
 
 async function loadDash(){ try{ const s=await api('/pharmacy/stats');
   $('#kpiGrid').innerHTML=[{k:'blue',l:'Medicines in stock',v:s.totalItems},{k:'amber',l:'Low stock (≤10)',v:s.lowStock},{k:'red',l:'Expiring ≤30 days',v:s.expiringSoon},{k:'green',l:'Bills today',v:s.todayBills},{k:'mint',l:'Revenue today',v:inr(s.todayRevenue)}].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div></div>`).join('');
@@ -32,7 +44,7 @@ async function loadRx(){ const list=$('#rxList'); const f=$('#rxFilter').value; 
  }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 
 async function loadInv(q){ const tb=$('#invTbody'); try{ __items=await api('/pharmacy/inventory'+(q?('?q='+encodeURIComponent(q)):''));
-  tb.innerHTML=__items.length?__items.map(i=>`<tr><td><b>${esc(i.name)}</b><div class="np-mut" style="font-size:.75rem">${esc(i.manufacturer||'')}</div></td><td>${esc(i.batchNumber||'—')}</td><td style="text-align:right">${inr(i.sellingPrice)}</td><td style="text-align:right"><b class="${i.stock<=10?'np-error':''}">${i.stock}</b></td><td>${i.expiryDate?esc(fmtDate(i.expiryDate)):'—'}</td><td style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openItemModal('${i.id}')">Edit</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="adjustStock('${i.id}')">Stock</button> <button class="np-btn np-btn--sm np-btn--ghost np-btn--danger" onclick="delItem('${i.id}')">Remove</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No medicines</div></div></td></tr>';
+  tb.innerHTML=__items.length?__items.map(i=>`<tr><td data-label="Medicine"><b>${esc(i.name)}</b><div class="np-mut" style="font-size:.75rem">${esc(i.manufacturer||'')}</div></td><td data-label="Batch">${esc(i.batchNumber||'—')}</td><td data-label="Price" style="text-align:right">${inr(i.sellingPrice)}</td><td data-label="Stock" style="text-align:right"><b class="${i.stock<=10?'np-error':''}">${i.stock}</b></td><td data-label="Expiry">${i.expiryDate?esc(fmtDate(i.expiryDate)):'—'}</td><td data-label="Actions" style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openItemModal('${i.id}')">Edit</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="adjustStock('${i.id}')">Stock</button> <button class="np-btn np-btn--sm np-btn--ghost np-btn--danger" onclick="delItem('${i.id}')">Remove</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No medicines</div></div></td></tr>';
  }catch(e){ tb.innerHTML=`<tr><td colspan="6"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 $('#invSearch').addEventListener('input',e=>{clearTimeout(window.__is); window.__is=setTimeout(()=>loadInv(e.target.value.trim()),300);});
 
@@ -53,9 +65,27 @@ function closeModal(){ $('#modalHost').innerHTML=''; }
 async function adjustStock(id){ const d=prompt('Stock adjustment (+/- quantity):'); if(!d)return; const n=parseInt(d,10); if(!n)return; try{ await api('/pharmacy/inventory/'+id+'/stock',{method:'POST',body:JSON.stringify({delta:n,reason:'Manual adjustment'})}); toast('Stock updated'); loadInv(); }catch(e){toast(e.message,'error');} }
 async function delItem(id){ if(!confirm('Remove this medicine from active inventory?'))return; try{ await api('/pharmacy/inventory/'+id,{method:'DELETE'}); toast('Removed'); loadInv(); }catch(e){toast(e.message,'error');} }
 
-async function loadBills(){ const tb=$('#billsTbody'); try{ const rows=await api('/pharmacy/bills'); tb.innerHTML=rows.length?rows.map(b=>`<tr><td><b>${esc(b.billNumber)}</b></td><td>${esc(b.customerName||'')}</td><td style="text-align:right">${(b.items||[]).length}</td><td style="text-align:right"><b>${inr(b.total)}</b></td><td>${esc(fmtDate(b.createdAt))}</td><td style="text-align:right;white-space:nowrap">${b.pdfUrl?`<a class="np-btn np-btn--sm" href="${b.pdfUrl}" target="_blank">PDF</a> `:''}<button class="np-btn np-btn--sm" onclick="printPdf('${b.pdfUrl||''}')">Print</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="sendBill('${b.id}')">Send</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="6"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+async function loadBills(){ const tb=$('#billsTbody'); try{ const rows=await api('/pharmacy/bills'); tb.innerHTML=rows.length?rows.map(b=>`<tr><td data-label="Bill #"><b>${esc(b.billNumber)}</b></td><td data-label="Customer">${esc(b.customerName||'')}</td><td data-label="Items" style="text-align:right">${(b.items||[]).length}</td><td data-label="Total" style="text-align:right"><b>${inr(b.total)}</b></td><td data-label="Date">${esc(fmtDate(b.createdAt))}</td><td data-label="Actions" style="text-align:right;white-space:nowrap">${b.pdfUrl?`<a class="np-btn np-btn--sm" href="${b.pdfUrl}" target="_blank">PDF</a> `:''}<button class="np-btn np-btn--sm" onclick="printPdf('${b.pdfUrl||''}')">Print</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="openBillSendModal('${b.id}','${esc(b.customerPhone||'')}','${esc((b.patient&&b.patient.email)||'')}')">Send</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="6"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 function printPdf(url){ if(!url){toast('No PDF yet','warn');return;} const w=window.open(url,'_blank'); if(w){w.addEventListener('load',()=>{try{w.print();}catch(_){}});} }
-async function sendBill(id){ const wa=confirm('Send bill on WhatsApp?'); const em=confirm('Send bill by email?'); if(!wa&&!em)return; const ch=[]; if(wa)ch.push('whatsapp'); if(em)ch.push('email'); try{ const r=await api('/pharmacy/bills/'+id+'/send',{method:'POST',body:JSON.stringify({channels:ch})}); toast('Delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); }catch(e){toast(e.message,'error');} }
+function openBillSendModal(billId, phone, email){
+  const hasPhone=!!phone; const hasEmail=!!email;
+  if(!hasPhone && !hasEmail){ toast('Customer has no phone or email on file — cannot send','error'); return; }
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Send bill</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body">
+    <div class="np-row" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+      ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendBillWa" checked/> Send via WhatsApp</label>`:''}
+      ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendBillEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
+    </div>
+    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendBillConfirm">Send</button></div>
+  </div></div></div>`;
+  $('#sendBillConfirm').addEventListener('click', async ()=>{
+    const channels=[];
+    if(hasPhone && $('#sendBillWa').checked) channels.push('whatsapp');
+    if(hasEmail && $('#sendBillEm') && $('#sendBillEm').checked) channels.push('email');
+    if(!channels.length){ toast('Choose at least one channel','error'); return; }
+    closeModal();
+    try{ const r=await api('/pharmacy/bills/'+billId+'/send',{method:'POST',body:JSON.stringify({channels})}); toast('Delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); }catch(e){ toast(e.message,'error'); }
+  });
+}
 
 async function openBillModal(rxId){
   try{ __items=await api('/pharmacy/inventory'); }catch(_){}
@@ -73,9 +103,20 @@ async function openBillModal(rxId){
     try{ const r=await api('/pharmacy/bills',{method:'POST',body:JSON.stringify({ customerName:raw.customerName||'', customerPhone:raw.customerPhone||'', paymentMethod:raw.paymentMethod, prescriptionId:rxId||undefined, discount:Number(raw.discount||0), tax:Number(raw.tax||0), items:lines })}); toast('Bill created'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadBills(); }catch(err){toast(err.message,'error');} });
 }
 function addBillLine(){ const host=$('#billLines'); const div=document.createElement('div'); div.className='bill-line np-row'; div.style.cssText='gap:.5rem;align-items:flex-end;margin-bottom:.5rem;'; div.innerHTML=`<div class="np-field" style="flex:2"><select class="np-select bl-item"><option value="">— manual —</option>${window.__billItemOpts}</select><input class="np-input bl-name" placeholder="Medicine name" style="margin-top:.35rem"/></div><div class="np-field"><label class="np-field__label">Qty</label><input type="number" class="np-input bl-qty" value="1" min="1"/></div><div class="np-field"><label class="np-field__label">Price</label><input type="number" step="0.01" class="np-input bl-price" value="0"/></div>`; host.appendChild(div);
-  div.querySelector('.bl-item').addEventListener('change',e=>{ const o=e.target.selectedOptions[0]; if(o&&o.value){ div.querySelector('.bl-name').value=o.dataset.name; div.querySelector('.bl-price').value=o.dataset.price; } });
+  const itemSel=div.querySelector('.bl-item'); const nameInput=div.querySelector('.bl-name');
+  itemSel.addEventListener('change',e=>{ const o=e.target.selectedOptions[0]; if(o&&o.value){ nameInput.value=o.dataset.name; nameInput.readOnly=true; div.querySelector('.bl-price').value=o.dataset.price; } else { nameInput.value=''; nameInput.readOnly=false; } });
 }
 
 $('#passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const d=Object.fromEntries(new FormData(e.target).entries()); if(d.newPassword!==d.confirmPassword){toast('Passwords do not match','error');return;} try{ await api('/auth/change-password',{method:'POST',body:JSON.stringify(d)}); toast('Password changed'); e.target.reset(); }catch(err){toast(err.message,'error');}});
+
+function wireThemeSwitch(){
+  const opts=$$('#setting-appearance [data-theme-choice]');
+  if(!opts.length || !window.NPTheme) return;
+  function paint(){ const mode=window.NPTheme.current?window.NPTheme.current():(document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light'); opts.forEach(el=>{ const active=el.dataset.themeChoice===mode; el.classList.toggle('is-active',active); el.setAttribute('aria-checked',active?'true':'false'); }); }
+  opts.forEach(el=>el.addEventListener('click',()=>{ window.NPTheme.set(el.dataset.themeChoice); paint(); }));
+  document.addEventListener('np-theme-change', paint);
+  paint();
+}
+wireThemeSwitch();
 
 (async()=>{ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.add('hidden'); if(TOKEN){ try{ const me=await api('/auth/me'); if(me&&me.role==='PHARMACY') return showDashboard(); localStorage.removeItem('np_pharmacy_token'); TOKEN=null; }catch{} } showLogin(); })();

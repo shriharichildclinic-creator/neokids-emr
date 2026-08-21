@@ -38,7 +38,7 @@ function drawHeader(doc, title) {
   if (doc.page && doc.page.margins) doc.page.margins.bottom = 0;
   doc.rect(0, 0, doc.page.width, 80).fill(BRAND_BLUE);
   doc.fillColor('white').fontSize(22).font('Helvetica-Bold').text('NeoKidsPro', 50, 28);
-  doc.fontSize(10).font('Helvetica').text('Pediatric Clinic · neokidspro.in', 50, 55);
+  doc.fontSize(10).font('Helvetica').text('Pediatric Network of Doctors · neokidspro.in', 50, 55);
   doc.fontSize(16).font('Helvetica-Bold').fillColor('white')
      .text(title, 0, 32, { align: 'right', width: doc.page.width - 50 });
   doc.fillColor('black').moveDown(3);
@@ -178,6 +178,11 @@ async function generateInvoice(appointment) {
     // Appointment date + time on the invoice.
     doc.fillColor('#555').fontSize(9)
        .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
+    // Clinic line — same field/placement as the Prescription PDF, so this
+    // invoice isn't the odd one out that never names the clinic.
+    if (appointment.doctor.clinicName) {
+      doc.fillColor('#555').fontSize(9).text(String(appointment.doctor.clinicName), 320, 234, { width: 225 });
+    }
     doc.fillColor('#333');
 
     const tableTop = 285;
@@ -319,6 +324,19 @@ async function generatePrescription(appointment, prescription) {
 
     section('Advice', prescription.advice);
     if (prescription.followUpDate) section('Follow-up', dayjs(prescription.followUpDate).format('DD MMM YYYY'));
+
+    // Teleconsultation safety disclaimer — required on every prescription
+    // issued from an online consultation, not shown for in-clinic visits.
+    if (appointment.consultationType === 'ONLINE') {
+      const disclaimerText = 'This prescription has been issued following a teleconsultation conducted through NeoKidsPro.in. If your child develops worsening symptoms, experiences a medical emergency, or requires urgent medical attention, please visit your nearest hospital, emergency department, or healthcare facility immediately. Teleconsultation does not replace emergency medical care.';
+      const boxX = 50, boxW = doc.page.width - 100, boxPad = 8;
+      doc.fontSize(8).font('Helvetica');
+      const textH = doc.heightOfString(disclaimerText, { width: boxW - boxPad * 2 });
+      const boxH = textH + boxPad * 2;
+      doc.rect(boxX, cursorY, boxW, boxH).fillAndStroke('#FFF8E1', '#F0D98C');
+      doc.fillColor('#7A5B00').text(disclaimerText, boxX + boxPad, cursorY + boxPad, { width: boxW - boxPad * 2 });
+      cursorY += boxH + 10;
+    }
 
     // Signature block (uploaded signature image when available).
     drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 110 });
@@ -599,13 +617,25 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
       ty += 12;
       doc.font('Helvetica').fillColor('#555').text('neokidspro.in', 50, ty, { width: 260 });
     } else {
+      // In-person certificates are still issued and signed by the doctor,
+      // not the clinic — the clinic is where the exam happened, not who
+      // is vouching for it. Doctor name leads (matches the online block
+      // above); clinic name/address is shown underneath as location info.
       doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
-         .text(doctor.clinicName || 'NeoKidsPro Pediatric Clinic', 50, ly);
+         .text(`Dr. ${doctor.name}`, 50, ly);
       doc.fontSize(9).font('Helvetica').fillColor('#555');
-      if (doctor.clinicAddress) {
-        doc.text(String(doctor.clinicAddress), 50, ly + 16, { width: 260 });
+      let ty = ly + 16;
+      doc.text(`${doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${doctor.specialization || 'Pediatrician'}`, 50, ty, { width: 260 });
+      ty += 12;
+      if (doctor.clinicName) {
+        doc.text(String(doctor.clinicName), 50, ty, { width: 260 });
+        ty += 12;
       }
-      doc.text('neokidspro.in', 50, ly + (doctor.clinicAddress ? 16 + Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11 : 16), { width: 260 });
+      if (doctor.clinicAddress) {
+        doc.text(String(doctor.clinicAddress), 50, ty, { width: 260 });
+        ty += Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11;
+      }
+      doc.text('neokidspro.in', 50, ty, { width: 260 });
     }
 
     doc.fontSize(9).fillColor('#555')
@@ -690,9 +720,11 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
     drawSignatureBlock(doc, doctor, { y: doc.page.height - 175 });
 
     // ── Footer ───────────────────────────────────────────────────────
+    // Issuer is always the consulting doctor — never the clinic — on
+    // both online and in-person certificates.
     const issuerLine = isOnline
       ? `This certificate was issued electronically by Dr. ${doctor.name} following a teleconsultation and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`
-      : `This certificate was issued electronically by ${doctor.clinicName || 'NeoKidsPro Pediatric Clinic'} and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`;
+      : `This certificate was issued electronically by Dr. ${doctor.name} and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`;
     doc.fontSize(8).fillColor('#888')
        .text(issuerLine,
          50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true }

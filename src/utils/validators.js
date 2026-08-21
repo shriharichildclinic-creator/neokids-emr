@@ -526,7 +526,7 @@ const receptionistBookSchema = z.object({
 
 const receptionistInvoiceSchema = z.object({
   appointmentId: z.string().uuid(),
-  amount: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().nonnegative().optional()),
+  amount: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().nonnegative().max(50000, 'Amount is too high for a consultation invoice').optional()),
   paymentMethod: z.enum(['CASH', 'CARD', 'UPI', 'ONLINE', 'OTHER']).optional(),
   notes: safeOptStr('notes')
 });
