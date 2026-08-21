@@ -225,6 +225,9 @@
       ['billDiscount', 'billTax'].forEach(function (id) {
         qs('#' + id).addEventListener('input', NPBilling.recompute);
       });
+      // Sync the footer + every line total with whatever was rendered into the
+      // form (edit-draft values, pre-seeded price) instead of waiting for input.
+      NPBilling.recompute();
       if (canSwitchType) {
         qs('#billType').addEventListener('change', function () {
           bill.billType = qs('#billType').value;
@@ -250,7 +253,7 @@
             qty.value = Math.max(1, Math.min(Number(qty.value) || 1, Number(b.getAttribute('data-stock'))));
             NPBilling.setStockHint(stockHint, Number(b.getAttribute('data-stock')));
             menu.classList.remove('is-open');
-            NPBilling.recompute();
+            NPBilling.recompute(); // price/qty were set programmatically — no 'input' event fires
           });
         });
       };
@@ -339,17 +342,25 @@
 
     collectLines: function () {
       return qsa('#billLines .np-bill-line').map(function (lineEl) {
-        var kind = qs('.np-bill-line__kind', lineEl).getAttribute('data-kind');
+        // data-kind stores the raw mode ('inv' | 'manual'), set by setLineMode.
+        // Fall back to the live DOM (hidden item id vs. free-text name) so a
+        // stale attribute can never silently flip a line to the wrong mode.
+        var kindEl = qs('.np-bill-line__kind', lineEl);
+        var kind = kindEl ? kindEl.getAttribute('data-kind') : '';
         var itemId = qs('.np-line-item', lineEl);
         var nameEl = qs('.np-line-name', lineEl);
         var name = qs('.np-line-search', lineEl);
         var qty = qs('.np-line-qty', lineEl);
         var price = qs('.np-line-price', lineEl);
-        var mode = kind === 'Inventory' ? 'inv' : 'manual';
+        var mode = (kind === 'inv' || kind === 'manual') ? kind
+                 : (itemId && itemId.value) ? 'inv' : 'manual';
+        // An inventory line's display name lives in the search input; a manual
+        // line's name lives in its own input. Never cross them over.
+        var lineName = mode === 'inv' ? (name ? name.value : '') : (nameEl ? nameEl.value : '');
         return {
           mode: mode,
           itemId: (itemId && itemId.value) || '',
-          name: kind === 'Inventory' ? (name ? name.value : '') : (nameEl ? nameEl.value : ''),
+          name: lineName,
           quantity: Number(qty ? qty.value : 1),
           unitPrice: Number(price ? price.value : 0)
         };

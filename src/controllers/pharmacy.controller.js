@@ -472,21 +472,9 @@ exports.createBill = asyncHandler(async (req, res) => {
     ? d.medicalCentreId
     : actor.centreId;
 
+  // Drafts never move stock — see the lifecycle note above. Stock is checked
+  // again, atomically, when the bill is marked paid.
   const bill = await prisma.$transaction(async (tx) => {
-    for (const line of computed) {
-      if (line.itemId) {
-        const dec = await tx.pharmacyItem.updateMany({
-          where: { id: line.itemId, stock: { gte: line.quantity } },
-          data: { stock: { decrement: line.quantity } }
-        });
-        if (dec.count === 0) {
-          const stock = stockMap.get(line.itemId);
-          const err = new Error(`Insufficient stock for ${stock ? stock.name : line.name} — it may have just been sold in another bill`);
-          err.statusCode = 409;
-          throw err;
-        }
-      }
-    }
     return tx.pharmacyBill.create({
       data: {
         billNumber,
@@ -582,26 +570,8 @@ exports.updateBill = asyncHandler(async (req, res) => {
   const previousSnapshot = { subtotal: num(bill.subtotal), discount: num(bill.discount), tax: num(bill.tax), total: num(bill.total), items: previousItems, doctorId: bill.doctorId, patientId: bill.patientId };
 
   const updates = await prisma.$transaction(async (tx) => {
-    // Release stock held by the previous draft, then re-reserve for the new set.
-    const oldItemIds = [...new Set(previousItems.map(i => i.itemId).filter(Boolean))];
-    for (const itemId of oldItemIds) {
-      const qty = previousItems.filter(i => i.itemId === itemId).reduce((s, i) => s + i.quantity, 0);
-      await tx.pharmacyItem.updateMany({ where: { id: itemId }, data: { stock: { increment: qty } } });
-    }
-    for (const line of computed) {
-      if (line.itemId) {
-        const dec = await tx.pharmacyItem.updateMany({
-          where: { id: line.itemId, stock: { gte: line.quantity } },
-          data: { stock: { decrement: line.quantity } }
-        });
-        if (dec.count === 0) {
-          const stock = stockMap.get(line.itemId);
-          const err = new Error(`Insufficient stock for ${stock ? stock.name : line.name}`);
-          err.statusCode = 409;
-          throw err;
-        }
-      }
-    }
+    // Drafts hold no stock (it moves only at mark-paid), so editing a draft is
+    // a pure document rewrite — nothing to release or re-reserve here.
     await tx.pharmacyBillItem.deleteMany({ where: { billId: bill.id } });
     const editRecord = { at: new Date().toISOString(), by: `${actor.role}:${actor.user.id}`, previous: previousSnapshot };
     const edits = Array.isArray(bill.edits) ? bill.edits.slice(-19).concat(editRecord) : [editRecord];
@@ -645,16 +615,34 @@ exports.markPaid = asyncHandler(async (req, res) => {
   if (error) return res.status(error.status).json({ error: error.message });
   if (bill.status === 'PAID') return res.json({ bill: { ...bill, pdfUrl: signBillUrl(bill.id, actor) }, existing: true });
 
-  const updated = await prisma.pharmacyBill.update({
-    where: { id: bill.id },
-    data: {
-      status: 'PAID',
-      paidAt: new Date(),
-      paidById: actor.user.id,
-      paidByRole: actor.role,
-      paymentMethod: req.body && req.body.paymentMethod ? req.body.paymentMethod : bill.paymentMethod
-    },
-    include: { items: true }
+  // Payment is the single point where stock moves. Each decrement is a guarded
+  // updateMany (stock >= quantity) inside one transaction: either every line
+  // commits or none do, and stock can never go negative even under concurrent
+  // checkouts of the same medicine.
+  const updated = await prisma.$transaction(async (tx) => {
+    for (const line of bill.items) {
+      if (!line.itemId) continue;
+      const dec = await tx.pharmacyItem.updateMany({
+        where: { id: line.itemId, stock: { gte: line.quantity } },
+        data: { stock: { decrement: line.quantity } }
+      });
+      if (dec.count === 0) {
+        const err = new Error(`Insufficient stock for ${line.name} — adjust the draft before taking payment`);
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+    return tx.pharmacyBill.update({
+      where: { id: bill.id },
+      data: {
+        status: 'PAID',
+        paidAt: new Date(),
+        paidById: actor.user.id,
+        paidByRole: actor.role,
+        paymentMethod: req.body && req.body.paymentMethod ? req.body.paymentMethod : bill.paymentMethod
+      },
+      include: { items: true }
+    });
   });
 
   const stored = await staffDocs.generateAndStoreBillPdf(updated.id, { id: actor.user.id, role: actor.role });

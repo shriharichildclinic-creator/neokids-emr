@@ -2611,3 +2611,118 @@ html[data-theme="dark"] .np-bill-total{ background:rgba(137,188,189,.12); }
 @media (max-width:720px){
   .np-table-wrap{ max-height:none; }
 }
+
+/* ==========================================================================
+   v29 CONSISTENCY AUDIT — one ruleset, every module
+   The rules below close the remaining gaps found in the platform-wide audit:
+   buttons, dropdowns, date pickers, badges, file inputs, cards/modals and
+   mobile rounding now resolve to the same --nk-* tokens everywhere.
+   ========================================================================== */
+
+/* ── Buttons ───────────────────────────────────────────────────────────────
+   .np-btn above is the single source of truth; these guards stop the
+   recurring "stretched Apply/Clear/Filter/Save/Reset" class of bug without
+   touching the intentional full-width mobile rules in the page sheets. */
+.np-btn{ box-sizing: border-box; flex: 0 0 auto; }
+.np-filterbar .np-btn, .np-filter-actions .np-btn, .np-modal__foot .np-btn{
+  width: auto; /* desktop: buttons size to their label, never to the row */
+}
+
+/* ── Dropdowns & date pickers ──────────────────────────────────────────────
+   Every control shares one 40px box, one radius, one border token. */
+.np-input, .np-select, .np-select-native, input.np-input, select.np-select{
+  min-height: 40px;
+}
+/* Date/time inputs must keep the NATIVE picker affordance. Several filter
+   bars used class="np-select" on <input type="date">, which forced
+   appearance:none and hid the calendar icon entirely; where it survived, it
+   rendered black-on-dark. Reset to the native control and let color-scheme
+   theme the icon in both modes. */
+input[type="date"].np-input, input[type="time"].np-input, input[type="datetime-local"].np-input,
+input[type="date"].np-select, input[type="time"].np-select, input[type="datetime-local"].np-select{
+  appearance: auto;
+  -webkit-appearance: auto;
+  background-image: none;
+  padding-right: .8rem;
+  color-scheme: light;
+}
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="time"],
+html[data-theme="dark"] input[type="datetime-local"]{
+  color-scheme: dark; /* calendar/clock glyphs switch to light on dark */
+  background-color: #0E1A22;
+  color: #E6EEF1;
+  border-color: #234551;
+}
+
+/* ── Stock & warning badges ────────────────────────────────────────────────
+   .np-error is a block-level error CARD style; it was being applied to an
+   inline <b> inside the inventory table's Stock cell, where the card padding
+   and 12px radius made it clip against the cell and header edges. Compact
+   pill treatment for inline use; the card treatment stays for real errors. */
+td .np-error, .np-table .np-error, b.np-error, span.np-error{
+  display: inline-block;
+  padding: .1rem .5rem;
+  border-radius: 999px;
+  font-size: .78rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+/* Billing stock hint (In stock / low / out) gets the same padded pill so it
+   never touches the edge of its line container. */
+.np-bill-stock{
+  display: inline-block;
+  margin-top: .35rem;
+  padding: .15rem .55rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  background: var(--nk-teal-50);
+  color: var(--nk-teal-700);
+  border: 1px solid var(--nk-teal-100);
+}
+.np-bill-stock.is-low{ background:#FEF3CC; color:#8A5A0F; border-color:#F4D9A3; }
+.np-bill-stock.is-out{ background:#FEE2E5; color:#9F1E36; border-color:#F5BFBF; }
+html[data-theme="dark"] .np-bill-stock{ background:rgba(137,188,189,.14); color:#B4D7D7; border-color:rgba(137,188,189,.3); }
+html[data-theme="dark"] .np-bill-stock.is-low{ background:rgba(249,169,69,.18); color:#FBC97A; border-color:rgba(249,169,69,.35); }
+html[data-theme="dark"] .np-bill-stock.is-out{ background:rgba(225,29,72,.2); color:#FECDD3; border-color:rgba(225,29,72,.35); }
+
+/* ── File upload presentation (KYC and every other uploader) ───────────────
+   The filename is user content: it wraps instead of truncating, and the
+   control keeps the shared 40px/radius/border tokens. */
+input[type="file"].np-input{
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+.np-dropzone__hint, .np-file-name, [data-file-name]{
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+/* ── Cards, modals & mobile rounding ───────────────────────────────────────
+   Rounded outer card + square inner strip was the most visible mobile defect
+   (Today's Snapshot and siblings). Inner header/footer strips now inherit the
+   parent radius on their touching corners, and every card clips its own
+   content so nothing square can ever poke past a rounded edge. */
+.np-panel, .np-kpi, .np-modal__panel, .np-drawer, .np-doc-card{
+  overflow: hidden;
+}
+.np-panel__head, .np-card__head, .np-widget__head{
+  border-radius: calc(var(--nk-radius-card) - 1px) calc(var(--nk-radius-card) - 1px) 0 0;
+}
+.np-panel__foot, .np-card__foot, .np-modal__foot{
+  border-radius: 0 0 calc(var(--nk-radius-card) - 1px) calc(var(--nk-radius-card) - 1px);
+}
+@media (max-width: 600px){
+  /* One radius scale on phones: slightly tighter than desktop, consistent
+     across every card/modal/widget instead of desktop values squeezed down. */
+  .np-panel, .np-kpi, .np-doc-card{ border-radius: var(--nk-radius); }
+  .np-modal__panel{ border-radius: var(--nk-radius-card); }
+  .np-panel__head, .np-card__head, .np-widget__head{
+    border-radius: calc(var(--nk-radius) - 1px) calc(var(--nk-radius) - 1px) 0 0;
+  }
+  .np-panel__body, .np-card__body{ padding-left: 1rem; padding-right: 1rem; }
+}
