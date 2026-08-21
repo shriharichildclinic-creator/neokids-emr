@@ -519,6 +519,11 @@ const receptionistBookSchema = z.object({
   startTime: timeSchema,
   consultationType: z.enum(['ONLINE', 'OFFLINE']),
   primaryProblem: z.string().min(3).max(2000),
+  // Source is captured explicitly from the booking form now (Clinic Reception /
+  // Walk-in / Phone / Other) instead of the old binary isWalkIn checkbox.
+  // isWalkIn is kept accepted (but unused when source is present) purely so
+  // any stale cached frontend bundle mid-deploy doesn't 400 on this field.
+  source: z.enum(['CLINIC_RECEPTION', 'WALK_IN', 'PHONE', 'OTHER']).optional(),
   isWalkIn: z.boolean().optional()
 }).refine(d => !!d.patientId || (!!d.patientName && !!d.phone), {
   message: 'Either patientId or (patientName + phone) is required', path: ['patientId']

@@ -202,7 +202,11 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   res.json(rows.map(a => ({
     ...a,
     invoiceUrl: a.invoiceUrl ? buildSignedFileUrl({ kind: 'invoice', appointmentId: a.id, userId: me.id, role: 'RECEPTIONIST' }) : null,
-    prescriptionUrl: a.prescriptionUrl ? buildSignedFileUrl({ kind: 'prescription', appointmentId: a.id, userId: me.id, role: 'RECEPTIONIST' }) : null
+    prescriptionUrl: a.prescriptionUrl ? buildSignedFileUrl({ kind: 'prescription', appointmentId: a.id, userId: me.id, role: 'RECEPTIONIST' }) : null,
+    consultationInvoice: a.consultationInvoice ? {
+      ...a.consultationInvoice,
+      pdfUrl: signConsultInvoiceUrl(a.consultationInvoice.id, me)
+    } : null
   })));
 });
 
@@ -268,7 +272,10 @@ exports.createAppointment = asyncHandler(async (req, res) => {
         feeAtBooking,
         status: 'CONFIRMED',
         paymentStatus: 'CASH_PENDING',
-        source: d.isWalkIn ? 'WALK_IN' : 'CLINIC_RECEPTION',
+        // Explicit source from the booking form (Clinic Reception / Walk-in /
+        // Phone / Other) takes priority; isWalkIn is only a fallback for a
+        // stale cached frontend mid-deploy.
+        source: d.source || (d.isWalkIn ? 'WALK_IN' : 'CLINIC_RECEPTION'),
         medicalCentreId,
         createdByReceptionistId: me.id,
         addedById: me.id,
@@ -283,9 +290,11 @@ exports.createAppointment = asyncHandler(async (req, res) => {
     throw e;
   }
 
+  const bookedSource = d.source || (d.isWalkIn ? 'WALK_IN' : 'CLINIC_RECEPTION');
+  const sourceLabel = { WALK_IN: 'walk-in', PHONE: 'phone', OTHER: 'other', CLINIC_RECEPTION: 'reception' }[bookedSource];
   await audit.log({
     actor: actorOf(req, me), action: 'APPOINTMENT_CREATED', entityType: 'APPOINTMENT', entityId: appointment.id,
-    summary: `Booked ${patient.name} with Dr. ${doctor.name} on ${d.date} ${d.startTime}${d.isWalkIn ? ' (walk-in)' : ''}`,
+    summary: `Booked ${patient.name} with Dr. ${doctor.name} on ${d.date} ${d.startTime} (${sourceLabel})`,
     medicalCentreId, doctorId: d.doctorId
   });
 

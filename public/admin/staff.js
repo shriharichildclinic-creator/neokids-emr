@@ -297,14 +297,14 @@ async function loadRecInvoices(){
   try {
     const rows = await api('/admin/consultation-invoices');
     tb.innerHTML = rows.length ? rows.map(i => `<tr>
-      <td><b>${esc(i.invoiceNumber)}</b></td>
-      <td>${esc(i.appointment.patient.name)}</td>
-      <td>Dr. ${esc(i.appointment.doctor.name)}</td>
-      <td>${esc(i.medicalCentre ? i.medicalCentre.name : '—')}</td>
-      <td>${esc(i.receptionist ? i.receptionist.name : '—')}</td>
-      <td style="text-align:right"><b>${inr(i.amount)}</b></td>
-      <td>${esc(fmtDateTime(i.createdAt))}</td>
-      <td style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
+      <td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td>
+      <td data-label="Patient">${esc(i.appointment.patient.name)}</td>
+      <td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td>
+      <td data-label="Clinic">${esc(i.medicalCentre ? i.medicalCentre.name : '—')}</td>
+      <td data-label="Receptionist">${esc(i.receptionist ? i.receptionist.name : '—')}</td>
+      <td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td>
+      <td data-label="Date">${esc(fmtDateTime(i.createdAt))}</td>
+      <td data-label="PDF" style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
     </tr>`).join('') : '<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No reception invoices yet</div></div></td></tr>';
   } catch(e){ tb.innerHTML = `<tr><td colspan="8"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
 }
@@ -325,11 +325,11 @@ async function loadAudit(){
     const rows = data.rows || [];
     const roleBadge = r => r === 'RECEPTIONIST' ? 'np-badge--violet' : r === 'PHARMACY' ? 'np-badge--mint' : 'np-badge--slate';
     tb.innerHTML = rows.length ? rows.map(a => `<tr>
-      <td class="np-mut" style="font-size:.8rem">${esc(fmtDateTime(a.createdAt))}</td>
-      <td><b>${esc(a.actorName || a.actorId)}</b></td>
-      <td><span class="np-badge ${roleBadge(a.actorRole)}">${esc(a.actorRole)}</span></td>
-      <td style="font-size:.8rem">${esc(a.action.replace(/_/g, ' '))}</td>
-      <td class="np-mut" style="font-size:.8rem">${esc(a.summary || '—')}</td>
+      <td data-label="Time" class="np-mut" style="font-size:.8rem">${esc(fmtDateTime(a.createdAt))}</td>
+      <td data-label="Staff"><b>${esc(a.actorName || a.actorId)}</b></td>
+      <td data-label="Role"><span class="np-badge ${roleBadge(a.actorRole)}">${esc(a.actorRole)}</span></td>
+      <td data-label="Action" style="font-size:.8rem">${esc(a.action.replace(/_/g, ' '))}</td>
+      <td data-label="Details" class="np-mut" style="font-size:.8rem">${esc(a.summary || '—')}</td>
     </tr>`).join('') : '<tr><td colspan="5"><div class="np-empty"><div class="np-empty__title">No audit entries</div></div></td></tr>';
   } catch(e){ tb.innerHTML = `<tr><td colspan="5"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
 }

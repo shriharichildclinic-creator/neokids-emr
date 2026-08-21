@@ -160,7 +160,7 @@ async function saveAttachments(req, record){
   }
   return out;
 }
-const include = { attachments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }, patient: { select: { id:true, name:true, phone:true, email:true } }, doctor: { select: { id:true, name:true } } };
+const include = { attachments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }, patient: { select: { id:true, name:true, phone:true, email:true } }, doctor: { select: { id:true, name:true, clinicName:true } } };
 function notFound(){ const e = new Error('Historical record not found'); e.status = 404; return e; }
 function unlinkQuiet(rel){ try { const p = path.join(UP_DIR, rel || ''); if (rel && fs.existsSync(p)) fs.unlinkSync(p); } catch(_){} }
 

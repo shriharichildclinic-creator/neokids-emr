@@ -76,7 +76,7 @@ html,body{
 .np-sidebar__title{ font-weight:700; color:var(--np-ink); line-height:1.1; }
 .np-sidebar__subtitle{ font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--np-muted); }
 
-.np-sidebar__nav{ padding:.75rem .75rem 1rem; flex:1; min-height:0; overflow:hidden; }
+.np-sidebar__nav{ padding:.75rem .75rem 1rem; flex:1; min-height:0; }
 .np-sidebar__section{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--np-muted); padding:.75rem .75rem .25rem; }
 
 .np-nav-item{
@@ -1213,7 +1213,9 @@ html[data-theme="dark"] #notifModal pre{
   #certsView .np-table-wrap,
   #pharmBillsView .np-table-wrap,
   #invView .np-table-wrap,
-  #billsView .np-table-wrap{
+  #billsView .np-table-wrap,
+  #recInvoicesView .np-table-wrap,
+  #auditView .np-table-wrap{
     overflow:visible;
     max-height:none;
     border:0;
@@ -1238,7 +1240,11 @@ html[data-theme="dark"] #notifModal pre{
   #invView .np-table,
   #invView .np-table tbody,
   #billsView .np-table,
-  #billsView .np-table tbody{
+  #billsView .np-table tbody,
+  #recInvoicesView .np-table,
+  #recInvoicesView .np-table tbody,
+  #auditView .np-table,
+  #auditView .np-table tbody{
     display:block;
     width:100%;
     min-width:0;
@@ -1252,7 +1258,9 @@ html[data-theme="dark"] #notifModal pre{
   #certsView .np-table thead,
   #pharmBillsView .np-table thead,
   #invView .np-table thead,
-  #billsView .np-table thead{
+  #billsView .np-table thead,
+  #recInvoicesView .np-table thead,
+  #auditView .np-table thead{
     position:absolute;
     width:1px;
     height:1px;
@@ -1271,7 +1279,9 @@ html[data-theme="dark"] #notifModal pre{
   #certsView .np-table tr,
   #pharmBillsView .np-table tr,
   #invView .np-table tr,
-  #billsView .np-table tr{
+  #billsView .np-table tr,
+  #recInvoicesView .np-table tr,
+  #auditView .np-table tr{
     display:block;
     width:100%;
     margin:0 0 .75rem;
@@ -1290,7 +1300,9 @@ html[data-theme="dark"] #notifModal pre{
   #certsView .np-table td[data-label],
   #pharmBillsView .np-table td[data-label],
   #invView .np-table td[data-label],
-  #billsView .np-table td[data-label]{
+  #billsView .np-table td[data-label],
+  #recInvoicesView .np-table td[data-label],
+  #auditView .np-table td[data-label]{
     display:grid;
     grid-template-columns:minmax(84px,.6fr) minmax(0,1.4fr);
     gap:.7rem;
@@ -1311,7 +1323,9 @@ html[data-theme="dark"] #notifModal pre{
   #certsView .np-table td[data-label]::before,
   #pharmBillsView .np-table td[data-label]::before,
   #invView .np-table td[data-label]::before,
-  #billsView .np-table td[data-label]::before{
+  #billsView .np-table td[data-label]::before,
+  #recInvoicesView .np-table td[data-label]::before,
+  #auditView .np-table td[data-label]::before{
     content:attr(data-label);
     color:var(--np-muted);
     font-size:.68rem;
@@ -1330,8 +1344,11 @@ html[data-theme="dark"] #notifModal pre{
   #pharmBillsView .np-table td[data-label]:last-child,
   #invView .np-table td[data-label]:last-child,
   #billsView .np-table td[data-label]:last-child{ border-bottom:0; }
+  #recInvoicesView .np-table td[data-label]:last-child,
+  #auditView .np-table td[data-label]:last-child{ border-bottom:0; }
   #settlementsView .np-table td[data-label="Doctor"],
-  #invoicesView .np-table td[data-label="Doctor"]{ grid-template-columns:1fr; gap:.25rem; }
+  #invoicesView .np-table td[data-label="Doctor"],
+  #recInvoicesView .np-table td[data-label="Doctor"]{ grid-template-columns:1fr; gap:.25rem; }
   #settlementsView .np-table td[data-label="Actions"],
   #invoicesView .np-table td[data-label="Actions"],
   #revenueView .np-table td[data-label="Actions"],
@@ -1362,6 +1379,13 @@ html[data-theme="dark"] #notifModal pre{
     border:0;
     text-align:center;
   }
+  #recInvoicesView .np-table td[colspan],
+  #auditView .np-table td[colspan]{
+    display:block;
+    padding:.25rem 0;
+    border:0;
+    text-align:center;
+  }
   #settlementsView .np-empty,
   #invoicesView .np-empty,
   #revenueView .np-empty,
@@ -1372,6 +1396,8 @@ html[data-theme="dark"] #notifModal pre{
   #pharmBillsView .np-empty,
   #invView .np-empty,
   #billsView .np-empty{ padding:1.25rem .75rem; }
+  #recInvoicesView .np-empty,
+  #auditView .np-empty{ padding:1.25rem .75rem; }
 }
 @media (max-width:520px){
   .np-filterbar--toolbar > .np-select,

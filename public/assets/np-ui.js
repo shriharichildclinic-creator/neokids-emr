@@ -37,8 +37,8 @@
   .np-ui-modal__actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
   .np-ui-modal__btn{padding:8px 16px;border-radius:8px;font:600 14px/1 inherit;cursor:pointer;border:1px solid transparent;background:transparent;color:#374151}
   .np-ui-modal__btn:hover{background:#f3f4f6}
-  .np-ui-modal__btn--primary{background:#89BCBD;color:#fff;border-color:#89BCBD}
-  .np-ui-modal__btn--primary:hover{background:#5A9495;border-color:#5A9495}
+  .np-ui-modal__btn--primary{background:#467878;color:#fff;border-color:#467878}
+  .np-ui-modal__btn--primary:hover{background:#375F5F;border-color:#375F5F}
   .np-ui-modal__btn--danger{background:#dc2626;color:#fff;border-color:#dc2626}
   .np-ui-modal__btn--danger:hover{background:#b91c1c;border-color:#b91c1c}
 
@@ -438,6 +438,17 @@
   html[data-theme="dark"] .np-ui-modal__input{background:#0E1A22;color:#E6EEF1;border-color:#234551}
   html[data-theme="dark"] .np-ui-modal__btn{color:#C8D5DB}
   html[data-theme="dark"] .np-ui-modal__btn:hover{background:rgba(137,188,189,.14);color:#B4D7D7}
+  /* The two rules above set a light-gray text color meant for the plain
+     Cancel button. Because .np-ui-modal__btn--primary/--danger also carry
+     the base .np-ui-modal__btn class, that gray was silently overriding
+     their intended white text in dark mode too — the exact WCAG-AA
+     contrast bug reported on Generate Settlement, just re-triggered by
+     dark mode. Locking primary/danger to white here, in both states,
+     stops that leak for every confirm/alert dialog app-wide. */
+  html[data-theme="dark"] .np-ui-modal__btn--primary,
+  html[data-theme="dark"] .np-ui-modal__btn--primary:hover,
+  html[data-theme="dark"] .np-ui-modal__btn--danger,
+  html[data-theme="dark"] .np-ui-modal__btn--danger:hover{color:#fff}
   html[data-theme="dark"] .np-ui-skel{background:#1B2F39}
   html[data-theme="dark"] .np-ui-skel::after{background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.08) 50%,transparent 100%)}
   html[data-theme="dark"] .np-ui-empty{color:#91A6B0}

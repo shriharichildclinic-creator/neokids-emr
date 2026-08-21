@@ -22,6 +22,8 @@ function statusBadge(s){ const m={CONFIRMED:'np-badge--green',PENDING:'np-badge-
 function sourceBadge(s){
   if (s==='CLINIC_RECEPTION') return `<span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Reception</span>`;
   if (s==='WALK_IN') return `<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Walk-in</span>`;
+  if (s==='PHONE') return `<span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>Phone</span>`;
+  if (s==='OTHER') return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Other</span>`;
   if (s==='NEOKIDSPRO') return `<span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span>`;
   if (s==='MANUAL') return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Manual</span>`;
   return '';
@@ -42,12 +44,28 @@ function apptActionsHtml(a){
   if(!a.consultationInvoice && a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`);
   } else if(a.consultationInvoice){
-    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceSendModal('${a.consultationInvoice.id}','${a.patient.phone||''}','${esc(a.patient.email||'')}')">Send invoice</button>`);
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceActions('${a.consultationInvoice.id}','${esc(a.consultationInvoice.pdfUrl||'')}','${a.patient.phone||''}','${esc(a.patient.email||'')}')">Invoice</button>`);
   }
   if(__me.canIssueCertificates && a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertModal('${a.id}')">Certificate</button>`);
   }
   return btns.join(' ');
+}
+
+// Single "Actions" entry point for an invoice row — replaces the old
+// PDF/Print/Send buttons crammed side by side, which especially broke down
+// on the mobile stacked-card layout. Send re-uses openInvoiceSendModal.
+function openInvoiceActions(invoiceId, pdfUrl, phone, email){
+  const hasPdf = !!pdfUrl;
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Invoice actions</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body">
+    <div class="np-action-list">
+      <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="window.open('${esc(pdfUrl)}','_blank')">View</button>
+      <a class="np-btn np-btn--block ${hasPdf?'':'np-btn--disabled'}" ${hasPdf?`href="${esc(pdfUrl)}" download`:'aria-disabled="true"'}>Download</a>
+      <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="printPdf('${esc(pdfUrl)}')">Print</button>
+      <button type="button" class="np-btn np-btn--block np-btn--primary" onclick="closeModal();openInvoiceSendModal('${invoiceId}','${esc(phone)}','${esc(email)}')">Send</button>
+    </div>
+    ${hasPdf?'':'<p style="margin:.75rem 0 0;font-size:.8rem;color:var(--np-muted)">PDF isn\'t ready yet — View, Download and Print will be available once it\'s generated.</p>'}
+  </div></div></div>`;
 }
 
 // Real modal (no browser confirm() popups) for choosing delivery channels.
@@ -94,6 +112,17 @@ function setupSidebar(){
   $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>{ if(window.matchMedia('(max-width:1023px)').matches) close(); }));
 }
 
+// Header profile menu (avatar/name button -> Settings + Sign out dropdown).
+// Mirrors the admin/doctor portal pattern so every panel behaves the same way.
+function setupProfileMenu(){
+  const trigger = $('#profileTrigger'); const menu = $('#profileDropdown');
+  if (!trigger || !menu) return;
+  if (trigger.__bound) return; trigger.__bound = true;
+  trigger.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('is-open'); trigger.setAttribute('aria-expanded', menu.classList.contains('is-open')); });
+  document.addEventListener('click', (e) => { if (!menu.contains(e.target) && !trigger.contains(e.target)) menu.classList.remove('is-open'); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.remove('is-open'); });
+}
+
 $('#loginForm').addEventListener('submit', async e=>{ e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='RECEPTIONIST')throw new Error('Not a receptionist account'); TOKEN=d.token; localStorage.setItem('np_reception_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
 function logout(){ localStorage.removeItem('np_reception_token'); TOKEN=null; showLogin(); }
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
@@ -101,9 +130,16 @@ function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen')
 async function showDashboard(){
   $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden');
   setupSidebar();
+  setupProfileMenu();
   try{
     const meRes = await api('/auth/me'); __me = meRes.user || meRes;
-    $('#userName').textContent = __me.name; $('#userInitials').textContent = __me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
+    const __initials = __me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
+    $('#userName').textContent = __me.name; $('#userInitials').textContent = __initials;
+    // Same identity, mirrored into the dropdown's "logged in as" block --
+    // stays visible on mobile even once the header hides .np-profile__meta.
+    if($('#userIdName')) $('#userIdName').textContent = __me.name;
+    if($('#userIdInitials')) $('#userIdInitials').textContent = __initials;
+    if($('#userIdEmail')) $('#userIdEmail').textContent = __me.email || '';
     if(!__me.canManageConsultations){ ['apptsView','patientsView','invoicesView'].forEach(v=>{const b=document.querySelector(`[data-view="${v}"]`); if(b)b.style.display='none';}); }
     if(!__me.canIssueCertificates){ const b=document.querySelector('[data-view="certsView"]'); if(b)b.style.display='none'; }
     if(__me.canManagePharmacy){ $('#pharmSection').style.display=''; $('#navRx').style.display=''; $('#navPharmBills').style.display=''; }
@@ -205,7 +241,7 @@ async function openBookModal(_, patientId){
   <div class="np-field"><label class="np-field__label">DOB</label><input name="dateOfBirth" type="date" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">Gender</label><select name="gender" class="np-select"><option value="">—</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option></select></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Reason / problem *</label><input name="primaryProblem" required class="np-input"/></div>
-  <div class="np-field"><label class="np-row" style="gap:.5rem;align-items:center"><input type="checkbox" name="isWalkIn"/> Walk-in</label></div></div>
+  <div class="np-field"><label class="np-field__label">Source</label><select name="source" class="np-select"><option value="CLINIC_RECEPTION">Clinic reception</option><option value="WALK_IN">Walk-in</option><option value="PHONE">Phone</option><option value="OTHER">Other</option></select></div></div></div>
   <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Book</button></div></form></div></div></div>`;
   const f=$('#bForm');
   async function bPrefillPatient(pid){ try{ const data=await api('/receptionist/patients/'+pid+'/history'); const p=data&&data.patient; if(!p)return; $('#bPatientId').value=p.id; $('#bPatient').value=`${p.name} — ${p.phone||''}`; if(f.phone) f.phone.value=p.phone||''; if(f.email) f.email.value=p.email||''; if(f.parentName) f.parentName.value=p.parentName||''; if(f.dateOfBirth) f.dateOfBirth.value=p.dateOfBirth?String(p.dateOfBirth).slice(0,10):''; if(f.gender) f.gender.value=p.gender||''; }catch(_){} }
@@ -216,7 +252,7 @@ async function openBookModal(_, patientId){
   f.addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(f).entries()); const [docId,centreId]=raw.docCentre.split('|');
     let pid=$('#bPatientId').value||null; const typed=bP.value.trim();
     if(!pid && window.__bplist){ const match=window.__bplist.find(p=>`${p.name} — ${p.phone}`===typed); if(match) pid=match.id; }
-    const payload={ doctorId:docId, medicalCentreId:centreId, date:raw.date, startTime:raw.startTime, consultationType:'OFFLINE', primaryProblem:raw.primaryProblem, isWalkIn:!!raw.isWalkIn };
+    const payload={ doctorId:docId, medicalCentreId:centreId, date:raw.date, startTime:raw.startTime, consultationType:'OFFLINE', primaryProblem:raw.primaryProblem, source:raw.source||'CLINIC_RECEPTION' };
     if(pid){ payload.patientId=pid; } else {
       const namePart=typed.split(' — ')[0]; payload.patientName=namePart; payload.phone=raw.phone; payload.email=raw.email||''; payload.parentName=raw.parentName||''; payload.dateOfBirth=raw.dateOfBirth||''; payload.gender=raw.gender||undefined;
       if(!raw.phone){ toast('Phone is required for a new patient','error'); return; }
@@ -226,7 +262,7 @@ async function openBookModal(_, patientId){
 }
 
 // Invoices
-async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td><td data-label="Patient">${esc(i.appointment.patient.name)}</td><td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td><td data-label="Clinic">${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td><td data-label="Date">${esc(fmtDate(i.createdAt))}</td><td data-label="Actions" style="text-align:right;white-space:nowrap">${i.pdfUrl?`<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a> `:''}<button class="np-btn np-btn--sm" onclick="printPdf('${i.pdfUrl||''}')">Print</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceSendModal('${i.id}','${i.appointment.patient.phone||''}','${esc(i.appointment.patient.email||'')}')">Send</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td><td data-label="Patient">${esc(i.appointment.patient.name)}</td><td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td><td data-label="Clinic">${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td><td data-label="Date">${esc(fmtDate(i.createdAt))}</td><td data-label="Actions" style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openInvoiceActions('${i.id}','${esc(i.pdfUrl||'')}','${i.appointment.patient.phone||''}','${esc(i.appointment.patient.email||'')}')">Actions</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 function printPdf(url){ if(!url){toast('Generate the invoice first','warn');return;} const w=window.open(url,'_blank'); if(w){w.addEventListener('load',()=>{try{w.print();}catch(_){}});} }
 
 // Certificates
@@ -296,10 +332,11 @@ async function openBillModal(_, rxId){
     if(!lines.length){toast('Add at least one item','error');return;}
     try{ const r=await api('/receptionist/pharmacy/bills',{method:'POST',body:JSON.stringify({ customerName:raw.customerName||'', customerPhone:raw.customerPhone||'', prescriptionId:rxId||undefined, discount:Number(raw.discount||0), tax:Number(raw.tax||0), items:lines })}); toast('Bill created'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadPharmBills(); }catch(err){toast(err.message,'error');} });
 }
-function addBillLine(){ const host=$('#billLines'); const div=document.createElement('div'); div.className='bill-line np-row'; div.style.cssText='gap:.5rem;align-items:flex-end;margin-bottom:.5rem;'; div.innerHTML=`<div class="np-field" style="flex:2"><select class="np-select bl-item"><option value="">— manual —</option>${window.__billItemOpts}</select><input class="np-input bl-name" placeholder="Medicine name" style="margin-top:.35rem"/></div><div class="np-field"><label class="np-field__label">Qty</label><input type="number" class="np-input bl-qty" value="1" min="1"/></div><div class="np-field"><label class="np-field__label">Price</label><input type="number" step="0.01" class="np-input bl-price" value="0"/></div>`; host.appendChild(div);
+function addBillLine(){ const host=$('#billLines'); const div=document.createElement('div'); div.className='bill-line'; div.innerHTML=`<div class="bill-line__med"><select class="np-select bl-item"><option value="">— manual —</option>${window.__billItemOpts}</select><input class="np-input bl-name" placeholder="Medicine name"/></div><div class="bill-line__qty"><label class="np-field__label">Qty</label><input type="number" class="np-input bl-qty" value="1" min="1"/></div><div class="bill-line__price"><label class="np-field__label">Price</label><input type="number" step="0.01" class="np-input bl-price" value="0"/></div><button type="button" class="bill-line__remove" aria-label="Remove item" onclick="removeBillLine(this)">×</button>`; host.appendChild(div);
   const itemSel=div.querySelector('.bl-item'); const nameInput=div.querySelector('.bl-name');
   itemSel.addEventListener('change',e=>{ const o=e.target.selectedOptions[0]; if(o&&o.value){ nameInput.value=o.dataset.name; nameInput.readOnly=true; div.querySelector('.bl-price').value=o.dataset.price; } else { nameInput.value=''; nameInput.readOnly=false; } });
 }
+function removeBillLine(btn){ const host=$('#billLines'); const line=btn.closest('.bill-line'); if(host.children.length<=1) return; line.remove(); }
 
 $('#passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const d=Object.fromEntries(new FormData(e.target).entries()); if(d.newPassword!==d.confirmPassword){toast('Passwords do not match','error');return;} try{ await api('/auth/change-password',{method:'POST',body:JSON.stringify(d)}); toast('Password changed'); e.target.reset(); }catch(err){toast(err.message,'error');}});
 

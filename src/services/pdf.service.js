@@ -30,6 +30,15 @@ function ensureDir(p) {
   }
 }
 
+// Sub-brand line under the NeoKidsPro letterhead. Hardcoded on purpose per
+// explicit instruction — Shri Hari Child Clinic, Borivali is the sub-brand
+// and prints the same on every document regardless of which doctor/medical
+// centre issued it. The dynamic clinicName/medicalCentre value that used to
+// drive this line is now only used for the clinic ADDRESS lookups elsewhere
+// (doctor identity block, invoice clinic-address line) — those stay dynamic
+// and are unaffected by this constant.
+const SUB_BRAND_NAME = 'Shri Hari Child Clinic, Borivali';
+
 function drawHeader(doc, title) {
   // Root-cause fix for empty trailing pages: PDFKit auto page-breaks whenever
   // a draw crosses (page.height - bottomMargin). These are fixed-layout,
@@ -41,6 +50,11 @@ function drawHeader(doc, title) {
   doc.fontSize(10).font('Helvetica').text('Pediatric Network of Doctors · neokidspro.in', 50, 55);
   doc.fontSize(16).font('Helvetica-Bold').fillColor('white')
      .text(title, 0, 32, { align: 'right', width: doc.page.width - 50 });
+  // Sub-brand always sits directly under the NeoKidsPro letterhead band —
+  // never inside the doctor identity block further down the page — so it
+  // reads the same way on every document type regardless of layout below.
+  doc.fontSize(9).font('Helvetica-Bold').fillColor(BRAND_DARK)
+     .text(SUB_BRAND_NAME, 50, 86, { width: doc.page.width - 100 });
   doc.fillColor('black').moveDown(3);
 }
 
@@ -178,11 +192,6 @@ async function generateInvoice(appointment) {
     // Appointment date + time on the invoice.
     doc.fillColor('#555').fontSize(9)
        .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
-    // Clinic line — same field/placement as the Prescription PDF, so this
-    // invoice isn't the odd one out that never names the clinic.
-    if (appointment.doctor.clinicName) {
-      doc.fillColor('#555').fontSize(9).text(String(appointment.doctor.clinicName), 320, 234, { width: 225 });
-    }
     doc.fillColor('#333');
 
     const tableTop = 285;
@@ -211,7 +220,7 @@ async function generateInvoice(appointment) {
     // Footer — lineBreak:false so PDFKit never auto page-breaks the line
     // onto a blank page (bottom margin auto-break was the root cause).
     doc.fontSize(9).font('Helvetica').fillColor('#888');
-    doc.text('Thank you for choosing NeoKidsPro. This is a computer-generated invoice.',
+    doc.text('Thank you for choosing NeoKidsPro (Shri Hari Child Clinic, Borivali). This is a computer-generated invoice.',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
@@ -238,9 +247,6 @@ async function generatePrescription(appointment, prescription) {
        .text(`Dr. ${appointment.doctor.name}`, 50, 110);
     doc.fontSize(10).font('Helvetica').fillColor('#555')
        .text(`${appointment.doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${appointment.doctor.specialization || 'Pediatrician'}`);
-    if (appointment.doctor.clinicName) {
-      doc.fontSize(9).fillColor('#777').text(`${appointment.doctor.clinicName}`);
-    }
     if (appointment.doctor.registrationNumber) {
       doc.fontSize(9).fillColor('#777').text(`Reg. No: ${appointment.doctor.registrationNumber}`);
     }
@@ -328,7 +334,7 @@ async function generatePrescription(appointment, prescription) {
     // Teleconsultation safety disclaimer — required on every prescription
     // issued from an online consultation, not shown for in-clinic visits.
     if (appointment.consultationType === 'ONLINE') {
-      const disclaimerText = 'This prescription has been issued following a teleconsultation conducted through NeoKidsPro.in. If your child develops worsening symptoms, experiences a medical emergency, or requires urgent medical attention, please visit your nearest hospital, emergency department, or healthcare facility immediately. Teleconsultation does not replace emergency medical care.';
+      const disclaimerText = 'This prescription has been issued following a teleconsultation conducted through NeoKidsPro (Shri Hari Child Clinic, Borivali), via NeoKidsPro.in. If your child develops worsening symptoms, experiences a medical emergency, or requires urgent medical attention, please visit your nearest hospital, emergency department, or healthcare facility immediately. Teleconsultation does not replace emergency medical care.';
       const boxX = 50, boxW = doc.page.width - 100, boxPad = 8;
       doc.fontSize(8).font('Helvetica');
       const textH = doc.heightOfString(disclaimerText, { width: boxW - boxPad * 2 });
@@ -342,7 +348,7 @@ async function generatePrescription(appointment, prescription) {
     drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 110 });
 
     doc.fontSize(8).fillColor('#888')
-       .text('This is a digitally generated prescription from NeoKidsPro EMR. neokidspro.in',
+       .text('This is a digitally generated prescription from NeoKidsPro (Shri Hari Child Clinic, Borivali) EMR. neokidspro.in',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
@@ -396,7 +402,6 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
     doc.fontSize(11).font('Helvetica');
     doc.text(`Dr. ${doctor.name}`, 50, 207);
     doc.text(doctor.specialization || 'Pediatrician', 50, 222);
-
     if (doctor.email) {
       doc.text(doctor.email, 50, 237);
     }
@@ -405,8 +410,14 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
        .text('Payer (Clinic):', 320, 190);
 
     doc.fontSize(11).font('Helvetica');
-    doc.text('NeoKidsPro Pediatric Clinic', 320, 207);
-    doc.text('neokidspro.in', 320, 222);
+    doc.text('NeoKidsPro', 320, 207);
+    // Legal entity in brackets right under the brand name — the responsible
+    // business is Shri Hari Child Clinic, not the NeoKidsPro brand, so this
+    // has to be legible on its own line rather than squeezed/truncated
+    // alongside the brand name at 11pt.
+    doc.fontSize(8.5).text('(Shri Hari Child Clinic, Borivali)', 320, 220, { width: 225 });
+    doc.fontSize(11).text('Pediatric Network of Doctors', 320, 234);
+    doc.text('neokidspro.in', 320, 249);
 
     const sumTop = 275;
 
@@ -429,7 +440,7 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
     const lines = [
       ['Total Consultations', `${settlement.totalConsultations} appt(s)`, settlement.totalConsultations, false],
       ['Total Revenue Collected', 'Cashfree only', settlement.totalRevenue, true],
-      [`Clinic Share (${Number(settlement.clinicSharePercent)}%)`, 'of total', settlement.clinicShareAmount, true],
+      [`NeoKidsPro Share (${Number(settlement.clinicSharePercent)}%)`, 'of total', settlement.clinicShareAmount, true],
       [`Doctor Gross Share (${Number(settlement.doctorSharePercent)}%)`, 'of total', settlement.doctorGrossAmount, true],
       [`TDS Deducted (${Number(settlement.tdsPercent)}%)`, 'of doctor gross', settlement.tdsAmount, true]
     ];
@@ -602,7 +613,7 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
     drawHeader(doc, tpl.title);
 
     // Identity block under the band (left) + certificate meta (right).
-    let ly = 100;
+    let ly = 102;
     if (isOnline) {
       // Teleconsultation: doctor details only — never a physical clinic
       // address block (the consultation did not happen at the clinic).
@@ -620,17 +631,14 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
       // In-person certificates are still issued and signed by the doctor,
       // not the clinic — the clinic is where the exam happened, not who
       // is vouching for it. Doctor name leads (matches the online block
-      // above); clinic name/address is shown underneath as location info.
+      // above); clinic name already appears in the letterhead above, so
+      // only the street address (location-specific detail) repeats here.
       doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
          .text(`Dr. ${doctor.name}`, 50, ly);
       doc.fontSize(9).font('Helvetica').fillColor('#555');
       let ty = ly + 16;
       doc.text(`${doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${doctor.specialization || 'Pediatrician'}`, 50, ty, { width: 260 });
       ty += 12;
-      if (doctor.clinicName) {
-        doc.text(String(doctor.clinicName), 50, ty, { width: 260 });
-        ty += 12;
-      }
       if (doctor.clinicAddress) {
         doc.text(String(doctor.clinicAddress), 50, ty, { width: 260 });
         ty += Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11;
@@ -755,6 +763,10 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
     const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
     const stream = fs.createWriteStream(filepath);
     doc.pipe(stream);
+    // Only the address is still sourced dynamically (medical centre on file,
+    // falling back to the doctor's clinic address) — the clinic NAME in the
+    // letterhead is the hardcoded sub-brand now (see drawHeader).
+    const clinicAddr = (medicalCentre && medicalCentre.address) || doctor.clinicAddress || null;
     drawHeader(doc, 'INVOICE');
 
     doc.fontSize(11).font('Helvetica').fillColor('#333');
@@ -776,16 +788,12 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
        .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
     doc.fillColor('#333');
 
-    const clinicName = (medicalCentre && medicalCentre.name) || doctor.clinicName || null;
-    const clinicAddr = (medicalCentre && medicalCentre.address) || doctor.clinicAddress || null;
+    // Clinic name is already in the letterhead above; only the street
+    // address (location-specific, not repeated identity) prints here.
     let cy = 245;
-    if (clinicName) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor('#555').text(`Clinic: ${clinicName}`, 50, cy);
-      cy += 12;
-      if (clinicAddr) {
-        doc.font('Helvetica').text(String(clinicAddr), 50, cy, { width: 300 });
-        cy += 24;
-      }
+    if (clinicAddr) {
+      doc.fontSize(9).font('Helvetica').fillColor('#555').text(String(clinicAddr), 50, cy, { width: 300 });
+      cy += 24;
     }
     if (invoice.receptionist && invoice.receptionist.name) {
       doc.fontSize(9).font('Helvetica').fillColor('#777').text(`Billed by: ${invoice.receptionist.name} (Clinic Reception)`, 50, cy);
@@ -815,7 +823,7 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
     drawSignatureBlock(doc, doctor, { y: doc.page.height - 185 });
 
     doc.fontSize(9).font('Helvetica').fillColor('#888');
-    doc.text('Thank you for choosing NeoKidsPro. This is a computer-generated invoice.',
+    doc.text('Thank you for choosing NeoKidsPro (Shri Hari Child Clinic, Borivali). This is a computer-generated invoice.',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
@@ -837,7 +845,7 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
   const filename = `pharmacy_invoice_${bill.id}.pdf`;
   const filepath = path.join(STORAGE, 'pharmacy-invoices', filename);
 
-  const centreName = (medicalCentre && medicalCentre.name) || 'NeoKidsPro Pharmacy';
+  const centreName = (medicalCentre && medicalCentre.name) || 'NeoKidsPro (Shri Hari Child Clinic, Borivali)';
   const centreAddr = medicalCentre && medicalCentre.address;
 
   return new Promise((resolve, reject) => {

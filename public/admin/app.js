@@ -1480,8 +1480,15 @@ async function showDashboard() {
     const me = await api('/auth/me');
     const u = (me && me.user) || me; // backend returns {role, user:{...}}
     if (u && u.name){
+      const initials = u.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
       $('#adminName').textContent = u.name;
-      $('#adminInitials').textContent = u.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
+      $('#adminInitials').textContent = initials;
+      // Same identity, mirrored into the dropdown's "logged in as" block --
+      // this is the only place it stays visible once the header hides
+      // .np-profile__meta on narrow screens.
+      if ($('#adminIdName')) $('#adminIdName').textContent = u.name;
+      if ($('#adminIdInitials')) $('#adminIdInitials').textContent = initials;
+      if ($('#adminIdEmail')) $('#adminIdEmail').textContent = u.email || '';
     }
   } catch(e) {
     if (e && e.status === 401) return;

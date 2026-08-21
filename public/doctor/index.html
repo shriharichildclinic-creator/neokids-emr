@@ -41,7 +41,7 @@
 </script>
 <link rel="stylesheet" href="/doctor/styles.css?v=3.5.0"/>
 
-<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.5.0"/>
+<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.5.4"/>
 <script>
   try {
     var t = localStorage.getItem('np-theme');
@@ -183,6 +183,14 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#64748B;"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div id="profileDropdown" class="np-profile__menu" role="menu">
+              <div class="np-profile__id">
+                <div class="np-profile__id-avatar" id="docIdPhoto"><span id="docIdInitials">D</span></div>
+                <div class="np-profile__id-text">
+                  <div class="np-profile__id-name" id="docIdName">Doctor</div>
+                  <div class="np-profile__id-role" id="docIdSpec">Pediatrician</div>
+                  <div class="np-profile__id-email" id="docIdEmail"></div>
+                </div>
+              </div>
               <button type="button" class="np-profile__menu-item" data-action="open-profile">
                 <svg class="np-profile__menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 My Profile

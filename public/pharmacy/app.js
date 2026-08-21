@@ -29,10 +29,21 @@ function setupSidebar(){
   $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>{ if(window.matchMedia('(max-width:1023px)').matches) close(); }));
 }
 
+// Header profile menu (avatar/name button -> Settings + Sign out dropdown).
+// Mirrors the admin/doctor portal pattern so every panel behaves the same way.
+function setupProfileMenu(){
+  const trigger = $('#profileTrigger'); const menu = $('#profileDropdown');
+  if (!trigger || !menu) return;
+  if (trigger.__bound) return; trigger.__bound = true;
+  trigger.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('is-open'); trigger.setAttribute('aria-expanded', menu.classList.contains('is-open')); });
+  document.addEventListener('click', (e) => { if (!menu.contains(e.target) && !trigger.contains(e.target)) menu.classList.remove('is-open'); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.remove('is-open'); });
+}
+
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='PHARMACY')throw new Error('Not a pharmacy account'); TOKEN=d.token; localStorage.setItem('np_pharmacy_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
 function logout(){ localStorage.removeItem('np_pharmacy_token'); TOKEN=null; showLogin(); }
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
-async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); try{ const me=await api('/auth/me'); __me=me.user||me; $('#userName').textContent=__me.name; $('#userInitials').textContent=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); }catch(e){} setView('dashView'); }
+async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); setupProfileMenu(); try{ const me=await api('/auth/me'); __me=me.user||me; const __initials=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); $('#userName').textContent=__me.name; $('#userInitials').textContent=__initials; /* mirror into dropdown "logged in as" block -- stays visible on mobile once header hides .np-profile__meta */ if($('#userIdName'))$('#userIdName').textContent=__me.name; if($('#userIdInitials'))$('#userIdInitials').textContent=__initials; if($('#userIdEmail'))$('#userIdEmail').textContent=__me.email||''; }catch(e){} setView('dashView'); }
 
 async function loadDash(){ try{ const s=await api('/pharmacy/stats');
   $('#kpiGrid').innerHTML=[{k:'blue',l:'Medicines in stock',v:s.totalItems},{k:'amber',l:'Low stock (≤10)',v:s.lowStock},{k:'red',l:'Expiring ≤30 days',v:s.expiringSoon},{k:'green',l:'Bills today',v:s.todayBills},{k:'mint',l:'Revenue today',v:inr(s.todayRevenue)}].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div></div>`).join('');
@@ -102,10 +113,11 @@ async function openBillModal(rxId){
     if(!lines.length){toast('Add at least one item','error');return;}
     try{ const r=await api('/pharmacy/bills',{method:'POST',body:JSON.stringify({ customerName:raw.customerName||'', customerPhone:raw.customerPhone||'', paymentMethod:raw.paymentMethod, prescriptionId:rxId||undefined, discount:Number(raw.discount||0), tax:Number(raw.tax||0), items:lines })}); toast('Bill created'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadBills(); }catch(err){toast(err.message,'error');} });
 }
-function addBillLine(){ const host=$('#billLines'); const div=document.createElement('div'); div.className='bill-line np-row'; div.style.cssText='gap:.5rem;align-items:flex-end;margin-bottom:.5rem;'; div.innerHTML=`<div class="np-field" style="flex:2"><select class="np-select bl-item"><option value="">— manual —</option>${window.__billItemOpts}</select><input class="np-input bl-name" placeholder="Medicine name" style="margin-top:.35rem"/></div><div class="np-field"><label class="np-field__label">Qty</label><input type="number" class="np-input bl-qty" value="1" min="1"/></div><div class="np-field"><label class="np-field__label">Price</label><input type="number" step="0.01" class="np-input bl-price" value="0"/></div>`; host.appendChild(div);
+function addBillLine(){ const host=$('#billLines'); const div=document.createElement('div'); div.className='bill-line'; div.innerHTML=`<div class="bill-line__med"><select class="np-select bl-item"><option value="">— manual —</option>${window.__billItemOpts}</select><input class="np-input bl-name" placeholder="Medicine name"/></div><div class="bill-line__qty"><label class="np-field__label">Qty</label><input type="number" class="np-input bl-qty" value="1" min="1"/></div><div class="bill-line__price"><label class="np-field__label">Price</label><input type="number" step="0.01" class="np-input bl-price" value="0"/></div><button type="button" class="bill-line__remove" aria-label="Remove item" onclick="removeBillLine(this)">×</button>`; host.appendChild(div);
   const itemSel=div.querySelector('.bl-item'); const nameInput=div.querySelector('.bl-name');
   itemSel.addEventListener('change',e=>{ const o=e.target.selectedOptions[0]; if(o&&o.value){ nameInput.value=o.dataset.name; nameInput.readOnly=true; div.querySelector('.bl-price').value=o.dataset.price; } else { nameInput.value=''; nameInput.readOnly=false; } });
 }
+function removeBillLine(btn){ const host=$('#billLines'); const line=btn.closest('.bill-line'); if(host.children.length<=1) return; line.remove(); }
 
 $('#passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const d=Object.fromEntries(new FormData(e.target).entries()); if(d.newPassword!==d.confirmPassword){toast('Passwords do not match','error');return;} try{ await api('/auth/change-password',{method:'POST',body:JSON.stringify(d)}); toast('Password changed'); e.target.reset(); }catch(err){toast(err.message,'error');}});
 

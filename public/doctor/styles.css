@@ -66,7 +66,7 @@ html,body{
 .np-sidebar__title{ font-weight:700; color:var(--np-ink); line-height:1.1; }
 .np-sidebar__subtitle{ font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color: var(--np-muted); }
 
-.np-sidebar__nav{ padding: .75rem .75rem 1rem; flex:1; min-height:0; overflow:hidden; }
+.np-sidebar__nav{ padding: .75rem .75rem 1rem; flex:1; min-height:0; }
 .np-sidebar__section{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color: var(--np-muted); padding: .75rem .75rem .25rem; }
 
 .np-nav-item{

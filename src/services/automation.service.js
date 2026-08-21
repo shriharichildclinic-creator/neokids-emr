@@ -99,6 +99,7 @@ const logger   = require('../utils/logger');
 const whatsapp = require('./whatsapp.service');
 const waMedia  = require('./whatsapp-media.service');   // NEW — WhatsApp PDF sharing
 const email    = require('./email.service');
+const { renderBrandedEmail, esc } = require('./email-brand.service');
 const pdf      = require('./pdf.service');
 const meet     = require('./googleMeet.service');
 const { formatDateOnly, getTodayDateString, getCurrentTimeMinutes, parseDateOnly } = require('../utils/date');
@@ -291,10 +292,14 @@ async function onDoctorCreated({ doctor, inviteLink }) {
       messageFactory: () => email.sendEmail({
         to: doctor.email,
         subject: 'Welcome to NeoKidsPro — set your password',
-        html: `<h2>Welcome Dr. ${doctor.name}</h2>
-               <p>Your NeoKidsPro EMR account has been created by the clinic admin.</p>
-               <p><a href="${inviteLink}">Click here to set your password and log in</a></p>
-               <p>This invite expires soon — please use it as soon as possible.</p>`
+        html: renderBrandedEmail({
+          preheader: 'Your NeoKidsPro EMR account is ready — set your password to log in.',
+          headline: `Welcome, Dr. ${esc(doctor.name)}`,
+          subhead: 'Your NeoKidsPro EMR account has been created by the clinic admin.',
+          bodyHtml: `<p>Set a password to log in and start using the doctor portal.</p>`,
+          ctas: [{ label: 'Set Password & Log In', url: inviteLink }],
+          footerNote: 'This invite link expires soon — please use it as soon as possible.'
+        })
       })
     });
   }
@@ -348,14 +353,21 @@ async function onPhysicalBookingConfirmed(appointment) {
       messageFactory: () => email.sendEmail({
         to: a.patient.email,
         subject: 'Your appointment is confirmed - NeoKidsPro',
-        html: `<h2>Appointment Confirmed</h2>
-               <p>Dear ${a.patient.name},</p>
-               <p>Your in-clinic visit with <strong>Dr. ${a.doctor.name}</strong> is confirmed for
-               <strong>${fmtDate(a.date)}</strong> at <strong>${fmtTime(a.startTime)}</strong>.</p>
-               ${a.doctor.clinicName ? `<p><strong>Clinic:</strong> ${a.doctor.clinicName}</p>` : ''}
-               ${a.doctor.clinicAddress ? `<p><strong>Address:</strong> ${a.doctor.clinicAddress}</p>` : ''}
-               <p><a href="${mapLink}" style="display:inline-block;padding:10px 18px;background:#4DA8FF;color:#fff;border-radius:8px;text-decoration:none">📍 Get Directions</a></p>
-               <p>Fee: ₹${Number(a.feeAtBooking).toFixed(2)} (payable at clinic)</p>`
+        html: renderBrandedEmail({
+          preheader: `Your in-clinic visit with Dr. ${a.doctor.name} is confirmed for ${fmtDate(a.date)}.`,
+          headline: 'Appointment Confirmed',
+          subhead: `Dr. ${esc(a.doctor.name)} · ${esc(fmtDate(a.date))} at ${esc(fmtTime(a.startTime))}`,
+          bodyHtml: `
+            <p>Dear ${esc(a.patient.name)},</p>
+            <p>Your in-clinic visit is confirmed. Here are the details:</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+              ${a.doctor.clinicName ? `<tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Clinic</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(a.doctor.clinicName)}</td></tr>` : ''}
+              ${a.doctor.clinicAddress ? `<tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Address</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(a.doctor.clinicAddress)}</td></tr>` : ''}
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Fee</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">₹${Number(a.feeAtBooking).toFixed(2)} (payable at clinic)</td></tr>
+            </table>
+          `,
+          ctas: [{ label: '📍 Get Directions', url: mapLink }]
+        })
       })
     });
   }
@@ -366,14 +378,19 @@ async function onPhysicalBookingConfirmed(appointment) {
       messageFactory: () => email.sendEmail({
         to: a.doctor.email,
         subject: `New in-clinic booking: ${a.patient.name} on ${fmtDate(a.date)}`,
-        html: `<h2>New Booking</h2>
-               <p>Dr. ${a.doctor.name},</p>
-               <p><strong>${a.patient.name}</strong> has booked an in-clinic visit.</p>
-               <ul>
-                 <li>Date: ${fmtDate(a.date)} ${fmtTime(a.startTime)}</li>
-                 <li>Phone: +91 ${a.patient.phone}</li>
-                 <li>Problem: ${a.primaryProblem}</li>
-               </ul>`
+        html: renderBrandedEmail({
+          preheader: `${a.patient.name} has booked an in-clinic visit on ${fmtDate(a.date)}.`,
+          headline: 'New Booking',
+          subhead: `Dr. ${esc(a.doctor.name)}`,
+          bodyHtml: `
+            <p><b>${esc(a.patient.name)}</b> has booked an in-clinic visit.</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Date</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(fmtDate(a.date))} ${esc(fmtTime(a.startTime))}</td></tr>
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Phone</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">+91 ${esc(a.patient.phone)}</td></tr>
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Problem</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(a.primaryProblem)}</td></tr>
+            </table>
+          `
+        })
       })
     });
   }
@@ -464,12 +481,16 @@ async function onOnlineBookingConfirmed(appointment) {
       messageFactory: () => email.sendEmail({
         to: a.patient.email,
         subject: 'Your online consultation is confirmed - NeoKidsPro',
-        html: `<h2>Consultation Confirmed</h2>
-               <p>Dear ${a.patient.name},</p>
-               <p>Your online consultation with <strong>Dr. ${a.doctor.name}</strong> on
-               <strong>${fmtDate(a.date)}</strong> at <strong>${fmtTime(a.startTime)}</strong> is confirmed.</p>
-               ${meetLink ? `<p><a href="${meetLink}" style="display:inline-block;padding:10px 18px;background:#4DA8FF;color:#fff;border-radius:8px;text-decoration:none">🎥 Join Meeting</a></p>` : ''}
-               <p>Invoice is attached.</p>`,
+        html: renderBrandedEmail({
+          preheader: `Your online consultation with Dr. ${a.doctor.name} is confirmed for ${fmtDate(a.date)}.`,
+          headline: 'Consultation Confirmed',
+          subhead: `Dr. ${esc(a.doctor.name)} · ${esc(fmtDate(a.date))} at ${esc(fmtTime(a.startTime))}`,
+          bodyHtml: `
+            <p>Dear ${esc(a.patient.name)},</p>
+            <p>Your online consultation is confirmed. Your invoice is attached to this email.</p>
+          `,
+          ctas: meetLink ? [{ label: '🎥 Join Meeting', url: meetLink }] : []
+        }),
         attachments: invoiceFilepath ? [{ filename: `invoice_${apptShort}.pdf`, path: invoiceFilepath }] : []
       })
     });
@@ -490,25 +511,21 @@ async function onOnlineBookingConfirmed(appointment) {
       messageFactory: () => email.sendEmail({
         to: a.doctor.email,
         subject: `New online consultation: ${a.patient.name} on ${fmtDate(a.date)}`,
-        html: `<h2>New Online Booking</h2>
-               <p>Dr. ${a.doctor.name}, a paid online consultation has been booked.</p>
-               <ul style="margin:0 0 14px 18px; padding:0;">
-                 <li>Patient: ${a.patient.name} (+91 ${a.patient.phone})</li>
-                 <li>Date: ${fmtDate(a.date)} ${fmtTime(a.startTime)}</li>
-                 <li>Problem: ${a.primaryProblem}</li>
-               </ul>
-               ${meetLink ? `
-                 <p style="margin:18px 0;">
-                   <a href="${meetLink}"
-                      style="display:inline-block;padding:10px 18px;background:#4DA8FF;color:#fff;border-radius:8px;text-decoration:none">
-                     🎥 Join Consultation
-                   </a>
-                 </p>
-                 <p style="font-size:.85rem;color:#666;">
-                   If the button doesn’t work, open this link in your browser:<br>
-                   <a href="${meetLink}" style="color:#4DA8FF;word-break:break-all;">${meetLink}</a>
-                 </p>
-               ` : ''}`
+        html: renderBrandedEmail({
+          preheader: `A paid online consultation with ${a.patient.name} has been booked.`,
+          headline: 'New Online Booking',
+          subhead: `Dr. ${esc(a.doctor.name)}`,
+          bodyHtml: `
+            <p>A paid online consultation has been booked.</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Patient</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(a.patient.name)} (+91 ${esc(a.patient.phone)})</td></tr>
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Date</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(fmtDate(a.date))} ${esc(fmtTime(a.startTime))}</td></tr>
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Problem</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(a.primaryProblem)}</td></tr>
+            </table>
+          `,
+          ctas: meetLink ? [{ label: '🎥 Join Consultation', url: meetLink }] : [],
+          footerNote: meetLink ? `If the button doesn't work, open this link: <a href="${meetLink}" style="color:#1E6FBF;word-break:break-all;">${esc(meetLink)}</a>` : ''
+        })
       })
     });
   }
@@ -628,13 +645,18 @@ async function onAppointmentRescheduled(appointment) {
       messageFactory: () => email.sendEmail({
         to: a.patient.email,
         subject: 'Appointment Rescheduled - NeoKidsPro',
-        html: `<h2>Appointment Rescheduled</h2>
-               <p>Dear ${a.patient.name},</p>
-               <p>Your appointment with <strong>Dr. ${a.doctor.name}</strong> has been rescheduled to
-               <strong>${fmtDate(a.date)}</strong> at <strong>${fmtTime(a.startTime)}</strong>.</p>
-               <p><b>Reason:</b> ${reason}</p>
-               ${meetLink && isOnline ? `<p><a href="${meetLink}" style="display:inline-block;padding:10px 18px;background:#4DA8FF;color:#fff;border-radius:8px;text-decoration:none">🎥 Join New Meet</a></p>
-               <p style="font-size:.85rem;color:#666;">New Meet link: <a href="${meetLink}">${meetLink}</a></p>` : ''}`
+        html: renderBrandedEmail({
+          preheader: `Your appointment with Dr. ${a.doctor.name} has been rescheduled to ${fmtDate(a.date)}.`,
+          headline: 'Appointment Rescheduled',
+          subhead: `Dr. ${esc(a.doctor.name)} · New time: ${esc(fmtDate(a.date))} at ${esc(fmtTime(a.startTime))}`,
+          bodyHtml: `
+            <p>Dear ${esc(a.patient.name)},</p>
+            <p>Your appointment has been rescheduled to the date and time above.</p>
+            <p><b>Reason:</b> ${esc(reason)}</p>
+          `,
+          ctas: (meetLink && isOnline) ? [{ label: '🎥 Join New Meeting', url: meetLink }] : [],
+          footerNote: (meetLink && isOnline) ? `New Meet link: <a href="${meetLink}" style="color:#1E6FBF;word-break:break-all;">${esc(meetLink)}</a>` : ''
+        })
       })
     });
   }
@@ -646,14 +668,20 @@ async function onAppointmentRescheduled(appointment) {
       messageFactory: () => email.sendEmail({
         to: a.doctor.email,
         subject: `Rescheduled: ${a.patient.name} → ${fmtDate(a.date)} ${fmtTime(a.startTime)}`,
-        html: `<p>Dr. ${a.doctor.name}, the following appointment was rescheduled:</p>
-               <ul>
-                 <li><b>Patient:</b> ${a.patient.name}</li>
-                 <li><b>New date/time:</b> ${fmtDate(a.date)} ${fmtTime(a.startTime)}</li>
-                 <li><b>Reason:</b> ${reason}</li>
-                 ${meetLink && isOnline ? `<li><b>New Meet link:</b> <a href="${meetLink}">${meetLink}</a></li>` : ''}
-               </ul>
-               ${meetLink && isOnline ? `<p><a href="${meetLink}" style="display:inline-block;padding:10px 18px;background:#4DA8FF;color:#fff;border-radius:8px;text-decoration:none">🎥 Open Meet</a></p>` : ''}`
+        html: renderBrandedEmail({
+          preheader: `${a.patient.name}'s appointment was rescheduled to ${fmtDate(a.date)}.`,
+          headline: 'Appointment Rescheduled',
+          subhead: `Dr. ${esc(a.doctor.name)}`,
+          bodyHtml: `
+            <p>The following appointment was rescheduled:</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Patient</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(a.patient.name)}</td></tr>
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">New date/time</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(fmtDate(a.date))} ${esc(fmtTime(a.startTime))}</td></tr>
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Reason</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(reason)}</td></tr>
+            </table>
+          `,
+          ctas: (meetLink && isOnline) ? [{ label: '🎥 Open Meet', url: meetLink }] : []
+        })
       })
     });
   }
@@ -680,8 +708,16 @@ async function onAppointmentCancelled(appointment, reason) {
       messageFactory: () => email.sendEmail({
         to: a.patient.email,
         subject: 'Appointment Cancelled - NeoKidsPro',
-        html: `<p>Dear ${a.patient.name}, your appointment with Dr. ${a.doctor.name} on ${fmtDate(a.date)} ${fmtTime(a.startTime)} has been cancelled.</p>
-               ${reason ? `<p><b>Reason:</b> ${reason}</p>` : ''}`
+        html: renderBrandedEmail({
+          preheader: `Your appointment with Dr. ${a.doctor.name} on ${fmtDate(a.date)} has been cancelled.`,
+          headline: 'Appointment Cancelled',
+          subhead: `Dr. ${esc(a.doctor.name)} · ${esc(fmtDate(a.date))} at ${esc(fmtTime(a.startTime))}`,
+          bodyHtml: `
+            <p>Dear ${esc(a.patient.name)},</p>
+            <p>Your appointment above has been cancelled.</p>
+            ${reason ? `<p><b>Reason:</b> ${esc(reason)}</p>` : ''}
+          `
+        })
       })
     });
   }
@@ -691,10 +727,19 @@ async function onAppointmentCancelled(appointment, reason) {
       messageFactory: () => email.sendEmail({
         to: a.doctor.email,
         subject: `Cancelled: ${a.patient.name} on ${fmtDate(a.date)}`,
-        html: `<p>Dr. ${a.doctor.name}, the following appointment was cancelled:</p>
-               <ul><li>Patient: ${a.patient.name}</li>
-                   <li>${fmtDate(a.date)} ${fmtTime(a.startTime)}</li>
-                   ${reason ? `<li>Reason: ${reason}</li>` : ''}</ul>`
+        html: renderBrandedEmail({
+          preheader: `${a.patient.name}'s appointment on ${fmtDate(a.date)} was cancelled.`,
+          headline: 'Appointment Cancelled',
+          subhead: `Dr. ${esc(a.doctor.name)}`,
+          bodyHtml: `
+            <p>The following appointment was cancelled:</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Patient</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(a.patient.name)}</td></tr>
+              <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Date/time</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(fmtDate(a.date))} ${esc(fmtTime(a.startTime))}</td></tr>
+              ${reason ? `<tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Reason</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(reason)}</td></tr>` : ''}
+            </table>
+          `
+        })
       })
     });
   }
@@ -776,9 +821,15 @@ async function onPrescriptionCreated(appointment, prescription) {
       messageFactory: () => email.sendEmail({
         to: appointment.patient.email,
         subject: 'Your prescription from NeoKidsPro',
-        html: `<h2>Your Prescription</h2>
-               <p>Dear ${appointment.patient.name},</p>
-               <p>Please find your prescription from Dr. ${appointment.doctor.name} attached.</p>`,
+        html: renderBrandedEmail({
+          preheader: `Your prescription from Dr. ${appointment.doctor.name} is attached.`,
+          headline: 'Your Prescription',
+          subhead: `Dr. ${esc(appointment.doctor.name)}`,
+          bodyHtml: `
+            <p>Dear ${esc(appointment.patient.name)},</p>
+            <p>Please find your prescription attached to this email as a PDF.</p>
+          `
+        }),
         attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
       })
     });
@@ -843,12 +894,20 @@ async function onCertificateIssued({ certificate, pdfRes, sendWhatsapp = true, s
         messageFactory: () => email.sendEmail({
           to: patient.email,
           subject: `Medical Certificate – ${doctorLabel}`,
-          html: `<h2>Medical Certificate</h2>
-                 <p>Hello ${patient.name},</p>
-                 <p>Your medical certificate has been generated and is attached to this email.</p>
-                 <p>Please find the certificate attached as a PDF.</p>
-                 <p style="color:#555;font-size:13px;">Certificate ID: ${certificate.certificateNumber} · Date: ${certDate}</p>
-                 <p>Regards,<br>${doctorLabel}</p>`,
+          html: renderBrandedEmail({
+            preheader: `Your medical certificate from ${doctorLabel} is attached.`,
+            headline: 'Medical Certificate',
+            subhead: doctorLabel,
+            bodyHtml: `
+              <p>Hello ${esc(patient.name)},</p>
+              <p>Your medical certificate has been generated and is attached to this email as a PDF.</p>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+                <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Certificate ID</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(certificate.certificateNumber)}</td></tr>
+                <tr><td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Date</td><td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(certDate)}</td></tr>
+              </table>
+            `,
+            footerNote: `Regards,<br>${esc(doctorLabel)}`
+          }),
           attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
         })
       });
@@ -906,9 +965,15 @@ async function resendPrescription(appointment, prescription) {
     messageFactory: () => email.sendEmail({
       to: appointment.patient.email,
       subject: 'Your prescription from NeoKidsPro (resend)',
-      html: `<h2>Your Prescription</h2>
-             <p>Dear ${appointment.patient.name},</p>
-             <p>As requested by Dr. ${appointment.doctor.name}, your prescription is attached again.</p>`,
+      html: renderBrandedEmail({
+        preheader: `Your prescription from Dr. ${appointment.doctor.name} is attached again.`,
+        headline: 'Your Prescription',
+        subhead: 'Resend',
+        bodyHtml: `
+          <p>Dear ${esc(appointment.patient.name)},</p>
+          <p>As requested by Dr. ${esc(appointment.doctor.name)}, your prescription is attached again as a PDF.</p>
+        `
+      }),
       attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
     })
   });
@@ -1145,24 +1210,32 @@ async function processFollowUpRecalls() {
       const subject = kind === 'PRE'
         ? `Reminder: Dr. ${a.doctor.name} recommended a follow-up tomorrow`
         : `Follow-up due — please re-book with Dr. ${a.doctor.name}`;
+      const parentName = escapeForHtml(a.patient.parentName || a.patient.name);
       const bodyHtml = kind === 'PRE'
-        ? `<p>Dear ${escapeForHtml(a.patient.parentName || a.patient.name)},</p>
+        ? `<p>Dear ${parentName},</p>
            <p>Dr. <b>${escapeForHtml(a.doctor.name)}</b> recommended a follow-up for <b>${escapeForHtml(a.patient.name)}</b>
-              on <b>${fmtDate(rx.followUpDate)}</b>.</p>
-           <p>Please pick a convenient slot:</p>
-           <p><a href="${bookingLink}" style="background:#4DA8FF;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block;">Book follow-up</a></p>
-           <p style="color:#888;font-size:12px;">If the button does not work, copy this link: ${bookingLink}</p>`
-        : `<p>Dear ${escapeForHtml(a.patient.parentName || a.patient.name)},</p>
+              on <b>${escapeForHtml(fmtDate(rx.followUpDate))}</b>.</p>
+           <p>Please pick a convenient slot.</p>`
+        : `<p>Dear ${parentName},</p>
            <p>We noticed that <b>${escapeForHtml(a.patient.name)}</b>'s follow-up with Dr. <b>${escapeForHtml(a.doctor.name)}</b>
-              (recommended for ${fmtDate(rx.followUpDate)}) has not been booked yet.</p>
-           <p>If symptoms persisted or you have any concerns, please book a slot here:</p>
-           <p><a href="${bookingLink}" style="background:#4DA8FF;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block;">Book follow-up</a></p>
-           <p style="color:#888;font-size:12px;">If the button does not work, copy this link: ${bookingLink}</p>`;
+              (recommended for ${escapeForHtml(fmtDate(rx.followUpDate))}) has not been booked yet.</p>
+           <p>If symptoms persisted or you have any concerns, please book a slot below.</p>`;
 
       if (a.patient.email) {
         await safeEmail({
           appointmentId: a.id, recipient: a.patient.email, template, direction: 'PATIENT',
-          messageFactory: () => email.sendEmail({ to: a.patient.email, subject, html: bodyHtml })
+          messageFactory: () => email.sendEmail({
+            to: a.patient.email,
+            subject,
+            html: renderBrandedEmail({
+              preheader: subject,
+              headline: kind === 'PRE' ? 'Follow-up Tomorrow' : 'Follow-up Due',
+              subhead: `Dr. ${esc(a.doctor.name)} · ${esc(fmtDate(rx.followUpDate))}`,
+              bodyHtml,
+              ctas: [{ label: 'Book Follow-up', url: bookingLink }],
+              footerNote: `If the button doesn't work, copy this link: <a href="${bookingLink}" style="color:#1E6FBF;word-break:break-all;">${esc(bookingLink)}</a>`
+            })
+          })
         });
         sent += 1;
       } else {
@@ -1185,11 +1258,10 @@ async function processFollowUpRecalls() {
   return sent;
 }
 
-function escapeForHtml(s){
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
+// Kept as an alias — call sites below were written against this name.
+// Both point at the exact same escaper now (single source of truth in
+// email-brand.service.js), so there is no behavior difference.
+const escapeForHtml = esc;
 
 module.exports = {
   onDoctorCreated,

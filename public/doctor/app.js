@@ -132,6 +132,12 @@ function paymentBadge(p){
 function sourceBadge(source){
   if (source === 'CLINIC_RECEPTION')
     return `<span class="np-badge np-badge--violet" title="Booked at the clinic front desk"><span class="np-badge__dot"></span>Clinic reception</span>`;
+  if (source === 'WALK_IN')
+    return `<span class="np-badge np-badge--amber" title="Walk-in patient, no prior booking"><span class="np-badge__dot"></span>Walk-in</span>`;
+  if (source === 'PHONE')
+    return `<span class="np-badge np-badge--blue" title="Booked over a phone call to reception"><span class="np-badge__dot"></span>Phone</span>`;
+  if (source === 'OTHER')
+    return `<span class="np-badge np-badge--slate" title="Booked via another channel"><span class="np-badge__dot"></span>Other</span>`;
   if (source === 'NEOKIDSPRO')
     return `<span class="np-badge np-badge--mint" title="Booked online by the patient"><span class="np-badge__dot"></span>NeoKidsPro online</span>`;
   if (source === 'MANUAL')
@@ -300,6 +306,17 @@ function renderDoctorHeader(d){
     $('#docPhotoTop').innerHTML = `<span>${escapeHtml(initials)}</span>`;
     const large = $('#docPhotoLarge');
     if (large) large.innerHTML = `<span id="docPhotoPlaceholder">${escapeHtml(initials)}</span>`;
+  }
+  // Mirror the same identity into the dropdown's "logged in as" block --
+  // stays visible on mobile even once the header hides .np-profile__meta.
+  if ($('#docIdName')) $('#docIdName').textContent = name;
+  if ($('#docIdSpec')) $('#docIdSpec').textContent = d.specialization || 'Pediatrician';
+  if ($('#docIdEmail')) $('#docIdEmail').textContent = d.email || '';
+  const idPhoto = $('#docIdPhoto');
+  if (idPhoto){
+    idPhoto.innerHTML = d.photoUrl
+      ? `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`
+      : `<span>${escapeHtml(initials)}</span>`;
   }
 }
 

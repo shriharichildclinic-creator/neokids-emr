@@ -87,15 +87,31 @@ async function deliver({ channel, to, patientName, doctorName, recordType, recor
   const results = { channel };
   if (channel === 'email') {
     const { sendEmail } = require('./email.service');
+    const { renderBrandedEmail, esc } = require('./email-brand.service');
     const mail = {
       to,
       subject: `Medical Record Shared — ${patientName} (${recordDate})`,
-      html: `<h2>Medical Record Shared</h2>
-<p>Hello ${patientName},</p>
-<p>${doctorName} has shared a medical record for your reference.</p>
-<p><b>Record Type:</b> ${recordType}<br/><b>Record Date:</b> ${recordDate}</p>
-<p><a href="${url}">View Record</a> (secure link, expires in 7 days)</p>
-<p>For assistance, contact: ${clinicName}</p><p>Regards,<br/>NeoKidsPro</p>`
+      html: renderBrandedEmail({
+        preheader: `${doctorName} has shared a medical record for your reference.`,
+        headline: 'Medical Record Shared',
+        subhead: `${esc(recordType)} · ${esc(recordDate)}`,
+        bodyHtml: `
+          <p>Hello ${esc(patientName)},</p>
+          <p>${esc(doctorName)} has shared a medical record for your reference.</p>
+          <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+            <tr>
+              <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Record Type</td>
+              <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(recordType)}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Record Date</td>
+              <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(recordDate)}</td>
+            </tr>
+          </table>
+        `,
+        ctas: [{ label: 'View Record', url }],
+        footerNote: `Secure link, expires in 7 days. For assistance, contact ${esc(clinicName)}.`
+      })
     };
     if (attachmentPath && fs.existsSync(attachmentPath)) mail.attachments = [{ filename: attachmentName, path: attachmentPath }];
     results.email = await sendEmail(mail);

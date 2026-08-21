@@ -213,6 +213,41 @@ h1,h2,h3{
   color: var(--nk-teal-700);
 }
 
+/* "Who am I logged in as" block, shown at the top of the profile dropdown.
+   Exists because .np-profile__meta (name/role next to the avatar) is hidden
+   on narrow screens to save header space -- this is the one place identity
+   is guaranteed visible at every screen size, since the dropdown only opens
+   on tap and isn't subject to the header's width crunch. */
+.np-profile__id{
+  display:flex;
+  align-items:center;
+  gap:.65rem;
+  padding: .85rem .9rem;
+  border-bottom: 1px solid var(--nk-border-soft);
+}
+.np-profile__id-avatar{
+  flex-shrink:0;
+  width:38px; height:38px;
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+  font-weight:700; font-size:.8rem; color:#fff;
+  background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
+}
+.np-profile__id-avatar img{ width:100%; height:100%; object-fit:cover; }
+.np-profile__id-text{ min-width:0; }
+.np-profile__id-name{
+  font-weight:700; font-size:.9rem; color: var(--nk-ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.np-profile__id-role{
+  font-size:.76rem; color: var(--nk-teal-700); font-weight:600;
+}
+.np-profile__id-email{
+  font-size:.76rem; color: var(--nk-muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
 .np-panel{
   background:#fff;
   border:1px solid var(--nk-border-soft);
@@ -286,6 +321,7 @@ h1,h2,h3{
 .np-btn:active{ transform: translateY(1px); }
 .np-btn--sm{ min-height: 32px; min-width: 0; padding: .4rem .75rem; font-size: .8rem; }
 .np-btn--block{ width: 100%; }
+.np-action-list{ display: flex; flex-direction: column; gap: .5rem; }
 .np-tab{ min-height: 36px; }
 .np-btn:disabled, .np-btn--disabled, .np-btn[disabled]{
   opacity: .5;
@@ -626,6 +662,16 @@ input[type="file"].np-input::file-selector-button:hover{
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
+  /* Root fix for the app-wide "stretched pill" bug: whenever a badge/pill/chip
+     sits directly inside a flex or grid container (card lists, mobile
+     data-label rows, KPI rows, bill-line rows, etc.) the container's default
+     stretch alignment was pulling it to fill the full cross-axis size,
+     turning a small rounded pill into a tall/wide smear. Pills must always
+     size to their own content, in every context, everywhere in the app —
+     so this is fixed once here instead of re-patched per screen. */
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: fit-content;
 }
 .np-pill{ font-size:.8rem; }
 .np-badge__dot{ width:6px; height:6px; border-radius:999px; background: currentColor; flex: 0 0 auto; }
@@ -671,12 +717,10 @@ html[data-theme="dark"] .np-callout--warning svg{ color:#FBC97A; }
 html[data-theme="dark"] .np-callout--danger{ background: rgba(225,29,72,.16); border-color: rgba(225,29,72,.32); color:#FECDD3; }
 html[data-theme="dark"] .np-callout--danger svg{ color:#FECDD3; }
 
-/* Prevent stretched pills inside cards/lists/table cells */
-.np-table td .np-badge, .np-table td .np-pill, .np-table td .np-chip,
-.np-appt__badges .np-badge, .np-appt__badges .np-pill{
-  flex: 0 0 auto;
-  width: auto;
-}
+/* (Pill/badge/chip stretch prevention now lives once, at the base
+   .np-badge/.np-pill/.np-chip rule above — see the note there. This
+   table/appt-specific override is no longer needed and was removed so the
+   rule isn't duplicated in two places. */
 
 .np-table-wrap{
   border:1px solid var(--nk-border-soft);
@@ -998,6 +1042,10 @@ html[data-theme="dark"] .np-profile__menu-item:hover{
 html[data-theme="dark"] .np-profile__menu-item.is-danger{ color:#FCA5A5; }
 html[data-theme="dark"] .np-profile__menu-item.is-danger:hover{ background: rgba(252,165,165,.12); }
 html[data-theme="dark"] .np-profile__menu-divider{ background: var(--nk-border-soft); }
+html[data-theme="dark"] .np-profile__id{ border-bottom-color: var(--nk-border-soft); }
+html[data-theme="dark"] .np-profile__id-name{ color: var(--nk-ink); }
+html[data-theme="dark"] .np-profile__id-role{ color: var(--nk-teal-300); }
+html[data-theme="dark"] .np-profile__id-email{ color: var(--nk-muted); }
 
 html[data-theme="dark"] .np-panel,
 html[data-theme="dark"] .np-card,
@@ -1914,13 +1962,12 @@ html[data-theme="dark"] .np-uuid-card{
 .np-sidebar__nav{
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
-@media (max-height: 720px) and (min-width: 1024px){
-  .np-sidebar__nav{ overflow-y: auto; scrollbar-width: thin; }
-  .np-sidebar__nav::-webkit-scrollbar{ width: 6px; }
-}
+.np-sidebar__nav::-webkit-scrollbar{ width: 6px; }
 @media (max-width: 1023px){
   .np-sidebar{
     position: fixed;
@@ -1937,7 +1984,6 @@ html[data-theme="dark"] .np-uuid-card{
        single source of truth, keeps the drawer above the backdrop again. */
     z-index: 50;
   }
-  .np-sidebar__nav{ overflow-y: auto; }
 }
 
 .np-header__inner{ min-width: 0; }
@@ -2134,7 +2180,16 @@ html[data-theme="dark"] #notifView .np-table tr,
 html[data-theme="dark"] #notifView .np-table tr.np-notif-row,
 html[data-theme="dark"] #settlementsView .np-table tr,
 html[data-theme="dark"] #invoicesView .np-table tr,
-html[data-theme="dark"] #revenueView .np-table tr{
+html[data-theme="dark"] #revenueView .np-table tr,
+html[data-theme="dark"] #centresView .np-table tr,
+html[data-theme="dark"] #receptionistsView .np-table tr,
+html[data-theme="dark"] #pharmUsersView .np-table tr,
+html[data-theme="dark"] #certsView .np-table tr,
+html[data-theme="dark"] #pharmBillsView .np-table tr,
+html[data-theme="dark"] #invView .np-table tr,
+html[data-theme="dark"] #billsView .np-table tr,
+html[data-theme="dark"] #recInvoicesView .np-table tr,
+html[data-theme="dark"] #auditView .np-table tr{
   background: var(--nk-card) !important;
   border-color: var(--nk-border) !important;
   color: var(--nk-text) !important;
@@ -2144,7 +2199,16 @@ html[data-theme="dark"] #apptsView .np-table td[data-label],
 html[data-theme="dark"] #notifView .np-table td[data-label],
 html[data-theme="dark"] #settlementsView .np-table td[data-label],
 html[data-theme="dark"] #invoicesView .np-table td[data-label],
-html[data-theme="dark"] #revenueView .np-table td[data-label]{
+html[data-theme="dark"] #revenueView .np-table td[data-label],
+html[data-theme="dark"] #centresView .np-table td[data-label],
+html[data-theme="dark"] #receptionistsView .np-table td[data-label],
+html[data-theme="dark"] #pharmUsersView .np-table td[data-label],
+html[data-theme="dark"] #certsView .np-table td[data-label],
+html[data-theme="dark"] #pharmBillsView .np-table td[data-label],
+html[data-theme="dark"] #invView .np-table td[data-label],
+html[data-theme="dark"] #billsView .np-table td[data-label],
+html[data-theme="dark"] #recInvoicesView .np-table td[data-label],
+html[data-theme="dark"] #auditView .np-table td[data-label]{
   border-bottom-color: var(--nk-border-soft) !important;
   color: var(--nk-text) !important;
 }
@@ -2152,7 +2216,16 @@ html[data-theme="dark"] #apptsView .np-table td[data-label]::before,
 html[data-theme="dark"] #notifView .np-table td[data-label]::before,
 html[data-theme="dark"] #settlementsView .np-table td[data-label]::before,
 html[data-theme="dark"] #invoicesView .np-table td[data-label]::before,
-html[data-theme="dark"] #revenueView .np-table td[data-label]::before{
+html[data-theme="dark"] #revenueView .np-table td[data-label]::before,
+html[data-theme="dark"] #centresView .np-table td[data-label]::before,
+html[data-theme="dark"] #receptionistsView .np-table td[data-label]::before,
+html[data-theme="dark"] #pharmUsersView .np-table td[data-label]::before,
+html[data-theme="dark"] #certsView .np-table td[data-label]::before,
+html[data-theme="dark"] #pharmBillsView .np-table td[data-label]::before,
+html[data-theme="dark"] #invView .np-table td[data-label]::before,
+html[data-theme="dark"] #billsView .np-table td[data-label]::before,
+html[data-theme="dark"] #recInvoicesView .np-table td[data-label]::before,
+html[data-theme="dark"] #auditView .np-table td[data-label]::before{
   color: var(--nk-muted) !important;
 }
 
@@ -2395,3 +2468,63 @@ html[data-theme="dark"] .np-cert-card__icon{
   border-color: var(--nk-border);
 }
 html[data-theme="dark"] .np-cert-card__reason{ color: var(--nk-text); }
+
+/* ==========================================================================
+   Pharmacy / reception "New bill" line items (.bill-line).
+   Root cause of the squashed medicine dropdown: this row used to be a bare
+   .np-row (display:flex, nowrap) with a `style="flex:2"` hint on the medicine
+   column and no flex value on Qty/Price. Flex items with no explicit flex
+   value size to their own max-content first, and only the flex:2 column had
+   flex-basis:0 — so Qty/Price claimed their full intrinsic width and the
+   medicine dropdown was squeezed into whatever was left (a sliver, on any
+   modal narrower than ~700px, i.e. basically always). Fixing it here with an
+   explicit grid so every column's width is a deliberate decision, not a
+   side-effect of the other two columns' content. Single source of truth —
+   used by both the receptionist and pharmacy portals.
+   ========================================================================== */
+.bill-line{
+  display: grid;
+  grid-template-columns: minmax(0,2.3fr) 84px 100px 34px;
+  gap: .5rem;
+  align-items: end;
+  margin-bottom: .6rem;
+}
+.bill-line__med,
+.bill-line__qty,
+.bill-line__price{
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  min-width: 0;
+}
+.bill-line .np-select,
+.bill-line .np-input{ min-width: 0; }
+.bill-line__remove{
+  align-self: end;
+  width: 34px;
+  height: 38px;
+  flex: none;
+  border: 1px solid var(--nk-border);
+  background: var(--nk-card);
+  border-radius: 8px;
+  color: var(--nk-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.bill-line__remove:hover{ background: #FEE2E2; color: #DC2626; border-color: #FCA5A5; }
+html[data-theme="dark"] .bill-line__remove:hover{ background: rgba(220,38,38,.18); border-color: #DC2626; color: #FCA5A5; }
+@media (max-width: 480px){
+  /* Below ~480px even the desktop grid gets cramped — stack medicine full
+     width, Qty/Price side by side underneath, remove button on that row. */
+  .bill-line{
+    grid-template-columns: 1fr 1fr 34px;
+    grid-template-areas:
+      "med  med  med"
+      "qty  price remove";
+  }
+  .bill-line__med{ grid-area: med; }
+  .bill-line__qty{ grid-area: qty; }
+  .bill-line__price{ grid-area: price; }
+  .bill-line__remove{ grid-area: remove; width: 100%; height: 38px; }
+}

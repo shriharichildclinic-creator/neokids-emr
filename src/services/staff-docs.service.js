@@ -2,6 +2,7 @@ const prisma = require('../config/prisma');
 const pdf = require('./pdf.service');
 const waMedia = require('./whatsapp-media.service');
 const emailSvc = require('./email.service');
+const { renderBrandedEmail, esc } = require('./email-brand.service');
 const logger = require('../utils/logger');
 
 async function logNotif(data) {
@@ -117,14 +118,30 @@ async function deliverConsultationInvoice(invoiceId, { channels = ['whatsapp', '
   if (channels.includes('email')) {
     if (patient.email) {
       try {
+        const invoiceRegards = (invoice.medicalCentre && invoice.medicalCentre.name) || doctor.clinicName || 'NeoKidsPro Clinic';
         await emailSvc.sendEmail({
           to: patient.email,
           subject: `Consultation Invoice – Dr. ${doctor.name}`,
-          html: `<h2>Consultation Invoice</h2>
-                 <p>Dear ${patient.name},</p>
-                 <p>Thank you for visiting. Your consultation invoice for <strong>Dr. ${doctor.name}</strong> is attached.</p>
-                 <p>Invoice No: <strong>${invoice.invoiceNumber}</strong> · Amount: <strong>₹${amount}</strong></p>
-                 <p>Regards,<br>${(invoice.medicalCentre && invoice.medicalCentre.name) || doctor.clinicName || 'NeoKidsPro Clinic'}</p>`,
+          html: renderBrandedEmail({
+            preheader: `Your consultation invoice for Dr. ${doctor.name} is attached.`,
+            headline: 'Consultation Invoice',
+            subhead: `Dr. ${esc(doctor.name)}`,
+            bodyHtml: `
+              <p>Dear ${esc(patient.name)},</p>
+              <p>Thank you for visiting. Your consultation invoice is attached to this email as a PDF.</p>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+                <tr>
+                  <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Invoice No</td>
+                  <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(invoice.invoiceNumber)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Amount</td>
+                  <td style="padding:8px 12px;border:1px solid #E6EEF7;">₹${esc(amount)}</td>
+                </tr>
+              </table>
+            `,
+            footerNote: `Regards,<br>${esc(invoiceRegards)}`
+          }),
           attachments: [{ filename, path: filepath }]
         });
         await logNotif({
@@ -182,11 +199,26 @@ async function deliverPharmacyBill(billId, { channels = ['whatsapp', 'email'], u
         await emailSvc.sendEmail({
           to: email,
           subject: `Pharmacy Bill – ${centreName}`,
-          html: `<h2>Pharmacy Bill</h2>
-                 <p>Dear ${customerName},</p>
-                 <p>Thank you for your purchase at <strong>${centreName}</strong>. Your bill is attached.</p>
-                 <p>Bill No: <strong>${bill.billNumber}</strong> · Total: <strong>₹${total}</strong></p>
-                 <p>Regards,<br>${centreName}</p>`,
+          html: renderBrandedEmail({
+            preheader: `Your pharmacy bill from ${centreName} is attached.`,
+            headline: 'Pharmacy Bill',
+            subhead: esc(centreName),
+            bodyHtml: `
+              <p>Dear ${esc(customerName)},</p>
+              <p>Thank you for your purchase. Your bill is attached to this email as a PDF.</p>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0;width:100%;">
+                <tr>
+                  <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;width:38%;">Bill No</td>
+                  <td style="padding:8px 12px;border:1px solid #E6EEF7;">${esc(bill.billNumber)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 12px;background:#F1F8FF;font-weight:bold;border:1px solid #E6EEF7;">Total</td>
+                  <td style="padding:8px 12px;border:1px solid #E6EEF7;">₹${esc(total)}</td>
+                </tr>
+              </table>
+            `,
+            footerNote: `Regards,<br>${esc(centreName)}`
+          }),
           attachments: [{ filename, path: filepath }]
         });
         await logNotif({

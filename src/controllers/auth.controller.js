@@ -26,6 +26,7 @@ const {
 const { asyncHandler } = require('../middleware/errorHandler');
 const { createPasswordToken, consumePasswordToken, revokeActivePasswordTokens } = require('../services/token.service');
 const emailService = require('../services/email.service');
+const { renderBrandedEmail, esc } = require('../services/email-brand.service');
 const logger = require('../utils/logger');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
@@ -69,16 +70,28 @@ function buildPasswordLink(rawToken) {
 async function sendPasswordEmail({ to, name, rawToken, purpose }) {
   const link = buildPasswordLink(rawToken);
   const isInvite = purpose === 'INVITE';
+  const greetName = esc(name || 'there');
+
+  const bodyHtml = `
+    <p>Hello ${greetName},</p>
+    <p>${isInvite
+      ? 'An account has been created for you on NeoKidsPro. Set a password to get started.'
+      : 'We received a request to reset the password on your NeoKidsPro account.'}</p>
+    <p>This link will expire in <b>${TOKEN_TTL_MINUTES} minutes</b>. If you did not request this,
+       you can safely ignore this email — your password will remain unchanged.</p>
+  `;
+
   await emailService.sendEmail({
     to,
     subject: isInvite ? 'Set your NeoKidsPro password' : 'Reset your NeoKidsPro password',
-    html: `
-      <h2>${isInvite ? 'Welcome to NeoKidsPro' : 'Reset your password'}</h2>
-      <p>Hello ${name || 'there'},</p>
-      <p>${isInvite ? 'An account has been created for you.' : 'We received a request to reset your password.'}</p>
-      <p><a href="${link}">Click here to ${isInvite ? 'set' : 'reset'} your password</a></p>
-      <p>This link will expire in ${TOKEN_TTL_MINUTES} minutes.</p>
-    `
+    html: renderBrandedEmail({
+      preheader: isInvite ? 'Set your NeoKidsPro password to get started.' : 'Reset your NeoKidsPro password.',
+      headline: isInvite ? 'Welcome to NeoKidsPro' : 'Reset Your Password',
+      subhead: isInvite ? 'Your account is ready — set a password to log in.' : 'Choose a new password for your account.',
+      bodyHtml,
+      ctas: [{ label: isInvite ? 'Set Password' : 'Reset Password', url: link }],
+      footerNote: 'This is a security-related email tied to a login action on your account.'
+    })
   });
   return link;
 }
