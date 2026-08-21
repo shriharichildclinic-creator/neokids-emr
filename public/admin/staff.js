@@ -34,7 +34,7 @@ async function loadCentres(){
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __centres = await api('/admin/medical-centres');
-    host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table np-table--fixed"><colgroup><col style="width:16%"><col style="width:30%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table np-table--fixed np-table--scroll-x"><colgroup><col style="width:16%"><col style="width:30%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
       __centres.map(c => `<tr>
         <td data-label="Name"><b>${esc(c.name)}</b></td>
         <td data-label="Address" class="np-mut" style="font-size:.82rem">${esc([c.address, c.city, c.state, c.pincode].filter(Boolean).join(', ') || '—')}</td>

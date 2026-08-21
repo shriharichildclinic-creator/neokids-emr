@@ -19,6 +19,8 @@ router.delete('/inventory/:id',                ph.deactivateItem);
 router.get('/bills',            ph.listBills);
 router.post('/bills',           ph.createBill);
 router.get('/bills/:id',        ph.billDetail);
+router.put('/bills/:id',        ph.updateBill);
+router.post('/bills/:id/mark-paid', ph.markPaid);
 router.post('/bills/:id/send',  ph.sendBill);
 
 module.exports = router;

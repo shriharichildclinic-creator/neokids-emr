@@ -857,7 +857,9 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
     doc.fontSize(11).font('Helvetica').fillColor('#333');
     doc.text(`Bill No: ${bill.billNumber}`, 50, 110);
     doc.text(`Date: ${dayjs(bill.createdAt).format('DD MMM YYYY, hh:mm A')}`, 50, 125);
-    doc.text(`Payment: ${bill.paymentMethod || 'CASH'}`, 50, 140);
+    doc.text(`Status: ${bill.status || 'DRAFT'}`, 50, 140);
+    doc.text(`Payment: ${bill.paymentMethod || 'CASH'}`, 50, 155);
+    if (bill.billType && bill.billType !== 'PHARMACY') doc.text(`Type: ${bill.billType === 'CONSULT' ? 'Consultation' : 'Service'}`, 50, 170);
 
     doc.fontSize(12).font('Helvetica-Bold').text('Customer:', 50, 175);
     doc.fontSize(11).font('Helvetica');
@@ -912,7 +914,7 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
       rowY += 16;
     }
     doc.font('Helvetica-Bold').fontSize(12).fillColor('#000');
-    doc.text('Total Paid:', 380, rowY + 6);
+    doc.text(bill.status === 'PAID' ? 'Total Paid:' : 'Total:', 380, rowY + 6);
     doc.text(`₹ ${Number(bill.total).toFixed(2)}`, 460, rowY + 6);
 
     doc.fontSize(9).font('Helvetica').fillColor('#888');

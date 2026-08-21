@@ -41,6 +41,8 @@ router.get('/pharmacy/inventory',                ph.listItems);
 router.get('/pharmacy/bills',                    ph.listBills);
 router.post('/pharmacy/bills',                   ph.createBill);
 router.get('/pharmacy/bills/:id',                ph.billDetail);
+router.put('/pharmacy/bills/:id',                ph.updateBill);
+router.post('/pharmacy/bills/:id/mark-paid',     ph.markPaid);
 router.post('/pharmacy/bills/:id/send',          ph.sendBill);
 
 module.exports = router;

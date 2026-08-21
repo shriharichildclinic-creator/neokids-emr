@@ -569,15 +569,19 @@ const pharmacyBillSchema = z.object({
   prescriptionId: z.string().uuid().optional(),
   doctorId: z.string().uuid().optional(),
   medicalCentreId: z.string().uuid().optional(),
+  billType: z.enum(['PHARMACY', 'CONSULT', 'SERVICE']).optional(),
   paymentMethod: z.enum(['CASH', 'CARD', 'UPI', 'ONLINE', 'OTHER']).optional(),
   discount: z.preprocess(v => (v === '' || v === null || v === undefined ? 0 : Number(v)), z.number().nonnegative().optional()),
   tax: z.preprocess(v => (v === '' || v === null || v === undefined ? 0 : Number(v)), z.number().nonnegative().optional()),
   notes: safeOptStr('notes'),
   items: z.array(z.object({
     itemId: z.string().uuid().optional(),
-    name: z.string().min(1),
+    name: z.string().trim().min(1).optional(),
     quantity: z.preprocess(v => Number(v), z.number().int().min(1)),
-    unitPrice: z.preprocess(v => Number(v), z.number().nonnegative())
+    unitPrice: z.preprocess(v => (v === '' || v === null || v === undefined ? undefined : Number(v)), z.number().nonnegative().optional())
+  }).refine(i => !!i.itemId || (!!i.name && i.name.trim().length > 0), {
+    message: 'Each item needs an inventory medicine (itemId) or a manual name',
+    path: ['name']
   })).min(1, 'At least one item is required')
 });
 

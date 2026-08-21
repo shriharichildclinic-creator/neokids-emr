@@ -726,7 +726,10 @@ html[data-theme="dark"] .np-callout--danger svg{ color:#FECDD3; }
   border:1px solid var(--nk-border-soft);
   border-radius: 16px;
   background:#fff;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 70vh;
+  -webkit-overflow-scrolling: touch;
 }
 .np-table th{
   background: var(--nk-teal-50);
@@ -2527,4 +2530,84 @@ html[data-theme="dark"] .bill-line__remove:hover{ background: rgba(220,38,38,.18
   .bill-line__qty{ grid-area: qty; }
   .bill-line__price{ grid-area: price; }
   .bill-line__remove{ grid-area: remove; width: 100%; height: 38px; }
+}
+
+/* ==========================================================================
+   Unified billing (v4.1) — searchable medicine combobox, manual vs inventory
+   line modes, bill totals break, and DRAFT/PAID lifecycle helpers.
+   ========================================================================== */
+.np-combo{ position:relative; }
+.np-combo__menu{
+  position:absolute;
+  top:calc(100% + 4px);
+  left:0; right:0;
+  max-height:230px;
+  overflow-y:auto;
+  background:var(--nk-card);
+  border:1px solid var(--nk-border);
+  border-radius:10px;
+  box-shadow:0 14px 34px rgba(15,23,42,.16);
+  z-index:40;
+  padding:.25rem;
+  display:none;
+}
+.np-combo__menu.is-open{ display:block; }
+.np-combo__opt{
+  width:100%;
+  text-align:left;
+  border:0;
+  background:transparent;
+  border-radius:8px;
+  padding:.5rem .6rem;
+  cursor:pointer;
+  font:inherit;
+  color:var(--nk-text);
+  display:flex;
+  flex-direction:column;
+  gap:.1rem;
+}
+.np-combo__opt:hover,
+.np-combo__opt.is-active{ background:var(--nk-teal-50); }
+.np-combo__opt__name{ font-weight:600; font-size:.84rem; display:flex; justify-content:space-between; gap:.5rem; }
+.np-combo__opt__meta{ font-size:.74rem; color:var(--nk-muted); }
+.np-combo__empty{ padding:.6rem; color:var(--nk-muted); font-size:.82rem; text-align:center; }
+.np-seg{ display:inline-flex; background:var(--nk-border-soft); border-radius:10px; padding:3px; gap:3px; }
+.np-seg__btn{
+  border:0; background:transparent; padding:.42rem .7rem;
+  border-radius:8px; font:600 .8rem/1 inherit; color:var(--nk-muted); cursor:pointer;
+}
+.np-seg__btn.is-active{ background:var(--nk-card); color:var(--nk-text); box-shadow:0 1px 3px rgba(15,23,42,.12); }
+.np-bill-line{ border:1px solid var(--nk-border-soft); border-radius:12px; padding:.7rem; margin-bottom:.6rem; }
+.np-bill-line__head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:.55rem; gap:.5rem; }
+.np-bill-line__kind{ font-size:.66rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--nk-muted); }
+.np-bill-stock{ font-size:.74rem; color:var(--nk-muted); }
+.np-bill-stock.is-low{ color:#b45309; }
+.np-bill-stock.is-out{ color:#dc2626; font-weight:700; }
+.np-bill-total{
+  display:flex; justify-content:space-between; align-items:center;
+  background:var(--nk-teal-50); border:1px solid var(--nk-border-soft);
+  border-radius:10px; padding:.7rem .8rem; margin-top:.35rem; font-weight:700;
+}
+html[data-theme="dark"] .np-bill-total{ background:rgba(137,188,189,.12); }
+
+/* ==========================================================================
+   Feature-table horizontal scrolling + sticky actions column (v4.1).
+   Tables that can overflow horizontally keep a scroll affordance instead of
+   being clipped, and the last (actions) column pins so Edit/Deactivate/PDF
+   stay reachable without scrolling back. On the mobile stacked-card layout
+   the sticky rule is inert (cells are grid children, not table cells).
+   ========================================================================== */
+.np-table--scroll-x{ min-width: 920px; }
+.np-table--scroll-x th:last-child,
+.np-table--scroll-x td:last-child{
+  position: sticky;
+  right: 0;
+  background: var(--nk-card);
+  box-shadow: -8px 0 12px -8px rgba(15,23,42,.18);
+  z-index: 2;
+}
+.np-table--scroll-x th:last-child{ z-index: 3; }
+.np-table--scroll-x td.np-table__nowrap{ white-space: nowrap; }
+@media (max-width:720px){
+  .np-table-wrap{ max-height:none; }
 }
