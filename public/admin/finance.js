@@ -57,6 +57,10 @@ function populatePeriodSelects() {
     }
     ['revDoctor','stlDoctor','invDoctor'].forEach(id => {
       const sel = $('#' + id); if (!sel) return;
+      // Rebuilding the <select> wipes whatever the user had picked, so the
+      // doctor filter appeared to "reset itself" right after selection.
+      // Capture the current value and restore it once the options are back.
+      const prevValue = sel.value;
       const head = sel.options[0];
       sel.innerHTML = '';
       if (head) sel.appendChild(head);
@@ -65,6 +69,9 @@ function populatePeriodSelects() {
         o.value = d.id; o.textContent = drName(d.name);
         sel.appendChild(o);
       });
+      if (prevValue && doctors.some(d => d.id === prevValue)) {
+        sel.value = prevValue;
+      }
     });
   }
 

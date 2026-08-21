@@ -519,6 +519,26 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     document.head.appendChild(s);
   }
 
+  // Native date/time inputs only open their picker when the tiny calendar
+  // glyph is clicked — everywhere else in the field just moves the text
+  // cursor. Delegate clicks anywhere on the field to showPicker() so the
+  // whole box is clickable, consistent across Admin/Doctor/Receptionist/
+  // Pharmacy and across desktop, tablet and mobile. Delegated on document
+  // because these panels render date fields dynamically via template
+  // strings, so a one-time querySelectorAll at load time would miss them.
+  const NPDatePicker = {
+    init() {
+      document.addEventListener('mousedown', (e) => {
+        const el = e.target && e.target.closest
+          ? e.target.closest('input[type="date"], input[type="time"], input[type="datetime-local"]')
+          : null;
+        if (!el || el.disabled || el.readOnly) return;
+        if (typeof el.showPicker !== 'function') return;
+        try { el.showPicker(); } catch (_) { /* no active user gesture / unsupported */ }
+      });
+    },
+  };
+
   // Theme controller. The floating header/nav toggle has been removed;
   // Settings is the single source of truth for switching Dark Mode.
   const NPTheme = {
@@ -772,17 +792,19 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     bind(table) { if (table) table.classList.add('np-sticky-head'); },
   };
 
-  global.NPTheme     = NPTheme;
-  global.NPPalette   = NPPalette;
-  global.NPChips     = NPChips;
-  global.NPDateRange = NPDateRange;
-  global.NPDropzone  = NPDropzone;
-  global.NPSticky    = NPSticky;
+  global.NPTheme      = NPTheme;
+  global.NPPalette    = NPPalette;
+  global.NPChips      = NPChips;
+  global.NPDateRange  = NPDateRange;
+  global.NPDropzone   = NPDropzone;
+  global.NPSticky     = NPSticky;
+  global.NPDatePicker = NPDatePicker;
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => NPTheme.init());
+    document.addEventListener('DOMContentLoaded', () => { NPTheme.init(); NPDatePicker.init(); });
   } else {
     NPTheme.init();
+    NPDatePicker.init();
   }
 })(window);
 

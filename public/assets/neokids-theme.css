@@ -1765,13 +1765,12 @@ html[data-theme="dark"] .np-skeleton{
   background: rgba(137,188,189,.12);
 }
 
-/* ---------- Calendar / date input dark ---------- */
-html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
-html[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
-html[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator{
-  filter: invert(.85);
-  opacity: .85;
-}
+/* Calendar/clock icon color is already handled by `color-scheme: dark` on
+   the input itself (see the canonical date/time block below) — the browser
+   draws a light glyph for a dark field automatically. A filter:invert()
+   used to be layered on top of that here, which inverted the already-light
+   icon straight back to black and was the actual cause of the "invisible
+   in dark mode" report. Do not reintroduce it. */
 
 /* ---------- Charts / bars dark polish ---------- */
 html[data-theme="dark"] .np-bars__bar{
@@ -2645,6 +2644,7 @@ input[type="date"].np-select, input[type="time"].np-select, input[type="datetime
   background-image: none;
   padding-right: .8rem;
   color-scheme: light;
+  cursor: pointer; /* whole field opens the picker, see NPDatePicker in np-ui.js */
 }
 html[data-theme="dark"] input[type="date"],
 html[data-theme="dark"] input[type="time"],

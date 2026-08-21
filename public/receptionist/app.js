@@ -124,6 +124,39 @@ function setupProfileMenu(){
 }
 
 $('#loginForm').addEventListener('submit', async e=>{ e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='RECEPTIONIST')throw new Error('Not a receptionist account'); TOKEN=d.token; localStorage.setItem('np_reception_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
+function togglePasswordVisibility(btn){
+  if(!btn) return;
+  const input=document.getElementById(btn.getAttribute('data-target'));
+  if(!input) return;
+  const showIcon=btn.querySelector('.np-password-toggle__icon--show');
+  const hideIcon=btn.querySelector('.np-password-toggle__icon--hide');
+  const isHidden=input.type==='password';
+  input.type=isHidden?'text':'password';
+  btn.setAttribute('aria-pressed', isHidden?'true':'false');
+  btn.setAttribute('aria-label', isHidden?'Hide password':'Show password');
+  if(showIcon) showIcon.style.display=isHidden?'none':'';
+  if(hideIcon) hideIcon.style.display=isHidden?'':'none';
+}
+async function forgotPassword(){
+  const email=await NPModal.prompt({
+    title:'Forgot password',
+    message:'Enter the email address associated with your receptionist account. If it matches, we\u2019ll send you a reset link.',
+    placeholder:'you@neokidspro.in',
+    inputType:'email',
+    defaultValue:($('#email').value||'').trim(),
+    okText:'Send reset link',
+  });
+  if(!email||!email.trim()) return;
+  try{
+    const res=await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email:email.trim()})});
+    if(res && res.previewUrl){
+      await NPModal.alert({ title:'Reset link generated (mock mode)', message:res.previewUrl, okText:'Copy & close' });
+      try{ await navigator.clipboard.writeText(res.previewUrl); toast('Reset link copied to clipboard'); }catch(_){ }
+    } else {
+      toast('If the account exists, a reset link has been sent.');
+    }
+  }catch(err){ toast(err.message,'error'); }
+}
 function logout(){ localStorage.removeItem('np_reception_token'); TOKEN=null; showLogin(); }
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
 

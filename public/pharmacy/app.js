@@ -9,6 +9,39 @@ async function api(path, opts={}){ const headers={'Content-Type':'application/js
   if(!r.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status)); return d; }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(m,k){ if(window.NPToast&&NPToast[k||'success'])NPToast[k||'success'](m); else alert(m); }
+function togglePasswordVisibility(btn){
+  if(!btn) return;
+  const input=document.getElementById(btn.getAttribute('data-target'));
+  if(!input) return;
+  const showIcon=btn.querySelector('.np-password-toggle__icon--show');
+  const hideIcon=btn.querySelector('.np-password-toggle__icon--hide');
+  const isHidden=input.type==='password';
+  input.type=isHidden?'text':'password';
+  btn.setAttribute('aria-pressed', isHidden?'true':'false');
+  btn.setAttribute('aria-label', isHidden?'Hide password':'Show password');
+  if(showIcon) showIcon.style.display=isHidden?'none':'';
+  if(hideIcon) hideIcon.style.display=isHidden?'':'none';
+}
+async function forgotPassword(){
+  const email=await NPModal.prompt({
+    title:'Forgot password',
+    message:'Enter the email address associated with your pharmacy account. If it matches, we\u2019ll send you a reset link.',
+    placeholder:'you@neokidspro.in',
+    inputType:'email',
+    defaultValue:($('#email').value||'').trim(),
+    okText:'Send reset link',
+  });
+  if(!email||!email.trim()) return;
+  try{
+    const res=await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email:email.trim()})});
+    if(res && res.previewUrl){
+      await NPModal.alert({ title:'Reset link generated (mock mode)', message:res.previewUrl, okText:'Copy & close' });
+      try{ await navigator.clipboard.writeText(res.previewUrl); toast('Reset link copied to clipboard'); }catch(_){ }
+    } else {
+      toast('If the account exists, a reset link has been sent.');
+    }
+  }catch(err){ toast(err.message,'error'); }
+}
 function fmtDate(d){ if(!d)return''; return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
 function inr(n){ return '₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2}); }
 
