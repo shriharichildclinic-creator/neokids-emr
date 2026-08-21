@@ -107,14 +107,42 @@ function openBillSendModal(billId, phone, email){
 }
 
 async function openBillModal(rxId){
+  // Root-cause fix for "pharmacy stock not updating": always re-fetch
+  // inventory from the server when opening the bill modal so the dropdown,
+  // stock hints and max-quantity clamp reflect the latest committed stock.
+  // Cached __items would otherwise keep pre-sale quantities and mislead
+  // the user into selling medicines already depleted.
   try{ __items=await api('/pharmacy/inventory'); }catch(_){__items=__items||[];}
   await loadPortalDoctors();
   window.NPBilling.open({
-    api, esc, fmt: fmtDate, toast, onSaved: loadBills,
+    api, esc, fmt: fmtDate, toast,
+    onSaved: function () { refreshAll(); },
     inventory: __items, doctors: __doctors, billsBase: '/pharmacy/bills',
     role: 'PHARMACY', host: '#modalHost', rxId: rxId,
     patientSearch: q => api('/pharmacy/patients?q='+encodeURIComponent(q))
   });
+}
+function refreshAll(){
+  // Re-pull every dependent dataset in parallel so the dashboard + bills
+  // + inventory + KPIs never show stale stock or stale sale totals after a
+  // mutation (bill save / edit / mark-paid / stock adjust / new item).
+  Promise.all([
+    api('/pharmacy/inventory').then(function (r) { __items = r; loadInv(); }).catch(function () {}),
+    api('/pharmacy/bills').then(function (r) { __bills = r; loadBills(); }).catch(function () {}),
+    api('/pharmacy/stats').then(function (s) {
+      var kg = document.getElementById('kpiGrid');
+      if (!kg) return;
+      kg.innerHTML = [
+        { k: 'blue',  l: 'Medicines in stock', v: s.totalItems },
+        { k: 'amber', l: 'Low stock (\u226410)', v: s.lowStock },
+        { k: 'red',   l: 'Expiring \u226430 days', v: s.expiringSoon },
+        { k: 'green', l: 'Bills today', v: s.todayBills },
+        { k: 'mint',  l: 'Revenue today', v: inr(s.todayRevenue) }
+      ].map(function (c) {
+        return '<div class="np-kpi np-kpi--' + c.k + '"><div class="np-kpi__label">' + c.l + '</div><div class="np-kpi__value">' + c.v + '</div></div>';
+      }).join('');
+    }).catch(function () {})
+  ]);
 }
 async function loadPortalDoctors(){ try{ const a=await api('/pharmacy/assignments'); __doctors=(a&&a.doctors)||[]; }catch(_){__doctors=__doctors||[];} }
 function __billUrlById(id){ const b=__bills.find(x=>x.id===id); return b?b.pdfUrl:''; }
@@ -135,8 +163,30 @@ function showBillActions(id){
   }
   $('#modalHost').innerHTML='<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Bill actions — '+esc(b.billNumber)+'</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><div class="np-action-list">'+rows+'</div></div></div></div>';
 }
-function __markPaid(id){ NPBilling.markPaid({api:api,esc:esc,fmt:fmtDate,toast:toast,onSaved:loadBills,billsBase:'/pharmacy/bills'},id,loadBills); }
-async function editBill(id){ try{ const b=await api('/pharmacy/bills/'+id); if(b.status!=='DRAFT'){ toast('This bill is already paid and locked','warn'); return; } try{ __items=await api('/pharmacy/inventory'); }catch(_){__items=__items||[];} await loadPortalDoctors(); window.NPBilling.open({ api, esc, fmt: fmtDate, toast, onSaved: loadBills, inventory: __items, doctors: __doctors, billsBase:'/pharmacy/bills', role:'PHARMACY', host:'#modalHost', patientSearch: q=>api('/pharmacy/patients?q='+encodeURIComponent(q)) }, b); }catch(e){ toast(e.message,'error'); } }
+function __markPaid(id){
+  NPBilling.markPaid(
+    { api:api, esc:esc, fmt:fmtDate, toast:toast, onSaved:loadBills, billsBase:'/pharmacy/bills' },
+    id,
+    function () { refreshAll(); }
+  );
+}
+async function editBill(id){
+  try{
+    const b = await api('/pharmacy/bills/'+id);
+    if (b.status !== 'DRAFT') { toast('This bill is already paid and locked','warn'); return; }
+    // Same root-cause fix as openBillModal — refresh cached inventory
+    // before re-rendering the modal so stock hints are accurate.
+    try { __items = await api('/pharmacy/inventory'); } catch (_) { __items = __items || []; }
+    await loadPortalDoctors();
+    window.NPBilling.open(
+      { api, esc, fmt: fmtDate, toast, onSaved: function () { refreshAll(); },
+        inventory: __items, doctors: __doctors, billsBase: '/pharmacy/bills',
+        role: 'PHARMACY', host: '#modalHost',
+        patientSearch: function (q) { return api('/pharmacy/patients?q=' + encodeURIComponent(q)); } },
+      b
+    );
+  } catch (e) { toast(e.message, 'error'); }
+}
 function openBillSendModal2(id){ api('/pharmacy/bills/'+id).then(b=>{ openBillSendModal(id, b.customerPhone||'', (b.patient&&b.patient.email)||''); }).catch(e=>toast(e.message,'error')); }
 
 $('#passwordForm').addEventListener('submit',async e=>{e.preventDefault(); const d=Object.fromEntries(new FormData(e.target).entries()); if(d.newPassword!==d.confirmPassword){toast('Passwords do not match','error');return;} try{ await api('/auth/change-password',{method:'POST',body:JSON.stringify(d)}); toast('Password changed'); e.target.reset(); }catch(err){toast(err.message,'error');}});

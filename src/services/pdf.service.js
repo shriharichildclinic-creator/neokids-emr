@@ -30,48 +30,50 @@ function ensureDir(p) {
   }
 }
 
-// Sub-brand line under the NeoKidsPro letterhead. Hardcoded on purpose per
-// explicit instruction — Shri Hari Child Clinic, Borivali is the sub-brand
-// and prints the same on every document regardless of which doctor/medical
-// centre issued it. The dynamic clinicName/medicalCentre value that used to
-// drive this line is now only used for the clinic ADDRESS lookups elsewhere
-// (doctor identity block, invoice clinic-address line) — those stay dynamic
-// and are unaffected by this constant.
+// Sub-brand line printed INSIDE the blue letterhead band on every document.
+// Kept as the single source of truth so no PDF template ever prints the
+// clinic name a second time further down the page as a stray branding block.
 const SUB_BRAND_NAME = 'Shri Hari Child Clinic, Borivali';
+const HEADER_BAND_HEIGHT = 88;
 
+// Single layout for every PDF letterhead. Three stacked lines inside one
+// solid blue band at the top of the page so the brand reads as ONE header
+// block, not a brand line + a stray clinic name in the document body.
+//
+//   ┌─────────────────────────────────────────────────────────┐
+//   │ NeoKidsPro                                       TITLE  │
+//   │ Pediatric Network of Doctors                            │
+//   │ Shri Hari Child Clinic, Borivali                        │
+//   └─────────────────────────────────────────────────────────┘
+//
+// Root-cause fix for empty trailing pages carried over: PDFKit auto
+// page-breaks whenever a draw crosses (page.height - bottomMargin). These
+// are fixed-layout single-page documents, so the auto-break is zeroed out
+// once and the signature block is separately clamped to stay on this page.
 function drawHeader(doc, title) {
-  // Root-cause fix for empty trailing pages: PDFKit auto page-breaks whenever
-  // a draw crosses (page.height - bottomMargin). These are fixed-layout,
-  // single-page documents, so we disable the auto-break by zeroing the bottom
-  // margin. The signature block is separately clamped to stay on this page.
   if (doc.page && doc.page.margins) doc.page.margins.bottom = 0;
-  doc.rect(0, 0, doc.page.width, 80).fill(BRAND_BLUE);
-  doc.fillColor('white').fontSize(22).font('Helvetica-Bold').text('NeoKidsPro', 50, 28);
-  doc.fontSize(10).font('Helvetica').text('Pediatric Network of Doctors · neokidspro.in', 50, 55);
-  doc.fontSize(16).font('Helvetica-Bold').fillColor('white')
-     .text(title, 0, 32, { align: 'right', width: doc.page.width - 50 });
-  // Sub-brand always sits directly under the NeoKidsPro letterhead band —
-  // never inside the doctor identity block further down the page — so it
-  // reads the same way on every document type regardless of layout below.
-  doc.fontSize(9).font('Helvetica-Bold').fillColor(BRAND_DARK)
-     .text(SUB_BRAND_NAME, 50, 86, { width: doc.page.width - 100 });
-  doc.fillColor('black').moveDown(3);
+  doc.rect(0, 0, doc.page.width, HEADER_BAND_HEIGHT).fill(BRAND_BLUE);
+  doc.fillColor('white');
+  doc.font('Helvetica-Bold').fontSize(22).text('NeoKidsPro', 50, 14, { lineBreak: false });
+  doc.font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', 50, 40, { lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, 50, 55, { lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(16)
+     .text(title, 0, 22, { align: 'right', width: doc.page.width - 50, lineBreak: false, ellipsis: true });
+  doc.fillColor('black');
+  doc.y = HEADER_BAND_HEIGHT + 12;
 }
 
 // ─────────────────────────────────────────────────────────────────────
 // Feature 3 — Doctor Digital Signature helper
 //
-// Given a doctor row, resolves the local disk path for their uploaded
-// signature PNG (if any) and returns it, or null. The signature is
-// stored under storage/signatures/<uuid>.<ext>; the doctor row keeps
-// only the public/relative URL fragment, so we re-derive the disk path
-// here without hitting the auth layer.
+// Resolves the local disk path for the doctor's uploaded signature PNG
+// (if any) and returns it. Stored under storage/signatures/<uuid>.<ext>;
+// the row only keeps the public/relative URL fragment so we re-derive
+// the disk path here without hitting the auth layer.
 // ─────────────────────────────────────────────────────────────────────
 function resolveSignaturePath(doctor) {
   if (!doctor || !doctor.signatureUrl) return null;
   try {
-    // signatureUrl is stored as e.g. "/files/signatures/<uuid>.png"
-    // OR just "<uuid>.png" — we tolerate both.
     const marker = 'signatures/';
     const idx = doctor.signatureUrl.indexOf(marker);
     const filename = idx >= 0
@@ -83,60 +85,28 @@ function resolveSignaturePath(doctor) {
   return null;
 }
 
-// Draw the doctor's signature block at the bottom-right of the current
-// page. Name, qualification and signature image always stay TOGETHER.
-//
-// Bug fix (PDF rendering): the old implementation drew every line with a
-// hard-coded absolute y-offset (y+55, y+70, y+82 …). PDFKit triggers an
-// automatic page break whenever ANY draw lands past the bottom margin, so
-// a tall/long name or a lower start-y pushed the doctor name, the
-// qualification and the "Digital Signature" caption onto separate pages.
-// We now compute the exact raster height, clamp the whole block so it
-// fits on one page, and use flowing relative y offsets (never absolute).
+// Draws the doctor's signature block at the bottom-right of the current
+// page. Name, qualification, registration and signature image always stay
+// TOGETHER — PDFKit auto page-breaks any draw that crosses the bottom
+// margin, so the block is clamped to fit and uses flowing relative y
+// offsets (never absolute jumps that could land across pages).
 function drawSignatureBlock(doc, doctor, opts = {}) {
   const sigPath   = resolveSignaturePath(doctor);
-  // Positioned right-of-center per doctor feedback ("slightly too far
-  // toward center"). blockW is trimmed from 220 to 200 to keep a ~10pt
-  // print-safe buffer from the true page edge at this position — this
-  // only affects the text-wrap/image-fit *container* width, not the
-  // size of anything rendered inside it (name/qualification text and
-  // the signature image are both comfortably narrower than either
-  // value, so nothing changes visually except the horizontal position).
-  const leftX     = doc.page.width - 210;   // block's left edge — every element shares this x
-  const blockW    = 200;                    // shared width for text wrapping + image box
-  const sigMaxH   = 46;                     // signature image never exceeds this height
-  const sigInset  = 6;                      // margin inside the image's box on every side, so
-                                             // ink that runs close to the source PNG's own edges
-                                             // still reads with breathing room, never "cut off"
+  const leftX     = doc.page.width - 210;
+  const blockW    = 200;
+  const sigMaxH   = 46;
+  const sigInset  = 6;
   const hasReg    = !!(doctor && doctor.registrationNumber);
 
-  // Required layout (per doctor sign-off): signature image ABOVE the
-  // printed name, everything left-aligned to `leftX`:
-  //   [Signature Image]
-  //   Doctor Name
-  //   Qualifications
-  // Total block height: image (sigMaxH) + gap (6) + name (14) +
-  // qualification (12) + optional reg. no (11) + caption (10).
   const blockH = sigMaxH + 6 + 14 + 12 + (hasReg ? 11 : 0) + 10;
-  const bottomLimit = doc.page.height - 48;   // keep clear of the footer band
-  // The ENTIRE block (image + every text line) must end above bottomLimit,
-  // otherwise PDFKit auto page-breaks mid-block.
+  const bottomLimit = doc.page.height - 48;
   const maxY = bottomLimit - blockH;
   let y = Math.min(opts.y || maxY, maxY);
-  if (y < 40) y = 40;                          // never collide with the header
+  if (y < 40) y = 40;
 
-  // ── Signature image first, left-aligned at `leftX` ──
   let ty = y;
   if (sigPath) {
     try {
-      // `fit` alone (no `height` passed alongside it) — passing both throws
-      // "unsupported number: NaN" in this pdfkit version because the
-      // redundant height conflicts with fit's own aspect-ratio math. `fit`
-      // preserves the source aspect ratio and never crops on its own.
-      // The image is fit into a box inset by `sigInset` on every side
-      // (rather than the full block width/height) so it never visually
-      // touches the block's outer edges, and `align:'left'` keeps that
-      // inset consistent with the text below instead of centering it.
       doc.image(sigPath, leftX + sigInset, ty + sigInset,
         { fit: [blockW - sigInset * 2, sigMaxH - sigInset * 2], align: 'left', valign: 'top' });
     } catch (e) {
@@ -147,7 +117,6 @@ function drawSignatureBlock(doc, doctor, opts = {}) {
   }
   ty += sigMaxH + 6;
 
-  // ── Text lines below the image, all left-aligned to the same `leftX` ──
   doc.font('Helvetica-Bold').fillColor('#000').fontSize(11)
      .text(`Dr. ${doctor.name}`, leftX, ty, { width: blockW, lineBreak: false, ellipsis: true });
   ty += 14;
@@ -189,7 +158,6 @@ async function generateInvoice(appointment) {
     doc.fontSize(11).font('Helvetica');
     doc.text(`Dr. ${appointment.doctor.name}`, 320, 192);
     doc.text(appointment.doctor.specialization || 'Pediatrician', 320, 207);
-    // Appointment date + time on the invoice.
     doc.fillColor('#555').fontSize(9)
        .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
     doc.fillColor('#333');
@@ -214,13 +182,10 @@ async function generateInvoice(appointment) {
     doc.text('Total Paid:', 380, rowY + 45);
     doc.text(`₹ ${Number(appointment.feeAtBooking).toFixed(2)}`, 460, rowY + 45);
 
-    // Optional signature on invoice (kept on this page).
     drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 185 });
 
-    // Footer — lineBreak:false so PDFKit never auto page-breaks the line
-    // onto a blank page (bottom margin auto-break was the root cause).
     doc.fontSize(9).font('Helvetica').fillColor('#888');
-    doc.text('Thank you for choosing NeoKidsPro (Shri Hari Child Clinic, Borivali). This is a computer-generated invoice.',
+    doc.text('Thank you for choosing NeoKidsPro. This is a computer-generated invoice.',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
@@ -276,7 +241,6 @@ async function generatePrescription(appointment, prescription) {
     doc.font('Helvetica-Bold').text('Mode: ', 320, py + 30, { continued: true })
        .font('Helvetica').text(appointmentModeLabel(appointment.consultationType));
 
-    // Vitals row (if recorded)
     if (prescription.weight || prescription.height) {
       doc.font('Helvetica-Bold').text('Weight: ', 320, py + 45, { continued: true })
          .font('Helvetica').text(prescription.weight ? `${prescription.weight} kg` : '—');
@@ -331,10 +295,8 @@ async function generatePrescription(appointment, prescription) {
     section('Advice', prescription.advice);
     if (prescription.followUpDate) section('Follow-up', dayjs(prescription.followUpDate).format('DD MMM YYYY'));
 
-    // Teleconsultation safety disclaimer — required on every prescription
-    // issued from an online consultation, not shown for in-clinic visits.
     if (appointment.consultationType === 'ONLINE') {
-      const disclaimerText = 'This prescription has been issued following a teleconsultation conducted through NeoKidsPro (Shri Hari Child Clinic, Borivali), via NeoKidsPro.in. If your child develops worsening symptoms, experiences a medical emergency, or requires urgent medical attention, please visit your nearest hospital, emergency department, or healthcare facility immediately. Teleconsultation does not replace emergency medical care.';
+      const disclaimerText = 'This prescription has been issued following a teleconsultation conducted through NeoKidsPro, via NeoKidsPro.in. If your child develops worsening symptoms, experiences a medical emergency, or requires urgent medical attention, please visit your nearest hospital, emergency department, or healthcare facility immediately. Teleconsultation does not replace emergency medical care.';
       const boxX = 50, boxW = doc.page.width - 100, boxPad = 8;
       doc.fontSize(8).font('Helvetica');
       const textH = doc.heightOfString(disclaimerText, { width: boxW - boxPad * 2 });
@@ -344,11 +306,10 @@ async function generatePrescription(appointment, prescription) {
       cursorY += boxH + 10;
     }
 
-    // Signature block (uploaded signature image when available).
     drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 110 });
 
     doc.fontSize(8).fillColor('#888')
-       .text('This is a digitally generated prescription from NeoKidsPro (Shri Hari Child Clinic, Borivali) EMR. neokidspro.in',
+       .text('This is a digitally generated prescription from NeoKidsPro EMR. neokidspro.in',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
@@ -367,7 +328,6 @@ const MONTH_NAMES = [
 
 async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumber }) {
   ensureDir(path.join(STORAGE, 'invoices'));
-
   const filename = `settlement_${settlement.id}.pdf`;
   const filepath = path.join(STORAGE, 'invoices', filename);
 
@@ -409,15 +369,13 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
     doc.fontSize(12).font('Helvetica-Bold')
        .text('Payer (Clinic):', 320, 190);
 
-    doc.fontSize(11).font('Helvetica');
+    doc.font('Helvetica').fillColor('#222').fontSize(11);
     doc.text('NeoKidsPro', 320, 207);
-    // Legal entity in brackets right under the brand name — the responsible
-    // business is Shri Hari Child Clinic, not the NeoKidsPro brand, so this
-    // has to be legible on its own line rather than squeezed/truncated
-    // alongside the brand name at 11pt.
-    doc.fontSize(8.5).text('(Shri Hari Child Clinic, Borivali)', 320, 220, { width: 225 });
-    doc.fontSize(11).text('Pediatric Network of Doctors', 320, 234);
-    doc.text('neokidspro.in', 320, 249);
+    // Letterhead already carries the brand + sub-brand — body only lists
+    // the legal category and URL. No duplicate "Shri Hari Child Clinic"
+    // block lower in the page.
+    doc.text('Pediatric Network of Doctors', 320, 222);
+    doc.text('neokidspro.in', 320, 237);
 
     const sumTop = 275;
 
@@ -477,295 +435,44 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
        .font('Helvetica-Bold')
        .fontSize(13);
 
-    doc.text('Net Payable to Doctor', 60, y + 10);
-    doc.text(`₹ ${num(settlement.doctorNetAmount)}`, 460, y + 10, {
-      width: 80,
-      align: 'right'
-    });
+    doc.text(`Net Payable to Doctor: ₹ ${num(settlement.netPayable)}`,
+      50, y + 9, { width: doc.page.width - 100, align: 'center' });
 
-    doc.fillColor('#000');
+    y += 50;
+
+    if (settlement.notes) {
+      doc.fontSize(10).font('Helvetica').fillColor('#555')
+         .text(`Notes: ${settlement.notes}`, 50, y, { width: doc.page.width - 100 });
+      y = doc.y + 8;
+    }
+
+    drawSignatureBlock(doc, doctor, { y });
+
+    doc.fontSize(9).font('Helvetica').fillColor('#888');
+    doc.text('This is a computer-generated settlement statement from NeoKidsPro EMR.',
+      50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
+
     doc.end();
 
- stream.on('finish', () =>
-      resolve({
-        filepath,
-        filename,
-        // Settlement invoices are downloaded via the protected admin /
-        // doctor endpoints that stream `filepath` directly, so the URL
-        // we store on the settlement row points at *that* endpoint — not
-        // at any static mount, which would 404.
-        url: `/api/admin/finance/invoices/${settlement.id}/download`
-      })
-    );
-    stream.on('error', reject);
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Feature 2 — Medical Certificate Generator
-// ─────────────────────────────────────────────────────────────────────
-
-// Template catalog; wording adapts to durationType:
-//   SINGLE_DAY → "on <Certificate Date>" phrasing (school absence for one
-//   day, doctor-visit proof, vaccination, etc.)
-//   DATE_RANGE → "from <from> to <to>" phrasing.
-// `ctx` carries: name, age, gender, examDate, examClause, reason, fromDate,
-// toDate, restDays, singleDate.
-const CERT_TEMPLATES = {
-  GENERAL: {
-    title: 'MEDICAL CERTIFICATE',
-    body: ({ name, age, gender, examClause, reason }) =>
-      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, ${examClause}. ${reason}`
-  },
-  SCHOOL_LEAVE: {
-    title: 'SCHOOL LEAVE CERTIFICATE',
-    body: ({ name, age, gender, examClause, reason, fromDate, toDate, restDays, singleDate }) => {
-      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}, ${examClause}. ${reason}`;
-      if (singleDate) {
-        s += ` ${cap(name)} is advised to remain absent from school on ${singleDate}.`;
-      } else if (fromDate && toDate) {
-        s += ` ${cap(name)} is advised to remain absent from school from ${fromDate} to ${toDate}${restDays ? ` (${restDays} day${restDays === 1 ? '' : 's'})` : ''}.`;
-      }
-      return s;
-    }
-  },
-  FITNESS: {
-    title: 'FITNESS CERTIFICATE',
-    body: ({ name, age, gender, examClause, reason }) =>
-      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, ${examClause} and is found to be medically fit. ${reason}`
-  },
-  MEDICAL_REST: {
-    title: 'REST ADVISED CERTIFICATE',
-    body: ({ name, age, gender, examClause, reason, fromDate, toDate, restDays, singleDate }) => {
-      let s = `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''}, ${examClause}. ${reason}`;
-      if (singleDate) {
-        s += ` ${cap(name)} is advised rest on ${singleDate}.`;
-      } else if (restDays || (fromDate && toDate)) {
-        s += ` ${cap(name)} is advised complete medical rest${restDays ? ` for ${restDays} day${restDays === 1 ? '' : 's'}` : ''}${fromDate && toDate ? ` from ${fromDate} to ${toDate}` : ''}.`;
-      }
-      return s;
-    }
-  },
-  VACCINATION: {
-    title: 'VACCINATION CERTIFICATE',
-    body: ({ name, age, gender, examClause, reason, singleDate }) =>
-      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? `, ${String(gender).toLowerCase()}` : ''} was administered vaccination at our clinic on ${singleDate || examClause.replace(/^(was examined|was examined via teleconsultation) /, '')}. ${reason}`
-  },
-  RETURN_TO_SCHOOL: {
-    title: 'RETURN TO SCHOOL CERTIFICATE',
-    body: ({ name, age, gender, examClause, reason, singleDate }) => {
-      const dateStr = singleDate ? ` on ${singleDate}` : '';
-      return `This is to certify that ${name}${age ? `, aged ${age}` : ''}, ${examClause} and is now medically fit to return to school${dateStr}. ${reason}`;
-    }
-  }
-};
-
-function cap(s) {
-  const str = String(s || '').trim();
-  if (!str) return 'The patient';
-  return str;
-}
-
-function fmtCertDate(d) {
-  return d ? dayjs(d).format('DD MMM YYYY') : null;
-}
-
-/**
- * Generate a professional medical certificate PDF.
- *
- * @param {Object} args
- * @param {Object} args.certificate  MedicalCertificate row (with certificateNumber, templateKey, etc.)
- * @param {Object} args.doctor       Doctor row (name, qualification, registrationNumber, clinicName, clinicAddress, signatureUrl)
- * @param {Object} args.patient      Patient row
- * @returns {{ filepath, filename, url }}
- */
-async function generateMedicalCertificate({ certificate, doctor, patient }) {
-  ensureDir(path.join(STORAGE, 'certificates'));
-  const filename = `certificate_${certificate.id}.pdf`;
-  const filepath = path.join(STORAGE, 'certificates', filename);
-
-  const tpl = CERT_TEMPLATES[certificate.templateKey] || CERT_TEMPLATES.GENERAL;
-  const examDate = fmtCertDate(certificate.issuedAt);
-  const name = certificate.patientNameSnapshot || (patient && patient.name) || 'the patient';
-  const age = certificate.patientAgeSnapshot || (patient ? calcAge(patient.dateOfBirth) : '') || null;
-  const gender = certificate.patientGenderSnapshot || (patient && patient.gender) || null;
-
-  // ── Consultation mode (snapshot first, live appointment second) ──
-  // In-person (OFFLINE) → clinic name + address + contact block.
-  // Online  (ONLINE)    → "Teleconsultation" identity, doctor details only,
-  //                       no physical clinic address block.
-  const consultType = certificate.consultationType || (certificate.appointment && certificate.appointment.consultationType) || null;
-  const isOnline = consultType === 'ONLINE';
-  const examClause = isOnline
-    ? `was examined via teleconsultation (online consultation) on ${examDate}`
-    : `was examined at our clinic on ${examDate}`;
-
-  // ── Duration semantics (legacy rows fall back to DATE_RANGE) ──
-  const durationType = certificate.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
-  const singleDate = durationType === 'SINGLE_DAY' ? fmtCertDate(certificate.certificateDate) : null;
-
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
-    const stream = fs.createWriteStream(filepath);
-    doc.pipe(stream);
-
-    // ── Letterhead ──────────────────────────────────────────────────
-    drawHeader(doc, tpl.title);
-
-    // Identity block under the band (left) + certificate meta (right).
-    let ly = 102;
-    if (isOnline) {
-      // Teleconsultation: doctor details only — never a physical clinic
-      // address block (the consultation did not happen at the clinic).
-      doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
-         .text(`Dr. ${doctor.name}`, 50, ly);
-      doc.fontSize(9).font('Helvetica').fillColor('#555');
-      let ty = ly + 16;
-      doc.text(`${doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${doctor.specialization || 'Pediatrician'}`, 50, ty, { width: 260 });
-      ty += 12;
-      doc.fillColor(BRAND_BLUE).font('Helvetica-Bold')
-         .text('Teleconsultation / Online Consultation', 50, ty, { width: 260 });
-      ty += 12;
-      doc.font('Helvetica').fillColor('#555').text('neokidspro.in', 50, ty, { width: 260 });
-    } else {
-      // In-person certificates are still issued and signed by the doctor,
-      // not the clinic — the clinic is where the exam happened, not who
-      // is vouching for it. Doctor name leads (matches the online block
-      // above); clinic name already appears in the letterhead above, so
-      // only the street address (location-specific detail) repeats here.
-      doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
-         .text(`Dr. ${doctor.name}`, 50, ly);
-      doc.fontSize(9).font('Helvetica').fillColor('#555');
-      let ty = ly + 16;
-      doc.text(`${doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${doctor.specialization || 'Pediatrician'}`, 50, ty, { width: 260 });
-      ty += 12;
-      if (doctor.clinicAddress) {
-        doc.text(String(doctor.clinicAddress), 50, ty, { width: 260 });
-        ty += Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11;
-      }
-      doc.text('neokidspro.in', 50, ty, { width: 260 });
-    }
-
-    doc.fontSize(9).fillColor('#555')
-       .text(`Certificate ID: ${certificate.certificateNumber}`, 320, ly, { width: 225, align: 'right' });
-    doc.text(`Date of Issue: ${examDate}`, 320, ly + 14, { width: 225, align: 'right' });
-    // Consultation mode is always explicit on the certificate.
-    doc.text(`Consultation: ${appointmentModeLabel(consultType || 'OFFLINE')}`, 320, ly + 28, { width: 225, align: 'right' });
-    // Show the linked appointment's date + time when available.
-    if (certificate.appointment && certificate.appointment.date) {
-      const apptDt = `${fmtCertDate(certificate.appointment.date)}${certificate.appointment.startTime ? ' · ' + dayjs(`2000-01-01T${certificate.appointment.startTime}`).format('hh:mm A') : ''}`;
-      doc.text(`Appointment: ${apptDt}`, 320, ly + 42, { width: 225, align: 'right' });
-    }
-
-    // ── Title ────────────────────────────────────────────────────────
-    const titleY = 185;
-    doc.fontSize(18).font('Helvetica-Bold').fillColor(BRAND_DARK)
-       .text(tpl.title, 50, titleY, { align: 'center', width: doc.page.width - 100 });
-    doc.moveTo(doc.page.width / 2 - 90, titleY + 26)
-       .lineTo(doc.page.width / 2 + 90, titleY + 26)
-       .strokeColor(BRAND_BLUE).lineWidth(1.5).stroke();
-
-    // ── Patient summary line ─────────────────────────────────────────
-    let cy = titleY + 48;
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('Patient: ', 50, cy, { continued: true })
-       .font('Helvetica').text(name);
-    cy += 16;
-    if (age || gender) {
-      doc.font('Helvetica-Bold').text('Age / Gender: ', 50, cy, { continued: true })
-         .font('Helvetica').text(`${age || 'N/A'}${gender ? ' / ' + gender : ''}`);
-      cy += 16;
-    }
-    if (patient && patient.phone) {
-      doc.font('Helvetica-Bold').text('Phone: ', 50, cy, { continued: true })
-         .font('Helvetica').text(`+91 ${patient.phone}`);
-      cy += 16;
-    }
-
-    // ── Certificate body ─────────────────────────────────────────────
-    cy += 12;
-    const bodyText = tpl.body({
-      name, age, gender, examDate, examClause, singleDate,
-      reason: certificate.reason,
-      fromDate: fmtCertDate(certificate.fromDate),
-      toDate: fmtCertDate(certificate.toDate),
-      restDays: certificate.restDays
-    });
-    doc.fontSize(12).font('Helvetica').fillColor('#222')
-       .text(bodyText, 50, cy, {
-         width: doc.page.width - 100,
-         lineGap: 4,
-         align: 'left'
-       });
-    cy = doc.y + 14;
-
-    if (certificate.diagnosis) {
-      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Diagnosis', 50, cy);
-      doc.font('Helvetica').fillColor('#222').fontSize(11)
-         .text(certificate.diagnosis, 50, cy + 14, { width: doc.page.width - 100 });
-      cy = doc.y + 12;
-    }
-
-    if (durationType === 'SINGLE_DAY' && singleDate) {
-      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Certificate Date', 50, cy);
-      doc.font('Helvetica').fillColor('#222').fontSize(11)
-         .text(singleDate, 50, cy + 14, { width: doc.page.width - 100 });
-      cy = doc.y + 12;
-    } else if (certificate.restDays && certificate.fromDate && certificate.toDate) {
-      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Recommended Rest', 50, cy);
-      doc.font('Helvetica').fillColor('#222').fontSize(11)
-         .text(`${certificate.restDays} day${certificate.restDays === 1 ? '' : 's'} — from ${fmtCertDate(certificate.fromDate)} to ${fmtCertDate(certificate.toDate)}`,
-               50, cy + 14, { width: doc.page.width - 100 });
-      cy = doc.y + 12;
-    }
-
-    if (certificate.additionalNotes) {
-      doc.font('Helvetica-Bold').fillColor(BRAND_DARK).fontSize(11).text('Additional Notes', 50, cy);
-      doc.font('Helvetica').fillColor('#222').fontSize(11)
-         .text(certificate.additionalNotes, 50, cy + 14, { width: doc.page.width - 100 });
-    }
-
-    // ── Signature block (stays on this page) ─────────────────────────
-    drawSignatureBlock(doc, doctor, { y: doc.page.height - 175 });
-
-    // ── Footer ───────────────────────────────────────────────────────
-    // Issuer is always the consulting doctor — never the clinic — on
-    // both online and in-person certificates.
-    const issuerLine = isOnline
-      ? `This certificate was issued electronically by Dr. ${doctor.name} following a teleconsultation and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`
-      : `This certificate was issued electronically by Dr. ${doctor.name} and is valid without a physical seal. Verify with Certificate ID: ${certificate.certificateNumber}`;
-    doc.fontSize(8).fillColor('#888')
-       .text(issuerLine,
-         50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true }
-       );
-
-    doc.end();
     stream.on('finish', () => resolve({
-      filepath,
-      filename,
-      url: `/api/files/certificates/${certificate.id}.pdf`
+      filepath, filename,
+      url: `/api/files/settlement-invoices/${settlement.id}.pdf`
     }));
     stream.on('error', reject);
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// v4.0.0 — Consultation invoice generated from the Receptionist Portal.
-// Intentionally mirrors generateInvoice's layout (same header band, mint
-// table header, signature block, footer) so front-desk invoices are
-// visually identical to the payment-generated ones.
-// ─────────────────────────────────────────────────────────────────────
 async function generateConsultationInvoice({ invoice, appointment, patient, doctor, medicalCentre }) {
-  ensureDir(path.join(STORAGE, 'invoices'));
-  const filename = `consultation_invoice_${invoice.id}.pdf`;
-  const filepath = path.join(STORAGE, 'invoices', filename);
+  ensureDir(path.join(STORAGE, 'consultation-invoices'));
+  const filename = `consult_invoice_${invoice.id}.pdf`;
+  const filepath = path.join(STORAGE, 'consultation-invoices', filename);
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
     const stream = fs.createWriteStream(filepath);
     doc.pipe(stream);
-    // Only the address is still sourced dynamically (medical centre on file,
-    // falling back to the doctor's clinic address) — the clinic NAME in the
-    // letterhead is the hardcoded sub-brand now (see drawHeader).
+    // Letterhead already carries the clinic sub-brand. Body prints only
+    // the location-specific address (which varies per centre/doctor).
     const clinicAddr = (medicalCentre && medicalCentre.address) || doctor.clinicAddress || null;
     drawHeader(doc, 'INVOICE');
 
@@ -788,8 +495,6 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
        .text(`Appointment: ${dayjs(appointment.date).format('DD MMM YYYY')} · ${appointment.startTime ? dayjs(`2000-01-01T${appointment.startTime}`).format('hh:mm A') : '—'}`, 320, 222);
     doc.fillColor('#333');
 
-    // Clinic name is already in the letterhead above; only the street
-    // address (location-specific, not repeated identity) prints here.
     let cy = 245;
     if (clinicAddr) {
       doc.fontSize(9).font('Helvetica').fillColor('#555').text(String(clinicAddr), 50, cy, { width: 300 });
@@ -823,7 +528,7 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
     drawSignatureBlock(doc, doctor, { y: doc.page.height - 185 });
 
     doc.fontSize(9).font('Helvetica').fillColor('#888');
-    doc.text('Thank you for choosing NeoKidsPro (Shri Hari Child Clinic, Borivali). This is a computer-generated invoice.',
+    doc.text('Thank you for choosing NeoKidsPro. This is a computer-generated invoice.',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
@@ -836,16 +541,18 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// v4.0.0 — Pharmacy bill invoice. Same visual system as the consultation
-// invoice, but the line-item table is medicine rows (name / qty / rate /
-// amount) and totals include discount + tax.
+// v4.0.0 — Pharmacy bill. Same letterhead as the consultation invoice;
+// the line-item table is medicine rows (name / qty / rate / amount) and
+// totals include discount + tax.
 // ─────────────────────────────────────────────────────────────────────
 async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
   ensureDir(path.join(STORAGE, 'pharmacy-invoices'));
   const filename = `pharmacy_invoice_${bill.id}.pdf`;
   const filepath = path.join(STORAGE, 'pharmacy-invoices', filename);
 
-  const centreName = (medicalCentre && medicalCentre.name) || 'NeoKidsPro (Shri Hari Child Clinic, Borivali)';
+  // Letterhead band already carries the clinic sub-brand. Body never
+  // re-prints the brand string — store name + address only.
+  const centreName = medicalCentre ? medicalCentre.name : 'NeoKidsPro Pharmacy';
   const centreAddr = medicalCentre && medicalCentre.address;
 
   return new Promise((resolve, reject) => {
@@ -887,38 +594,44 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
     const items = Array.isArray(bill.items) ? bill.items : [];
     items.forEach((it, i) => {
       if (i % 2 === 0) {
-        doc.rect(50, rowY - 2, doc.page.width - 100, 20).fill('#F8FAFB').fillColor('#000');
+        doc.rect(50, rowY - 3, doc.page.width - 100, 20).fill('#F8FAFB').fillColor('#222');
       }
-      doc.text(String(it.name || ''), 60, rowY + 3, { width: 260, lineBreak: false, ellipsis: true });
-      doc.text(String(it.quantity), 330, rowY + 3);
-      doc.text(Number(it.unitPrice).toFixed(2), 390, rowY + 3);
-      doc.text(Number(it.total).toFixed(2), 470, rowY + 3);
-      rowY += 20;
+      doc.text(it.name || '', 60, rowY, { width: 260 });
+      doc.text(String(it.quantity), 330, rowY);
+      doc.text(Number(it.unitPrice).toFixed(2), 390, rowY);
+      doc.text(Number(it.total).toFixed(2), 470, rowY);
+      rowY += 22;
     });
 
-    rowY += 10;
-    doc.moveTo(50, rowY).lineTo(doc.page.width - 50, rowY).stroke();
-    rowY += 12;
-    doc.font('Helvetica').fontSize(11).fillColor('#333');
-    doc.text('Subtotal:', 380, rowY);
-    doc.text(`₹ ${Number(bill.subtotal).toFixed(2)}`, 460, rowY);
+    rowY += 8;
+    const subtotal = Number(bill.subtotal);
+    const discount = Number(bill.discount);
+    const tax = Number(bill.tax);
+    const total = Number(bill.total);
+
+    doc.font('Helvetica').fontSize(10).fillColor('#555');
+    doc.text('Subtotal', 360, rowY); doc.text(subtotal.toFixed(2), 470, rowY);
     rowY += 16;
-    if (Number(bill.discount) > 0) {
-      doc.text('Discount:', 380, rowY);
-      doc.text(`- ₹ ${Number(bill.discount).toFixed(2)}`, 460, rowY);
+    if (discount > 0) {
+      doc.text('Discount', 360, rowY); doc.text(`-${discount.toFixed(2)}`, 470, rowY);
       rowY += 16;
     }
-    if (Number(bill.tax) > 0) {
-      doc.text('Tax:', 380, rowY);
-      doc.text(`₹ ${Number(bill.tax).toFixed(2)}`, 460, rowY);
+    if (tax > 0) {
+      doc.text('Tax', 360, rowY); doc.text(tax.toFixed(2), 470, rowY);
       rowY += 16;
     }
-    doc.font('Helvetica-Bold').fontSize(12).fillColor('#000');
-    doc.text(bill.status === 'PAID' ? 'Total Paid:' : 'Total:', 380, rowY + 6);
-    doc.text(`₹ ${Number(bill.total).toFixed(2)}`, 460, rowY + 6);
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000');
+    doc.text('Total Paid', 360, rowY);
+    doc.text(`₹ ${total.toFixed(2)}`, 470, rowY);
+    rowY += 24;
+
+    if (bill.notes) {
+      doc.font('Helvetica').fontSize(9).fillColor('#777').text(`Notes: ${bill.notes}`, 50, rowY, { width: doc.page.width - 100 });
+      rowY = doc.y + 10;
+    }
 
     doc.fontSize(9).font('Helvetica').fillColor('#888');
-    doc.text('Thank you for your purchase. This is a computer-generated bill. Medicines once sold are subject to store exchange policy.',
+    doc.text('Thank you for choosing NeoKidsPro Pharmacy. This is a computer-generated bill.',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
 
     doc.end();
@@ -930,14 +643,188 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Medical Certificate generator. Reuses drawHeader so the clinic name
+// only ever appears inside the blue band.
+// ─────────────────────────────────────────────────────────────────────
+
+const CERT_TEMPLATES = {
+  GENERAL: {
+    title: 'MEDICAL CERTIFICATE',
+    body: ({ name, age, gender, examDate, examClause, reason }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? ` (${gender})` : ''}, ${examClause}.\n\nBased on the examination conducted, the patient is medically fit${reason ? ` for: ${reason}` : ''}. This certificate is issued on the patient's request for the purpose stated.`
+  },
+  SICK_LEAVE: {
+    title: 'MEDICAL CERTIFICATE — SICK LEAVE',
+    body: ({ name, age, gender, examDate, examClause, restDays, reason }) => {
+      const days = restDays ? ` for a period of ${restDays} day(s)` : '';
+      return `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? ` (${gender})` : ''}, ${examClause}.\n\nThe patient was found to be suffering from ${reason || 'a medical condition'} and advised rest${days} from the date of examination.\n\nThis certificate is issued for the purpose of leave/sick-record submission.`;
+    }
+  },
+  FITNESS: {
+    title: 'MEDICAL CERTIFICATE — FITNESS',
+    body: ({ name, age, gender, examDate, examClause, reason }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? ` (${gender})` : ''}, ${examClause}.\n\nThe patient has been examined and is found to be medically fit${reason ? ` for: ${reason}` : ''} at the time of examination.\n\nThis certificate is valid for the purpose stated and is issued on the patient's request.`
+  },
+  CHRONIC: {
+    title: 'MEDICAL CERTIFICATE — CHRONIC CONDITION',
+    body: ({ name, age, gender, examDate, examClause, reason }) =>
+      `This is to certify that ${name}${age ? `, aged ${age}` : ''}${gender ? ` (${gender})` : ''}, ${examClause}.\n\nThe patient has been diagnosed with a chronic condition (${reason || 'as documented in clinical records'}) and is under ongoing medical management.\n\nThis certificate is issued for the purpose stated.`
+  }
+};
+
+function fmtCertDate(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/**
+ * @param {{ certificate: any, doctor: any, patient: any }} opts
+ * @returns {{ filepath, filename, url }}
+ */
+async function generateMedicalCertificate({ certificate, doctor, patient }) {
+  ensureDir(path.join(STORAGE, 'certificates'));
+  const filename = `certificate_${certificate.id}.pdf`;
+  const filepath = path.join(STORAGE, 'certificates', filename);
+
+  const tpl = CERT_TEMPLATES[certificate.templateKey] || CERT_TEMPLATES.GENERAL;
+  const examDate = fmtCertDate(certificate.issuedAt);
+  const name = certificate.patientNameSnapshot || (patient && patient.name) || 'the patient';
+  const age = certificate.patientAgeSnapshot || (patient ? calcAge(patient.dateOfBirth) : '') || null;
+  const gender = certificate.patientGenderSnapshot || (patient && patient.gender) || null;
+
+  // Consultation mode (snapshot first, live appointment second).
+  // In-person (OFFLINE) → doctor details + clinic street address only
+  //                         (the brand line is in the letterhead above).
+  // Online    (ONLINE)    → doctor details only.
+  const consultType = certificate.consultationType || (certificate.appointment && certificate.appointment.consultationType) || null;
+  const isOnline = consultType === 'ONLINE';
+  const examClause = isOnline
+    ? `was examined via teleconsultation (online consultation) on ${examDate}`
+    : `was examined at our clinic on ${examDate}`;
+
+  // Duration semantics.
+  const durationType = certificate.durationType === 'SINGLE_DAY' ? 'SINGLE_DAY' : 'DATE_RANGE';
+  const singleDate = durationType === 'SINGLE_DAY' ? fmtCertDate(certificate.certificateDate) : null;
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: true });
+    const stream = fs.createWriteStream(filepath);
+    doc.pipe(stream);
+
+    drawHeader(doc, tpl.title);
+
+    let ly = 102;
+    if (isOnline) {
+      doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
+         .text(`Dr. ${doctor.name}`, 50, ly);
+      doc.fontSize(9).font('Helvetica').fillColor('#555');
+      let ty = ly + 16;
+      doc.text(`${doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${doctor.specialization || 'Pediatrician'}`, 50, ty, { width: 260 });
+      ty += 12;
+      doc.fillColor(BRAND_BLUE).font('Helvetica-Bold')
+         .text('Teleconsultation / Online Consultation', 50, ty, { width: 260 });
+      ty += 12;
+      doc.font('Helvetica').fillColor('#555').text('neokidspro.in', 50, ty, { width: 260 });
+    } else {
+      doc.fontSize(12).font('Helvetica-Bold').fillColor(BRAND_DARK)
+         .text(`Dr. ${doctor.name}`, 50, ly);
+      doc.fontSize(9).font('Helvetica').fillColor('#555');
+      let ty = ly + 16;
+      doc.text(`${doctor.qualification || 'MBBS, MD (Pediatrics)'} · ${doctor.specialization || 'Pediatrician'}`, 50, ty, { width: 260 });
+      ty += 12;
+      if (doctor.clinicAddress) {
+        doc.text(String(doctor.clinicAddress), 50, ty, { width: 260 });
+        ty += Math.min(3, Math.ceil(String(doctor.clinicAddress).length / 45)) * 11;
+      }
+      doc.text('neokidspro.in', 50, ty, { width: 260 });
+    }
+
+    doc.fontSize(9).fillColor('#555')
+       .text(`Certificate ID: ${certificate.certificateNumber}`, 320, ly, { width: 225, align: 'right' });
+    doc.text(`Date of Issue: ${examDate}`, 320, ly + 14, { width: 225, align: 'right' });
+    doc.text(`Consultation: ${appointmentModeLabel(consultType || 'OFFLINE')}`, 320, ly + 28, { width: 225, align: 'right' });
+    if (certificate.appointment && certificate.appointment.date) {
+      const apptDt = `${fmtCertDate(certificate.appointment.date)}${certificate.appointment.startTime ? ' · ' + dayjs(`2000-01-01T${certificate.appointment.startTime}`).format('hh:mm A') : ''}`;
+      doc.text(`Appointment: ${apptDt}`, 320, ly + 42, { width: 225, align: 'right' });
+    }
+
+    const titleY = 185;
+    doc.fontSize(18).font('Helvetica-Bold').fillColor(BRAND_DARK)
+       .text(tpl.title, 50, titleY, { align: 'center', width: doc.page.width - 100 });
+    doc.moveTo(doc.page.width / 2 - 90, titleY + 26)
+       .lineTo(doc.page.width / 2 + 90, titleY + 26)
+       .strokeColor(BRAND_BLUE).lineWidth(1.5).stroke();
+
+    let cy = titleY + 48;
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('Patient: ', 50, cy, { continued: true })
+       .font('Helvetica').text(name);
+    cy += 16;
+    if (age || gender) {
+      doc.font('Helvetica-Bold').text('Age / Gender: ', 50, cy, { continued: true })
+         .font('Helvetica').text(`${age || 'N/A'}${gender ? ' / ' + gender : ''}`);
+      cy += 16;
+    }
+    if (patient && patient.phone) {
+      doc.font('Helvetica-Bold').text('Phone: ', 50, cy, { continued: true })
+         .font('Helvetica').text(`+91 ${patient.phone}`);
+      cy += 16;
+    }
+
+    cy += 12;
+    const bodyText = tpl.body({
+      name, age, gender, examDate, examClause, singleDate,
+      reason: certificate.reason,
+      fromDate: fmtCertDate(certificate.fromDate),
+      toDate: fmtCertDate(certificate.toDate),
+      restDays: certificate.restDays
+    });
+    doc.fontSize(12).font('Helvetica').fillColor('#222')
+       .text(bodyText, 50, cy, {
+         width: doc.page.width - 100,
+         lineGap: 4,
+         align: 'left'
+       });
+    cy = doc.y + 14;
+
+    if (durationType === 'DATE_RANGE' && (certificate.fromDate || certificate.toDate)) {
+      doc.fontSize(11).font('Helvetica-Bold').fillColor(BRAND_DARK)
+         .text(`Period: ${fmtCertDate(certificate.fromDate) || '—'} → ${fmtCertDate(certificate.toDate) || '—'}`, 50, cy);
+      cy = doc.y + 12;
+    } else if (singleDate) {
+      doc.fontSize(11).font('Helvetica-Bold').fillColor(BRAND_DARK)
+         .text(`Date: ${singleDate}`, 50, cy);
+      cy = doc.y + 12;
+    }
+
+    if (certificate.notes) {
+      doc.fontSize(10).font('Helvetica').fillColor('#555')
+         .text(`Notes: ${certificate.notes}`, 50, cy + 8, { width: doc.page.width - 100 });
+      cy = doc.y + 18;
+    }
+
+    drawSignatureBlock(doc, doctor, { y: doc.page.height - 130 });
+
+    doc.fontSize(8).fillColor('#888')
+       .text(`Issued via NeoKidsPro EMR. neokidspro.in`,
+             50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
+
+    doc.end();
+    stream.on('finish', () => resolve({
+      filepath, filename,
+      url: `/api/files/certificates/${certificate.id}.pdf`
+    }));
+    stream.on('error', reject);
+  });
+}
+
 module.exports = {
   generateInvoice,
   generatePrescription,
   generateSettlementInvoice,
-  generateMedicalCertificate,
   generateConsultationInvoice,
   generatePharmacyInvoice,
-  // exported for tests / future document types
-  resolveSignaturePath,
-  drawSignatureBlock
+  generateMedicalCertificate,
+  SUB_BRAND_NAME
 };
