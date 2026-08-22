@@ -74,13 +74,17 @@ function getLogoImage(doc) {
 
 function drawHeader(doc, title) {
   if (doc.page && doc.page.margins) doc.page.margins.bottom = 0;
-  const band = doc.linearGradient(0, 0, doc.page.width, 0);
-  band.stop(0, BRAND_TEAL_LIGHT).stop(1, BRAND_TEAL_DARK);
-  doc.rect(0, 0, doc.page.width, HEADER_BAND_HEIGHT).fill(band);
+  // The logo wordmark's "Neo" text is a pale colour meant for a plain white
+  // background (matches the app icon) — it washed out to near-illegible on
+  // the old solid teal band. Header is now a white band with a thin teal
+  // accent rule underneath, so the logo renders exactly as designed while
+  // the page still reads as branded.
+  doc.rect(0, 0, doc.page.width, HEADER_BAND_HEIGHT).fill('#FFFFFF');
+  doc.rect(0, HEADER_BAND_HEIGHT - 4, doc.page.width, 4).fill(BRAND_TEAL_DARK);
 
   const logo = getLogoImage(doc);
   let textX = 50;
-  doc.fillColor('white');
+  doc.fillColor(BRAND_DARK);
 
   if (logo) {
     // The logo is a full wordmark (icon + "NeoKidsPro" text baked into the
@@ -89,17 +93,17 @@ function drawHeader(doc, title) {
     // centered against the logo instead of the old 3-line text stack.
     const logoH = 58;
     const logoW = logoH * (logo.width / logo.height);
-    doc.image(logo, 50, (HEADER_BAND_HEIGHT - logoH) / 2, { height: logoH });
+    doc.image(logo, 50, (HEADER_BAND_HEIGHT - logoH) / 2 - 2, { height: logoH });
     textX = 50 + logoW + 16;
-    doc.font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', textX, 30, { lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, textX, 46, { lineBreak: false });
+    doc.fillColor(BRAND_TEAL_DARK).font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', textX, 30, { lineBreak: false });
+    doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, textX, 46, { lineBreak: false });
   } else {
-    doc.font('Helvetica-Bold').fontSize(22).text('NeoKidsPro', textX, 14, { lineBreak: false });
-    doc.font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', textX, 40, { lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, textX, 55, { lineBreak: false });
+    doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(22).text('NeoKidsPro', textX, 14, { lineBreak: false });
+    doc.fillColor(BRAND_TEAL_DARK).font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', textX, 40, { lineBreak: false });
+    doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, textX, 55, { lineBreak: false });
   }
 
-  doc.font('Helvetica-Bold').fontSize(16)
+  doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(16)
      .text(title, 0, 22, { align: 'right', width: doc.page.width - 50, lineBreak: false, ellipsis: true });
   doc.fillColor('black');
   doc.y = HEADER_BAND_HEIGHT + 12;
