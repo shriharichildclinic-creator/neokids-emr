@@ -135,6 +135,12 @@
           Staff Audit
         </button>
 
+        <div class="np-sidebar__section">Danger Zone</div>
+        <button class="np-nav-item" data-view="dataManagementView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Data Management
+        </button>
+
         <div class="np-sidebar__section">Account</div>
         <button class="np-nav-item" data-view="settingsView" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.1a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.1a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.1a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -224,7 +230,7 @@
             <div class="np-panel">
               <div class="np-panel__head">
                 <div style="flex:1">
-                  <div class="np-panel__title">Appointments — last 14 days</div>
+                  <div class="np-panel__title">Appointments — last 7 days</div>
                   <div class="np-panel__subtitle">Daily volume (all statuses)</div>
                 </div>
               </div>
@@ -374,7 +380,18 @@
                 </div>
               </div>
 
-              <div id="revKpiGrid" class="np-kpi-grid" style="margin-bottom:1rem;"></div>
+              <div id="revAnalytics" class="np-analytics" style="margin-bottom:1rem;" aria-label="Revenue analytics">
+                <div class="np-analytics-card np-analytics-card--revenue">
+                  <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow" id="revPeriodLabel">This period</div><div class="np-analytics-card__trend" id="revTrend"></div></div>
+                  <div class="np-analytics-card__value" id="revTotal">—</div>
+                  <div class="np-analytics-card__breakdown" id="revBreakdown"></div>
+                </div>
+                <div class="np-analytics-card np-analytics-card--today">
+                  <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Doctor payouts</div><div class="np-analytics-card__trend" id="revNetTrend"></div></div>
+                  <div class="np-analytics-card__value" id="revNet">—</div>
+                  <div class="np-analytics-card__breakdown" id="revNetBreakdown"></div>
+                </div>
+              </div>
 
               <div class="np-table-wrap">
                 <table class="np-table">
@@ -541,6 +558,27 @@
                   <button type="button" id="notifNextPage" class="np-pagination__btn" aria-label="Next page">Next ›</button>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+<section id="dataManagementView" class="tab-pane hidden">
+          <div class="np-panel" style="border-color:#FCA5A5;">
+            <div class="np-panel__head">
+              <div>
+                <div class="np-panel__title">Permanently delete a doctor or patient</div>
+                <div class="np-panel__subtitle">Irreversible. Deletes the record and every appointment, prescription, certificate and invoice attached to it. Use this to remove mock/test data or to fulfil a data-deletion request — not for normal deactivation.</div>
+              </div>
+            </div>
+            <div class="np-panel__body">
+              <div class="np-row" style="gap:.6rem;flex-wrap:wrap;margin-bottom:1rem;">
+                <select id="dmType" class="np-select" style="max-width:160px;">
+                  <option value="PATIENT">Patient</option>
+                  <option value="DOCTOR">Doctor</option>
+                </select>
+                <input id="dmSearch" type="search" class="np-input" style="flex:1;min-width:220px;" placeholder="Search by name, phone or email (min 2 characters)"/>
+              </div>
+              <div id="dmResults"></div>
             </div>
           </div>
         </section>
@@ -984,3 +1022,4 @@
 <script src="app.js"></script>
 <script src="finance.js"></script>
 <script src="staff.js"></script>
+<script src="data-management.js"></script>

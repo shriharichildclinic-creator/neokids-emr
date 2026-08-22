@@ -224,6 +224,16 @@ const VIEW_META = {
   notifView:       { title:'Notification Logs',  sub:'Audit WhatsApp & email deliveries' },
   settingsView:    { title:'Settings',           sub:'Account management' }
 };
+// Clicking a "recent appointment" row used to just dump the admin into the
+// full, unfiltered Appointments list — technically "somewhere", but not
+// the appointment they clicked. Pre-fill the search with that patient's
+// name so landing on Appointments actually shows their booking(s).
+function viewAppointmentInList(patientName){
+  const search = document.getElementById('apptSearch');
+  if (search) search.value = patientName || '';
+  setView('apptsView');
+}
+
 function setView(view, opts) {
   $$('.tab-pane').forEach(v => v.classList.add('hidden'));
   const el = document.getElementById(view); if (el) el.classList.remove('hidden');
@@ -401,10 +411,10 @@ function drawDailyChart(){
   const peakDateLabel = escapeHtml(new Date(data[peakIdx].date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }));
 
   wrap.innerHTML = `
-    <svg class="np-chart__svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Daily appointment volume for the last 14 days">
+    <svg class="np-chart__svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Daily appointment volume for the last ${n} days">
       <g class="np-chart__grid-group">${gridLines}</g>
-      ${avgLine}
       <g class="np-chart__bars">${bars}</g>
+      ${avgLine}
       <g class="np-chart__ylabels">${yLabels}</g>
       <g class="np-chart__xlabels">${xlabels}</g>
       <line class="np-chart__axis" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${(marginTop + plotH).toFixed(1)}" y2="${(marginTop + plotH).toFixed(1)}"></line>
@@ -535,7 +545,10 @@ async function loadDashboard() {
       return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${fmtCurrency(d.revenue)}"></div>`;
     }).join(''));
 
-    try { renderDailyChart(daily); } catch (_) {}
+    // Full 14 days is too dense for a comfortable bar width in the panel's
+    // available space, and the analytics cards above already cover the
+    // longer 7-vs-7 comparison — the chart itself only needs the latest week.
+    try { renderDailyChart(daily.slice(7)); } catch (_) {}
 
     // Revenue by source — online / in-clinic / pharmacy, each showing money
     // actually collected with pending noted separately so nothing is inflated.
@@ -562,7 +575,7 @@ async function loadDashboard() {
     $('#recentAppts').innerHTML = (appts.length === 0)
       ? `<div class="np-empty"><div class="np-empty__title">No appointments yet</div><div class="np-empty__sub">Bookings will show up here.</div></div>`
       : appts.slice(0, 10).map(a => `
-        <div class="np-appt-row" onclick="setView('apptsView')">
+        <div class="np-appt-row" style="cursor:pointer" title="View ${escapeHtml(a.patient.name)}'s appointments" onclick="viewAppointmentInList('${escapeHtml((a.patient.name||'').replace(/'/g, "\\'"))}')">
           <div class="np-appt-row__time">
             <div class="np-appt-row__time-h">${escapeHtml(fmtTime(a.startTime))}</div>
             <div class="np-appt-row__time-d">${escapeHtml(fmtDate(a.date))}</div>
@@ -607,7 +620,7 @@ function _docInitials(name){
 }
 function _docAvatar(d){
   if (d.photoUrl) {
-    return `<img class="np-doc-card__avatar" src="${escapeHtml(d.photoUrl)}" alt="${drNameHtml(d.name)}"/>`;
+    return `<img class="np-doc-card__avatar" src="${escapeHtml(d.photoUrl)}" alt="Dr. ${escapeHtml(d.name)}" style="cursor:zoom-in" onclick="event.stopPropagation(); NPLightbox.open('${escapeHtml(d.photoUrl)}', 'Dr. ${escapeHtml((d.name||'').replace(/'/g, "\\'"))}')"/>`;
   }
   return `<div class="np-doc-card__avatar" aria-hidden="true">${escapeHtml(_docInitials(d.name))}</div>`;
 }
@@ -814,6 +827,8 @@ function setDoctorPhotoPreview(url){
   const removeBtn = $('#doctorPhotoRemoveBtn');
   if (url){
     img.src = url; img.classList.remove('hidden');
+    img.style.cursor = 'zoom-in';
+    img.onclick = () => NPLightbox.open(url, 'Doctor photo');
     placeholder.classList.add('hidden');
     removeBtn.classList.remove('hidden');
   } else {
@@ -944,7 +959,11 @@ $('#doctorForm').addEventListener('submit', async (e) => {
   const isEdit = f.dataset.mode === 'edit';
   const payload = {
     name: (raw.name || '').trim(),
-    phone: (raw.phone || '').replace(/\D/g, '').replace(/^91/, ''),
+    // Only strip a genuine country-code prefix (12 digits total, e.g. a
+    // pasted "+91 9876543210"). A bare replace(/^91/,'') would also mangle
+    // any valid 10-digit number that simply starts with 91, e.g.
+    // "9177211867" → "77211867" (8 digits, then fails phone validation).
+    phone: (() => { const d = (raw.phone || '').replace(/\D/g, ''); return d.length === 12 && d.startsWith('91') ? d.slice(2) : d; })(),
     specialization: (raw.specialization || '').trim() || undefined,
     qualification: (raw.qualification || '').trim() || undefined,
     experience: raw.experience === '' ? 0 : Number(raw.experience),
@@ -1017,7 +1036,7 @@ async function openInsights(id){
 
     body.innerHTML = `
       <div class="np-row" style="gap:.85rem; margin-bottom:1rem;">
-        ${d.photoUrl ? `<img class="np-profile__avatar" style="width:60px;height:60px;border-radius:14px;" src="${escapeHtml(d.photoUrl)}"/>`
+        ${d.photoUrl ? `<img class="np-profile__avatar" style="width:60px;height:60px;border-radius:14px;cursor:zoom-in" src="${escapeHtml(d.photoUrl)}" alt="Dr. ${escapeHtml(d.name)}" onclick="NPLightbox.open('${escapeHtml(d.photoUrl)}', 'Dr. ${escapeHtml((d.name||'').replace(/'/g, "\\'"))}')"/>`
                     : `<div class="np-profile__avatar" style="width:60px;height:60px;border-radius:14px;">${escapeHtml((d.name||'D').split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase())}</div>`}
         <div style="flex:1;">
           <div style="font-weight:700; color:var(--np-ink);">${drNameHtml(d.name)}</div>
@@ -1624,9 +1643,8 @@ async function showDashboard() {
       if ($('#adminIdName')) $('#adminIdName').textContent = u.name;
       if ($('#adminIdInitials')) $('#adminIdInitials').textContent = initials;
       if ($('#adminIdEmail')) $('#adminIdEmail').textContent = u.email || '';
-      const first = u.name.split(/\s+/)[0] || u.name;
       const nameEl = $('#dashWelcomeName');
-      if (nameEl) nameEl.textContent = 'Welcome back, ' + first + ' 👋';
+      if (nameEl) nameEl.textContent = 'Welcome back, ' + u.name + ' 👋';
     }
     startDashClock();
   } catch(e) {

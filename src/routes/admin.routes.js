@@ -4,6 +4,7 @@ const clinic = require('../controllers/admin-clinic.controller');
 const fin  = require('../controllers/finance.controller');
 const kyc  = require('../controllers/kyc.controller');
 const cert = require('../controllers/certificate.controller');
+const dataMgmt = require('../controllers/admin-data.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const {
   uploadKycDocuments, KYC_FIELDS, uploadProfileImage
@@ -12,6 +13,14 @@ const {
 router.use(authenticate, requireRole('ADMIN'));
 
 router.get('/analytics', c.analytics);
+
+// Data Management — permanent deletion. Kept apart from the regular
+// Doctors/Patients screens on purpose: same admin auth as every other
+// route here, but a separate, clearly-labeled surface for an irreversible
+// action, not something one accidental click away from Edit/Deactivate.
+router.get('/data-management/search', dataMgmt.search);
+router.delete('/data-management/patients/:id', dataMgmt.purgePatient);
+router.delete('/data-management/doctors/:id', dataMgmt.purgeDoctor);
 
 // Doctors
 router.post('/doctors', c.createDoctor);

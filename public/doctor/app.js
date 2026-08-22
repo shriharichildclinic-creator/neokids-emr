@@ -301,9 +301,10 @@ function renderDoctorHeader(d){
   $('#docSpec').textContent = d.specialization || 'Pediatrician';
   const initials = (clean || 'D').split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
   if (d.photoUrl){
-    $('#docPhotoTop').innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
+    const openLightbox = `NPLightbox.open('${escapeHtml(d.photoUrl)}', '${escapeHtml(name.replace(/'/g, "\\'"))}')`;
+    $('#docPhotoTop').innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}" style="cursor:zoom-in" onclick="${openLightbox}">`;
     const large = $('#docPhotoLarge');
-    if (large) large.innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}">`;
+    if (large) large.innerHTML = `<img src="${escapeHtml(d.photoUrl)}" alt="${escapeHtml(name)}" style="cursor:zoom-in" onclick="${openLightbox}">`;
   } else {
     $('#docPhotoTop').innerHTML = `<span>${escapeHtml(initials)}</span>`;
     const large = $('#docPhotoLarge');

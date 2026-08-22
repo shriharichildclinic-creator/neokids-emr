@@ -118,25 +118,28 @@ async function loadRevenue() {
     if (ptype)    q.set('paymentType', ptype);
     if (source)   q.set('source', source);
 
+    // Same endpoint, previous calendar month — gives a real period-over-
+    // period trend for free, no backend change needed.
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear  = month === 1 ? year - 1 : year;
+    const prevQ = new URLSearchParams(q); prevQ.set('year', prevYear); prevQ.set('month', prevMonth);
+
     const tbody = $('#revenueTbody');
     tbody.innerHTML = `<tr><td colspan="9" class="np-empty"><div>Loading…</div></td></tr>`;
 
-    let data;
-    try { data = await api('/admin/finance/revenue-report?' + q.toString()); }
+    let data, prevData;
+    try {
+      [data, prevData] = await Promise.all([
+        api('/admin/finance/revenue-report?' + q.toString()),
+        api('/admin/finance/revenue-report?' + prevQ.toString()).catch(() => null)
+      ]);
+    }
     catch (err) {
       tbody.innerHTML = `<tr><td colspan="9" class="np-empty"><div>Failed: ${escapeHtml(err.message)}</div></td></tr>`;
       return;
     }
 
-    const g = data.grandTotals;
-    $('#revKpiGrid').innerHTML = [
-      kpi('Total Revenue',     compactInr(g.totalRevenue), inr(g.totalRevenue), 'blue'),
-      kpi('NeoKidsPro Share',  compactInr(g.clinicShare),  inr(g.clinicShare),  'mint'),
-      kpi('Doctor Gross',      compactInr(g.doctorGross),  inr(g.doctorGross),  'cream'),
-      kpi('TDS Deducted',      compactInr(g.tds),          inr(g.tds),          'coral'),
-      kpi('Net to Doctors',    compactInr(g.doctorNet),    inr(g.doctorNet),    'blue'),
-      kpi('Consultations',     String(g.consultations),    `${g.consultations} Cashfree-paid appts`, 'mint')
-    ].join('');
+    renderRevenueAnalytics(data.grandTotals, prevData && prevData.grandTotals, MONTH_NAMES[month - 1], year);
 
     if (!data.rows.length) {
       tbody.innerHTML = `<tr><td colspan="9" class="np-empty"><div>No revenue for this period.</div></td></tr>`;
@@ -177,6 +180,40 @@ async function loadRevenue() {
         </tr>
       `;
     }).join('');
+  }
+
+  function trendChip(delta, label, isPercent){
+    if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
+    const up = delta > 0;
+    const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
+    return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
+  }
+
+  function pctDelta(curr, prev){
+    if (!prev) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / prev) * 100);
+  }
+
+  function renderRevenueAnalytics(g, pg, monthLabel, year){
+    const revEl = $('#revPeriodLabel');
+    if (revEl) revEl.textContent = `${monthLabel} ${year}`;
+
+    const revDelta = pg ? pctDelta(g.totalRevenue, pg.totalRevenue) : 0;
+    const trendEl = $('#revTrend');
+    if (trendEl) trendEl.innerHTML = pg ? trendChip(revDelta, 'vs last month', true) : '';
+    const totalEl = $('#revTotal'); if (totalEl) totalEl.textContent = inr(g.totalRevenue);
+    const bd = $('#revBreakdown');
+    if (bd) bd.innerHTML =
+      `<span class="np-dot np-dot--mint"></span>${inr(g.clinicShare)} NeoKidsPro share` +
+      `<span class="np-dot np-dot--amber"></span>${inr(g.tds)} TDS deducted` +
+      `<span class="np-dot np-dot--blue"></span>${g.consultations} consultations`;
+
+    const netDelta = pg ? pctDelta(g.doctorNet, pg.doctorNet) : 0;
+    const netTrendEl = $('#revNetTrend');
+    if (netTrendEl) netTrendEl.innerHTML = pg ? trendChip(netDelta, 'vs last month', true) : '';
+    const netEl = $('#revNet'); if (netEl) netEl.textContent = inr(g.doctorNet);
+    const netBd = $('#revNetBreakdown');
+    if (netBd) netBd.innerHTML = `<span class="np-dot np-dot--mint"></span>${inr(g.doctorGross)} gross before TDS`;
   }
 
   function kpi(label, big, sub, kind='blue') {

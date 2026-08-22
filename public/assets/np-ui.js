@@ -509,6 +509,12 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   .np-dropzone input{display:none}
 
 .np-sticky-head thead th{position:sticky;top:0;z-index:5;background:inherit}
+
+.np-lightbox{position:fixed;inset:0;z-index:100002;display:flex;align-items:center;justify-content:center;padding:32px;background:rgba(8,12,18,.82);opacity:0;transition:opacity .15s ease;cursor:zoom-out}
+  .np-lightbox.is-visible{opacity:1}
+  .np-lightbox__img{max-width:min(90vw,560px);max-height:85vh;border-radius:16px;box-shadow:0 25px 60px -12px rgba(0,0,0,.6);object-fit:contain;cursor:default}
+  .np-lightbox__close{position:absolute;top:16px;right:20px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:24px;line-height:1;cursor:pointer;display:grid;place-items:center}
+  .np-lightbox__close:hover{background:rgba(255,255,255,.22)}
   `;
 
   function injectStyles() {
@@ -792,6 +798,39 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     bind(table) { if (table) table.classList.add('np-sticky-head'); },
   };
 
+  // Click-to-enlarge for any profile photo (doctor avatars in Admin's
+  // doctor grid/insights drawer, the Doctor portal's own header/profile
+  // photo, etc.) — one shared lightbox instead of a bespoke modal per page.
+  let _lightboxHost = null;
+  const NPLightbox = {
+    open(url, alt) {
+      if (!url) return;
+      this.close();
+      injectStyles();
+      const host = document.createElement('div');
+      host.className = 'np-lightbox';
+      host.setAttribute('role', 'dialog');
+      host.setAttribute('aria-modal', 'true');
+      host.innerHTML =
+        '<button type="button" class="np-lightbox__close" aria-label="Close">&times;</button>' +
+        '<img class="np-lightbox__img" src="' + String(url).replace(/"/g, '&quot;') + '" alt="' + String(alt || '').replace(/"/g, '&quot;') + '"/>';
+      host.addEventListener('click', (e) => { if (e.target === host) this.close(); });
+      host.querySelector('.np-lightbox__close').addEventListener('click', () => this.close());
+      document.addEventListener('keydown', this._onKey);
+      document.body.appendChild(host);
+      requestAnimationFrame(() => host.classList.add('is-visible'));
+      _lightboxHost = host;
+    },
+    close() {
+      if (!_lightboxHost) return;
+      const host = _lightboxHost; _lightboxHost = null;
+      document.removeEventListener('keydown', NPLightbox._onKey);
+      host.classList.remove('is-visible');
+      setTimeout(() => host.remove(), 150);
+    },
+    _onKey(e) { if (e.key === 'Escape') NPLightbox.close(); },
+  };
+
   global.NPTheme      = NPTheme;
   global.NPPalette    = NPPalette;
   global.NPChips      = NPChips;
@@ -799,6 +838,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   global.NPDropzone   = NPDropzone;
   global.NPSticky     = NPSticky;
   global.NPDatePicker = NPDatePicker;
+  global.NPLightbox   = NPLightbox;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { NPTheme.init(); NPDatePicker.init(); });
