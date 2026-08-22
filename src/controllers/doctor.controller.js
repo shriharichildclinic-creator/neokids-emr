@@ -448,6 +448,17 @@ exports.createPrescription = asyncHandler(async (req, res) => {
 
   const delivery = await automation.onPrescriptionCreated(appt, rx);
 
+  const pharmacyUserIds = await staffAccess.getPharmacyUserIdsForDoctor(req.user.id).catch(() => []);
+  for (const pharmacyUserId of pharmacyUserIds) {
+    await notifications.create({
+      userType: 'PHARMACY', userId: pharmacyUserId,
+      type: 'PRESCRIPTION_CREATED', title: 'New prescription to dispense',
+      message: `Dr. ${appt.doctor.name} prescribed medicines for ${appt.patient.name} — ready to dispense.`,
+      iconUrl: appt.doctor.photoUrl || null,
+      entityType: 'PRESCRIPTION', entityId: rx.id
+    }).catch(() => {});
+  }
+
   const refreshed = await prisma.appointment.findUnique({
     where: { id },
     include: { prescription: true, patient: true, doctor: true }

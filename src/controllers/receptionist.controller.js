@@ -509,10 +509,18 @@ exports.cancel = asyncHandler(async (req, res) => {
     summary: `Cancelled ${appt.patient.name} with Dr. ${appt.doctor.name} (${reason})`,
     medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
   });
+  const cancelMsg = `${appt.patient.name}'s appointment on ${String(appt.date).slice(0, 10)} at ${appt.startTime} was cancelled by ${me.name} at reception (${reason}).`;
   await notifications.create({
     userType: 'DOCTOR', userId: appt.doctorId,
     type: 'APPOINTMENT_CANCELLED', title: 'Appointment cancelled',
-    message: `${appt.patient.name}'s appointment on ${String(appt.date).slice(0, 10)} at ${appt.startTime} was cancelled by ${me.name} at reception (${reason}).`,
+    message: cancelMsg,
+    iconUrl: me.photoUrl || null,
+    entityType: 'APPOINTMENT', entityId: appt.id
+  }).catch(() => {});
+  await notifications.create({
+    userType: 'ADMIN', userId: null,
+    type: 'APPOINTMENT_CANCELLED', title: 'Appointment cancelled by reception',
+    message: cancelMsg,
     iconUrl: me.photoUrl || null,
     entityType: 'APPOINTMENT', entityId: appt.id
   }).catch(() => {});
@@ -727,6 +735,16 @@ exports.createPrescription = asyncHandler(async (req, res) => {
   });
   const automation = require('../services/automation.service');
   automation.onPrescriptionCreated(appt, rx).catch(e => logger.error('receptionist prescription notify failed', e.message));
+  const pharmacyUserIds = await staffAccess.getPharmacyUserIdsForDoctor(appt.doctorId).catch(() => []);
+  for (const pharmacyUserId of pharmacyUserIds) {
+    await notifications.create({
+      userType: 'PHARMACY', userId: pharmacyUserId,
+      type: 'PRESCRIPTION_CREATED', title: 'New prescription to dispense',
+      message: `${me.name} added a prescription for ${appt.patient.name} (Dr. ${appt.doctor.name}) — ready to dispense.`,
+      iconUrl: appt.doctor.photoUrl || null,
+      entityType: 'PRESCRIPTION', entityId: rx.id
+    }).catch(() => {});
+  }
   await audit.log({
     actor: actorOf(req, me), action: 'PRESCRIPTION_CREATED', entityType: 'PRESCRIPTION', entityId: rx.id,
     summary: `Added prescription for ${appt.patient.name} (on behalf of Dr. ${appt.doctor.name})`,

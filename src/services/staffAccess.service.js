@@ -128,6 +128,17 @@ async function getPharmacyDoctorIds(pharmacyUserId) {
   return [...new Set(rows.map(r => r.doctorId))];
 }
 
+// Reverse of getPharmacyDoctorIds — every pharmacy user assigned to a given
+// doctor. Used to notify the medical store when that doctor creates a new
+// (offline) prescription that needs dispensing.
+async function getPharmacyUserIdsForDoctor(doctorId) {
+  const rows = await prisma.pharmacyUserDoctor.findMany({
+    where: { doctorId },
+    select: { pharmacyUserId: true }
+  });
+  return [...new Set(rows.map(r => r.pharmacyUserId))];
+}
+
 async function getPharmacyAssignments(pharmacyUserId) {
   return prisma.pharmacyUserDoctor.findMany({
     where: { pharmacyUserId },
@@ -211,6 +222,7 @@ module.exports = {
   patientHasDoctorLink,
   getPharmacyUser,
   getPharmacyDoctorIds,
+  getPharmacyUserIdsForDoctor,
   getPharmacyAssignments,
   getPharmacyPatientScope
 };

@@ -8,6 +8,7 @@ const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
 const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 const audit = require('../services/audit.service');
+const notifications = require('../services/notification.service');
 
 function adminActor(req) {
   return { id: req.user.id, role: 'ADMIN', name: req.user.email };
@@ -253,7 +254,7 @@ exports.refundAppointment = asyncHandler(async (req, res) => {
 
   const appt = await prisma.appointment.findUnique({
     where: { id: req.params.id },
-    include: { patient: true, doctor: { select: { name: true } } }
+    include: { patient: true, doctor: { select: { id: true, name: true, photoUrl: true } } }
   });
   if (!appt) return res.status(404).json({ error: 'Appointment not found' });
   if (appt.status !== 'CANCELLED') {
@@ -289,6 +290,14 @@ exports.refundAppointment = asyncHandler(async (req, res) => {
     summary: `Refunded ₹${Number(appt.feeAtBooking).toFixed(2)} to ${appt.patient.name} for the cancelled appointment with Dr. ${appt.doctor.name}`,
     doctorId: appt.doctorId
   });
+
+  await notifications.create({
+    userType: 'DOCTOR', userId: appt.doctorId,
+    type: 'APPOINTMENT_REFUNDED', title: 'Payment refunded',
+    message: `₹${Number(appt.feeAtBooking).toFixed(2)} paid by ${appt.patient.name} was refunded for their cancelled appointment — this consultation is no longer part of your earnings.`,
+    iconUrl: appt.doctor.photoUrl || null,
+    entityType: 'APPOINTMENT', entityId: appt.id
+  }).catch(() => {});
 
   res.json(updated);
 });
