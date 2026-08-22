@@ -525,6 +525,31 @@ exports.markArrived = asyncHandler(async (req, res) => {
   res.json(updated);
 });
 
+// Explicit, staff-initiated cash collection — the only way a CASH_PENDING
+// appointment becomes CASH_COLLECTED. Neither completing a consultation nor
+// the auto-complete cron flips this on its own; someone actually collecting
+// the money has to say so.
+exports.markPaid = asyncHandler(async (req, res) => {
+  const me = await requireConsultations(req, res);
+  if (!me) return;
+  const ok = await staffAccess.canAccessAppointment(me.id, req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Appointment not found' });
+  const appt = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { doctor: true, patient: true } });
+  if (appt.paymentStatus !== 'CASH_PENDING') {
+    return res.status(400).json({ error: 'Only a cash-pending appointment can be marked as paid' });
+  }
+  const updated = await prisma.appointment.update({
+    where: { id: appt.id },
+    data: { paymentStatus: 'CASH_COLLECTED' }
+  });
+  await audit.log({
+    actor: actorOf(req, me), action: 'APPOINTMENT_MARKED_PAID', entityType: 'APPOINTMENT', entityId: appt.id,
+    summary: `Marked cash collected for ${appt.patient.name} with Dr. ${appt.doctor.name}`,
+    medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
+  });
+  res.json(updated);
+});
+
 // ─── Consultation invoices ───
 exports.generateInvoice = asyncHandler(async (req, res) => {
   const me = await requireConsultations(req, res);

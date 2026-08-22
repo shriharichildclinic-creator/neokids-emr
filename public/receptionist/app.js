@@ -135,7 +135,21 @@ function apptActionsHtml(a){
   if(__me.canIssueCertificates && a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertModal('${a.id}')">Certificate</button>`);
   }
+  if(a.paymentStatus==='CASH_PENDING' && a.status!=='CANCELLED'){
+    btns.push(`<button class="np-btn np-btn--sm np-btn--primary" onclick="markAppointmentPaid('${a.id}')">Mark as paid</button>`);
+  }
   return btns.join(' ');
+}
+
+async function markAppointmentPaid(id){
+  const ok = await NPModal.confirm({
+    title: 'Mark cash collected?',
+    message: 'Confirms this appointment’s consultation fee was received in cash at the clinic.',
+    okText: 'Mark as paid',
+  });
+  if(!ok) return;
+  try{ await api('/receptionist/appointments/'+id+'/mark-paid',{method:'POST',body:'{}'}); toast('Marked as paid'); loadDashboard(); loadAppointments(); }
+  catch(e){ toast(e.message,'error'); }
 }
 
 // Single "Actions" entry point for an invoice row — replaces the old

@@ -19,11 +19,31 @@
 // survives even though the underlying data does not.
 // =====================================================================
 const prisma = require('../config/prisma');
+const bcrypt = require('bcryptjs');
 const { asyncHandler } = require('../middleware/errorHandler');
 const audit = require('../services/audit.service');
 
 function adminActor(req) {
   return { id: req.user.id, role: 'ADMIN', name: req.user.email };
+}
+
+// A permanent delete is irreversible, so it requires the acting admin to
+// re-enter their own password — a stolen/left-open session alone is not
+// enough to wipe a patient or doctor. Checked fresh against the DB on every
+// call rather than trusting anything from the JWT.
+async function verifyAdminPassword(req, res) {
+  const password = req.body && req.body.confirmPassword;
+  if (!password) {
+    res.status(400).json({ error: 'Your admin password is required to confirm a permanent deletion' });
+    return false;
+  }
+  const admin = await prisma.admin.findUnique({ where: { id: req.user.id } });
+  const ok = admin && await bcrypt.compare(password, admin.passwordHash);
+  if (!ok) {
+    res.status(401).json({ error: 'Incorrect password' });
+    return false;
+  }
+  return true;
 }
 
 exports.search = asyncHandler(async (req, res) => {
@@ -61,6 +81,7 @@ exports.search = asyncHandler(async (req, res) => {
 });
 
 exports.purgePatient = asyncHandler(async (req, res) => {
+  if (!(await verifyAdminPassword(req, res))) return;
   const patient = await prisma.patient.findUnique({ where: { id: req.params.id } });
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
@@ -94,6 +115,7 @@ exports.purgePatient = asyncHandler(async (req, res) => {
 });
 
 exports.purgeDoctor = asyncHandler(async (req, res) => {
+  if (!(await verifyAdminPassword(req, res))) return;
   const doctor = await prisma.doctor.findUnique({ where: { id: req.params.id } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
 

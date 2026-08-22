@@ -11,35 +11,43 @@
 //     Gmail, Outlook, Apple Mail, and mobile clients.
 //   • A trust-building header + footer with contact info & unsubscribe.
 //
-// Brand palette (from neokidspro.in):
-//   Primary Blue      #4DA8FF   (buttons, headings, links)
-//   Primary Deep      #1E6FBF   (hover / darker CTA)
-//   Accent Yellow     #FFC857   (soft callouts, kid-friendly touch)
-//   Accent Pink       #FF7EB6   (secondary accent)
+// Brand palette — matches the real neokidspro.in / public/assets/neokids-theme.css
+// theme (--nk-teal-*, --nk-orange-400, --nk-pink-400), not the unrelated blue
+// this file used to hardcode:
+//   Primary Teal      #89BCBD   (header band start, buttons, headings)
+//   Primary Deep      #5A9495   (header band end / hover CTA)
+//   Accent Orange     #F9A945   (soft callouts, kid-friendly touch)
+//   Accent Pink       #FE84A4   (secondary accent)
 //   Text Dark         #1F2937
 //   Text Muted        #6B7280
 //   Card BG           #FFFFFF
-//   Page BG           #F5F9FF   (very light blue tint)
-//   Border            #E6EEF7
+//   Page BG           #F1F7F7   (light teal tint)
+//   Border            #D9E6E6
 // =====================================================================
+
+const EMR_BASE = (process.env.EMR_URL || process.env.API_URL || process.env.APP_URL || '').replace(/\/+$/, '');
 
 const BRAND = {
   name:        process.env.CLINIC_NAME || 'NeoKidsPro',
-  tagline:     'Paediatric Care, Simplified',
+  tagline:     'Pediatric Network of Doctors',
   primaryUrl:  (process.env.NEOKIDS_URL || 'https://neokidspro.in').replace(/\/+$/, ''),
   vaxUrl:      (process.env.VACC_PORTAL_URL || 'https://vaxiclinics.com').replace(/\/+$/, ''),
   supportEmail: process.env.SUPPORT_EMAIL || 'admin@neokidspro.in',
   supportPhone: process.env.SUPPORT_PHONE || '',
+  // Absolute URL so the logo renders in every mail client (Gmail/Outlook/
+  // Apple Mail all need a real hosted image, not a relative path or a
+  // data: URI — many clients strip data: URIs from inbound HTML mail).
+  logoUrl: EMR_BASE ? `${EMR_BASE}/assets/logo-neokidspro.png` : '',
   colors: {
-    primary:   '#4DA8FF',
-    primaryDk: '#1E6FBF',
-    accent:    '#FFC857',
-    accentPk:  '#FF7EB6',
+    primary:   '#89BCBD',
+    primaryDk: '#5A9495',
+    accent:    '#F9A945',
+    accentPk:  '#FE84A4',
     text:      '#1F2937',
     muted:     '#6B7280',
     card:      '#FFFFFF',
-    page:      '#F5F9FF',
-    border:    '#E6EEF7',
+    page:      '#F1F7F7',
+    border:    '#D9E6E6',
     warnBg:    '#FFF8E6',
     warnBd:    '#F2E3B3',
     warnTx:    '#6B5B21'
@@ -74,7 +82,7 @@ function renderBrandedEmail({ preheader = '', headline, subhead = '', bodyHtml, 
            style="display:inline-block;padding:14px 28px;background:${b.color || c.primary};
                   color:#ffffff;border-radius:10px;text-decoration:none;font-weight:600;
                   font-family:Arial,Helvetica,sans-serif;font-size:15px;letter-spacing:.2px;
-                  box-shadow:0 2px 6px rgba(30,111,191,.25);">
+                  box-shadow:0 2px 6px rgba(90,148,149,.3);">
           ${esc(b.label)}
         </a>
       </td>
@@ -121,19 +129,25 @@ function renderBrandedEmail({ preheader = '', headline, subhead = '', bodyHtml, 
         <table role="presentation" class="np-wrap" width="600" cellspacing="0" cellpadding="0"
                style="width:600px;max-width:600px;background:${c.card};border-radius:16px;
                       overflow:hidden;border:1px solid ${c.border};
-                      box-shadow:0 6px 24px rgba(30,111,191,.06);">
+                      box-shadow:0 6px 24px rgba(15,46,58,.08);">
 
           <!-- Header / Brand bar -->
           <tr>
             <td style="background:linear-gradient(135deg, ${c.primary} 0%, ${c.primaryDk} 100%);
-                       padding:22px 28px;">
+                       padding:20px 28px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;">
-                    <div style="font-size:22px;font-weight:700;letter-spacing:.3px;">
+                  <td style="vertical-align:middle;">
+                    ${BRAND.logoUrl ? `
+                    <img src="${BRAND.logoUrl}" alt="${esc(BRAND.name)}" width="132" height="auto"
+                         style="display:block;max-width:132px;width:132px;height:auto;border:0;outline:none;">
+                    ` : `
+                    <div style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:22px;
+                                font-weight:700;letter-spacing:.3px;">
                       ${esc(BRAND.name)}
-                    </div>
-                    <div style="font-size:12px;opacity:.85;margin-top:2px;">
+                    </div>`}
+                    <div style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:12px;
+                                opacity:.9;margin-top:6px;">
                       ${esc(BRAND.tagline)}
                     </div>
                   </td>

@@ -779,25 +779,31 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 .np-kyc-grid{
   display:grid;
   grid-template-columns: repeat(2, minmax(0,1fr));
-  gap:.65rem;
+  gap:.75rem;
   align-items:stretch;
 }
+@media (min-width:860px){ .np-kyc-grid{ grid-template-columns: repeat(4, minmax(0,1fr)); } }
 @media (max-width:599px){ .np-kyc-grid{ grid-template-columns: 1fr; } }
 .np-kyc-card{
   display:flex;
   flex-direction:column;
-  gap:.5rem;
-  min-height:112px;
+  gap:.55rem;
+  min-height:120px;
   background: var(--nk-surface);
   border:1px solid var(--np-border);
-  border-radius:10px;
-  padding:.7rem .75rem;
+  border-radius:12px;
+  padding:.85rem .9rem;
   box-sizing:border-box;
   min-width:0;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.np-kyc-card:hover{
+  border-color: var(--nk-teal-200);
+  box-shadow: 0 4px 14px -8px rgba(15,46,58,.18);
 }
 .np-kyc-card__head{
   display:flex;
-  align-items:baseline;
+  align-items:flex-start;
   justify-content:space-between;
   gap:.4rem;
   min-width:0;
@@ -1117,6 +1123,10 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #apptsView .np-table td[colspan]{ display:block; padding:.5rem 0; text-align:center; border:0; }
   #apptsView .np-table tr:hover td{ background:transparent; }
   html[data-theme="dark"] #apptsView .np-table tr{ background:var(--nk-card) !important; border-color:var(--nk-border) !important; }
+
+  /* .np-table--cards mobile transform lives in the shared
+     assets/neokids-theme.css (loaded by every portal) so Doctor,
+     Receptionist and Pharmacy tables can use it too, not just Admin. */
 
   #notifView .np-table-wrap{ border:0; background:transparent; }
   #notifView .np-table, #notifView .np-table tbody{ display:block; width:100%; min-width:0; }

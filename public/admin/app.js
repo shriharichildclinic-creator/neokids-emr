@@ -1796,9 +1796,7 @@ function setKycFieldStatus(elId, viewElId, url){
   const viewEl   = $('#' + viewElId);
   if (!statusEl || !viewEl) return;
   if (url) {
-    statusEl.textContent = '— uploaded ✓';
-    statusEl.style.color = '#0F8A4F';
-    const fname = String(url).split('/').pop();
+    statusEl.innerHTML = '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Uploaded</span>';
     const KIND_BY_VIEW = {
       kycAadhaarView: 'aadhaar',
       kycPanView: 'pan',
@@ -1810,8 +1808,7 @@ function setKycFieldStatus(elId, viewElId, url){
                   '/' + encodeURIComponent(kind);
     viewEl.classList.remove('hidden');
   } else {
-    statusEl.textContent = '— not uploaded';
-    statusEl.style.color = '';
+    statusEl.innerHTML = '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Not uploaded</span>';
     viewEl.classList.add('hidden');
     viewEl.removeAttribute('href');
   }

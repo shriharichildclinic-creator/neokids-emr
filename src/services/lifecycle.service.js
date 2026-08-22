@@ -1,60 +1,6 @@
 const prisma  = require('../config/prisma');
 const logger  = require('../utils/logger');
 const { expirePendingAppointments } = require('./appointment-state.service');
-const { getTodayDateOnly, getCurrentTimeMinutes } = require('../utils/date');
-
-/**
- * Auto-complete appointments whose endTime has passed.
- * This is the ONLY place revenue/consults are incremented for online appointments
- * (the duplicate increment in onOnlineBookingConfirmed has been removed).
- */
-async function autoCompletePassedAppointments() {
-  const today = getTodayDateOnly();
-  const nowMinutes = getCurrentTimeMinutes();
-
-  const passed = await prisma.appointment.findMany({
-    where: { date: today, status: 'CONFIRMED' },
-    select: { id: true, endTime: true, feeAtBooking: true, doctorId: true, paymentStatus: true }
-  });
-
-  const toComplete = passed.filter(a => {
-    const [h, m] = a.endTime.split(':').map(Number);
-    return (h * 60 + m) <= nowMinutes;
-  });
-
-  if (!toComplete.length) return 0;
-
-  const byDoctor = {};
-  let completedCount = 0;
-  for (const a of toComplete) {
-    const claim = await prisma.appointment.updateMany({
-      where: { id: a.id, status: 'CONFIRMED' },
-      data: {
-        status: 'COMPLETED',
-        completedAt: new Date(),
-        ...(a.paymentStatus === 'CASH_PENDING' ? { paymentStatus: 'CASH_COLLECTED' } : {})
-      }
-    });
-    if (claim.count === 0) continue;
-    completedCount += 1;
-    if (a.paymentStatus === 'PAID' || a.paymentStatus === 'CASH_PENDING') {
-      if (!byDoctor[a.doctorId]) byDoctor[a.doctorId] = { revenue: 0, consults: 0 };
-      byDoctor[a.doctorId].revenue += Number(a.feeAtBooking);
-      byDoctor[a.doctorId].consults += 1;
-    }
-  }
-  for (const [doctorId, agg] of Object.entries(byDoctor)) {
-    await prisma.doctor.update({
-      where: { id: doctorId },
-      data: { revenue: { increment: agg.revenue }, consults: { increment: agg.consults } }
-    });
-  }
-
-  if (completedCount) {
-    logger.info(`Auto-completed ${completedCount} appointment(s); credited ${Object.keys(byDoctor).length} doctor(s)`);
-  }
-  return completedCount;
-}
 
 async function incrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
   if (!['PAID', 'CASH_PENDING', 'CASH_COLLECTED'].includes(paymentStatus)) return;
@@ -118,7 +64,9 @@ async function runLifecycleJobs() {
   _jobsStartedAt = Date.now();
   try {
     await expirePendingAppointments();
-    await autoCompletePassedAppointments();
+    // Consultations are no longer auto-completed by elapsed time — status
+    // only changes via the explicit Mark as Complete action (doctor portal),
+    // for both online and in-clinic appointments.
     const automation = require('./automation.service');
     await automation.processReminders();                 // 30-min appointment reminders
     await automation.processFollowUpRecalls();           // soft follow-up recall
@@ -152,7 +100,6 @@ async function runLifecycleJobs() {
 
 module.exports = {
   expirePendingAppointments,
-  autoCompletePassedAppointments,
   incrementDoctorRevenue,
   decrementDoctorRevenue,
   runLifecycleJobs

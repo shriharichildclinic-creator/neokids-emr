@@ -394,7 +394,7 @@
               </div>
 
               <div class="np-table-wrap">
-                <table class="np-table">
+                <table class="np-table np-table--cards">
                   <thead>
                     <tr>
                       <th>Doctor</th>
@@ -444,8 +444,20 @@
                   <button id="clearSettlements" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
                 </div>
               </div>
+              <div id="stlAnalytics" class="np-analytics" style="margin:1rem 0;" aria-label="Settlement analytics">
+                <div class="np-analytics-card np-analytics-card--warn">
+                  <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Pending payout</div></div>
+                  <div class="np-analytics-card__value" id="stlPendingAmount">—</div>
+                  <div class="np-analytics-card__breakdown" id="stlPendingBreakdown"></div>
+                </div>
+                <div class="np-analytics-card np-analytics-card--today">
+                  <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Paid (this filter)</div></div>
+                  <div class="np-analytics-card__value" id="stlPaidAmount">—</div>
+                  <div class="np-analytics-card__breakdown" id="stlPaidBreakdown"></div>
+                </div>
+              </div>
               <div class="np-table-wrap np-table-wrap--responsive">
-                <table class="np-table">
+                <table class="np-table np-table--cards">
                   <thead>
                     <tr>
                       <th>Period</th>
@@ -487,7 +499,7 @@
                 </div>
               </div>
               <div class="np-table-wrap np-table-wrap--responsive">
-                <table class="np-table">
+                <table class="np-table np-table--cards">
                   <thead>
                     <tr>
                       <th>Invoice #</th>
@@ -708,7 +720,7 @@
                   <button id="recInvClear" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
                 </div>
               </form>
-              <div class="np-table-wrap np-table-wrap--responsive"><table class="np-table">
+              <div class="np-table-wrap np-table-wrap--responsive"><table class="np-table np-table--cards">
                 <thead><tr><th>Invoice #</th><th>Patient</th><th>Doctor</th><th>Clinic</th><th>Receptionist</th><th style="text-align:right">Amount</th><th>Date</th><th style="text-align:right">PDF</th></tr></thead>
                 <tbody id="recInvTbody"></tbody>
               </table></div>
@@ -736,7 +748,7 @@
                   <button id="onlineInvClear" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
                 </div>
               </form>
-              <div class="np-table-wrap np-table-wrap--responsive"><table class="np-table">
+              <div class="np-table-wrap np-table-wrap--responsive"><table class="np-table np-table--cards">
                 <thead><tr><th>Invoice #</th><th>Patient</th><th>Doctor</th><th>Payment</th><th style="text-align:right">Amount</th><th>Date</th><th style="text-align:right">PDF</th></tr></thead>
                 <tbody id="onlineInvTbody"></tbody>
               </table></div>

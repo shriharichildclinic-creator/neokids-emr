@@ -619,19 +619,16 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
   // Double-credit race fix: claim the transition atomically. The auto-
   // complete cron applies the same pattern, so whichever path flips the
   // row first (count === 1) is the only one that credits/debits revenue.
+  //
+  // Marking a consultation complete does NOT touch paymentStatus — cash
+  // collection is a separate, explicit action (see exports.markPaid)
+  // performed by whoever actually took the money, not an automatic
+  // side effect of the doctor finishing the visit.
   const claim = await prisma.appointment.updateMany({
     where: { id, status: shouldComplete ? 'CONFIRMED' : 'COMPLETED' },
     data: shouldComplete
-      ? {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-          ...(appt.paymentStatus === 'CASH_PENDING' && { paymentStatus: 'CASH_COLLECTED' })
-        }
-      : {
-          status: 'CONFIRMED',
-          completedAt: null,
-          ...(appt.paymentStatus === 'CASH_COLLECTED' && { paymentStatus: 'CASH_PENDING' })
-        }
+      ? { status: 'COMPLETED', completedAt: new Date() }
+      : { status: 'CONFIRMED', completedAt: null }
   });
 
   if (claim.count === 0) {
@@ -643,6 +640,24 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
 
   const updated = await prisma.appointment.findUnique({ where: { id } });
   res.json({ ...updated, toggledTo: shouldComplete ? 'COMPLETED' : 'CONFIRMED' });
+});
+
+// Explicit, doctor-initiated cash collection — mirrors receptionist's
+// exports.markPaid. Completing a consultation no longer implies cash was
+// collected; this is the only way a CASH_PENDING appointment becomes
+// CASH_COLLECTED from the doctor portal.
+exports.markPaid = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const appt = await prisma.appointment.findFirst({ where: { id, doctorId: req.user.id } });
+  if (!appt) return res.status(404).json({ error: 'Not found' });
+  if (appt.paymentStatus !== 'CASH_PENDING') {
+    return res.status(400).json({ error: 'Only a cash-pending appointment can be marked as paid' });
+  }
+  const updated = await prisma.appointment.update({
+    where: { id },
+    data: { paymentStatus: 'CASH_COLLECTED' }
+  });
+  res.json(updated);
 });
 
 // ────────────────────────────────────────────────────────────────────

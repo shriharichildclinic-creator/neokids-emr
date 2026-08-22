@@ -243,6 +243,26 @@ async function loadRevenue() {
     } catch (err) { NPToast.error('Failed: ' + err.message); }
   }
 
+function renderSettlementAnalytics(list){
+    const generated = list.filter(s => s.status === 'GENERATED');
+    const paid = list.filter(s => s.status === 'PAID');
+    const sum = (rows) => rows.reduce((t, r) => t + Number(r.doctorNetAmount || 0), 0);
+
+    const pendingEl = $('#stlPendingAmount');
+    if (pendingEl) pendingEl.textContent = inr(sum(generated));
+    const pendingBd = $('#stlPendingBreakdown');
+    if (pendingBd) pendingBd.innerHTML =
+      `<span class="np-dot np-dot--amber"></span>${generated.length} awaiting payment` +
+      `<span class="np-dot np-dot--blue"></span>${generated.reduce((t,s)=>t+Number(s.totalConsultations||0),0)} consults`;
+
+    const paidEl = $('#stlPaidAmount');
+    if (paidEl) paidEl.textContent = inr(sum(paid));
+    const paidBd = $('#stlPaidBreakdown');
+    if (paidBd) paidBd.innerHTML =
+      `<span class="np-dot np-dot--mint"></span>${paid.length} settlement(s) paid` +
+      `<span class="np-dot np-dot--blue"></span>${paid.reduce((t,s)=>t+Number(s.totalConsultations||0),0)} consults`;
+  }
+
 async function loadSettlements() {
     populatePeriodSelects();
     await populateDoctorFilters();
@@ -269,6 +289,7 @@ async function loadSettlements() {
       badge.textContent = pending;
       badge.classList.toggle('hidden', pending === 0);
     }
+    renderSettlementAnalytics(list);
 
     if (!list.length) {
       tbody.innerHTML = `<tr><td colspan="8" class="np-empty"><div>No settlements yet for the selected filters.</div></td></tr>`;

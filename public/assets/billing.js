@@ -194,7 +194,7 @@
             '<span class="np-bill-line__kind" data-kind="' + mode + '">' + (mode === 'inv' ? 'Inventory' : 'Manual item') + '</span>' +
             '<button type="button" class="np-btn np-btn--sm np-btn--ghost np-btn--danger" onclick="NPBilling.removeLine(this)">Remove</button>' +
           '</div>' +
-          '<div class="np-seg" style="margin-bottom:.5rem">' +
+          '<div class="np-seg np-seg--fit" style="margin-bottom:.5rem">' +
             '<button type="button" class="np-seg__btn' + (mode === 'inv' ? ' is-active' : '') + '" data-mode="inv">Inventory</button>' +
             '<button type="button" class="np-seg__btn' + (mode === 'manual' ? ' is-active' : '') + '" data-mode="manual">Manual item</button>' +
           '</div>' +

@@ -1,11 +1,10 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
-const { SUB_BRAND_NAME } = require('./pdf.service');
+const { drawHeader } = require('./pdf.service');
 
 const STORAGE_PATH = process.env.STORAGE_PATH || path.join(process.cwd(), 'storage');
 const OUT_DIR = path.join(STORAGE_PATH, 'historical-pdf');
-const BRAND_BLUE = '#4DA8FF';
 function ensureDir(p){ if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 
 function humanType(t){
@@ -58,23 +57,13 @@ async function generateHistoricalRecordPdf(record){
     doc.pipe(stream);
 
     const L = 50, W = 495;
-    const BAND_H = 84;
-    // Same three-line letterhead as pdf.service.js's drawHeader: brand
-    // line, network tagline, sub-brand — all inside one solid blue band
-    // so the clinic name is never re-printed as a body branding block.
-    doc.rect(0, 0, doc.page.width, BAND_H).fill(BRAND_BLUE);
-    doc.fillColor('white');
-    doc.font('Helvetica-Bold').fontSize(20).text('NeoKidsPro', L, 14, { lineBreak: false });
-    doc.font('Helvetica').fontSize(9).text('Pediatric Network of Doctors', L, 40, { lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(9).text(SUB_BRAND_NAME, L, 55, { lineBreak: false });
-    doc.font('Helvetica-Bold').fontSize(14)
-       .text('Historical Medical Record', doc.page.width - L, 26,
-         { align: 'right', width: doc.page.width - 2 * L, lineBreak: false, ellipsis: true });
-    let headerBottom = BAND_H + 8;
-    doc.fillColor('black');
+    // Shared letterhead (same one every other PDF in the app uses) —
+    // picks up the gradient brand band, the clinic logo if one exists,
+    // and stays in sync automatically instead of drifting from its own copy.
+    drawHeader(doc, 'Historical Medical Record');
 
     doc.fontSize(10).font('Helvetica');
-    let y = headerBottom + 17;
+    let y = doc.y + 5;
     const row = (k, v) => { doc.font('Helvetica-Bold').text(k, L, y, { width: 140 }); doc.font('Helvetica').text(String(v || '—'), L+145, y, { width: W-145 }); y = doc.y + 4; };
 
     row('Patient:', record.patient ? record.patient.name : '');

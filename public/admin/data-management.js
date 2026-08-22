@@ -29,7 +29,7 @@ async function dmSearch(){
       host.innerHTML = `<div class="np-empty"><div class="np-empty__title">No matches</div></div>`;
       return;
     }
-    host.innerHTML = `<div class="np-table-wrap"><table class="np-table"><thead><tr>
+    host.innerHTML = `<div class="np-table-wrap"><table class="np-table np-table--cards np-table--danger"><thead><tr>
         <th>Name</th><th>Contact</th>${type === 'DOCTOR' ? '<th>Status</th>' : '<th>Parent/Guardian</th>'}
         <th style="text-align:right">Action</th>
       </tr></thead><tbody>` + rows.map(r => `
@@ -59,9 +59,20 @@ async function dmPurge(type, id, name){
     toast('Name did not match — nothing was deleted.', 'error');
     return;
   }
+  const password = await NPModal.prompt({
+    title: 'Confirm your password',
+    message: `Re-enter your admin password to permanently delete ${name}.`,
+    inputType: 'password',
+    okText: 'Delete permanently'
+  });
+  if (password == null) return;
+  if (!password){
+    toast('Password is required — nothing was deleted.', 'error');
+    return;
+  }
   try {
     const path = type === 'DOCTOR' ? '/admin/data-management/doctors/' : '/admin/data-management/patients/';
-    const res = await api(path + id, { method: 'DELETE' });
+    const res = await api(path + id, { method: 'DELETE', body: JSON.stringify({ confirmPassword: password }) });
     toast(res.message || 'Deleted.');
     dmSearch();
   } catch (e) {

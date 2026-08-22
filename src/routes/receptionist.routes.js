@@ -24,6 +24,7 @@ router.get('/appointments/:id',                  c.appointmentDetail);
 router.post('/appointments/:id/reschedule',      c.reschedule);
 router.post('/appointments/:id/cancel',          c.cancel);
 router.post('/appointments/:id/arrive',          c.markArrived);
+router.post('/appointments/:id/mark-paid',       c.markPaid);
 router.post('/appointments/:id/invoice',         c.generateInvoice);
 router.post('/appointments/:id/prescription',    c.createPrescription);
 router.get('/appointments/:id/prescription',     c.appointmentPrescription);

@@ -85,7 +85,7 @@ async function loadCentres(){
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __centres = await api('/admin/medical-centres');
-    host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table np-table--fixed np-table--scroll-x"><colgroup><col style="width:16%"><col style="width:30%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table np-table--fixed np-table--scroll-x np-table--cards"><colgroup><col style="width:16%"><col style="width:30%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
       __centres.map(c => `<tr>
         <td data-label="Name"><b>${esc(c.name)}</b></td>
         <td data-label="Address" class="np-mut" style="font-size:.82rem">${esc([c.address, c.city, c.state, c.pincode].filter(Boolean).join(', ') || '—')}</td>
@@ -143,7 +143,7 @@ async function loadReceptionists(){
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __receptionists = await api('/admin/receptionists');
-    host.innerHTML = __receptionists.length ? '<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Name</th><th>Contact</th><th>Assignments (Doctor @ Clinic)</th><th>Permissions</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    host.innerHTML = __receptionists.length ? '<div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Name</th><th>Contact</th><th>Assignments (Doctor @ Clinic)</th><th>Permissions</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
       __receptionists.map(r => `<tr>
         <td data-label="Name"><b>${esc(r.name)}</b></td>
         <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(r.email)}<br/>+91 ${esc(r.phone)}</td>
@@ -269,7 +269,7 @@ async function loadPharmUsers(){
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __pharmUsers = await api('/admin/pharmacy-users');
-    host.innerHTML = __pharmUsers.length ? '<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Name</th><th>Contact</th><th>Centre</th><th>Responsible doctors</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    host.innerHTML = __pharmUsers.length ? '<div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Name</th><th>Contact</th><th>Centre</th><th>Responsible doctors</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
       __pharmUsers.map(u => `<tr>
         <td data-label="Name"><b>${esc(u.name)}</b></td>
         <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(u.email)}<br/>+91 ${esc(u.phone)}</td>

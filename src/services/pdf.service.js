@@ -5,9 +5,17 @@ const dayjs = require('dayjs');
 const { calcAge } = require('../utils/date');
 
 const STORAGE = process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage');
-const BRAND_BLUE = '#4DA8FF';
-const BRAND_MINT = '#B8F2E6';
-const BRAND_DARK = '#0F2E3A';
+// Brand palette — matches the actual site theme (public/assets/neokids-theme.css
+// --nk-teal-*/--nk-ink), not the unrelated blue this file used to hardcode.
+const BRAND_TEAL_LIGHT = '#89BCBD'; // nk-teal-400 — header band gradient start
+const BRAND_TEAL_DARK  = '#5A9495'; // nk-teal-600 — header band gradient end
+const BRAND_BLUE = BRAND_TEAL_DARK; // kept as the name every generator already calls
+const BRAND_MINT = '#DCEBEB';       // nk-teal-100 — light fill for table headers
+const BRAND_DARK = '#0F2E3A';       // nk-ink — unchanged, already on-brand
+const BRAND_ACCENT = '#F9A945';     // nk-orange-400 — warm accent for highlights
+// Drop a PNG/JPG here (pdfkit can't render SVG) to have every PDF pick it up
+// automatically — drawHeader() below checks for it on every call.
+const LOGO_PATH = path.join(__dirname, '..', '..', 'public', 'assets', 'logo-neokidspro.png');
 
 function appointmentModeLabel(type) {
   return type === 'ONLINE' ? 'Online Consultation' : type === 'OFFLINE' ? 'Clinic Visit' : (type || '—');
@@ -50,13 +58,47 @@ const HEADER_BAND_HEIGHT = 88;
 // page-breaks whenever a draw crosses (page.height - bottomMargin). These
 // are fixed-layout single-page documents, so the auto-break is zeroed out
 // once and the signature block is separately clamped to stay on this page.
+// Caches the opened logo image (and whether it even exists) across calls —
+// drawHeader() runs on every single PDF, and re-checking the filesystem
+// plus re-decoding the PNG on every page/document would be wasteful.
+let _logoImage; // undefined = not checked yet, null = missing/unreadable
+function getLogoImage(doc) {
+  if (_logoImage !== undefined) return _logoImage;
+  try {
+    _logoImage = fs.existsSync(LOGO_PATH) ? doc.openImage(LOGO_PATH) : null;
+  } catch (_) {
+    _logoImage = null; // corrupt/unreadable file — fall back to text-only header
+  }
+  return _logoImage;
+}
+
 function drawHeader(doc, title) {
   if (doc.page && doc.page.margins) doc.page.margins.bottom = 0;
-  doc.rect(0, 0, doc.page.width, HEADER_BAND_HEIGHT).fill(BRAND_BLUE);
+  const band = doc.linearGradient(0, 0, doc.page.width, 0);
+  band.stop(0, BRAND_TEAL_LIGHT).stop(1, BRAND_TEAL_DARK);
+  doc.rect(0, 0, doc.page.width, HEADER_BAND_HEIGHT).fill(band);
+
+  const logo = getLogoImage(doc);
+  let textX = 50;
   doc.fillColor('white');
-  doc.font('Helvetica-Bold').fontSize(22).text('NeoKidsPro', 50, 14, { lineBreak: false });
-  doc.font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', 50, 40, { lineBreak: false });
-  doc.font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, 50, 55, { lineBreak: false });
+
+  if (logo) {
+    // The logo is a full wordmark (icon + "NeoKidsPro" text baked into the
+    // image) — drawing the brand name a second time next to it would look
+    // redundant, so only the tagline/sub-brand run alongside it, vertically
+    // centered against the logo instead of the old 3-line text stack.
+    const logoH = 58;
+    const logoW = logoH * (logo.width / logo.height);
+    doc.image(logo, 50, (HEADER_BAND_HEIGHT - logoH) / 2, { height: logoH });
+    textX = 50 + logoW + 16;
+    doc.font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', textX, 30, { lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, textX, 46, { lineBreak: false });
+  } else {
+    doc.font('Helvetica-Bold').fontSize(22).text('NeoKidsPro', textX, 14, { lineBreak: false });
+    doc.font('Helvetica').fontSize(10).text('Pediatric Network of Doctors', textX, 40, { lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(10).text(SUB_BRAND_NAME, textX, 55, { lineBreak: false });
+  }
+
   doc.font('Helvetica-Bold').fontSize(16)
      .text(title, 0, 22, { align: 'right', width: doc.page.width - 50, lineBreak: false, ellipsis: true });
   doc.fillColor('black');
@@ -833,5 +875,12 @@ module.exports = {
   generateConsultationInvoice,
   generatePharmacyInvoice,
   generateMedicalCertificate,
-  SUB_BRAND_NAME
+  SUB_BRAND_NAME,
+  drawHeader,
+  HEADER_BAND_HEIGHT,
+  BRAND_TEAL_LIGHT,
+  BRAND_TEAL_DARK,
+  BRAND_MINT,
+  BRAND_DARK,
+  BRAND_ACCENT
 };

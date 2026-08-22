@@ -678,6 +678,18 @@ function apptCard(a){
       Mark complete
     </button>`);
   }
+  if (a.status === 'COMPLETED') {
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); toggleComplete('${escapeHtml(a.id)}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      Mark incomplete
+    </button>`);
+  }
+  if (a.paymentStatus === 'CASH_PENDING' && a.status !== 'CANCELLED') {
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); markAppointmentPaid('${escapeHtml(a.id)}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Mark as paid
+    </button>`);
+  }
   if (canCancel) {
     overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation(); openReschedule('${escapeHtml(a.id)}','${escapeHtml(a.consultationType||'OFFLINE')}')">
       <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -1456,18 +1468,37 @@ function renderRxArchive(){
 }
 
 async function toggleComplete(id){
-  const ok = await NPModal.confirm({
+  const isCompleted = (__apptById(id) || {}).status === 'COMPLETED';
+  const ok = await NPModal.confirm(isCompleted ? {
+    title: 'Mark appointment as incomplete?',
+    message: 'This reopens the consultation and moves it back to the waiting room. Payment status is not affected.',
+    okText: 'Mark incomplete',
+  } : {
     title: 'Mark appointment as completed?',
-    message: 'This will close the consultation, finalise the invoice, and move the appointment out of the waiting room.',
+    message: 'This will close the consultation and move the appointment out of the waiting room. Payment status is not affected — use Mark as paid separately once cash is collected.',
     okText: 'Mark completed',
   });
   if (!ok) return;
   try {
     await api('/doctor/appointments/' + encodeURIComponent(id) + '/complete', { method:'POST' });
-    NPToast.success('Appointment marked completed');
+    NPToast.success(isCompleted ? 'Appointment marked incomplete' : 'Appointment marked completed');
     loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
     if (activeConsultId === id) openConsultation(id);
-  } catch (ex){ NPToast.error(ex.message || 'Could not complete'); }
+  } catch (ex){ NPToast.error(ex.message || 'Could not update appointment'); }
+}
+async function markAppointmentPaid(id){
+  const ok = await NPModal.confirm({
+    title: 'Mark cash collected?',
+    message: 'Confirms this appointment’s consultation fee was received in cash at the clinic.',
+    okText: 'Mark as paid',
+  });
+  if (!ok) return;
+  try {
+    await api('/doctor/appointments/' + encodeURIComponent(id) + '/mark-paid', { method:'POST' });
+    NPToast.success('Marked as paid');
+    loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
+    if (activeConsultId === id) openConsultation(id);
+  } catch (ex){ NPToast.error(ex.message || 'Could not mark as paid'); }
 }
 function cancelAppt(id){
   $('#cancelApptId').value = id;

@@ -44,6 +44,7 @@ router.post('/appointments/:id/reschedule',                 c.reschedule);
 router.post('/appointments/:id/cancel',                     c.cancelAppointment);
 router.post('/appointments/:id/complete',                   c.toggleComplete);
 router.post('/appointments/:id/toggle-complete',            c.toggleComplete);
+router.post('/appointments/:id/mark-paid',                  c.markPaid);
 
 // ─── Legacy historical-appointment flow retained for backward compatibility ───
 router.post(
