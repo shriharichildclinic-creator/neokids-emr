@@ -423,6 +423,16 @@ html,body{
   transition: background .15s, color .15s, border-color .15s, transform .05s;
 }
 .np-pill:hover{ background: var(--nk-teal-50); }
+/* At the desktop padding above, these buttons render around 28px tall —
+   well under the ~44px minimum touch target (Apple HIG / Material both
+   recommend it), which is exactly why the slot-duration/working-days
+   pills were hard to hit precisely on a phone. */
+@media (max-width:600px){
+  .np-pill{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-height:44px; padding:.5rem 1rem; font-size:.85rem;
+  }
+}
 .np-pill.active{
   background: linear-gradient(135deg, #89BCBD, #6FAAAB);
   color:#fff; border-color: transparent;
@@ -561,7 +571,7 @@ html,body{
   padding: .85rem 1.25rem;
   border-top: 1px solid var(--np-border);
   display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap;
-  background: rgba(244,248,251,.7);
+  background: var(--nk-card);
 }
 
 @keyframes npFadeIn{ from{opacity:0} to{opacity:1} }
@@ -2435,13 +2445,13 @@ html[data-theme="dark"] .np-modal pre{
 .np-profile-card{
   display:flex; gap:1rem; align-items:center;
   padding:.85rem; border-radius:14px;
-  background:linear-gradient(135deg, rgba(59,130,246,.08), rgba(16,185,129,.08));
+  background: rgba(137,188,189,.08);
   border:1px solid var(--nk-border);
   margin-bottom:1rem;
 }
 .np-profile-card__avatar{
   width:64px; height:64px; border-radius:50%;
-  background:#3b82f6; color:#fff;
+  background: var(--nk-teal-600, #5A9495); color:#fff;
   display:flex; align-items:center; justify-content:center;
   font-weight:700; font-size:1.4rem; overflow:hidden; flex-shrink:0;
 }
@@ -2469,8 +2479,8 @@ html[data-theme="dark"] .np-modal pre{
   .np-profile-dl > div{ grid-template-columns:1fr; gap:.15rem; }
 }
 [data-theme="dark"] .np-profile-card{
-  background:linear-gradient(135deg, rgba(59,130,246,.14), rgba(16,185,129,.10));
-  border-color:rgba(255,255,255,.08);
+  background: rgba(137,188,189,.12);
+  border-color: var(--nk-border);
 }
 [data-theme="dark"] .np-profile-card__name{ color:#e2e8f0; }
 [data-theme="dark"] .np-profile-dl dd{ color:#e2e8f0; }

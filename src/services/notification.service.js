@@ -7,9 +7,9 @@
 // =====================================================================
 const prisma = require('../config/prisma');
 
-async function create({ userType, userId = null, type, title, message, entityType = null, entityId = null }) {
+async function create({ userType, userId = null, type, title, message, iconUrl = null, entityType = null, entityId = null }) {
   return prisma.notification.create({
-    data: { userType, userId, type, title, message, entityType, entityId }
+    data: { userType, userId, type, title, message, iconUrl, entityType, entityId }
   });
 }
 

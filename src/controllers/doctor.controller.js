@@ -8,6 +8,8 @@ const prisma = require('../config/prisma');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 const { asyncHandler } = require('../middleware/errorHandler');
 const audit = require('../services/audit.service');
+const notifications = require('../services/notification.service');
+const staffAccess = require('../services/staffAccess.service');
 
 function doctorActor(req, name) {
   return { id: req.user.id, role: 'DOCTOR', name: name || 'Dr. ' + req.user.id };
@@ -623,6 +625,22 @@ exports.cancelAppointment = asyncHandler(async (req, res) => {
     summary: `Cancelled ${updated.patient.name}'s appointment (${reason})`,
     doctorId: req.user.id
   });
+
+  const cancelMsg = `Dr. ${updated.doctor.name} cancelled ${updated.patient.name}'s appointment on ${String(updated.date).slice(0, 10)} at ${updated.startTime} (${reason || 'no reason given'}).`;
+  const cancelIcon = updated.doctor.photoUrl || null;
+  await notifications.create({
+    userType: 'ADMIN', userId: null,
+    type: 'APPOINTMENT_CANCELLED', title: 'Appointment cancelled by doctor',
+    message: cancelMsg, iconUrl: cancelIcon, entityType: 'APPOINTMENT', entityId: id
+  }).catch(() => {});
+  const receptionistIds = await staffAccess.getReceptionistIdsForDoctor(req.user.id).catch(() => []);
+  for (const receptionistId of receptionistIds) {
+    await notifications.create({
+      userType: 'RECEPTIONIST', userId: receptionistId,
+      type: 'APPOINTMENT_CANCELLED', title: 'Appointment cancelled by doctor',
+      message: cancelMsg, iconUrl: cancelIcon, entityType: 'APPOINTMENT', entityId: id
+    }).catch(() => {});
+  }
 
   automation.onAppointmentCancelled(updated, reason).catch(e => {
     logger.error('onAppointmentCancelled failed', e);

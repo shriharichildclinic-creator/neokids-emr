@@ -1842,6 +1842,23 @@ function kycBadge(status){
   return `<span class="np-badge ${m[0]}"><span class="np-badge__dot"></span>${m[1]}</span>`;
 }
 
+function setKycLocked(locked){
+  const grid = $('#kycGrid');
+  const banner = $('#kycLockedBanner');
+  const uploadBtn = document.querySelector('#kycUploadBlock .np-row button[onclick="uploadKycDocs()"]');
+  if (grid) grid.classList.toggle('is-locked', locked);
+  if (banner) banner.classList.toggle('hidden', !locked);
+  if (uploadBtn) uploadBtn.classList.toggle('hidden', locked);
+}
+async function unlockKycUpload(){
+  const ok = await NPModal.confirm({
+    title: 'Replace verified documents?',
+    message: 'This doctor’s KYC is currently verified. Uploading a new document will drop the status back to Uploaded, and it will need to be re-verified.',
+    okText: 'Unlock to replace',
+    danger: true
+  });
+  if (ok) setKycLocked(false);
+}
 function setKycFieldStatus(elId, viewElId, url){
   // SECURITY FIX (audit finding #2): KYC documents are no longer served
   // by a public static mount. Rewrite the stored /files/kyc-documents/...
@@ -1954,6 +1971,8 @@ async function loadKycForDoctor(doctorId){
     rejBox.classList.remove('hidden');
     $('#kycRejectionText').textContent = kyc.rejectionReason;
   }
+
+  setKycLocked(kyc.kycStatus === 'VERIFIED');
 
   const anyUploaded = !!(kyc.aadhaarUrl || kyc.panUrl || kyc.cancelledChequeUrl || kyc.medicalRegCertUrl);
   if (anyUploaded) verify.classList.remove('hidden'); else verify.classList.add('hidden');

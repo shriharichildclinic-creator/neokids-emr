@@ -275,6 +275,14 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   const where = { doctorId: { in: doctorIds } };
   if (doctorId && doctorIds.includes(doctorId)) where.doctorId = doctorId;
   if (status) where.status = status;
+  // Unpaid-and-expired online bookings auto-cancel themselves — they're
+  // noise, not a real cancellation reception needs to see, so they're
+  // filtered out unconditionally rather than behind a toggle (unless
+  // reception explicitly asks to see CANCELLED appointments, in which case
+  // showing everything including these is the actual expected behaviour).
+  if (status !== 'CANCELLED') {
+    where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED', notes: { contains: 'Auto-cancelled' } };
+  }
   if (date) where.date = parseDateOnly(date);
   if (from || to) {
     where.date = {};
@@ -504,7 +512,8 @@ exports.cancel = asyncHandler(async (req, res) => {
   await notifications.create({
     userType: 'DOCTOR', userId: appt.doctorId,
     type: 'APPOINTMENT_CANCELLED', title: 'Appointment cancelled',
-    message: `${appt.patient.name}'s appointment on ${String(appt.date).slice(0, 10)} at ${appt.startTime} was cancelled by reception (${reason}).`,
+    message: `${appt.patient.name}'s appointment on ${String(appt.date).slice(0, 10)} at ${appt.startTime} was cancelled by ${me.name} at reception (${reason}).`,
+    iconUrl: me.photoUrl || null,
     entityType: 'APPOINTMENT', entityId: appt.id
   }).catch(() => {});
   const automation = require('../services/automation.service');

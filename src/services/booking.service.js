@@ -12,7 +12,7 @@ const logger = require('../utils/logger');
 // ("not a function"). automation is required lazily inside each function
 // that needs it to avoid this.
 
-const UNPAID_BOOKING_EXPIRY_MINUTES = parseInt(process.env.UNPAID_BOOKING_EXPIRY_MINUTES || '15', 10);
+const UNPAID_BOOKING_EXPIRY_MINUTES = parseInt(process.env.UNPAID_BOOKING_EXPIRY_MINUTES || '5', 10);
 
 // Normalize a name for sibling lookup: lowercase, collapse whitespace, trim.
 // This is what we match on so "Ravi Kumar" and "  ravi   kumar " are the same kid
@@ -356,10 +356,11 @@ async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
 
   const notifications = require('./notification.service');
   const bookingMsg = `${updated.patient.name} booked a ${updated.consultationType === 'ONLINE' ? 'video' : 'clinic'} consultation with Dr. ${updated.doctor.name} on ${String(updated.date).slice(0, 10)} at ${updated.startTime}.`;
+  const bookingIcon = updated.doctor.photoUrl || null;
   await notifications.create({
     userType: 'DOCTOR', userId: updated.doctorId,
     type: 'NEW_ONLINE_BOOKING', title: 'New online booking',
-    message: bookingMsg,
+    message: bookingMsg, iconUrl: bookingIcon,
     entityType: 'APPOINTMENT', entityId: updated.id
   }).catch(() => {});
   // userId: null = every admin account sees this, not just one — there's
@@ -367,7 +368,7 @@ async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
   await notifications.create({
     userType: 'ADMIN', userId: null,
     type: 'NEW_ONLINE_BOOKING', title: 'New online booking',
-    message: bookingMsg,
+    message: bookingMsg, iconUrl: bookingIcon,
     entityType: 'APPOINTMENT', entityId: updated.id
   }).catch(() => {});
   // Front-desk staff who actually manage this doctor's schedule — not just
@@ -379,7 +380,7 @@ async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
     await notifications.create({
       userType: 'RECEPTIONIST', userId: receptionistId,
       type: 'NEW_ONLINE_BOOKING', title: 'New online booking',
-      message: bookingMsg,
+      message: bookingMsg, iconUrl: bookingIcon,
       entityType: 'APPOINTMENT', entityId: updated.id
     }).catch(() => {});
   }

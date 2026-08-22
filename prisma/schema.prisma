@@ -749,6 +749,10 @@ model Notification {
   type       String
   title      String
   message    String    @db.Text
+  // Whoever the notification is actually about (the doctor who cancelled,
+  // the staff member who dispensed) — not the recipient's own photo. Null
+  // falls back to a generic type-based icon in the UI.
+  iconUrl    String?
   entityType String?
   entityId   String?
   isRead     Boolean   @default(false)

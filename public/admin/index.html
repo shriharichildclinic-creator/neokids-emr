@@ -939,7 +939,11 @@
           </div>
 
           <div id="kycUploadBlock">
-            <div class="np-kyc-grid">
+            <div id="kycLockedBanner" class="np-callout hidden" style="font-size:.78rem; margin-bottom:.6rem; display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+              <span>✓ Verified — documents are locked. Replacing any of them requires re-verification.</span>
+              <button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="unlockKycUpload()">Replace documents</button>
+            </div>
+            <div id="kycGrid" class="np-kyc-grid">
               <div class="np-kyc-card">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Aadhaar Card</span>

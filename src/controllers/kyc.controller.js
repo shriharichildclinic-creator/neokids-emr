@@ -53,7 +53,7 @@ function publicUrlForFile(filename) {
 }
 
 async function assertDoctorExists(id) {
-  const doc = await prisma.doctor.findFirst({ where: { id, deletedAt: null }, select: { id: true, name: true } });
+  const doc = await prisma.doctor.findFirst({ where: { id, deletedAt: null }, select: { id: true, name: true, photoUrl: true } });
   if (!doc) {
     const e = new Error('Doctor not found');
     e.statusCode = 404;
@@ -202,6 +202,7 @@ exports.updateKycStatus = asyncHandler(async (req, res) => {
     message: status === 'VERIFIED'
       ? 'Your KYC documents have been verified by the admin.'
       : `Your KYC was rejected: ${patch.rejectionReason}`,
+    iconUrl: doctor.photoUrl || null,
     entityType: 'DOCTOR_KYC', entityId: doctorId
   }).catch(() => {});
 

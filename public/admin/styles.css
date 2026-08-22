@@ -809,6 +809,13 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
   border-color: var(--nk-teal-200);
   box-shadow: 0 4px 14px -8px rgba(15,46,58,.18);
 }
+/* Once KYC is VERIFIED, the file inputs (and NPDropzone's own wrapper,
+   inserted as a sibling right before the input) are hidden so the panel
+   reads as read-only until an admin deliberately clicks "Replace
+   documents" — previously the upload controls stayed live indefinitely,
+   with no visual cue that touching them would undo the verification. */
+#kycGrid.is-locked input[type="file"],
+#kycGrid.is-locked .np-dropzone{ display:none; }
 .np-kyc-card__head{
   display:flex;
   align-items:flex-start;

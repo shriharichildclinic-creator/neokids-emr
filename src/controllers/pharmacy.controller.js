@@ -141,6 +141,36 @@ function totalsOf(computed, d) {
   return { subtotal, discount, tax, total };
 }
 
+// Fires from anywhere stock can drop: a bill being paid (dispensing), a
+// direct item edit, or a manual stock adjustment — not just the one place
+// this happened to be written first. "actor" may be null (no single acting
+// user, e.g. a bulk import) in which case only the admin-wide copy fires.
+async function notifyIfLowStock(itemIds, actor) {
+  const ids = [...new Set((itemIds || []).filter(Boolean))];
+  if (!ids.length) return;
+  const lowNow = await prisma.pharmacyItem.findMany({
+    where: { id: { in: ids }, stock: { lte: 10 } },
+    select: { name: true, stock: true }
+  });
+  for (const item of lowNow) {
+    const lowMsg = `${item.name} is down to ${item.stock} unit(s) in stock.`;
+    if (actor) {
+      await notifications.create({
+        userType: actor.role, userId: actor.user.id,
+        type: 'LOW_STOCK', title: 'Low stock', message: lowMsg,
+        entityType: 'PHARMACY_ITEM'
+      }).catch(() => {});
+    }
+    // Admin oversight — a separate clinic-wide notice since admin manages
+    // inventory across every location, not just wherever this happened.
+    await notifications.create({
+      userType: 'ADMIN', userId: null,
+      type: 'LOW_STOCK', title: 'Low stock', message: lowMsg,
+      entityType: 'PHARMACY_ITEM'
+    }).catch(() => {});
+  }
+}
+
 function loadItemsByBillIds(itemIds) {
   if (!itemIds.length) return Promise.resolve(new Map());
   return prisma.pharmacyItem.findMany({ where: { id: { in: itemIds } } }).then(rows => new Map(rows.map(r => [r.id, r])));
@@ -430,6 +460,7 @@ exports.updateItem = asyncHandler(async (req, res) => {
     summary: `Updated medicine ${updated.name}`,
     medicalCentreId: updated.medicalCentreId
   });
+  if (d.stock !== undefined) await notifyIfLowStock([updated.id], actor);
   res.json(updated);
 });
 
@@ -455,6 +486,7 @@ exports.adjustStock = asyncHandler(async (req, res) => {
     summary: `Adjusted ${updated.name} stock by ${parsed.data.delta} → ${next}${parsed.data.reason ? ` (${parsed.data.reason})` : ''}`,
     medicalCentreId: updated.medicalCentreId
   });
+  if (parsed.data.delta < 0) await notifyIfLowStock([updated.id], actor);
   res.json(updated);
 });
 
@@ -759,29 +791,7 @@ exports.markPaid = asyncHandler(async (req, res) => {
   // uses for its own lowStock filter, so "low" means the same thing in
   // both places.
   const dispensedItemIds = [...new Set(bill.items.map(i => i.itemId).filter(Boolean))];
-  if (dispensedItemIds.length) {
-    const lowNow = await prisma.pharmacyItem.findMany({
-      where: { id: { in: dispensedItemIds }, stock: { lte: 10 } },
-      select: { name: true, stock: true }
-    });
-    for (const item of lowNow) {
-      const lowMsg = `${item.name} is down to ${item.stock} unit(s) in stock.`;
-      await notifications.create({
-        userType: actor.role, userId: actor.user.id,
-        type: 'LOW_STOCK', title: 'Low stock', message: lowMsg,
-        entityType: 'PHARMACY_ITEM'
-      }).catch(() => {});
-      // Admin oversight — the acting pharmacy/reception user already got
-      // their own copy above; this is a separate clinic-wide notice since
-      // admin manages inventory across every location, not just the one
-      // this sale happened at.
-      await notifications.create({
-        userType: 'ADMIN', userId: null,
-        type: 'LOW_STOCK', title: 'Low stock', message: lowMsg,
-        entityType: 'PHARMACY_ITEM'
-      }).catch(() => {});
-    }
-  }
+  await notifyIfLowStock(dispensedItemIds, actor);
 
   res.json({ bill: stored.bill, pdfUrl: stored.signedUrl });
 });
