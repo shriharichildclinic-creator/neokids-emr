@@ -246,10 +246,6 @@ html,body{
 .np-kpi__label{ font-size:.78rem; color:var(--np-muted); font-weight:500; }
 .np-kpi__value{ font-size:1.65rem; font-weight:700; color:var(--np-ink); margin-top:.15rem; line-height:1.1; }
 .np-kpi__sub{ font-size:.78rem; color:var(--np-muted); margin-top:.25rem; }
-.np-kpi__delta{ font-size:.78rem; margin-top:.25rem; font-weight:600; }
-.np-kpi__delta--up{   color:#16A34A; }
-.np-kpi__delta--down{ color:#DC2626; }
-.np-kpi__delta--flat{ color:var(--np-muted); }
 
 /* Button and badge/pill/chip base styling (sizing, color, radius, padding,
    hover/focus states) is defined ONCE, for both panels, in

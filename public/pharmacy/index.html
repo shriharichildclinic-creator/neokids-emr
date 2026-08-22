@@ -99,7 +99,26 @@
     </div>
   </div></header>
   <div class="np-content">
-    <section id="dashView" class="tab-pane"><div id="kpiGrid" class="np-kpi-grid"></div><div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Recent bills</div><div class="np-panel__subtitle">Latest medicine sales</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBillModal()">+ New bill</button></div><div id="recentBills" class="np-panel__body np-scroll-list" style="padding:0;"></div></div></section>
+    <section id="dashView" class="tab-pane">
+  <div id="dashAnalytics" class="np-analytics" aria-label="Pharmacy analytics">
+    <div class="np-analytics-card np-analytics-card--today">
+      <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Today</div><div class="np-analytics-card__trend" id="trendTodayBills"></div></div>
+      <div class="np-analytics-card__value" id="statTodayBills">—</div>
+      <div class="np-analytics-card__breakdown" id="statTodayBreakdown"></div>
+    </div>
+    <div class="np-analytics-card np-analytics-card--revenue">
+      <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Collected this week</div><div class="np-analytics-card__trend" id="trendWeekCollected"></div></div>
+      <div class="np-analytics-card__value" id="statWeekCollected">—</div>
+      <div class="np-sparkline" id="statSparkline" aria-hidden="true"></div>
+    </div>
+    <div class="np-analytics-card np-analytics-card--warn">
+      <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Inventory health</div></div>
+      <div class="np-analytics-card__value" id="statTotalItems">—</div>
+      <div class="np-analytics-card__breakdown" id="statInventoryBreakdown"></div>
+    </div>
+  </div>
+  <div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Recent bills</div><div class="np-panel__subtitle">Latest medicine sales</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBillModal()">+ New bill</button></div><div id="recentBills" class="np-panel__body np-scroll-list" style="padding:0;"></div></div>
+</section>
     <section id="rxView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Prescriptions</div><div class="np-panel__subtitle">Offline prescriptions issued by your assigned doctors or entered by reception</div></div><select id="rxFilter" class="np-select" onchange="loadRx()"><option value="">All</option><option value="no">Not dispensed</option><option value="yes">Dispensed</option></select></div><div class="np-panel__body np-scroll-list" id="rxList"></div></div></section>
     <section id="invView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Inventory</div><div class="np-panel__subtitle">Medicines, stock, batches & expiry</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openItemModal()">+ Add medicine</button></div><div class="np-panel__body"><div class="np-search" style="max-width:380px;margin-bottom:1rem;"><input id="invSearch" type="search" class="np-input" placeholder="Search medicine"/></div><div class="np-table-wrap"><table class="np-table"><thead><tr><th>Medicine</th><th>Batch</th><th style="text-align:right">Price</th><th style="text-align:right">Stock</th><th>Expiry</th><th style="text-align:right">Actions</th></tr></thead><tbody id="invTbody"></tbody></table></div></div></div></section>
     <section id="billsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Pharmacy Bills</div><div class="np-panel__subtitle">Print · WhatsApp · Email</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBillModal()">+ New bill</button></div><div class="np-panel__body"><div class="np-table-wrap"><table class="np-table"><thead><tr><th>Bill #</th><th>Type</th><th>Customer</th><th style="text-align:right">Items</th><th style="text-align:right">Total</th><th>Status</th><th>Date</th><th style="text-align:right">Actions</th></tr></thead><tbody id="billsTbody"></tbody></table></div></div></div></section>

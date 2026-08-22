@@ -211,16 +211,47 @@ async function showDashboard(){
   setView(__restore || 'dashView', __restore ? { skipHash: true } : undefined);
 }
 
+function trendChip(delta, label, isPercent){
+  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
+  const up = delta > 0;
+  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
+  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
+}
+
 async function loadDashboard(){
   try{
     const s = await api('/receptionist/stats');
-    $('#kpiGrid').innerHTML = [
-      {k:'blue', l:"Today's appointments", v:s.todayAppointments, sub:`${s.bookedToday||0} booked · ${s.walkinToday||0} walk-in`},
-      {k:'green', l:'Checked in', v:s.arrivedToday, sub:`${s.pendingToday} awaiting arrival`},
-      {k:'mint', l:'Cash collected today', v:inr(s.cashCollectedToday||0), sub:`${inr(s.onlineCollectedToday||0)} via UPI/online`},
-      {k:'amber', l:'Pending collection', v:inr(s.pendingCollectionToday||0), sub:`${s.invoicesToday} invoice(s) today`},
-      {k:'violet', l:'Clinic patients', v:s.patientsTotal, sub:'in your scope'}
-    ].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div>${c.sub?`<div class="np-kpi__sub">${esc(c.sub)}</div>`:''}</div>`).join('');
+    const trend = s.trend || {};
+    const thisWeek = trend.thisWeek || { appointments: 0, collected: 0 };
+    const prevWeek = trend.prevWeek || { appointments: 0, collected: 0 };
+    const daily = Array.isArray(trend.daily) ? trend.daily : [];
+    const vsYesterday = Number((trend.today && trend.today.vsYesterday) || 0);
+
+    $('#trendToday').innerHTML = trendChip(vsYesterday, 'vs yesterday');
+    $('#statToday').textContent = s.todayAppointments || 0;
+    $('#statTodayBreakdown').innerHTML =
+      `<span class="np-dot np-dot--mint"></span>${s.bookedToday||0} booked` +
+      `<span class="np-dot np-dot--blue"></span>${s.walkinToday||0} walk-in` +
+      `<span class="np-dot np-dot--amber"></span>${s.pendingToday||0} awaiting arrival`;
+    $('#statTodayFoot').textContent = `${s.arrivedToday||0} checked in today · ${s.patientsTotal||0} patients in your scope`;
+
+    const weekDelta = prevWeek.collected > 0
+      ? Math.round(((thisWeek.collected - prevWeek.collected) / prevWeek.collected) * 100)
+      : (thisWeek.collected > 0 ? 100 : 0);
+    $('#trendWeek').innerHTML = trendChip(weekDelta, 'vs last week', true);
+    $('#statWeekCollected').textContent = inr(thisWeek.collected);
+
+    const maxDaily = Math.max(1, ...daily.map(d => Number(d.collected) || 0));
+    $('#statSparkline').innerHTML = daily.map(d => {
+      const h = Math.max(3, Math.round(((Number(d.collected) || 0) / maxDaily) * 32));
+      const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
+      return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${inr(d.collected)}"></div>`;
+    }).join('');
+    $('#statTodaySplit').innerHTML =
+      `<span class="np-dot np-dot--mint"></span>${inr(s.cashCollectedToday||0)} cash today` +
+      `<span class="np-dot np-dot--blue"></span>${inr(s.onlineCollectedToday||0)} online today` +
+      (s.pendingCollectionToday > 0 ? `<span class="np-dot np-dot--amber"></span>${inr(s.pendingCollectionToday)} pending` : '');
+
     const rows = await api('/receptionist/appointments?date='+todayIso());
     __appts = rows;
     $('#todayList').innerHTML = rows.length ? rows.map(a=>`
@@ -229,7 +260,7 @@ async function loadDashboard(){
       <div class="np-appt-row__right">${statusBadge(a.status)} ${sourceBadge(a.source)}
         ${apptActionsHtml(a)}
       </div></div>`).join('') : '<div class="np-empty"><div class="np-empty__title">No appointments today</div></div>';
-  }catch(e){ $('#kpiGrid').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; }
+  }catch(e){ $('#dashAnalytics').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; }
 }
 
 async function loadAppointments(){

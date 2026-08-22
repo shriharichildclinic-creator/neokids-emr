@@ -132,13 +132,6 @@ function channelBadge(c){
   if (c === 'EMAIL')    return `<span class="np-badge np-badge--blue">Email</span>`;
   return `<span class="np-badge np-badge--slate">${escapeHtml(c||'—')}</span>`;
 }
-function deltaTag(curr, prev){
-  const diff = curr - prev;
-  if (diff > 0) return `<div class="np-kpi__delta np-kpi__delta--up">▲ ${diff} vs yesterday</div>`;
-  if (diff < 0) return `<div class="np-kpi__delta np-kpi__delta--down">▼ ${Math.abs(diff)} vs yesterday</div>`;
-  return `<div class="np-kpi__delta np-kpi__delta--flat">— same as yesterday</div>`;
-}
-
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#loginError').classList.add('hidden');
@@ -495,62 +488,65 @@ function bindDailyChartInteractions(wrap, data){
   });
 }
 
+function trendChip(delta, label, isPercent){
+  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
+  const up = delta > 0;
+  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
+  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
+}
+
 async function loadDashboard() {
   try {
-    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsGrid'), 6);
+    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#dashAnalytics'), 2);
   } catch (_) {}
   try {
     const a = await api('/admin/analytics');
-    const cards = [
-      { kind:'blue',  label:"Today's Appointments", value: a.todayAppointments,
-        extra: deltaTag(a.todayAppointments, a.yesterdayAppointments),
-        tip: 'Count of bookings scheduled for today across all doctors.' },
-      { kind:'mint',  label:"Last 7 days",          value: a.last7Appointments,
-        sub: `${a.last30Appointments} in last 30 days`,
-        tip: 'Bookings made in the last 7 calendar days.' },
-      { kind:'coral', label:"Total Patients",       value: a.totalPatients,
-        sub: `${a.totalDoctors} active doctors`,
-        tip: 'Unique patient records ever created in the system.' },
-      { kind:'cream', label:"Lifetime Revenue",     value: fmtCurrency(a.totalRevenue),
-        sub: `${fmtCurrency(a.revenueLast30)} in last 30 days`,
-        tip: 'Sum of feeAtBooking for completed + confirmed paid appointments since launch.' },
-      { kind:'violet',label:"Completion Rate",      value: a.completionRate + '%',
-        sub: `${a.completedAppointments} of ${a.totalAppointments} completed`,
-        tip: 'Completion Rate = completed ÷ (confirmed + completed). Higher is better.' },
-      { kind:'rose',  label:"Cancellation Rate",    value: a.cancellationRate + '%',
-        sub: `${a.cancelledAppointments} cancelled`,
-        tip: 'Cancellation Rate = cancelled ÷ total appointments. Lower is better.' }
-    ];
-    $('#statsGrid').innerHTML = cards.map(c => `
-      <div class="np-kpi np-kpi--${c.kind}" title="${escapeHtml(c.tip||'')}">
-        <div class="np-kpi__label">${escapeHtml(c.label)}</div>
-        <div class="np-kpi__value">${escapeHtml(String(c.value))}</div>
-        ${c.sub ? `<div class="np-kpi__sub">${escapeHtml(c.sub)}</div>` : ''}
-        ${c.extra || ''}
-      </div>`).join('');
+    const daily = Array.isArray(a.daily) ? a.daily : [];
 
-    renderDailyChart(a.daily || []);
+    $('#trendToday').innerHTML = trendChip(a.todayDelta, 'vs yesterday');
+    $('#statToday').textContent = a.todayAppointments;
+    $('#statTodayBreakdown').innerHTML =
+      `<span class="np-dot np-dot--mint"></span>${a.last7Appointments} in last 7 days` +
+      `<span class="np-dot np-dot--blue"></span>${a.last30Appointments} in last 30 days`;
+    $('#statTodayFoot').textContent =
+      `${a.completionRate}% completion · ${a.cancellationRate}% cancellation · ${a.totalDoctors} doctors · ${a.totalPatients} patients`;
+
+    // The API only returns a 14-day daily series (not a pre-computed
+    // week-over-week total), so the this-week/last-week split is derived
+    // here from the last 14 entries — exactly enough for one real
+    // comparison, oldest 7 vs newest 7.
+    const thisWeek = daily.slice(7);
+    const prevWeek = daily.slice(0, 7);
+    const sum = (rows, key) => rows.reduce((t, r) => t + (Number(r[key]) || 0), 0);
+    const thisWeekRevenue = sum(thisWeek, 'revenue');
+    const prevWeekRevenue = sum(prevWeek, 'revenue');
+    const weekDelta = prevWeekRevenue > 0
+      ? Math.round(((thisWeekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100)
+      : (thisWeekRevenue > 0 ? 100 : 0);
+    $('#trendWeek').innerHTML = trendChip(weekDelta, 'vs last week', true);
+    $('#statWeekRevenue').textContent = fmtCurrency(thisWeekRevenue);
+
+    const maxDaily = Math.max(1, ...thisWeek.map(d => Number(d.revenue) || 0));
+    $('#statSparkline').innerHTML = thisWeek.map(d => {
+      const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
+      const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
+      return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${fmtCurrency(d.revenue)}"></div>`;
+    }).join('');
+
+    renderDailyChart(daily);
 
     // Revenue by source — online / in-clinic / pharmacy, each showing money
     // actually collected with pending noted separately so nothing is inflated.
+    // These are lifetime totals (the API doesn't split by source per-week).
     const rbs = a.revenueBySource;
-    const rbsEl = $('#revBySourceGrid');
-    if (rbs && rbsEl) {
-      const pend = (p) => Number(p) > 0 ? `${fmtCurrency(p)} pending` : 'Fully collected';
-      const srcCards = [
-        { kind:'mint',   label:'Online Revenue',   d: rbs.online,   tip:'Collected from NeoKidsPro online (Cashfree) consultations.' },
-        { kind:'blue',   label:'In-Clinic Revenue',d: rbs.offline,  tip:'Collected from in-person (offline) consultations.' },
-        { kind:'violet', label:'Pharmacy Revenue',  d: rbs.pharmacy, tip:'Collected from paid pharmacy bills.' },
-        { kind:'cream',  label:'Total Collected',   d: { collected: rbs.totalCollected, pending: null },
-          tip:'All money actually received across every source.',
-          sub: `${rbs.outstandingInvoices || 0} unpaid invoice(s)` }
-      ];
-      rbsEl.innerHTML = srcCards.map(c => `
-        <div class="np-kpi np-kpi--${c.kind}" title="${escapeHtml(c.tip)}">
-          <div class="np-kpi__label">${escapeHtml(c.label)}</div>
-          <div class="np-kpi__value">${escapeHtml(fmtCurrency(c.d.collected))}</div>
-          <div class="np-kpi__sub">${escapeHtml(c.sub != null ? c.sub : pend(c.d.pending))}</div>
-        </div>`).join('');
+    if (rbs) {
+      const pend = (p) => Number(p) > 0 ? ` · ${fmtCurrency(p)} pending` : '';
+      $('#statSplit').innerHTML = `
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${fmtCurrency(rbs.online.collected)} collected${pend(rbs.online.pending)}</div>
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>In-Clinic</span> ${fmtCurrency(rbs.offline.collected)} collected${pend(rbs.offline.pending)}</div>
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Pharmacy</span> ${fmtCurrency(rbs.pharmacy.collected)} collected${pend(rbs.pharmacy.pending)}</div>`;
+      $('#statFoot').textContent =
+        `${fmtCurrency(rbs.totalCollected)} collected all-time · ${rbs.outstandingInvoices || 0} unpaid invoice(s)`;
     }
 
     const fail = a.notificationsFailed || 0;
@@ -579,7 +575,7 @@ async function loadDashboard() {
           </div>
         </div>`).join('');
   } catch (err) {
-    $('#statsGrid').innerHTML = `<div class="np-error">${escapeHtml(err.message)}</div>`;
+    $('#dashAnalytics').innerHTML = `<div class="np-error">${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -709,6 +705,10 @@ function renderDoctors(){
     docs = docs.filter(d => [d.name, d.email, d.phone, d.clinicName, d.specialization, d.qualification]
       .some(v => v && String(v).toLowerCase().includes(q)));
   }
+  // Pinned: Dr. Vishal Parmar's card always leads the grid, regardless of
+  // search/filter/sort — the rest keep their normal relative order.
+  const pinnedIdx = docs.findIndex(d => stripDrPrefix(d.name || '').trim().toLowerCase() === 'vishal parmar');
+  if (pinnedIdx > 0) docs.unshift(docs.splice(pinnedIdx, 1)[0]);
   const grid = $('#doctorsGrid');
   if (!docs.length){
     grid.innerHTML = `<div class="np-empty" style="grid-column:1/-1;">
@@ -806,6 +806,63 @@ async function sendDoctorInvite() {
   }
 }
 
+function setDoctorPhotoPreview(url){
+  const img = $('#doctorPhotoPreview');
+  const placeholder = $('#doctorPhotoPlaceholder');
+  const removeBtn = $('#doctorPhotoRemoveBtn');
+  if (url){
+    img.src = url; img.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+    removeBtn.classList.remove('hidden');
+  } else {
+    img.src = ''; img.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    removeBtn.classList.add('hidden');
+  }
+}
+
+async function uploadDoctorPhoto(file){
+  const f = $('#doctorForm');
+  const id = f.dataset.id;
+  const input = $('#doctorPhotoInput');
+  if (!id) { if (typeof NPToast !== 'undefined') NPToast.warn('Save the doctor first, then add a photo.'); return; }
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  try {
+    const r = await fetch(API + '/admin/doctors/' + encodeURIComponent(id) + '/profile-image', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN }, // NO Content-Type — browser sets multipart boundary
+      body: fd
+    });
+    let data = null; try { data = await r.json(); } catch(_) {}
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    setDoctorPhotoPreview(data.photoUrl);
+    if (typeof NPToast !== 'undefined') NPToast.success('Photo updated.');
+    loadDoctors();
+  } catch (err) {
+    if (typeof NPToast !== 'undefined') NPToast.error(err.message);
+    else alert(err.message);
+  } finally {
+    input.value = '';
+  }
+}
+
+async function removeDoctorPhoto(){
+  const f = $('#doctorForm');
+  const id = f.dataset.id;
+  if (!id) return;
+  try {
+    await api('/admin/doctors/' + id + '/profile-image', { method: 'DELETE' });
+    setDoctorPhotoPreview(null);
+    if (typeof NPToast !== 'undefined') NPToast.success('Photo removed.');
+    loadDoctors();
+  } catch (err) {
+    if (typeof NPToast !== 'undefined') NPToast.error(err.message);
+    else alert(err.message);
+  }
+}
+
 function openDoctorModal() {
   $('#doctorModalTitle').textContent = 'Add Doctor';
   const f = $('#doctorForm');
@@ -815,6 +872,7 @@ function openDoctorModal() {
   f.email.readOnly = false;
   f.password.placeholder = '(invite link is preferred)';
   $('#sendDoctorInviteBtn').classList.add('hidden');
+  $('#doctorPhotoBlock').classList.add('hidden');
   loadKycForDoctor(null);
   applyAdminModeVisibility(f.consultationModes ? f.consultationModes.value : 'BOTH');
   $('#doctorModal').classList.remove('hidden');
@@ -840,6 +898,8 @@ function openEditDoctor(id) {
   const f = $('#doctorForm');
   f.dataset.mode = 'edit'; f.dataset.id = id;
   $('#sendDoctorInviteBtn').classList.remove('hidden');
+  $('#doctorPhotoBlock').classList.remove('hidden');
+  setDoctorPhotoPreview(d.photoUrl || null);
   f.name.value  = d.name || '';
   f.email.value = d.email || '';
   f.email.disabled = false; f.email.readOnly = true;

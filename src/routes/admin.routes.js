@@ -6,7 +6,7 @@ const kyc  = require('../controllers/kyc.controller');
 const cert = require('../controllers/certificate.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const {
-  uploadKycDocuments, KYC_FIELDS
+  uploadKycDocuments, KYC_FIELDS, uploadProfileImage
 } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('ADMIN'));
@@ -21,6 +21,8 @@ router.put('/doctors/:id', c.updateDoctor);
 router.delete('/doctors/:id', c.deleteDoctor);
 router.delete('/doctors/:id/hard', c.hardDeleteDoctor);
 router.post('/doctors/:id/invite', c.sendDoctorInvite);
+router.post('/doctors/:id/profile-image', uploadProfileImage.single('photo'), c.uploadDoctorProfileImage);
+router.delete('/doctors/:id/profile-image', c.removeDoctorProfileImage);
 
 // KYC
 router.post('/doctors/:id/kyc',         uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);

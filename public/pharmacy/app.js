@@ -83,10 +83,54 @@ function logout(){ localStorage.removeItem('np_pharmacy_token'); TOKEN=null; sho
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
 async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); setupProfileMenu(); try{ const me=await api('/auth/me'); __me=me.user||me; const __initials=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); $('#userName').textContent=__me.name; $('#userInitials').textContent=__initials; /* mirror into dropdown "logged in as" block -- stays visible on mobile once header hides .np-profile__meta */ if($('#userIdName'))$('#userIdName').textContent=__me.name; if($('#userIdInitials'))$('#userIdInitials').textContent=__initials; if($('#userIdEmail'))$('#userIdEmail').textContent=__me.email||''; }catch(e){} const __r=viewFromHash(); setView(__r||'dashView', __r?{skipHash:true}:undefined); }
 
+function trendChip(delta, label, isPercent){
+  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
+  const up = delta > 0;
+  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
+  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
+}
+
+// Single source of truth for the dashboard's analytics panels — used on
+// initial load and after every mutation (bill save/edit/stock adjust),
+// so the numbers and labels never drift between the two call sites.
+function renderPharmacyStats(s){
+  const trend = s.trend || {};
+  const thisWeek = trend.thisWeek || { bills: 0, collected: 0 };
+  const prevWeek = trend.prevWeek || { bills: 0, collected: 0 };
+  const daily = Array.isArray(trend.daily) ? trend.daily : [];
+  const vsYesterday = Number((trend.today && trend.today.vsYesterday) || 0);
+
+  const todayCollected = s.todayCollected != null ? s.todayCollected : s.todayRevenue;
+  $('#trendTodayBills').innerHTML = trendChip(vsYesterday, 'vs yesterday');
+  $('#statTodayBills').textContent = s.todayBills || 0;
+  $('#statTodayBreakdown').innerHTML =
+    `<span class="np-dot np-dot--mint"></span>${inr(todayCollected)} collected` +
+    (s.todayPending > 0 ? ` <span class="np-dot np-dot--amber"></span>${inr(s.todayPending)} pending` : '');
+
+  const weekDelta = prevWeek.collected > 0
+    ? Math.round(((thisWeek.collected - prevWeek.collected) / prevWeek.collected) * 100)
+    : (thisWeek.collected > 0 ? 100 : 0);
+  $('#trendWeekCollected').innerHTML = trendChip(weekDelta, 'vs last week', true);
+  $('#statWeekCollected').textContent = inr(thisWeek.collected);
+
+  const maxDaily = Math.max(1, ...daily.map(d => Number(d.collected) || 0));
+  $('#statSparkline').innerHTML = daily.map(d => {
+    const h = Math.max(3, Math.round(((Number(d.collected) || 0) / maxDaily) * 32));
+    const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
+    return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${inr(d.collected)}"></div>`;
+  }).join('');
+
+  $('#statTotalItems').textContent = s.totalItems || 0;
+  $('#statInventoryBreakdown').innerHTML =
+    `<span class="np-dot np-dot--amber"></span>${s.lowStock || 0} low stock` +
+    `<span class="np-dot np-dot--blue"></span>${s.expiringSoon || 0} expiring ≤30d` +
+    (s.expired > 0 ? `<span class="np-dot np-dot--red"></span>${s.expired} already expired` : '');
+}
+
 async function loadDash(){ try{ const s=await api('/pharmacy/stats');
-  $('#kpiGrid').innerHTML=[{k:'mint',l:'Collected today',v:inr(s.todayCollected!=null?s.todayCollected:s.todayRevenue),sub:(s.todayPending>0?inr(s.todayPending)+' in draft bills':(s.todayBills||0)+' bill(s) today')},{k:'green',l:'Bills today',v:s.todayBills},{k:'blue',l:'Medicines in stock',v:s.totalItems},{k:'amber',l:'Low stock (≤10)',v:s.lowStock,sub:'reorder soon'},{k:'red',l:'Expiring ≤30 days',v:s.expiringSoon,sub:'check batches'}].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div>${c.sub?`<div class="np-kpi__sub">${esc(c.sub)}</div>`:''}</div>`).join('');
+  renderPharmacyStats(s);
   const bills=await api('/pharmacy/bills'); $('#recentBills').innerHTML=(bills.slice(0,8).map(b=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(b.billNumber)}</div><div class="np-appt-row__meta">${esc(b.customerName||'Walk-in')} · ${esc(fmtDate(b.createdAt))}</div></div><div class="np-appt-row__right"><b>${inr(b.total)}</b></div></div>`).join('')||'<div class="np-empty"><div class="np-empty__sub">No bills yet.</div></div>');
- }catch(e){ $('#kpiGrid').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+ }catch(e){ $('#dashAnalytics').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 
 async function loadRx(){ const list=$('#rxList'); const f=$('#rxFilter').value; try{ const rows=await api('/pharmacy/prescriptions'+(f?('?dispensed='+f):''));
   list.innerHTML=rows.length?rows.map(rx=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(rx.patient.name)} ${rx.dispensed?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Dispensed</span>':'<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Pending</span>'}</div><div class="np-appt-row__assign">Dr. ${esc(rx.doctor.name)} · ${esc(fmtDate(rx.visitDate))}</div><div class="np-appt-row__meta">${(rx.medications||[]).map(m=>`<div class="np-rx-med-line">${esc(m.name)} ${esc(m.dose||'')} ${esc(m.frequency||'')}</div>`).join('')}</div></div><div class="np-appt-row__right"><span class="np-badge ${rx.createdByRole==='RECEPTIONIST'?'np-badge--violet':'np-badge--mint'}">${rx.createdByRole==='RECEPTIONIST'?'by reception':'by doctor'}</span>${!rx.dispensed?` <button class="np-btn np-btn--sm np-btn--primary" onclick="openBillModal('${rx.id}')">Dispense & bill</button>`:''}</div></div>`).join(''):'<div class="np-empty"><div class="np-empty__title">No prescriptions</div></div>';
@@ -171,17 +215,7 @@ function refreshAll(){
     api('/pharmacy/inventory').then(function (r) { __items = r; loadInv(); }).catch(function () {}),
     api('/pharmacy/bills').then(function (r) { __bills = r; loadBills(); }).catch(function () {}),
     api('/pharmacy/stats').then(function (s) {
-      var kg = document.getElementById('kpiGrid');
-      if (!kg) return;
-      kg.innerHTML = [
-        { k: 'blue',  l: 'Medicines in stock', v: s.totalItems },
-        { k: 'amber', l: 'Low stock (\u226410)', v: s.lowStock },
-        { k: 'red',   l: 'Expiring \u226430 days', v: s.expiringSoon },
-        { k: 'green', l: 'Bills today', v: s.todayBills },
-        { k: 'mint',  l: 'Revenue today', v: inr(s.todayRevenue) }
-      ].map(function (c) {
-        return '<div class="np-kpi np-kpi--' + c.k + '"><div class="np-kpi__label">' + c.l + '</div><div class="np-kpi__value">' + c.v + '</div></div>';
-      }).join('');
+      if (document.getElementById('dashAnalytics')) renderPharmacyStats(s);
     }).catch(function () {})
   ]);
 }

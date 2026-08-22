@@ -18,6 +18,7 @@ const automation = require('../services/automation.service');
 const slotService = require('../services/slot.service');
 const { timeToMinutes, minutesToTime } = require('../services/slot.service');
 const { parseDateOnly, parseDateOnlyOrNull, getTodayDateOnly, getTodayDateString } = require('../utils/date');
+const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
 const { incrementDoctorRevenue, decrementDoctorRevenue } = require('../services/lifecycle.service');
 const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
@@ -661,13 +662,8 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
 exports.stats = asyncHandler(async (req, res) => {
   const today = getTodayDateOnly();
   const doctorId = req.user.id;
-
-  // "Collected" = money actually received (PAID / CASH_COLLECTED).
-  // "Pending"   = billed but not yet received (CASH_PENDING).
-  // We keep these apart on purpose: an EMR dashboard should never present
-  // billed-but-uncollected money as earned revenue.
-  const COLLECTED = ['PAID', 'CASH_COLLECTED'];
-  const PENDING = ['CASH_PENDING'];
+  const COLLECTED = COLLECTED_PAYMENT_STATUSES;
+  const PENDING = PENDING_PAYMENT_STATUSES;
 
   const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate() - 6);   // 7-day window incl. today

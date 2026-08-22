@@ -69,16 +69,22 @@ exports.stats = asyncHandler(async (req, res) => {
   if (!doctorIds.length) {
     return res.json({
       todayAppointments: 0, arrivedToday: 0, pendingToday: 0, invoicesToday: 0, patientsTotal: 0,
-      bookedToday: 0, walkinToday: 0, cashCollectedToday: 0, onlineCollectedToday: 0, pendingCollectionToday: 0
+      bookedToday: 0, walkinToday: 0, cashCollectedToday: 0, onlineCollectedToday: 0, pendingCollectionToday: 0,
+      trend: { today: { appointments: 0, vsYesterday: 0 }, daily: [], thisWeek: { appointments: 0, collected: 0 }, prevWeek: { appointments: 0, collected: 0 } }
     });
   }
   const today = getTodayDateOnly();
   const dayStart = new Date(getTodayDateString() + 'T00:00:00.000Z');
   const CASH_METHODS = ['CASH', 'CARD', 'OTHER'];
 
+  const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate() - 6);
+  const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
+
   const [
     todayCount, arrived, pending, invToday, patients,
-    walkinToday, todayInvoices
+    walkinToday, todayInvoices,
+    yesterdayCount, fortnightAppts, fortnightInvoices
   ] = await Promise.all([
     prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, status: { not: 'CANCELLED' } } }),
     prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, arrivedAt: { not: null } } }),
@@ -91,6 +97,15 @@ exports.stats = asyncHandler(async (req, res) => {
     prisma.consultationInvoice.findMany({
       where: { receptionistId: req.user.id, createdAt: { gte: dayStart } },
       select: { amount: true, status: true, paymentMethod: true }
+    }),
+    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: yesterday, status: { not: 'CANCELLED' } } }),
+    prisma.appointment.findMany({
+      where: { doctorId: { in: doctorIds }, date: { gte: last14 }, status: { not: 'CANCELLED' } },
+      select: { date: true }
+    }),
+    prisma.consultationInvoice.findMany({
+      where: { receptionistId: req.user.id, createdAt: { gte: last14 }, status: 'PAID' },
+      select: { createdAt: true, amount: true }
     })
   ]);
 
@@ -106,6 +121,30 @@ exports.stats = asyncHandler(async (req, res) => {
   }
   const bookedToday = Math.max(todayCount - walkinToday, 0);
 
+  // 14-day daily series (appointments booked + cash/online collected) for
+  // the dashboard's trend sparkline, split into this-week vs last-week
+  // totals for a real week-over-week comparison.
+  const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+  const daily = {};
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(last14); d.setUTCDate(d.getUTCDate() + i);
+    daily[dayKey(d)] = { date: dayKey(d), appointments: 0, collected: 0 };
+  }
+  for (const a of fortnightAppts) {
+    const bucket = daily[dayKey(a.date)];
+    if (bucket) bucket.appointments += 1;
+  }
+  for (const inv of fortnightInvoices) {
+    const bucket = daily[dayKey(inv.createdAt)];
+    if (bucket) bucket.collected += Number(inv.amount || 0);
+  }
+  const last7Key = dayKey(last7);
+  let thisWeekAppts = 0, prevWeekAppts = 0, thisWeekCollected = 0, prevWeekCollected = 0;
+  for (const bucket of Object.values(daily)) {
+    if (bucket.date >= last7Key) { thisWeekAppts += bucket.appointments; thisWeekCollected += bucket.collected; }
+    else                         { prevWeekAppts += bucket.appointments; prevWeekCollected += bucket.collected; }
+  }
+
   res.json({
     todayAppointments: todayCount,
     arrivedToday: arrived,
@@ -116,7 +155,13 @@ exports.stats = asyncHandler(async (req, res) => {
     walkinToday,
     cashCollectedToday,
     onlineCollectedToday,
-    pendingCollectionToday
+    pendingCollectionToday,
+    trend: {
+      today: { appointments: todayCount, vsYesterday: todayCount - yesterdayCount },
+      daily: Object.values(daily).slice(7), // last 7 days, oldest → newest
+      thisWeek: { appointments: thisWeekAppts, collected: thisWeekCollected },
+      prevWeek: { appointments: prevWeekAppts, collected: prevWeekCollected }
+    }
   });
 });
 

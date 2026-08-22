@@ -205,8 +205,21 @@
               <button type="button" class="np-btn np-btn--primary np-btn--sm" onclick="setView('doctorsView'); setTimeout(function(){ if(typeof openDoctorModal==='function') openDoctorModal(); }, 60);">+ Add doctor</button>
             </div>
           </div>
-          <div id="statsGrid" class="np-kpi-grid"></div>
-          <div id="revBySourceGrid" class="np-kpi-grid" style="margin-top:1rem;"></div>
+          <div id="dashAnalytics" class="np-analytics" aria-label="Platform analytics">
+            <div class="np-analytics-card np-analytics-card--today">
+              <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Today</div><div class="np-analytics-card__trend" id="trendToday"></div></div>
+              <div class="np-analytics-card__value" id="statToday">—</div>
+              <div class="np-analytics-card__breakdown" id="statTodayBreakdown"></div>
+              <div class="np-analytics-card__foot" id="statTodayFoot"></div>
+            </div>
+            <div class="np-analytics-card np-analytics-card--revenue">
+              <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Revenue this week</div><div class="np-analytics-card__trend" id="trendWeek"></div></div>
+              <div class="np-analytics-card__value" id="statWeekRevenue">—</div>
+              <div class="np-sparkline" id="statSparkline" aria-hidden="true"></div>
+              <div class="np-analytics-card__split" id="statSplit"></div>
+              <div class="np-analytics-card__foot" id="statFoot"></div>
+            </div>
+          </div>
           <div id="dashSecondGrid" class="np-dash-second">
             <div class="np-panel">
               <div class="np-panel__head">
@@ -723,6 +736,18 @@
     </header>
     <div class="np-modal__body">
       <form id="doctorForm" data-mode="create" data-id="">
+        <div id="doctorPhotoBlock" class="np-row hidden" style="align-items:center;gap:.85rem;margin-bottom:1rem;">
+          <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--np-surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <img id="doctorPhotoPreview" src="" alt="" class="hidden" style="width:100%;height:100%;object-fit:cover;"/>
+            <svg id="doctorPhotoPlaceholder" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--np-muted)"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-6 8-6s8 2 8 6"/></svg>
+          </div>
+          <div>
+            <button type="button" class="np-btn np-btn--sm" onclick="document.getElementById('doctorPhotoInput').click()">Upload photo</button>
+            <button type="button" id="doctorPhotoRemoveBtn" class="np-btn np-btn--ghost np-btn--sm hidden" onclick="removeDoctorPhoto()">Remove</button>
+            <input id="doctorPhotoInput" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" onchange="uploadDoctorPhoto(this.files[0])"/>
+            <div class="np-field__hint" style="margin-top:.3rem;">Optional. JPG/PNG/WebP, shown across the platform wherever this doctor appears.</div>
+          </div>
+        </div>
         <div class="np-grid-2">
           <div class="np-field">
             <label class="np-field__label">Full name *</label>

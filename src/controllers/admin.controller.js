@@ -1,9 +1,12 @@
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 const prisma = require('../config/prisma');
 const { createDoctorSchema, updateDoctorByAdminSchema } = require('../utils/validators');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { sendStaffInvite } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
+const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -72,6 +75,39 @@ exports.sendDoctorInvite = asyncHandler(async (req, res) => {
     invitePreviewUrl: inviteLink,
     inviteExpiresInMinutes: expiresInMinutes
   });
+});
+
+// Admin-set profile photo — optional; a doctor can still set their own via
+// PUT /api/doctor/profile-image. Mirrors that handler exactly, just scoped
+// to req.params.id instead of the doctor's own session.
+exports.uploadDoctorProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
+  const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+  const photoUrl = `${process.env.PUBLIC_STORAGE_URL || '/files'}/profile-images/${req.file.filename}`;
+  if (doctor.photoUrl) {
+    const oldPath = path.resolve(
+      process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'),
+      doctor.photoUrl.replace(`${process.env.PUBLIC_STORAGE_URL || '/files'}/`, '')
+    );
+    fs.promises.unlink(oldPath).catch(() => null);
+  }
+  const updated = await prisma.doctor.update({ where: { id: doctor.id }, data: { photoUrl } });
+  res.json({ success: true, photoUrl: updated.photoUrl });
+});
+
+exports.removeDoctorProfileImage = asyncHandler(async (req, res) => {
+  const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+  if (doctor.photoUrl) {
+    const filePath = path.resolve(
+      process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'),
+      doctor.photoUrl.replace(`${process.env.PUBLIC_STORAGE_URL || '/files'}/`, '')
+    );
+    fs.promises.unlink(filePath).catch(() => null);
+  }
+  await prisma.doctor.update({ where: { id: doctor.id }, data: { photoUrl: null } });
+  res.json({ success: true });
 });
 
 exports.listDoctors = asyncHandler(async (req, res) => {
@@ -406,9 +442,12 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { status: 'CANCELLED' } }),
     prisma.appointment.count({ where: { status: 'PENDING'   } }),
     prisma.appointment.count({ where: { status: 'CONFIRMED' } }),
+    // "Revenue" = collected only, matching revenueBySource.totalCollected
+    // below — CASH_PENDING is billed but not yet received, so it must
+    // never be blended into the headline revenue figure.
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { status: 'COMPLETED', paymentStatus: { in: ['PAID', 'CASH_COLLECTED', 'CASH_PENDING'] } }
+      where: { status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.count({ where: { date: today } }),
     prisma.appointment.count({ where: { date: yesterday } }),
@@ -418,7 +457,7 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { consultationType: 'OFFLINE' } }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+      where: { status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.notificationLog.count().catch(() => 0),
     prisma.notificationLog.count({ where: { status: 'FAILED' } }).catch(() => 0)
@@ -432,17 +471,21 @@ exports.analytics = asyncHandler(async (req, res) => {
   const daily = {};
   for (let i = 0; i < 14; i++) {
     const d = new Date(today); d.setDate(d.getDate() - (13 - i));
-    daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0, revenue: 0 };
+    daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0, revenue: 0, pending: 0 };
   }
+  // "revenue" here must mean the same thing it means in revenueBySource
+  // below — money actually collected — or the dashboard ends up showing
+  // two different numbers both labeled "revenue". Billed-but-uncollected
+  // (CASH_PENDING) is tracked separately as `pending`, never folded in.
   raw.forEach(r => {
     const k = new Date(r.date).toISOString().slice(0,10);
     if (!daily[k]) return;
     daily[k].total++;
     if (r.status === 'COMPLETED') {
       daily[k].completed++;
-      if (['PAID','CASH_COLLECTED','CASH_PENDING'].includes(r.paymentStatus)) {
-        daily[k].revenue += Number(r.feeAtBooking || 0);
-      }
+      const amount = Number(r.feeAtBooking || 0);
+      if (COLLECTED_PAYMENT_STATUSES.includes(r.paymentStatus)) daily[k].revenue += amount;
+      else if (PENDING_PAYMENT_STATUSES.includes(r.paymentStatus)) daily[k].pending += amount;
     }
   });
 
@@ -450,7 +493,7 @@ exports.analytics = asyncHandler(async (req, res) => {
   // is separated into online (Cashfree) and in-clinic (offline); pharmacy
   // revenue comes from paid pharmacy bills. Collected = money received;
   // pending = billed but not yet collected — never blended into one figure.
-  const COLLECTED = ['PAID', 'CASH_COLLECTED'];
+  const COLLECTED = COLLECTED_PAYMENT_STATUSES;
   const [
     onlineCollectedAgg, offlineCollectedAgg,
     onlinePendingAgg, offlinePendingAgg,

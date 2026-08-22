@@ -156,21 +156,59 @@ exports.stats = asyncHandler(async (req, res) => {
   const actor = await resolveActor(req, res);
   if (!actor) return;
   const todayStart = new Date(getTodayDateString() + 'T00:00:00.000Z');
+  const yesterdayStart = new Date(todayStart); yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
+  const last7Start  = new Date(todayStart); last7Start.setUTCDate(last7Start.getUTCDate() - 6);
+  const last14Start = new Date(todayStart); last14Start.setUTCDate(last14Start.getUTCDate() - 13);
   const itemWhere = { isActive: true, medicalCentreId: { in: actor.centreIds } };
   const billWhere = { createdAt: { gte: todayStart }, medicalCentreId: { in: actor.centreIds } };
 
-  const [totalItems, lowStock, todayBills, todayCollectedAgg, todayPendingAgg, expiring] = await Promise.all([
+  const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const [
+    totalItems, lowStock, todayBills, todayCollectedAgg, todayPendingAgg, expiringSoon, expired,
+    yesterdayBills, fortnightBills
+  ] = await Promise.all([
     prisma.pharmacyItem.count({ where: itemWhere }),
     prisma.pharmacyItem.count({ where: { ...itemWhere, stock: { lte: 10 } } }),
     prisma.pharmacyBill.count({ where: billWhere }),
     prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { ...billWhere, status: 'PAID' } }),
     prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { ...billWhere, status: 'DRAFT' } }),
-    prisma.pharmacyItem.count({
-      where: { ...itemWhere, expiryDate: { not: null, lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } }
+    // "Expiring soon" = still sellable but running out of shelf life. Stock
+    // that has ALREADY expired is a materially more urgent, separate state
+    // (must not be dispensed at all) and is counted on its own below —
+    // folding it into "expiring soon" would understate how urgent it is.
+    prisma.pharmacyItem.count({ where: { ...itemWhere, expiryDate: { gte: todayStart, lte: in30Days } } }),
+    prisma.pharmacyItem.count({ where: { ...itemWhere, expiryDate: { lt: todayStart } } }),
+    prisma.pharmacyBill.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart }, medicalCentreId: { in: actor.centreIds } } }),
+    prisma.pharmacyBill.findMany({
+      where: { createdAt: { gte: last14Start }, medicalCentreId: { in: actor.centreIds } },
+      select: { createdAt: true, status: true, total: true }
     })
   ]);
   const collected = Number(todayCollectedAgg._sum.total || 0);
   const pending = Number(todayPendingAgg._sum.total || 0);
+
+  // 14-day daily series (bills + collected revenue) for the dashboard's
+  // trend sparkline, split into this-week vs last-week for a real
+  // week-over-week comparison.
+  const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+  const daily = {};
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(last14Start); d.setUTCDate(d.getUTCDate() + i);
+    daily[dayKey(d)] = { date: dayKey(d), bills: 0, collected: 0 };
+  }
+  for (const b of fortnightBills) {
+    const bucket = daily[dayKey(b.createdAt)];
+    if (!bucket) continue;
+    bucket.bills += 1;
+    if (b.status === 'PAID') bucket.collected += Number(b.total || 0);
+  }
+  const last7Key = dayKey(last7Start);
+  let thisWeekBills = 0, prevWeekBills = 0, thisWeekCollected = 0, prevWeekCollected = 0;
+  for (const bucket of Object.values(daily)) {
+    if (bucket.date >= last7Key) { thisWeekBills += bucket.bills; thisWeekCollected += bucket.collected; }
+    else                         { prevWeekBills += bucket.bills; prevWeekCollected += bucket.collected; }
+  }
+
   res.json({
     totalItems, lowStock, todayBills,
     // Collected = paid bills only; draft/unpaid bills are reported as pending
@@ -178,7 +216,14 @@ exports.stats = asyncHandler(async (req, res) => {
     todayRevenue: collected,
     todayCollected: collected,
     todayPending: pending,
-    expiringSoon: expiring
+    expiringSoon,
+    expired,
+    trend: {
+      today: { bills: todayBills, vsYesterday: todayBills - yesterdayBills },
+      daily: Object.values(daily).slice(7), // last 7 days, oldest → newest
+      thisWeek: { bills: thisWeekBills, collected: thisWeekCollected },
+      prevWeek: { bills: prevWeekBills, collected: prevWeekCollected }
+    }
   });
 });
 
