@@ -836,6 +836,13 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 .np-appt-row__assign{ font-size:.8rem; color:var(--np-muted); margin-top:.1rem; }
 .np-appt-row__name, .np-appt-row__assign, .np-appt-row__meta{ overflow-wrap:anywhere; word-break:break-word; }
 .np-appt-row__meta{ font-size:.78rem; color: var(--np-muted); margin-top:.15rem; line-height:1.45; }
+/* Pharmacy Prescriptions medication list: one block per medicine instead of
+   a single <br/>-joined line, so each line wraps independently on its own
+   width — same non-clipping, non-truncating behavior as every other
+   descriptive-text block in Admin/Doctor/Receptionist (see
+   .np-appt-row__name/__assign/__meta above). */
+.np-rx-med-line{ overflow-wrap:anywhere; word-break:break-word; white-space:normal; }
+.np-rx-med-line + .np-rx-med-line{ margin-top:.1rem; }
 .np-appt-row__right{ text-align:right; flex-shrink:0; }
 /* On phones the fixed-width action column squeezed the text body and forced
    medication/detail lines to clip. Stack the row so content takes the full
@@ -1021,7 +1028,17 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
 
 @media (max-width:720px){
   .np-content{ padding:1rem .75rem 1.5rem; }
-  .np-panel__head{ padding:1rem 1rem .5rem; }
+  /* Panel heads that pair a title/subtitle with a trailing control (e.g. the
+     Pharmacy Prescriptions filter select) used to stay in one non-wrapping
+     row, which squeezed the title/subtitle block down to whatever space the
+     control's min-width left over — on a long subtitle that meant severe
+     wrapping into a very cramped column. Wrap onto two rows on phones so
+     the descriptive text always has the full width to lay out in, matching
+     the rest of the app. */
+  .np-panel__head{ padding:1rem 1rem .5rem; flex-wrap:wrap; }
+  .np-panel__head > div:first-child{ min-width:0; flex:1 1 100%; }
+  .np-panel__head > .np-select,
+  .np-panel__head > .np-input{ flex:0 0 auto; max-width:100%; }
   .np-panel__body{ padding:.5rem 1rem 1rem; }
   .np-filterbar--appointments,
   .np-filterbar--notifications{ grid-template-columns:1fr; gap:.65rem; }

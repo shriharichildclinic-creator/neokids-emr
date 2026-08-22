@@ -11,9 +11,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/admin/styles.css?v=3.5.0"/>
+<link rel="stylesheet" href="/admin/styles.css?v=3.6.1"/>
 
-<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.5.4"/>
+<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.6.1"/>
 <script>
   try {
     var t = localStorage.getItem('np-theme');
@@ -876,11 +876,11 @@
         <div class="np-callout np-callout--warning" style="font-size:.78rem; margin-top:1.25rem; margin-bottom:.5rem;">
           Best practice: leave the temporary password blank and let the doctor set their own via the email invite.
         </div>
-        <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">
-          <button type="button" class="np-btn" onclick="closeDoctorModal()">Cancel</button>
-          <button type="submit" class="np-btn np-btn--primary">Save</button>
-        </div>
       </form>
+    </div>
+    <div class="np-modal__foot">
+      <button type="button" class="np-btn" onclick="closeDoctorModal()">Cancel</button>
+      <button type="submit" form="doctorForm" class="np-btn np-btn--primary">Save</button>
     </div>
   </div>
 </div>
@@ -945,11 +945,11 @@
           <textarea name="paymentNotes" class="np-textarea" placeholder="Any internal notes"></textarea>
         </div>
         <div id="markPaidError" class="np-error hidden"></div>
-        <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:.5rem;">
-          <button type="button" class="np-btn" onclick="closeMarkPaidModal()">Cancel</button>
-          <button type="submit" class="np-btn np-btn--primary">Mark Paid &amp; Generate Invoice</button>
-        </div>
       </form>
+    </div>
+    <div class="np-modal__foot">
+      <button type="button" class="np-btn" onclick="closeMarkPaidModal()">Cancel</button>
+      <button type="submit" form="markPaidForm" class="np-btn np-btn--primary">Mark Paid &amp; Generate Invoice</button>
     </div>
   </div>
 </div>

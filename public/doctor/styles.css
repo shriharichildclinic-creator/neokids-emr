@@ -525,17 +525,10 @@ html,body{
   animation: npPop .22s cubic-bezier(.2,.7,.2,1.1);
 }
 .np-modal__panel--lg{ max-width: 980px; }
-.np-modal__card{
-  background: rgba(255,255,255,.96);
-  border:1px solid rgba(255,255,255,.6);
-  border-radius: 20px;
-  width: 100%;
-  max-height: 92vh;
-  overflow-y: auto;
-  display:flex; flex-direction:column;
-  box-shadow: 0 30px 60px -20px rgba(15,42,71,.4), 0 0 0 1px rgba(255,255,255,.5) inset;
-  animation: npPop .22s cubic-bezier(.2,.7,.2,1.1);
-}
+/* .np-modal__card used to be a second, near-duplicate modal container with
+   its own (diverging) mobile behaviour — see the mobile media query note
+   below. All modals now use .np-modal__panel for one consistent header,
+   footer, scroll and mobile bottom-sheet treatment app-wide. */
 .np-modal__head{
   display:flex; align-items:center; gap:.75rem;
   padding: 1rem 1.25rem;
@@ -1580,18 +1573,6 @@ html, body{ max-width:100%; overflow-x:hidden; }
     flex-direction: column-reverse;
   }
   .np-modal__foot .np-btn{ width:100%; justify-content:center; }
-  
-  .np-modal__card{
-    background: var(--nk-card);
-    border-radius: 18px;
-    width:100%;
-    max-width:100%;
-    max-height: calc(100vh - 2rem);
-    overflow:auto;
-    box-shadow: 0 30px 60px -20px rgba(15,42,71,.4);
-    position:relative;
-    z-index:1;
-  }
 }
 
 @media (max-width:600px){
@@ -1741,29 +1722,18 @@ html[data-theme="dark"] .np-modal pre{
    ═══════════════════════════════════════════════════════════════════ */
 .np-modal{ z-index: 1300; }
 
-/* ── Segmented control (consultation mode, duration type) ── */
-.np-seg{
-  display:inline-flex; gap:4px; padding:4px;
-  background: var(--np-surface);
-  border:1px solid var(--np-border);
-  border-radius:12px;
-}
-.np-seg__btn{
-  flex:1; min-width:0;
-  padding:.5rem .9rem;
-  border:0; border-radius:9px;
-  background:transparent; color: var(--np-muted);
-  font-size:.86rem; font-weight:600;
-  cursor:pointer;
-  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
-  white-space:nowrap;
-}
-.np-seg__btn:hover{ color: var(--np-ink); }
-.np-seg__btn.is-active{
-  background: var(--nk-card);
-  color: var(--np-primary-600);
-  box-shadow: 0 1px 3px rgba(15,42,71,.12);
-}
+/* Segmented control (consultation mode, duration type, patient-source
+   toggle): base look now lives once in /assets/neokids-theme.css (the
+   file that loads last on every module page) instead of being partially
+   redefined here. The old doctor-only .np-seg/.np-seg__btn rule below used
+   to fight the shared one property-by-property — theme.css's border-radius/
+   padding/background won the cascade since it loads after this file, but
+   this file's border/flex/white-space/transition survived underneath it,
+   so every segmented control in the app rendered as an unintended hybrid
+   of both rulesets. Removing the duplicate here means one definition, one
+   look, everywhere (Admin, Doctor, Receptionist, Pharmacy). Anything that
+   needs to differ from the shared look (e.g. .hr-source-toggle below)
+   layers its own more-specific override on top, as before. */
 
 /* ── Patient picker (search → dropdown → selected card) ── */
 .np-ppicker{ position:relative; }

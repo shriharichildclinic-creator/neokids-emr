@@ -462,30 +462,16 @@ select.np-select:focus, select.np-input:focus, .np-select:focus{
 /* Native-arrow selects (hour/AM-PM pickers) keep the OS glyph but still
    reserve room so the value never sits underneath it. */
 .np-select-native{ appearance: auto; -webkit-appearance: auto; padding-right: 2rem; }
-/* Native date/time inputs everywhere (not just filter bars): keep a visible,
-   inset calendar glyph with breathing room from the right edge, a pointer
-   cursor so they read as pickers, and theme-aware colouring so the icon is
-   never invisible in dark mode. This is the single app-wide treatment for
-   Admin, Doctor, Receptionist and Pharmacy. */
+/* Native date/time inputs everywhere (not just filter bars): the visible
+   calendar glyph is now a drawn icon rather than the native picker
+   indicator — see the "CANONICAL DATE/TIME ICON" block at the end of this
+   file for the full app-wide treatment (Admin, Doctor, Receptionist and
+   Pharmacy all share it). Cursor stays pointer here since the field is
+   clickable everywhere via NPDatePicker in np-ui.js. */
 .np-input[type="date"], .np-input[type="time"], .np-input[type="datetime-local"],
 input.np-input[type="date"], input.np-input[type="time"], input.np-input[type="datetime-local"]{
   cursor: pointer;
-  color-scheme: light;
-  padding-right: 2.1rem;
 }
-html[data-theme="dark"] .np-input[type="date"],
-html[data-theme="dark"] .np-input[type="time"],
-html[data-theme="dark"] .np-input[type="datetime-local"]{ color-scheme: dark; }
-.np-input[type="date"]::-webkit-calendar-picker-indicator,
-.np-input[type="time"]::-webkit-calendar-picker-indicator,
-.np-input[type="datetime-local"]::-webkit-calendar-picker-indicator{
-  cursor: pointer;
-  margin-left: .35rem;
-  opacity: .8;
-}
-.np-input[type="date"]::-webkit-calendar-picker-indicator:hover,
-.np-input[type="time"]::-webkit-calendar-picker-indicator:hover,
-.np-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover{ opacity: 1; }
 /* File inputs (KYC docs, doctor photo/signature, historical-record
    attachments) were inheriting the same fixed padding/height box model
    as text inputs. That model fights the browser's own internal
@@ -2611,9 +2597,13 @@ html[data-theme="dark"] .bill-line__remove:hover{ background: rgba(220,38,38,.18
 .np-combo__empty{ padding:.6rem; color:var(--nk-muted); font-size:.82rem; text-align:center; }
 .np-seg{ display:inline-flex; background:var(--nk-border-soft); border-radius:10px; padding:3px; gap:3px; }
 .np-seg__btn{
+  flex:1 1 0; min-width:0;
   border:0; background:transparent; padding:.42rem .7rem;
   border-radius:8px; font:600 .8rem/1 inherit; color:var(--nk-muted); cursor:pointer;
+  white-space:nowrap; text-align:center;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
 }
+.np-seg__btn:hover{ color:var(--nk-ink); }
 .np-seg__btn.is-active{ background:var(--nk-card); color:var(--nk-text); box-shadow:0 1px 3px rgba(15,23,42,.12); }
 .np-bill-line{ border:1px solid var(--nk-border-soft); border-radius:12px; padding:.7rem; margin-bottom:.6rem; }
 .np-bill-line__head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:.55rem; gap:.5rem; }
@@ -2671,24 +2661,14 @@ html[data-theme="dark"] .np-bill-total{ background:rgba(137,188,189,.12); }
 .np-input, .np-select, .np-select-native, input.np-input, select.np-select{
   min-height: 40px;
 }
-/* Date/time inputs must keep the NATIVE picker affordance. Several filter
-   bars used class="np-select" on <input type="date">, which forced
-   appearance:none and hid the calendar icon entirely; where it survived, it
-   rendered black-on-dark. Reset to the native control and let color-scheme
-   theme the icon in both modes. */
-input[type="date"].np-input, input[type="time"].np-input, input[type="datetime-local"].np-input,
-input[type="date"].np-select, input[type="time"].np-select, input[type="datetime-local"].np-select{
-  appearance: auto;
-  -webkit-appearance: auto;
-  background-image: none;
-  padding-right: .8rem;
-  color-scheme: light;
-  cursor: pointer; /* whole field opens the picker, see NPDatePicker in np-ui.js */
-}
+/* Date/time icon treatment now lives in one place — see the "CANONICAL
+   DATE/TIME ICON" block at the end of this file. That block supersedes the
+   native-picker-indicator approach that used to live here (it was the
+   reason mobile browsers showed no calendar glyph at all: the native
+   indicator renders inconsistently, or not at all, on mobile WebKit). */
 html[data-theme="dark"] input[type="date"],
 html[data-theme="dark"] input[type="time"],
 html[data-theme="dark"] input[type="datetime-local"]{
-  color-scheme: dark; /* calendar/clock glyphs switch to light on dark */
   background-color: #0E1A22;
   color: #E6EEF1;
   border-color: #234551;
@@ -2767,4 +2747,72 @@ input[type="file"].np-input{
     border-radius: calc(var(--nk-radius) - 1px) calc(var(--nk-radius) - 1px) 0 0;
   }
   .np-panel__body, .np-card__body{ padding-left: 1rem; padding-right: 1rem; }
+}
+
+/* ==========================================================================
+   CANONICAL DATE/TIME ICON — one calendar glyph, every module, every input,
+   mobile and desktop (v30).
+   Every previous attempt at a date-icon fix (see the superseded comments
+   earlier in this file, plus the per-module filter-bar rules in
+   admin/styles.css and doctor/styles.css) relied on styling the browser's
+   own ::-webkit-calendar-picker-indicator. That pseudo-element is where the
+   "icons missing on mobile" bug actually comes from: mobile WebKit renders
+   it inconsistently — sometimes invisible, sometimes mis-sized — and it
+   doesn't exist at all outside Chromium/WebKit, so Firefox never matched
+   either. Each module also nudged its margin/opacity slightly differently,
+   which is the "spacing differs from other dropdowns" complaint.
+   Fix: stop drawing the browser's glyph entirely. Every date/time field
+   gets appearance:none and a drawn SVG calendar icon as a background-image,
+   positioned with the exact same right-inset (.85rem) and box model
+   (2.35rem right padding) as the .np-select chevron, so date pickers and
+   dropdowns finally match. The native picker-indicator is kept in the DOM
+   (for keyboard/screen-reader users) but made invisible and full-width, so
+   clicking anywhere still opens the picker — this doubles up with (and
+   never conflicts with) the whole-field-click handled by NPDatePicker in
+   np-ui.js. This one block wins the cascade everywhere because this file
+   loads after admin/styles.css and doctor/styles.css on every module page.
+   ========================================================================== */
+input[type="date"], input[type="time"], input[type="datetime-local"]{
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: var(--nk-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>") no-repeat right .85rem center;
+  background-size: 16px;
+  padding-right: 2.35rem !important;
+  color-scheme: light;
+  cursor: pointer; /* whole field opens the picker, see NPDatePicker in np-ui.js */
+}
+input[type="time"]{
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 16 14'/></svg>");
+}
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="time"],
+html[data-theme="dark"] input[type="datetime-local"]{
+  color-scheme: dark;
+  background-color: #0E1A22;
+  color: #E6EEF1;
+  border-color: #234551;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2391A6B0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right .85rem center;
+  background-size: 16px;
+}
+html[data-theme="dark"] input[type="time"]{
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2391A6B0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 16 14'/></svg>");
+}
+/* Keep the native indicator in the hit-testing tree (screen readers, and a
+   fallback native tap-target) but make it invisible and stretch it over the
+   whole field so it never shows a second, misaligned glyph next to ours. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  cursor: pointer;
 }

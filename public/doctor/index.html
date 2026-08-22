@@ -39,9 +39,9 @@
     }
   }
 </script>
-<link rel="stylesheet" href="/doctor/styles.css?v=3.5.0"/>
+<link rel="stylesheet" href="/doctor/styles.css?v=3.6.1"/>
 
-<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.5.4"/>
+<link rel="stylesheet" href="/assets/neokids-theme.css?v=3.6.1"/>
 <script>
   try {
     var t = localStorage.getItem('np-theme');
@@ -1342,18 +1342,18 @@
           <label class="np-field__label">Additional notes</label>
           <textarea name="additionalNotes" id="certNotes" class="np-textarea" rows="2" placeholder="Any extra remarks"></textarea>
         </div>
-        <div style="display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap;">
-          <button type="button" class="np-btn np-btn--ghost" onclick="closeCertModal()">Cancel</button>
-          <button type="submit" id="certSubmitBtn" class="np-btn np-btn--primary">Generate certificate PDF</button>
-        </div>
       </form>
+    </div>
+    <div class="np-modal__foot">
+      <button type="button" class="np-btn np-btn--ghost" onclick="closeCertModal()">Cancel</button>
+      <button type="submit" form="certForm" id="certSubmitBtn" class="np-btn np-btn--primary">Generate certificate PDF</button>
     </div>
   </div>
 </div>
 
 <!-- v3.4.0 — certificate actions (view / download / WhatsApp / email) -->
 <div id="certActionsModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="certActionsTitle">
-  <div class="np-modal__card" style="max-width:480px;">
+  <div class="np-modal__panel" style="max-width:480px;">
     <header class="np-modal__head">
       <div id="certActionsTitle" class="np-modal__title">Certificate</div>
       <button type="button" class="np-modal__close" onclick="closeCertActions()" aria-label="Close">×</button>
@@ -1385,9 +1385,9 @@
 
 <div id="linkConflictModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="linkConflictTitle">
   <div class="np-modal__backdrop" onclick="closeLinkConflict()"></div>
-  <div class="np-modal__card" style="max-width:520px;">
+  <div class="np-modal__panel" style="max-width:520px;">
     <header class="np-modal__head">
-      <h3 id="linkConflictTitle">Existing patient found</h3>
+      <h3 id="linkConflictTitle" class="np-modal__title">Existing patient found</h3>
       <button type="button" class="np-modal__close" onclick="closeLinkConflict()" aria-label="Close">×</button>
     </header>
     <div class="np-modal__body">
@@ -1395,11 +1395,11 @@
         An existing patient with this mobile number already exists. Please verify before creating a new patient.
       </p>
       <div id="linkConflictList" style="display:grid; gap:.5rem; margin-bottom:1rem;"></div>
-      <footer style="display:flex; gap:.5rem; justify-content:flex-end;">
-        <button type="button" class="np-btn" onclick="resolveLinkConflict('new')">Create separate patient</button>
-        <button type="button" id="linkConflictUseBtn" class="np-btn np-btn--primary" onclick="resolveLinkConflict('link')">Link to selected patient</button>
-      </footer>
     </div>
+    <footer class="np-modal__foot">
+      <button type="button" class="np-btn" onclick="resolveLinkConflict('new')">Create separate patient</button>
+      <button type="button" id="linkConflictUseBtn" class="np-btn np-btn--primary" onclick="resolveLinkConflict('link')">Link to selected patient</button>
+    </footer>
   </div>
 </div>
 <div id="rescheduleModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rescheduleModalTitle">
@@ -1427,36 +1427,38 @@
           <label class="np-field__label">Reason for rescheduling</label>
           <textarea name="reason" class="np-textarea" placeholder="Let the patient know why…"></textarea>
         </div>
-        <div style="display:flex; gap:.5rem; justify-content:flex-end;">
-          <button type="button" class="np-btn np-btn--ghost" onclick="closeRescheduleModal()">Cancel</button>
-          <button type="submit" id="rsSubmitBtn" class="np-btn np-btn--primary" disabled>Confirm reschedule</button>
-        </div>
       </form>
+    </div>
+    <div class="np-modal__foot">
+      <button type="button" class="np-btn np-btn--ghost" onclick="closeRescheduleModal()">Cancel</button>
+      <button type="submit" form="rescheduleForm" id="rsSubmitBtn" class="np-btn np-btn--primary" disabled>Confirm reschedule</button>
     </div>
   </div>
 </div>
 
 <div id="cancelModal" class="np-modal hidden" role="dialog" aria-modal="true" aria-labelledby="cancelTitle">
   <div class="np-modal__backdrop" onclick="closeCancelModal()"></div>
-  <div class="np-modal__card" style="max-width:480px;">
+  <div class="np-modal__panel" style="max-width:480px;">
     <header class="np-modal__head">
-      <h3 id="cancelTitle">Cancel appointment</h3>
+      <h3 id="cancelTitle" class="np-modal__title">Cancel appointment</h3>
       <button type="button" class="np-modal__close" onclick="closeCancelModal()" aria-label="Close">×</button>
     </header>
-    <form id="cancelForm" class="np-modal__body" novalidate>
-      <input type="hidden" id="cancelApptId"/>
-      <p class="np-mut" style="font-size:.9rem;margin-bottom:.75rem;">
-        This will cancel the appointment, remove the Google Meet event,
-        and notify the patient via WhatsApp &amp; email. This cannot be undone.
-      </p>
-      <div class="np-field">
-        <label class="np-field__label" for="cancelReason">Reason for cancellation *</label>
-        <textarea id="cancelReason" name="reason" class="np-input" rows="3"
-                  required minlength="3" maxlength="500"
-                  placeholder="e.g. Doctor unavailable due to emergency"></textarea>
-        <small class="np-mut">Minimum 3 characters. Shown to the patient.</small>
+    <form id="cancelForm" novalidate>
+      <div class="np-modal__body">
+        <input type="hidden" id="cancelApptId"/>
+        <p class="np-mut" style="font-size:.9rem;margin-bottom:.75rem;">
+          This will cancel the appointment, remove the Google Meet event,
+          and notify the patient via WhatsApp &amp; email. This cannot be undone.
+        </p>
+        <div class="np-field">
+          <label class="np-field__label" for="cancelReason">Reason for cancellation *</label>
+          <textarea id="cancelReason" name="reason" class="np-input" rows="3"
+                    required minlength="3" maxlength="500"
+                    placeholder="e.g. Doctor unavailable due to emergency"></textarea>
+          <small class="np-mut">Minimum 3 characters. Shown to the patient.</small>
+        </div>
       </div>
-      <footer class="np-modal__foot" style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem;">
+      <footer class="np-modal__foot">
         <button type="button" class="np-btn" onclick="closeCancelModal()">Keep appointment</button>
         <button type="submit" id="cancelSubmitBtn" class="np-btn np-btn--danger">Yes, cancel it</button>
       </footer>
