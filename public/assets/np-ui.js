@@ -516,6 +516,11 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   .np-dropzone:hover,.np-dropzone.is-drag{background:#F1F7F7;border-color:#89BCBD;color:#5A9495}
   .np-dropzone__hint{font-size:12.5px;margin-top:4px}
   .np-dropzone input{display:none}
+  /* input[type="file"].np-input in neokids-theme.css (used by the KYC card
+     inputs) has higher specificity than the rule above, so it was winning
+     and forcing the native "Choose File / No file chosen" control visible
+     underneath the styled dropzone — beat it explicitly. */
+  .np-dropzone input[type="file"].np-input{display:none}
 
 .np-sticky-head thead th{position:sticky;top:0;z-index:5;background:inherit}
 

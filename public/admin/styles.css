@@ -838,9 +838,14 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 .np-kyc-card__input{ margin:0; }
 .np-kyc-card__link{
   font-size:.72rem;
+  font-weight:600;
   margin-top:auto;
   padding-top:.15rem;
+  color: var(--nk-teal-700, #5A9495);
+  text-decoration:none;
 }
+.np-kyc-card__link:hover{ text-decoration:underline; }
+html[data-theme="dark"] .np-kyc-card__link{ color: var(--nk-teal-300, #B4D7D7); }
 .np-grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
 @media (max-width: 599px){ .np-grid-2{ grid-template-columns: 1fr; } }
 .np-mut{ color: var(--np-muted); }

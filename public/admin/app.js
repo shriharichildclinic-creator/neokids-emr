@@ -246,6 +246,12 @@ function goToAppointmentsForDate(dateStr){
   if (to)   to.value   = dateStr;
   if (search) search.value = '';
   setView('apptsView');
+  // Setting .value on the filter inputs directly does not fire a change/
+  // submit event, and loadAppointments() only ever runs from the filter
+  // form's submit handler — without this call the tab switches but the
+  // table keeps showing whatever was last loaded, silently ignoring the
+  // date that was just clicked.
+  loadAppointments();
 }
 
 function setView(view, opts) {

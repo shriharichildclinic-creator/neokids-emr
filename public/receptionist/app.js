@@ -212,6 +212,7 @@ function goToAppointmentsForDate(dateStr){
   const d = $('#fDate'); if (d) d.value = dateStr;
   const q = $('#fQ'); if (q) q.value = '';
   setView('apptsView');
+  loadAppointments();
 }
 
 function setupSidebar(){
