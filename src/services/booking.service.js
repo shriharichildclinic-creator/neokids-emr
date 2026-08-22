@@ -370,6 +370,19 @@ async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
     message: bookingMsg,
     entityType: 'APPOINTMENT', entityId: updated.id
   }).catch(() => {});
+  // Front-desk staff who actually manage this doctor's schedule — not just
+  // the doctor and admin — so reception has visibility into online bookings
+  // they didn't personally create.
+  const staffAccess = require('./staffAccess.service');
+  const receptionistIds = await staffAccess.getReceptionistIdsForDoctor(updated.doctorId).catch(() => []);
+  for (const receptionistId of receptionistIds) {
+    await notifications.create({
+      userType: 'RECEPTIONIST', userId: receptionistId,
+      type: 'NEW_ONLINE_BOOKING', title: 'New online booking',
+      message: bookingMsg,
+      entityType: 'APPOINTMENT', entityId: updated.id
+    }).catch(() => {});
+  }
 
   return updated;
 }

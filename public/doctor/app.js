@@ -506,9 +506,9 @@ async function loadStats(){
     setHtml('trendToday', trendChip(vsYesterday, 'vs yesterday'));
     setText('statToday', today);
     setHtml('statTodayBreakdown', `
-      <span class="np-dot np-dot--mint"></span>${completed} completed
-      <span class="np-dot np-dot--amber"></span>${pending} pending
-      <span class="np-dot np-dot--blue"></span>${waitCount} waiting`);
+      <span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${completed} completed</span>
+      <span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${pending} pending</span>
+      <span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${waitCount} waiting</span>`);
 
     const weekDelta = prevWeek.revenue > 0
       ? Math.round(((thisWeek.revenue - prevWeek.revenue) / prevWeek.revenue) * 100)
@@ -520,7 +520,7 @@ async function loadStats(){
     setHtml('statSparkline', daily.map(d => {
       const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
-      return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${fmtCurrencyFull(d.revenue)}"></div>`;
+      return `<div class="np-sparkline__bar" style="height:${h}px;cursor:pointer" title="${label}: ${fmtCurrencyFull(d.revenue)} — click to view that day's appointments" onclick="goToAppointmentsForDate('${d.date}')"></div>`;
     }).join(''));
 
     const pendNote = (p) => Number(p) > 0 ? ` · ${fmtCurrencyFull(p)} pending` : '';
@@ -623,6 +623,17 @@ async function loadAll(){
     list.innerHTML = emptyState('Could not load appointments', ex.message || 'Try again later.', null);
   }
 }
+// Set by clicking a revenue sparkline bar — a lightweight date drill-down
+// since the Appointments tab has no date-range filter UI of its own.
+let _apptDateFilter = null;
+function goToAppointmentsForDate(dateStr){
+  _apptDateFilter = dateStr;
+  setActiveTab('allTab');
+}
+function clearApptDateFilter(){
+  _apptDateFilter = null;
+  renderAllAppointments();
+}
 function renderAllAppointments(){
   const search = ($('#apptSearch').value || '').trim().toLowerCase();
   const status = $('#apptStatusFilter').value;
@@ -636,6 +647,7 @@ function renderAllAppointments(){
   }
   if (status) arr = arr.filter(a => a.status === status);
   if (type)   arr = arr.filter(a => a.consultationType === type);
+  if (_apptDateFilter) arr = arr.filter(a => String(a.date).slice(0,10) === _apptDateFilter);
   if (search) {
     arr = arr.filter(a => {
       const p = a.patient || {};
@@ -649,11 +661,14 @@ function renderAllAppointments(){
     return sort === 'date_asc' ? (ad - bd) : (bd - ad);
   });
   const list = $('#allList');
+  const dateChip = _apptDateFilter
+    ? `<div class="np-badge np-badge--mint" style="margin-bottom:.75rem;cursor:pointer" onclick="clearApptDateFilter()">Showing ${escapeHtml(fmtDate(_apptDateFilter))} only ✕</div>`
+    : '';
   if (!arr.length){
-    list.innerHTML = emptyState('No matches', 'Try clearing filters or changing the search term.', null);
+    list.innerHTML = dateChip + emptyState('No matches', 'Try clearing filters or changing the search term.', null);
     return;
   }
-  list.innerHTML = arr.map(apptCard).join('');
+  list.innerHTML = dateChip + arr.map(apptCard).join('');
 }
 function setupSearchFilters(){
   ['apptSearch','apptStatusFilter','apptTypeFilter','apptSort','apptHideAutoCancelled'].forEach(id => {

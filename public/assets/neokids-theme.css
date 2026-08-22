@@ -338,6 +338,13 @@ h1,h2,h3{
   display:inline-block; width:8px; height:8px; border-radius:50%;
   margin-right:.15rem; vertical-align:middle;
 }
+/* A dot + its label built as "<span class=np-dot></span>text" inside a
+   flex-wrap container turns the bare text into its own anonymous flex
+   item — flex-wrap can then wrap the text onto the next line while the
+   dot stays on the one before it, looking like the bullet floated away
+   from its own label. Wrapping both in one inline-flex unit makes the
+   pair a single flex item that wraps as a whole or not at all. */
+.np-dot-item{ display:inline-flex; align-items:center; white-space:nowrap; }
 .np-dot--mint{ background:var(--nk-teal-400); }
 .np-dot--amber{ background:var(--nk-orange-400); }
 .np-dot--blue{ background:#3b82f6; }
@@ -2723,6 +2730,16 @@ html[data-theme="dark"] .np-bill-total{ background:rgba(137,188,189,.12); }
    Every control shares one 40px box, one radius, one border token. */
 .np-input, .np-select, .np-select-native, input.np-input, select.np-select{
   min-height: 40px;
+}
+/* A verbose placeholder ("Search by patient name, phone, or problem…") on a
+   narrow mobile search box was getting hard-clipped mid-word with no visual
+   cue it was cut off at all — reads as broken rather than intentional.
+   Ellipsis doesn't fix the narrow box, but it makes the truncation look
+   deliberate instead of like the input is rendering wrong. */
+input.np-input, .np-search input{
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 /* Date/time icon treatment now lives in one place — see the "CANONICAL
    DATE/TIME ICON" block at the end of this file. That block supersedes the

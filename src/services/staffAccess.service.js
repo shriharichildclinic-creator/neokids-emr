@@ -31,6 +31,17 @@ async function getDoctorIds(receptionistId) {
   return [...new Set(rows.map(r => r.doctorId))];
 }
 
+// Reverse of getDoctorIds — every receptionist assigned to a given doctor.
+// Used to fan out a notification (e.g. a new online booking) to front-desk
+// staff who actually manage that doctor's schedule.
+async function getReceptionistIdsForDoctor(doctorId) {
+  const rows = await prisma.receptionistAssignment.findMany({
+    where: { doctorId },
+    select: { receptionistId: true }
+  });
+  return [...new Set(rows.map(r => r.receptionistId))];
+}
+
 async function getCentreIds(receptionistId) {
   const rows = await prisma.receptionistAssignment.findMany({
     where: { receptionistId },
@@ -189,6 +200,7 @@ module.exports = {
   getReceptionist,
   getAssignments,
   getDoctorIds,
+  getReceptionistIdsForDoctor,
   getCentreIds,
   primaryCentreId,
   centreForDoctor,

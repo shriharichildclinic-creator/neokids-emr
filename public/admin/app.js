@@ -235,6 +235,19 @@ function viewAppointmentInList(patientName){
   setView('apptsView');
 }
 
+// Drill-down from the daily chart / sparkline — jump to Appointments
+// filtered to exactly the day that was clicked, instead of leaving the
+// bar as a dead end that only ever shows a hover tooltip.
+function goToAppointmentsForDate(dateStr){
+  const from = document.getElementById('filterFrom');
+  const to   = document.getElementById('filterTo');
+  const search = document.getElementById('apptSearch');
+  if (from) from.value = dateStr;
+  if (to)   to.value   = dateStr;
+  if (search) search.value = '';
+  setView('apptsView');
+}
+
 function setView(view, opts) {
   $$('.tab-pane').forEach(v => v.classList.add('hidden'));
   const el = document.getElementById(view); if (el) el.classList.remove('hidden');
@@ -447,6 +460,7 @@ function bindDailyChartInteractions(wrap, data){
       <div class="np-chart__tooltip-date">${escapeHtml(label)}</div>
       <div class="np-chart__tooltip-main">${total} appointment${total === 1 ? '' : 's'}</div>
       <div class="np-chart__tooltip-sub">${completed} completed${revenue > 0 ? ' · ' + fmtCurrency(revenue) + ' revenue' : ''}</div>
+      ${total > 0 ? `<button type="button" class="np-chart__tooltip-link" data-date="${escapeHtml(d.date)}">View appointments →</button>` : ''}
     `;
   }
 
@@ -473,7 +487,7 @@ function bindDailyChartInteractions(wrap, data){
     $$('.np-chart__col', svg).forEach(c => c.classList.toggle('is-active', c === col));
   }
   function hide(){
-    tooltip.classList.remove('is-visible');
+    tooltip.classList.remove('is-visible', 'is-pinned');
     tooltip.setAttribute('aria-hidden', 'true');
     $$('.np-chart__col', svg).forEach(c => c.classList.remove('is-active'));
     pinned = null;
@@ -492,6 +506,11 @@ function bindDailyChartInteractions(wrap, data){
     if (pinned === i) { hide(); return; }
     pinned = i;
     show(i, col);
+    tooltip.classList.add('is-pinned');
+  });
+  tooltip.addEventListener('click', (e) => {
+    const link = e.target.closest('.np-chart__tooltip-link');
+    if (link && link.dataset.date) goToAppointmentsForDate(link.dataset.date);
   });
   svg.addEventListener('focusin', (e) => {
     const col = e.target.closest('.np-chart__col');
@@ -517,8 +536,8 @@ async function loadDashboard() {
     setHtml('trendToday', trendChip(a.todayDelta, 'vs yesterday'));
     setText('statToday', a.todayAppointments);
     setHtml('statTodayBreakdown',
-      `<span class="np-dot np-dot--mint"></span>${a.last7Appointments} in last 7 days` +
-      `<span class="np-dot np-dot--blue"></span>${a.last30Appointments} in last 30 days`);
+      `<span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${a.last7Appointments} in last 7 days</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${a.last30Appointments} in last 30 days</span>`);
     setText('statTodayFoot',
       `${a.completionRate}% completion · ${a.cancellationRate}% cancellation · ${a.totalDoctors} doctors · ${a.totalPatients} patients`);
 
@@ -541,7 +560,7 @@ async function loadDashboard() {
     setHtml('statSparkline', thisWeek.map(d => {
       const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
-      return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${fmtCurrency(d.revenue)}"></div>`;
+      return `<div class="np-sparkline__bar" style="height:${h}px;cursor:pointer" title="${label}: ${fmtCurrency(d.revenue)} — click to view that day's appointments" onclick="goToAppointmentsForDate('${d.date}')"></div>`;
     }).join(''));
 
     // Full 14 days is too dense for a comfortable bar width in the panel's

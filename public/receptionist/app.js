@@ -206,6 +206,14 @@ function viewFromHash(){ const h=(location.hash||'').replace(/^#/,'').trim(); if
 window.addEventListener('hashchange', ()=>{ const v=viewFromHash(); if(v) setView(v,{skipHash:true}); });
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 
+// Drill-down from the revenue sparkline — jump to Appointments filtered to
+// exactly the day that was clicked, instead of a dead-end hover tooltip.
+function goToAppointmentsForDate(dateStr){
+  const d = $('#fDate'); if (d) d.value = dateStr;
+  const q = $('#fQ'); if (q) q.value = '';
+  setView('apptsView');
+}
+
 function setupSidebar(){
   const sidebar=$('#sidebar'), backdrop=$('#sidebarBackdrop'), toggle=$('#sidebarToggle');
   if(!sidebar||!toggle||!backdrop) return;
@@ -313,9 +321,9 @@ async function loadDashboard(){
     setHtml('trendToday', trendChip(vsYesterday, 'vs yesterday'));
     setText('statToday', s.todayAppointments || 0);
     setHtml('statTodayBreakdown',
-      `<span class="np-dot np-dot--mint"></span>${s.bookedToday||0} booked` +
-      `<span class="np-dot np-dot--blue"></span>${s.walkinToday||0} walk-in` +
-      `<span class="np-dot np-dot--amber"></span>${s.pendingToday||0} awaiting arrival`);
+      `<span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${s.bookedToday||0} booked</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${s.walkinToday||0} walk-in</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${s.pendingToday||0} awaiting arrival</span>`);
     setText('statTodayFoot', `${s.arrivedToday||0} checked in today · ${s.patientsTotal||0} patients in your scope`);
 
     const weekDelta = prevWeek.collected > 0
@@ -328,12 +336,12 @@ async function loadDashboard(){
     setHtml('statSparkline', daily.map(d => {
       const h = Math.max(3, Math.round(((Number(d.collected) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
-      return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${inr(d.collected)}"></div>`;
+      return `<div class="np-sparkline__bar" style="height:${h}px;cursor:pointer" title="${label}: ${inr(d.collected)} — click to view that day's appointments" onclick="goToAppointmentsForDate('${d.date}')"></div>`;
     }).join(''));
     setHtml('statTodaySplit',
-      `<span class="np-dot np-dot--mint"></span>${inr(s.cashCollectedToday||0)} cash today` +
-      `<span class="np-dot np-dot--blue"></span>${inr(s.onlineCollectedToday||0)} online today` +
-      (s.pendingCollectionToday > 0 ? `<span class="np-dot np-dot--amber"></span>${inr(s.pendingCollectionToday)} pending` : ''));
+      `<span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${inr(s.cashCollectedToday||0)} cash today</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${inr(s.onlineCollectedToday||0)} online today</span>` +
+      (s.pendingCollectionToday > 0 ? `<span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${inr(s.pendingCollectionToday)} pending</span>` : ''));
 
     const rows = await api('/receptionist/appointments?date='+todayIso());
     __appts = rows;

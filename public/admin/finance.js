@@ -201,9 +201,9 @@ async function loadRevenue() {
     const totalEl = $('#revTotal'); if (totalEl) totalEl.textContent = inr(g.totalRevenue);
     const bd = $('#revBreakdown');
     if (bd) bd.innerHTML =
-      `<span class="np-dot np-dot--mint"></span>${inr(g.clinicShare)} NeoKidsPro share` +
-      `<span class="np-dot np-dot--amber"></span>${inr(g.tds)} TDS deducted` +
-      `<span class="np-dot np-dot--blue"></span>${g.consultations} consultations`;
+      `<span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${inr(g.clinicShare)} NeoKidsPro share</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${inr(g.tds)} TDS deducted</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${g.consultations} consultations</span>`;
 
     const netDelta = pg ? pctDelta(g.doctorNet, pg.doctorNet) : 0;
     const netTrendEl = $('#revNetTrend');
@@ -249,15 +249,15 @@ function renderSettlementAnalytics(list){
     if (pendingEl) pendingEl.textContent = inr(sum(generated));
     const pendingBd = $('#stlPendingBreakdown');
     if (pendingBd) pendingBd.innerHTML =
-      `<span class="np-dot np-dot--amber"></span>${generated.length} awaiting payment` +
-      `<span class="np-dot np-dot--blue"></span>${generated.reduce((t,s)=>t+Number(s.totalConsultations||0),0)} consults`;
+      `<span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${generated.length} awaiting payment</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${generated.reduce((t,s)=>t+Number(s.totalConsultations||0),0)} consults</span>`;
 
     const paidEl = $('#stlPaidAmount');
     if (paidEl) paidEl.textContent = inr(sum(paid));
     const paidBd = $('#stlPaidBreakdown');
     if (paidBd) paidBd.innerHTML =
-      `<span class="np-dot np-dot--mint"></span>${paid.length} settlement(s) paid` +
-      `<span class="np-dot np-dot--blue"></span>${paid.reduce((t,s)=>t+Number(s.totalConsultations||0),0)} consults`;
+      `<span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${paid.length} settlement(s) paid</span>` +
+      `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${paid.reduce((t,s)=>t+Number(s.totalConsultations||0),0)} consults</span>`;
   }
 
 async function loadSettlements() {

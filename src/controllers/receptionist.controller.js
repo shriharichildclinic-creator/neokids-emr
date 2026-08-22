@@ -15,6 +15,7 @@ const slotService = require('../services/slot.service');
 const staffAccess = require('../services/staffAccess.service');
 const staffDocs = require('../services/staff-docs.service');
 const audit = require('../services/audit.service');
+const notifications = require('../services/notification.service');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
 const logger = require('../utils/logger');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
@@ -500,6 +501,12 @@ exports.cancel = asyncHandler(async (req, res) => {
     summary: `Cancelled ${appt.patient.name} with Dr. ${appt.doctor.name} (${reason})`,
     medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
   });
+  await notifications.create({
+    userType: 'DOCTOR', userId: appt.doctorId,
+    type: 'APPOINTMENT_CANCELLED', title: 'Appointment cancelled',
+    message: `${appt.patient.name}'s appointment on ${String(appt.date).slice(0, 10)} at ${appt.startTime} was cancelled by reception (${reason}).`,
+    entityType: 'APPOINTMENT', entityId: appt.id
+  }).catch(() => {});
   const automation = require('../services/automation.service');
   automation.onAppointmentCancelled(updated, reason).catch(e => logger.error('receptionist cancel notify failed', e.message));
   res.json(updated);

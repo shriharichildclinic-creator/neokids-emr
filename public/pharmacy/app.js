@@ -173,8 +173,8 @@ function renderPharmacyStats(s){
   setHtml('trendTodayBills', trendChip(vsYesterday, 'vs yesterday'));
   setText('statTodayBills', s.todayBills || 0);
   setHtml('statTodayBreakdown',
-    `<span class="np-dot np-dot--mint"></span>${inr(todayCollected)} collected` +
-    (s.todayPending > 0 ? ` <span class="np-dot np-dot--amber"></span>${inr(s.todayPending)} pending` : ''));
+    `<span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${inr(todayCollected)} collected</span>` +
+    (s.todayPending > 0 ? ` <span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${inr(s.todayPending)} pending</span>` : ''));
 
   const weekDelta = prevWeek.collected > 0
     ? Math.round(((thisWeek.collected - prevWeek.collected) / prevWeek.collected) * 100)
@@ -186,14 +186,14 @@ function renderPharmacyStats(s){
   setHtml('statSparkline', daily.map(d => {
     const h = Math.max(3, Math.round(((Number(d.collected) || 0) / maxDaily) * 32));
     const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
-    return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${inr(d.collected)}"></div>`;
+    return `<div class="np-sparkline__bar" style="height:${h}px;cursor:pointer" title="${label}: ${inr(d.collected)} — click to view Bills" onclick="setView('billsView')"></div>`;
   }).join(''));
 
   setText('statTotalItems', s.totalItems || 0);
   setHtml('statInventoryBreakdown',
-    `<span class="np-dot np-dot--amber"></span>${s.lowStock || 0} low stock` +
-    `<span class="np-dot np-dot--blue"></span>${s.expiringSoon || 0} expiring ≤30d` +
-    (s.expired > 0 ? `<span class="np-dot np-dot--red"></span>${s.expired} already expired` : ''));
+    `<span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${s.lowStock || 0} low stock</span>` +
+    `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${s.expiringSoon || 0} expiring ≤30d</span>` +
+    (s.expired > 0 ? `<span class="np-dot-item"><span class="np-dot np-dot--red"></span>${s.expired} already expired</span>` : ''));
 }
 
 async function loadDash(){ try{ const s=await api('/pharmacy/stats');

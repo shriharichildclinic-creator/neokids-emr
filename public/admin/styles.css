@@ -660,9 +660,18 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
   transition: opacity .12s ease;
 }
 .np-chart__tooltip.is-visible{ opacity:1; visibility:visible; }
+/* Only interactive once pinned by a real click — during a plain hover
+   pass-through, pointer-events stays off so moving across bars doesn't
+   get caught on an unpinned tooltip that's about to disappear anyway. */
+.np-chart__tooltip.is-pinned{ pointer-events:auto; }
 .np-chart__tooltip-date{ font-size:.72rem; font-weight:700; color:var(--np-ink); margin-bottom:.15rem; }
 .np-chart__tooltip-main{ font-size:.82rem; font-weight:700; color:var(--np-primary-600); }
 .np-chart__tooltip-sub{ font-size:.72rem; color:var(--np-muted); margin-top:.1rem; }
+.np-chart__tooltip-link{
+  display:block; width:100%; margin-top:.4rem; padding-top:.4rem; border:0; border-top:1px dashed var(--np-border);
+  background:transparent; color:var(--np-primary-600); font-size:.72rem; font-weight:700; text-align:left; cursor:pointer;
+}
+.np-chart__tooltip-link:hover{ text-decoration:underline; }
 
 .np-chart__legend{
   display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .9rem;
