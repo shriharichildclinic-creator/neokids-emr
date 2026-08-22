@@ -502,9 +502,6 @@ function trendChip(delta, label, isPercent){
 
 async function loadDashboard() {
   try {
-    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#dashAnalytics'), 2);
-  } catch (_) {}
-  try {
     const a = await api('/admin/analytics');
     const daily = Array.isArray(a.daily) ? a.daily : [];
 
