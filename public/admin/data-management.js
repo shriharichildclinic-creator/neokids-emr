@@ -37,7 +37,8 @@ async function dmSearch(){
           <td data-label="Name"><b>${esc(r.name)}</b></td>
           <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(r.email || '—')}${r.phone ? '<br/>+91 ' + esc(r.phone) : ''}</td>
           <td data-label="${type === 'DOCTOR' ? 'Status' : 'Parent/Guardian'}">${type === 'DOCTOR' ? esc(r.status) : esc(r.parentName || '—')}</td>
-          <td data-label="Action" style="text-align:right">
+          <td data-label="Action" style="text-align:right; white-space:nowrap;">
+            <button class="np-btn np-btn--ghost np-btn--sm" onclick="dmView('${type}','${esc(r.id)}')">View</button>
             <button class="np-btn np-btn--danger np-btn--sm" onclick="dmPurge('${type}','${esc(r.id)}','${esc(r.name).replace(/'/g, "\\'")}')">Delete permanently</button>
           </td>
         </tr>`).join('') + '</tbody></table></div>';
@@ -45,6 +46,67 @@ async function dmSearch(){
     host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`;
   }
 }
+
+function dmFmtDate(d){
+  if (!d) return '—';
+  try { return (typeof fmtDate === 'function') ? fmtDate(d) : new Date(d).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); }
+  catch(_) { return String(d); }
+}
+
+async function dmView(type, id){
+  const host = $('#staffModalHost');
+  if (!host) return;
+  host.innerHTML = `<div class="np-modal"><div class="np-modal__panel np-modal__panel--lg">
+    <header class="np-modal__head"><div class="np-modal__title">Loading…</div><button class="np-modal__close" onclick="closeStaffModal()">×</button></header>
+    <div class="np-modal__body"><div class="np-empty"><div class="np-empty__sub">Loading record…</div></div></div>
+  </div></div>`;
+  try {
+    const path = type === 'DOCTOR' ? '/admin/data-management/doctors/' : '/admin/data-management/patients/';
+    const data = await api(path + id);
+    const rec = type === 'DOCTOR' ? data.doctor : data.patient;
+    const counts = data.counts || {};
+    const countChips = Object.entries(counts).map(([k, v]) =>
+      `<span class="np-badge np-badge--slate">${v} ${esc(k)}</span>`
+    ).join(' ');
+    const recentRows = (data.recentAppointments || []).map(a => `
+      <tr>
+        <td data-label="Date">${dmFmtDate(a.date)} ${esc(a.startTime || '')}</td>
+        <td data-label="${type === 'DOCTOR' ? 'Patient' : 'Doctor'}">${esc(type === 'DOCTOR' ? (a.patient && a.patient.name) : (a.doctor && a.doctor.name))}</td>
+        <td data-label="Status">${esc(a.status)}</td>
+      </tr>`).join('');
+    host.innerHTML = `<div class="np-modal"><div class="np-modal__panel np-modal__panel--lg">
+      <header class="np-modal__head"><div class="np-modal__title">${esc(rec.name)}</div><button class="np-modal__close" onclick="closeStaffModal()">×</button></header>
+      <div class="np-modal__body">
+        <div class="np-grid-2" style="margin-bottom:.75rem;">
+          <div class="np-field"><label class="np-field__label">Phone</label><div>${esc(rec.phone || '—')}</div></div>
+          <div class="np-field"><label class="np-field__label">Email</label><div>${esc(rec.email || '—')}</div></div>
+          ${type === 'DOCTOR'
+            ? `<div class="np-field"><label class="np-field__label">Status</label><div>${esc(rec.status)}</div></div>
+               <div class="np-field"><label class="np-field__label">Specialization</label><div>${esc(rec.specialization || '—')}</div></div>`
+            : `<div class="np-field"><label class="np-field__label">Parent/Guardian</label><div>${esc(rec.parentName || '—')}</div></div>
+               <div class="np-field"><label class="np-field__label">Date of birth</label><div>${dmFmtDate(rec.dateOfBirth)}</div></div>`
+          }
+        </div>
+        <div class="np-field__label" style="margin-bottom:.4rem;">Attached records</div>
+        <div style="display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:1rem;">${countChips || '<span class="np-mut">None</span>'}</div>
+        <div class="np-field__label" style="margin-bottom:.4rem;">Recent appointments</div>
+        ${recentRows
+          ? `<div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Date</th><th>${type === 'DOCTOR' ? 'Patient' : 'Doctor'}</th><th>Status</th></tr></thead><tbody>${recentRows}</tbody></table></div>`
+          : '<div class="np-empty"><div class="np-empty__sub">No appointments on record.</div></div>'}
+        <div class="np-row" style="justify-content:flex-end; gap:.5rem; margin-top:1.25rem;">
+          <button type="button" class="np-btn" onclick="closeStaffModal()">Close</button>
+          <button type="button" class="np-btn np-btn--danger" onclick="closeStaffModal(); dmPurge('${type}','${esc(id)}','${esc(rec.name).replace(/'/g, "\\'")}')">Delete permanently</button>
+        </div>
+      </div>
+    </div></div>`;
+  } catch (e) {
+    host.innerHTML = `<div class="np-modal"><div class="np-modal__panel">
+      <header class="np-modal__head"><div class="np-modal__title">Error</div><button class="np-modal__close" onclick="closeStaffModal()">×</button></header>
+      <div class="np-modal__body"><div class="np-error">${esc(e.message)}</div></div>
+    </div></div>`;
+  }
+}
+window.dmView = dmView;
 
 async function dmPurge(type, id, name){
   const label = type === 'DOCTOR' ? 'doctor' : 'patient';

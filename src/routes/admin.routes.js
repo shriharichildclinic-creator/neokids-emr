@@ -23,6 +23,8 @@ router.delete('/profile-image', c.removeOwnProfileImage);
 // route here, but a separate, clearly-labeled surface for an irreversible
 // action, not something one accidental click away from Edit/Deactivate.
 router.get('/data-management/search', dataMgmt.search);
+router.get('/data-management/patients/:id', dataMgmt.patientDetail);
+router.get('/data-management/doctors/:id', dataMgmt.doctorDetail);
 router.delete('/data-management/patients/:id', dataMgmt.purgePatient);
 router.delete('/data-management/doctors/:id', dataMgmt.purgeDoctor);
 
@@ -48,6 +50,7 @@ router.get('/kyc/:doctorId/:kind', kyc.streamKycDocument);
 
 // Appointments
 router.get('/appointments', c.listAppointments);
+router.post('/appointments/:id/refund', c.refundAppointment);
 
 // Feature 2 — Medical certificates (admin can view all)
 router.get('/certificates/templates', cert.listTemplates);

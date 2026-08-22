@@ -112,6 +112,8 @@ model Appointment {
   paymentStatus     String        @default("UNPAID")
   cashfreeOrderId   String?
   cashfreePaymentId String?
+  refundId          String?
+  refundedAt        DateTime?
   meetLink          String?       @db.Text
   meetEventId       String?
   invoiceUrl        String?

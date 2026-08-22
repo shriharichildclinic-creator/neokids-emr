@@ -620,45 +620,21 @@
                 <div class="np-grid-2">
                   <div class="np-field" id="availOnlineFrom">
                     <label class="np-field__label">Online — From</label>
-                    <div style="display:flex; gap:.4rem;">
-                      <select name="availableFromOnline_h" class="np-select-native" style="flex:1"></select>
-                      <select name="availableFromOnline_ampm" class="np-select-native" style="width:90px">
-                        <option value="AM">AM</option><option value="PM">PM</option>
-                      </select>
-                    </div>
+                    <input type="time" class="np-input" name="availableFromOnline" id="availableFromOnline" />
                   </div>
                   <div class="np-field" id="availOnlineTo">
                     <label class="np-field__label">Online — To</label>
-                    <div style="display:flex; gap:.4rem;">
-                      <select name="availableToOnline_h" class="np-select-native" style="flex:1"></select>
-                      <select name="availableToOnline_ampm" class="np-select-native" style="width:90px">
-                        <option value="AM">AM</option><option value="PM">PM</option>
-                      </select>
-                    </div>
+                    <input type="time" class="np-input" name="availableToOnline" id="availableToOnline" />
                   </div>
                   <div class="np-field" id="availOfflineFrom">
                     <label class="np-field__label">In-Person — From</label>
-                    <div style="display:flex; gap:.4rem;">
-                      <select name="availableFromOffline_h" class="np-select-native" style="flex:1"></select>
-                      <select name="availableFromOffline_ampm" class="np-select-native" style="width:90px">
-                        <option value="AM">AM</option><option value="PM">PM</option>
-                      </select>
-                    </div>
+                    <input type="time" class="np-input" name="availableFromOffline" id="availableFromOffline" />
                   </div>
                   <div class="np-field" id="availOfflineTo">
                     <label class="np-field__label">In-Person — To</label>
-                    <div style="display:flex; gap:.4rem;">
-                      <select name="availableToOffline_h" class="np-select-native" style="flex:1"></select>
-                      <select name="availableToOffline_ampm" class="np-select-native" style="width:90px">
-                        <option value="AM">AM</option><option value="PM">PM</option>
-                      </select>
-                    </div>
+                    <input type="time" class="np-input" name="availableToOffline" id="availableToOffline" />
                   </div>
                 </div>
-                <input type="hidden" name="availableFromOnline"  id="availableFromOnline" />
-                <input type="hidden" name="availableToOnline"    id="availableToOnline" />
-                <input type="hidden" name="availableFromOffline" id="availableFromOffline" />
-                <input type="hidden" name="availableToOffline"   id="availableToOffline" />
                 <div class="np-field">
                   <label class="np-field__label">Slot duration (minutes)</label>
                   <div class="np-pills" id="slotDurationBtns">

@@ -128,8 +128,12 @@ app.use('/files/profile-images',
 // the stored aadhaarUrl/panUrl/... values are still returned in the KYC
 // API payload, and the admin UI rewrites them to the protected route
 // (see public/admin/app.js setKycFieldStatus).
-app.use('/files/signatures',
-  express.static(path.join(__dirname, '..', 'storage', 'signatures')));
+// Doctor signatures were served by the same kind of public express.static
+// mount as KYC documents above, and for the same reason are removed: a
+// signature is exactly the artifact needed to forge a certificate or
+// prescription. Now readable only through
+//   GET /api/doctor/signature/file   (doctor's own JWT, own signature only)
+// registered in doctor.routes.js.
 
 const staticOpts = {
   maxAge: '1h',

@@ -35,23 +35,29 @@ async function peekPasswordToken({ rawToken, purposes }) {
 
 async function consumePasswordToken({ rawToken, purposes }) {
   const tokenHash = sha256(rawToken);
-  const token = await prisma.passwordToken.findFirst({
-    where: {
-      tokenHash,
-      usedAt: null,
-      expiresAt: { gt: new Date() },
-      ...(purposes?.length ? { purpose: { in: purposes } } : {})
-    }
-  });
+  const where = {
+    tokenHash,
+    usedAt: null,
+    expiresAt: { gt: new Date() },
+    ...(purposes?.length ? { purpose: { in: purposes } } : {})
+  };
 
+  // Atomic claim: usedAt:null is re-checked by the DB inside the UPDATE
+  // itself, not by a prior SELECT, so two concurrent requests racing on
+  // the same raw token can't both see "unused" and both succeed — only
+  // the first UPDATE's WHERE still matches.
+  const token = await prisma.passwordToken.findFirst({ where });
   if (!token) {
     throw Object.assign(new Error('Invalid or expired password token'), { statusCode: 400 });
   }
 
-  await prisma.passwordToken.update({
-    where: { id: token.id },
+  const claim = await prisma.passwordToken.updateMany({
+    where: { id: token.id, usedAt: null },
     data: { usedAt: new Date() }
   });
+  if (claim.count === 0) {
+    throw Object.assign(new Error('Invalid or expired password token'), { statusCode: 400 });
+  }
 
   return token;
 }

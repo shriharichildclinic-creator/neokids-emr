@@ -644,10 +644,6 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
 
 :focus-visible{ outline: 2px solid var(--np-primary); outline-offset: 2px; border-radius: 6px; }
 
-::-webkit-scrollbar{ width:10px; height:10px; }
-::-webkit-scrollbar-track{ background: transparent; }
-::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:999px; border:2px solid var(--np-surface); }
-::-webkit-scrollbar-thumb:hover{ background:#94a3b8; }
 
 .np-row{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
 .np-mut{ color: var(--np-muted); }

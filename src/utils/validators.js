@@ -246,16 +246,16 @@ const clinicSettingsSchema = z.object({
 //     phone) is untouched by this change.
 const bookAppointmentSchema = z.object({
   doctorId: z.string().uuid(),
-  patientName: z.string().min(2),
+  patientName: z.string().min(2).max(120).pipe(safeText('patientName')),
   phone: phoneSchema,
   email: z.string().email().optional().or(z.literal('')),
   parentName: z.preprocess(
     v => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.string().min(2, 'Parent name must be at least 2 characters').optional()
+    z.string().min(2, 'Parent name must be at least 2 characters').max(120).pipe(safeText('parentName')).optional()
   ),
   dateOfBirth: dateSchema,
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
-  primaryProblem: z.string().min(3),
+  primaryProblem: z.string().min(3).max(500).pipe(safeText('primaryProblem')),
   date: dateSchema,
   startTime: timeSchema,
   consultationType: z.enum(['ONLINE', 'OFFLINE']),
@@ -513,7 +513,7 @@ const staffPatientCreateSchema = z.object({
 
 const receptionistBookSchema = z.object({
   patientId: z.string().uuid().optional(),
-  patientName: z.string().min(2).optional(),
+  patientName: z.string().min(2).max(120).pipe(safeText('patientName')).optional(),
   phone: phoneSchema.optional(),
   email: z.string().email().optional().or(z.literal('')),
   parentName: safeOptStr('parentName'),
@@ -525,7 +525,7 @@ const receptionistBookSchema = z.object({
   date: dateSchema,
   startTime: timeSchema,
   consultationType: z.enum(['ONLINE', 'OFFLINE']),
-  primaryProblem: z.string().min(3).max(2000),
+  primaryProblem: z.string().min(3).max(2000).pipe(safeText('primaryProblem')),
   // Source is captured explicitly from the booking form. The in-person
   // channel is a single "Walk-in / Reception" option (WALK_IN); Phone and
   // Other stay distinct. Legacy CLINIC_RECEPTION is still accepted so
@@ -594,6 +594,27 @@ const pharmacyBillSchema = z.object({
   })).min(1, 'At least one item is required')
 });
 
+// Flatten Zod errors into a readable "field: message" list. Shared by the
+// admin controllers (doctor/receptionist/pharmacy management) so both stop
+// carrying their own byte-identical copy.
+function flattenZod(err) {
+  const flat = err.flatten();
+  const lines = [];
+  for (const [k, msgs] of Object.entries(flat.fieldErrors || {})) {
+    (msgs || []).forEach(m => lines.push(`${k}: ${m}`));
+  }
+  (flat.formErrors || []).forEach(m => lines.push(m));
+  return lines.length ? lines.join(' | ') : 'Invalid input';
+}
+
+// Generates a throwaway initial password for accounts created by an admin;
+// the account is onboarded via invite link rather than by sharing this
+// value directly, and mustChangePassword forces the real owner to set
+// their own on first use.
+function randomPassword() {
+  return `Neo${Math.random().toString(36).slice(2, 6)}${Date.now().toString().slice(-4)}`;
+}
+
 module.exports = {
   loginSchema,
   slotQuerySchema,
@@ -628,5 +649,7 @@ module.exports = {
   pharmacyItemSchema,
   updatePharmacyItemSchema,
   pharmacyStockSchema,
-  pharmacyBillSchema
+  pharmacyBillSchema,
+  flattenZod,
+  randomPassword
 };

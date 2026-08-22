@@ -1,6 +1,7 @@
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
-const { createDoctorSchema, updateDoctorByAdminSchema } = require('../utils/validators');
+const { createDoctorSchema, updateDoctorByAdminSchema, flattenZod, randomPassword } = require('../utils/validators');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { sendStaffInvite } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
@@ -8,21 +9,6 @@ const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../uti
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
-
-function randomPassword() {
-  return `Neo${Math.random().toString(36).slice(2, 6)}${Date.now().toString().slice(-4)}`;
-}
-
-// Flatten Zod errors into a readable "field: message" list
-function flattenZod(err) {
-  const flat = err.flatten();
-  const lines = [];
-  for (const [k, msgs] of Object.entries(flat.fieldErrors || {})) {
-    (msgs || []).forEach(m => lines.push(`${k}: ${m}`));
-  }
-  (flat.formErrors || []).forEach(m => lines.push(m));
-  return lines.length ? lines.join(' | ') : 'Invalid input';
-}
 
 exports.createDoctor = asyncHandler(async (req, res) => {
   const parsed = createDoctorSchema.safeParse(req.body);
@@ -83,17 +69,23 @@ exports.uploadDoctorProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  await deleteOldPhoto(doctor.photoUrl);
   const photoUrl = photoUrlFor(req.file.filename);
-  const updated = await prisma.doctor.update({ where: { id: doctor.id }, data: { photoUrl } });
+  let updated;
+  try {
+    updated = await prisma.doctor.update({ where: { id: doctor.id }, data: { photoUrl } });
+  } catch (err) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    throw err;
+  }
+  await deleteOldPhoto(doctor.photoUrl);
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
 
 exports.removeDoctorProfileImage = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  await deleteOldPhoto(doctor.photoUrl);
   await prisma.doctor.update({ where: { id: doctor.id }, data: { photoUrl: null } });
+  await deleteOldPhoto(doctor.photoUrl);
   res.json({ success: true });
 });
 
@@ -102,17 +94,23 @@ exports.uploadOwnProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const me = await prisma.admin.findUnique({ where: { id: req.user.id } });
   if (!me) return res.status(404).json({ error: 'Not found' });
-  await deleteOldPhoto(me.photoUrl);
   const photoUrl = photoUrlFor(req.file.filename);
-  const updated = await prisma.admin.update({ where: { id: me.id }, data: { photoUrl } });
+  let updated;
+  try {
+    updated = await prisma.admin.update({ where: { id: me.id }, data: { photoUrl } });
+  } catch (err) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    throw err;
+  }
+  await deleteOldPhoto(me.photoUrl);
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
 
 exports.removeOwnProfileImage = asyncHandler(async (req, res) => {
   const me = await prisma.admin.findUnique({ where: { id: req.user.id } });
   if (!me) return res.status(404).json({ error: 'Not found' });
-  await deleteOldPhoto(me.photoUrl);
   await prisma.admin.update({ where: { id: me.id }, data: { photoUrl: null } });
+  await deleteOldPhoto(me.photoUrl);
   res.json({ success: true });
 });
 
@@ -222,6 +220,56 @@ exports.listAppointments = asyncHandler(async (req, res) => {
     take
   });
   res.json(appointments);
+});
+
+// Admin-initiated refund for a cancelled, genuinely-Cashfree-paid
+// appointment. Deliberately admin-only (real money leaving the clinic's
+// Cashfree account) — reception can cancel an appointment, but refunding
+// it back to the parent is a separate, more consequential action.
+exports.refundAppointment = asyncHandler(async (req, res) => {
+  const cashfree = require('../services/cashfree.service');
+  const audit = require('../services/audit.service');
+
+  const appt = await prisma.appointment.findUnique({
+    where: { id: req.params.id },
+    include: { patient: true, doctor: { select: { name: true } } }
+  });
+  if (!appt) return res.status(404).json({ error: 'Appointment not found' });
+  if (appt.status !== 'CANCELLED') {
+    return res.status(400).json({ error: 'Only a cancelled appointment can be refunded' });
+  }
+  if (appt.paymentStatus !== 'PAID' || !appt.cashfreeOrderId) {
+    return res.status(400).json({ error: 'This appointment has no genuine Cashfree payment to refund' });
+  }
+  if (appt.refundId) {
+    return res.status(409).json({ error: 'This appointment was already refunded', code: 'ALREADY_REFUNDED' });
+  }
+
+  // Deterministic (not random) so a retried request after a timeout can't
+  // double-refund — Cashfree dedupes retries that reuse the same refund_id.
+  const refundId = `refund_${appt.id}`;
+  const refund = await cashfree.createRefund({
+    orderId: appt.cashfreeOrderId,
+    refundId,
+    refundAmount: Number(appt.feeAtBooking),
+    refundNote: (req.body && req.body.reason) || undefined
+  });
+
+  const updated = await prisma.appointment.update({
+    where: { id: appt.id },
+    data: { paymentStatus: 'REFUNDED', refundId: refund.cf_refund_id || refundId, refundedAt: new Date() }
+  });
+
+  await audit.log({
+    actor: { id: req.user.id, role: 'ADMIN', name: req.user.email },
+    action: 'APPOINTMENT_REFUNDED',
+    entityType: 'APPOINTMENT',
+    entityId: appt.id,
+    summary: `Refunded ₹${Number(appt.feeAtBooking).toFixed(2)} to ${appt.patient.name} for the cancelled appointment with Dr. ${appt.doctor.name}`,
+    doctorId: appt.doctorId
+  });
+
+  res.json(updated);
 });
 
 // ────────────────────────────────────────────────────────────────────
@@ -525,8 +573,35 @@ exports.analytics = asyncHandler(async (req, res) => {
     outstandingInvoices
   };
 
+  // Booking channel split — "online" consultationType above means video vs
+  // in-person visit; this is a different axis entirely: who actually made
+  // the booking. `source` defaults to NEOKIDSPRO for a patient booking
+  // straight through the public website/booking-widget (booking.service.js
+  // never sets it), while every reception-created booking sets an explicit
+  // WALK_IN/PHONE/OTHER (or legacy CLINIC_RECEPTION) value — see
+  // receptionist.controller.js createAppointment. MANUAL rows are
+  // historical/imported records, not a live booking channel, so they're
+  // reported separately rather than folded into either bucket.
+  const RECEPTION_SOURCES = ['WALK_IN', 'PHONE', 'OTHER', 'CLINIC_RECEPTION'];
+  const [
+    websiteCount, receptionCount, manualCount,
+    websiteRevenueAgg, receptionRevenueAgg
+  ] = await Promise.all([
+    prisma.appointment.count({ where: { source: 'NEOKIDSPRO' } }),
+    prisma.appointment.count({ where: { source: { in: RECEPTION_SOURCES } } }),
+    prisma.appointment.count({ where: { source: 'MANUAL' } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: 'NEOKIDSPRO', status: 'COMPLETED', paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: { in: RECEPTION_SOURCES }, status: 'COMPLETED', paymentStatus: { in: COLLECTED } } })
+  ]);
+  const bookingSource = {
+    website:   { count: websiteCount,   revenue: Number(websiteRevenueAgg._sum.feeAtBooking || 0) },
+    reception: { count: receptionCount, revenue: Number(receptionRevenueAgg._sum.feeAtBooking || 0) },
+    manual:    { count: manualCount }
+  };
+
   res.json({
     revenueBySource,
+    bookingSource,
     totalDoctors, totalPatients, totalAppointments,
     completedAppointments: completed,
     cancelledAppointments: cancelled,

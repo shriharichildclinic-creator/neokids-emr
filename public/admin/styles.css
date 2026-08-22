@@ -782,7 +782,6 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
   gap:.75rem;
   align-items:stretch;
 }
-@media (min-width:860px){ .np-kyc-grid{ grid-template-columns: repeat(4, minmax(0,1fr)); } }
 @media (max-width:599px){ .np-kyc-grid{ grid-template-columns: 1fr; } }
 .np-kyc-card{
   display:flex;

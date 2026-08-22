@@ -218,7 +218,7 @@ const VIEW_META = {
   apptsView:       { title:'Appointments',       sub:'All bookings across the clinic' },
   revenueView:     { title:'Revenue Reports',    sub:'Monthly clinic revenue — Cashfree only' },
   settlementsView: { title:'Doctor Settlements', sub:'Generate, review, and pay monthly doctor settlements' },
-  invoicesView:    { title:'Invoices',           sub:'Settlement invoices issued to doctors' },
+  invoicesView:    { title:'Settlement Invoices', sub:'Settlement invoices issued to doctors' },
   recInvoicesView: { title:'Reception Invoices',  sub:'Consultation invoices generated at clinic front desks' },
   onlineInvoicesView: { title:'Online Booking Invoices', sub:'Invoices from NeoKidsPro patient online bookings' },
   notifView:       { title:'Notification Logs',  sub:'Audit WhatsApp & email deliveries' },
@@ -503,12 +503,9 @@ function bindDailyChartInteractions(wrap, data){
   });
 }
 
-function trendChip(delta, label, isPercent){
-  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
-  const up = delta > 0;
-  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
-  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
-}
+// Shared with Admin/finance.js, Doctor, Receptionist and Pharmacy — see
+// NPFmt.trendChip in /assets/np-ui.js (single source of truth).
+const trendChip = NPFmt.trendChip;
 
 async function loadDashboard() {
   try {
@@ -562,6 +559,21 @@ async function loadDashboard() {
         <div class="np-analytics-card__split-row"><span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Pharmacy</span> ${fmtCurrency(rbs.pharmacy.collected)} collected${pend(rbs.pharmacy.pending)}</div>`);
       setText('statFoot',
         `${fmtCurrency(rbs.totalCollected)} collected all-time · ${rbs.outstandingInvoices || 0} unpaid invoice(s)`);
+    }
+
+    // Booking source — who actually made the booking (patient via the
+    // public website vs. reception on their behalf), distinct from
+    // consultationType (video vs in-person) above.
+    const bs = a.bookingSource;
+    if (bs) {
+      const totalLive = bs.website.count + bs.reception.count;
+      const pct = (n) => totalLive > 0 ? Math.round((n / totalLive) * 100) : 0;
+      setText('statBookingSourceValue', totalLive.toLocaleString('en-IN') + ' bookings');
+      setHtml('statBookingSourceSplit', `
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Website</span> ${bs.website.count} (${pct(bs.website.count)}%) · ${fmtCurrency(bs.website.revenue)}</div>
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Reception</span> ${bs.reception.count} (${pct(bs.reception.count)}%) · ${fmtCurrency(bs.reception.revenue)}</div>`);
+      setText('statBookingSourceFoot',
+        bs.manual.count > 0 ? `${bs.manual.count} historical/manual record(s) not counted above` : 'Lifetime totals');
     }
 
     const fail = a.notificationsFailed || 0;
@@ -1184,7 +1196,7 @@ function __ensureAutoCancelledFilter(){
 }
 async function loadAppointments() {
   const tbody = $('#apptsTbody');
-  tbody.innerHTML = `<tr><td colspan="7" class="np-mut" style="padding:1.5rem; text-align:center;">Loading…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="np-mut" style="padding:1.5rem; text-align:center;">Loading…</td></tr>`;
   const qs = new URLSearchParams();
   const status   = $('#filterStatus').value;
   const type     = $('#filterType').value;
@@ -1208,7 +1220,7 @@ async function loadAppointments() {
     const appts = await api('/admin/appointments' + (qs.toString() ? '?' + qs.toString() : ''));
     __apptsCache = appts;
     if (!appts.length){
-      tbody.innerHTML = `<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No appointments match</div><div class="np-empty__sub">Try clearing some filters.</div></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No appointments match</div><div class="np-empty__sub">Try clearing some filters.</div></div></td></tr>`;
       return;
     }
     appts.sort((a,b) => {
@@ -1237,13 +1249,33 @@ async function loadAppointments() {
         <td data-label="Status">${statusBadge(a.status)}${a.status === 'CANCELLED' && a.notes ? `<div style="font-size:.72rem; color:#B91C1C; margin-top:.2rem;">${escapeHtml(a.notes)}</div>` : ''}</td>
         <td data-label="Payment">${paymentBadge(a.paymentStatus)}</td>
         <td data-label="Fee" style="text-align:right;"><b>${fmtCurrencyFull(a.feeAtBooking)}</b></td>
+        <td data-label="Actions" style="text-align:right;">
+          ${a.status === 'CANCELLED' && a.paymentStatus === 'PAID' && a.cashfreeOrderId
+            ? `<button class="np-btn np-btn--danger np-btn--sm" onclick="refundAppointment('${a.id}','${escapeHtml(a.patient.name).replace(/'/g, "\\'")}')">Refund</button>`
+            : ''}
+        </td>
       </tr>`;
     }).join('');
     _renderApptFilterChips({ status, type, payment, doctorId, from, to, q });
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="np-error">${escapeHtml(err.message)}</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8"><div class="np-error">${escapeHtml(err.message)}</div></td></tr>`;
   }
 }
+async function refundAppointment(id, patientName){
+  const ok = await NPModal.confirm({
+    title: 'Refund this appointment?',
+    message: `This sends the consultation fee back to ${patientName} via Cashfree. This cannot be undone.`,
+    okText: 'Refund',
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    await api('/admin/appointments/' + encodeURIComponent(id) + '/refund', { method: 'POST' });
+    NPToast.success('Refund issued');
+    loadAppointments();
+  } catch (e) { NPToast.error(e.message || 'Could not issue refund'); }
+}
+window.refundAppointment = refundAppointment;
 $('#apptFilters').addEventListener('submit', (event) => { event.preventDefault(); loadAppointments(); });
 $('#clearFilters').addEventListener('click', () => {
   ['filterStatus','filterType','filterPayment','filterDoctor','filterFrom','filterTo','apptSearch'].forEach(id => {
@@ -1742,7 +1774,7 @@ async function showDashboard() {
       ['Go to Appointments',  '📅', () => setView('apptsView')],
       ['Go to Revenue',       '💰', () => setView('revenueView')],
       ['Go to Settlements',   '🧾', () => setView('settlementsView')],
-      ['Go to Invoices',      '📄', () => setView('invoicesView')],
+      ['Go to Settlement Invoices', '📄', () => setView('invoicesView')],
       ['Go to Notifications', '🔔', () => setView('notifView')],
       ['Go to Settings',      '⚙️', () => setView('settingsView')],
       ['Add Doctor',          '➕', () => { setView('doctorsView'); setTimeout(() => openDoctorModal(), 50); }],

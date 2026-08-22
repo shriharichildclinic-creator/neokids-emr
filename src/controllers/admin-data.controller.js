@@ -80,6 +80,57 @@ exports.search = asyncHandler(async (req, res) => {
   res.json(rows);
 });
 
+// Read-only drill-down shown before a permanent delete, so admin can see
+// what's actually attached to a record instead of just its name/phone.
+exports.patientDetail = asyncHandler(async (req, res) => {
+  const patient = await prisma.patient.findUnique({ where: { id: req.params.id } });
+  if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+  const [appointmentCount, invoiceCount, certificateCount, prescriptionCount, recentAppointments] = await Promise.all([
+    prisma.appointment.count({ where: { patientId: patient.id } }),
+    prisma.consultationInvoice.count({ where: { patientId: patient.id } }),
+    prisma.medicalCertificate.count({ where: { patientId: patient.id } }),
+    prisma.prescription.count({ where: { appointment: { is: { patientId: patient.id } } } }),
+    prisma.appointment.findMany({
+      where: { patientId: patient.id },
+      select: { id: true, date: true, startTime: true, status: true, doctor: { select: { name: true } } },
+      orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
+      take: 5
+    })
+  ]);
+
+  res.json({
+    patient,
+    counts: { appointments: appointmentCount, invoices: invoiceCount, certificates: certificateCount, prescriptions: prescriptionCount },
+    recentAppointments
+  });
+});
+
+exports.doctorDetail = asyncHandler(async (req, res) => {
+  const doctor = await prisma.doctor.findUnique({ where: { id: req.params.id } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+
+  const [appointmentCount, invoiceCount, certificateCount, settlementCount, previousRecordCount, recentAppointments] = await Promise.all([
+    prisma.appointment.count({ where: { doctorId: doctor.id } }),
+    prisma.consultationInvoice.count({ where: { doctorId: doctor.id } }),
+    prisma.medicalCertificate.count({ where: { doctorId: doctor.id } }),
+    prisma.doctorSettlement.count({ where: { doctorId: doctor.id } }),
+    prisma.previousRecord.count({ where: { doctorId: doctor.id } }),
+    prisma.appointment.findMany({
+      where: { doctorId: doctor.id },
+      select: { id: true, date: true, startTime: true, status: true, patient: { select: { name: true } } },
+      orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
+      take: 5
+    })
+  ]);
+
+  res.json({
+    doctor: { ...doctor, status: doctor.deletedAt ? 'Deactivated' : 'Active' },
+    counts: { appointments: appointmentCount, invoices: invoiceCount, certificates: certificateCount, settlements: settlementCount, previousRecords: previousRecordCount },
+    recentAppointments
+  });
+});
+
 exports.purgePatient = asyncHandler(async (req, res) => {
   if (!(await verifyAdminPassword(req, res))) return;
   const patient = await prisma.patient.findUnique({ where: { id: req.params.id } });

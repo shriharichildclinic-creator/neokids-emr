@@ -74,6 +74,31 @@ async function invalidateGeneratedPdfsForDoctor(doctorId) {
   logger.info('invalidated cached PDFs after signature change', { doctorId, candidates: targets.length, deleted });
 }
 
+// GET /api/doctor/signature/file — streams the doctor's OWN current
+// signature image to an authenticated doctor. Replaces the removed public
+// express.static mount on /files/signatures: a signature is exactly the
+// artifact needed to forge a certificate/prescription, so it must never be
+// reachable by a bare, unauthenticated URL. Mirrors kyc.controller.js's
+// streamKycDocument (path resolved strictly inside SIG_DIR).
+exports.streamFile = asyncHandler(async (req, res) => {
+  const doctor = await prisma.doctor.findFirst({
+    where: { id: req.user.id, deletedAt: null },
+    select: { signatureUrl: true }
+  });
+  if (!doctor || !doctor.signatureUrl) return res.status(404).json({ error: 'No signature uploaded' });
+
+  const filename = path.basename(doctor.signatureUrl);
+  const disk = path.join(SIG_DIR, filename);
+  if (!disk.startsWith(SIG_DIR + path.sep) || !fs.existsSync(disk)) {
+    return res.status(404).json({ error: 'Signature file not found' });
+  }
+
+  const ext = path.extname(disk).toLowerCase();
+  res.setHeader('Content-Type', ext === '.png' ? 'image/png' : 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  fs.createReadStream(disk).pipe(res);
+});
+
 exports.get = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findFirst({
     where: { id: req.user.id, deletedAt: null },

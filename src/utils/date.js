@@ -73,6 +73,50 @@ function calcAge(dob) {
   return `${years} yr${years === 1 ? '' : 's'} ${months} month${months === 1 ? '' : 's'}`;
 }
 
+/**
+ * Buckets one or more row sources into a trailing `days`-day daily series
+ * keyed by ISO date (UTC), then splits that series into "this week" (the
+ * trailing 7 days) vs "previous week" totals for the given `weekFields`.
+ *
+ * Shared by the Doctor/Receptionist/Pharmacy dashboard `stats` endpoints,
+ * which each build a 14-day trend sparkline plus a week-over-week delta —
+ * only the bucket shape, row source(s), and per-row accumulation differ.
+ *
+ * @param {Date} start - first day of the window (typically `today` minus
+ *   `days - 1`)
+ * @param {number} [days=14] - total number of days to bucket
+ * @param {() => object} emptyBucket - returns a fresh zeroed bucket shape
+ *   (the `date` key is added automatically, do not include it here)
+ * @param {Array<{ rows: any[], dateOf: (row: any) => (Date|string), accumulate: (bucket: object, row: any) => void }>} sources -
+ *   one or more row arrays to fold into the buckets; each row is matched to
+ *   its bucket via `dateOf` and merged in via `accumulate`
+ * @param {string[]} weekFields - bucket fields to sum into `thisWeek`/`prevWeek`
+ * @returns {{ daily: Record<string, object>, thisWeek: object, prevWeek: object, last7Key: string }}
+ */
+function buildDailyTrend({ start, days = 14, emptyBucket, sources, weekFields }) {
+  const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+  const daily = {};
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start); d.setUTCDate(d.getUTCDate() + i);
+    daily[dayKey(d)] = { date: dayKey(d), ...emptyBucket() };
+  }
+  for (const { rows, dateOf, accumulate } of sources) {
+    for (const row of rows) {
+      const bucket = daily[dayKey(dateOf(row))];
+      if (bucket) accumulate(bucket, row);
+    }
+  }
+  const splitStart = new Date(start); splitStart.setUTCDate(splitStart.getUTCDate() + (days - 7));
+  const last7Key = dayKey(splitStart);
+  const thisWeek = {}, prevWeek = {};
+  weekFields.forEach(f => { thisWeek[f] = 0; prevWeek[f] = 0; });
+  for (const bucket of Object.values(daily)) {
+    const target = bucket.date >= last7Key ? thisWeek : prevWeek;
+    weekFields.forEach(f => { target[f] += bucket[f]; });
+  }
+  return { daily, thisWeek, prevWeek, last7Key };
+}
+
 module.exports = {
   DEFAULT_TIME_ZONE,
   parseDateOnly,
@@ -82,5 +126,6 @@ module.exports = {
   getTodayDateOnly,
   getCurrentTimeMinutes,
   formatDateOnly,
-  calcAge
+  calcAge,
+  buildDailyTrend
 };

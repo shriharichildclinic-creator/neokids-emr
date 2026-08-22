@@ -56,7 +56,7 @@ h1,h2,h3{font-family:'Poppins',sans-serif;color:var(--g-ink);margin:0}
 .g-theme-btn:hover{color:var(--g-teal-600);border-color:var(--g-teal-200)}
 
 /* Hero */
-.g-hero{padding:clamp(32px,8vw,56px) 0 clamp(12px,3vw,20px);text-align:center}
+.g-hero{padding-top:clamp(32px,8vw,56px);padding-bottom:clamp(12px,3vw,20px);text-align:center}
 .g-hero__badge{display:inline-flex;align-items:center;gap:7px;background:var(--g-teal-50);color:var(--g-teal-700);border:1px solid var(--g-teal-100);border-radius:var(--g-radius-pill);padding:5px 14px;font-size:.78rem;font-weight:600;margin-bottom:18px}
 html[data-theme="dark"] .g-hero__badge{background:rgba(137,188,189,.12);border-color:rgba(137,188,189,.28);color:#B4D7D7}
 .g-hero__badge .g-dot{width:7px;height:7px;border-radius:50%;background:#22C55E;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
@@ -65,7 +65,7 @@ html[data-theme="dark"] .g-hero__badge{background:rgba(137,188,189,.12);border-c
 .g-hero p{max-width:620px;margin:16px auto 0;color:var(--g-muted);font-size:clamp(.95rem,2.4vw,1.05rem)}
 
 /* Portal cards */
-.g-section{padding:var(--g-pad-section) 0}
+.g-section{padding-top:var(--g-pad-section);padding-bottom:var(--g-pad-section)}
 .g-section__head{margin-bottom:22px}
 .g-section__eyebrow{font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g-teal-600)}
 .g-section__title{font-size:1.4rem;font-weight:700;margin-top:6px}
@@ -102,7 +102,7 @@ html[data-theme="dark"] .g-feature__icon{background:rgba(137,188,189,.12);color:
 .g-sec__desc{font-size:.76rem;color:var(--g-muted)}
 
 /* Footer */
-.g-footer{border-top:1px solid var(--g-border-soft);margin-top:20px;padding:clamp(20px,5vw,28px) 0 max(28px,calc(env(safe-area-inset-bottom) + 20px))}
+.g-footer{border-top:1px solid var(--g-border-soft);margin-top:20px;padding-top:clamp(20px,5vw,28px);padding-bottom:max(28px,calc(env(safe-area-inset-bottom) + 20px))}
 .g-footer__inner{display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:center}
 .g-footer__meta{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--g-muted);font-size:.82rem}
 .g-footer__meta b{color:var(--g-text);font-weight:600}

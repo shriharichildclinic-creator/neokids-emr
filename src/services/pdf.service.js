@@ -211,7 +211,7 @@ async function generateInvoice(appointment) {
     doc.text('Description', 60, tableTop + 8);
     doc.text('Date', 260, tableTop + 8);
     doc.text('Type', 360, tableTop + 8);
-    doc.text('Amount (₹)', amtX, tableTop + 8, { width: amtW, align: 'right' });
+    doc.text('Amount (Rs.)', amtX, tableTop + 8, { width: amtW, align: 'right' });
 
     doc.font('Helvetica').fontSize(11);
     const rowY = tableTop + 35;
@@ -223,7 +223,7 @@ async function generateInvoice(appointment) {
     doc.moveTo(50, rowY + 30).lineTo(doc.page.width - 50, rowY + 30).stroke();
     doc.font('Helvetica-Bold').fontSize(12);
     doc.text('Total Paid:', 360, rowY + 45);
-    doc.text(`₹ ${Number(appointment.feeAtBooking).toFixed(2)}`, amtX, rowY + 45, { width: amtW, align: 'right' });
+    doc.text(`Rs. ${Number(appointment.feeAtBooking).toFixed(2)}`, amtX, rowY + 45, { width: amtW, align: 'right' });
 
     drawSignatureBlock(doc, appointment.doctor, { y: doc.page.height - 185 });
 
@@ -431,7 +431,7 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
 
     doc.text('Description', 60, sumTop + 8);
     doc.text('Basis', 300, sumTop + 8);
-    doc.text('Amount (₹)', 440, sumTop + 8, {
+    doc.text('Amount (Rs.)', 440, sumTop + 8, {
       width: doc.page.width - 50 - 440,
       align: 'right'
     });
@@ -478,7 +478,7 @@ async function generateSettlementInvoice({ settlement, doctor, rows, invoiceNumb
        .font('Helvetica-Bold')
        .fontSize(13);
 
-    doc.text(`Net Payable to Doctor: ₹ ${num(settlement.netPayable)}`,
+    doc.text(`Net Payable to Doctor: Rs. ${num(settlement.netPayable)}`,
       50, y + 9, { width: doc.page.width - 100, align: 'center' });
 
     y += 50;
@@ -555,7 +555,7 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
     doc.text('Description', 60, tableTop + 8);
     doc.text('Date', 260, tableTop + 8);
     doc.text('Type', 360, tableTop + 8);
-    doc.text('Amount (₹)', amtX, tableTop + 8, { width: amtW, align: 'right' });
+    doc.text('Amount (Rs.)', amtX, tableTop + 8, { width: amtW, align: 'right' });
 
     doc.font('Helvetica').fontSize(11);
     const rowY = tableTop + 35;
@@ -567,7 +567,7 @@ async function generateConsultationInvoice({ invoice, appointment, patient, doct
     doc.moveTo(50, rowY + 30).lineTo(doc.page.width - 50, rowY + 30).stroke();
     doc.font('Helvetica-Bold').fontSize(12);
     doc.text('Total Paid:', 360, rowY + 45);
-    doc.text(`₹ ${Number(invoice.amount).toFixed(2)}`, amtX, rowY + 45, { width: amtW, align: 'right' });
+    doc.text(`Rs. ${Number(invoice.amount).toFixed(2)}`, amtX, rowY + 45, { width: amtW, align: 'right' });
 
     drawSignatureBlock(doc, doctor, { y: doc.page.height - 185 });
 
@@ -634,8 +634,8 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
     doc.fillColor('#000').fontSize(11).font('Helvetica-Bold');
     doc.text('Medicine', 60, tableTop + 8);
     doc.text('Qty', qtyX, tableTop + 8, { width: qtyW, align: 'right' });
-    doc.text('Rate (₹)', rateX, tableTop + 8, { width: rateW, align: 'right' });
-    doc.text('Amount (₹)', amtX, tableTop + 8, { width: amtW, align: 'right' });
+    doc.text('Rate (Rs.)', rateX, tableTop + 8, { width: rateW, align: 'right' });
+    doc.text('Amount (Rs.)', amtX, tableTop + 8, { width: amtW, align: 'right' });
 
     doc.font('Helvetica').fontSize(10);
     let rowY = tableTop + 32;
@@ -671,7 +671,7 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
     }
     doc.font('Helvetica-Bold').fontSize(11).fillColor('#000');
     doc.text('Total Paid', labelX, rowY, { width: labelW, align: 'right' });
-    doc.text(`₹ ${total.toFixed(2)}`, amtX, rowY, { width: amtW, align: 'right' });
+    doc.text(`Rs. ${total.toFixed(2)}`, amtX, rowY, { width: amtW, align: 'right' });
     rowY += 24;
 
     if (bill.notes) {

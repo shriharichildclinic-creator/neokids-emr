@@ -294,12 +294,9 @@ async function showDashboard(){
   setView(__restore || 'dashView', __restore ? { skipHash: true } : undefined);
 }
 
-function trendChip(delta, label, isPercent){
-  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
-  const up = delta > 0;
-  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
-  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
-}
+// Shared with Admin (app.js + finance.js), Doctor and Pharmacy — see
+// NPFmt.trendChip in /assets/np-ui.js (single source of truth).
+const trendChip = NPFmt.trendChip;
 
 async function loadDashboard(){
   try{

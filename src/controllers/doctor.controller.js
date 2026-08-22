@@ -18,7 +18,7 @@ const {
 const automation = require('../services/automation.service');
 const slotService = require('../services/slot.service');
 const { timeToMinutes, minutesToTime } = require('../services/slot.service');
-const { parseDateOnly, parseDateOnlyOrNull, getTodayDateOnly, getTodayDateString } = require('../utils/date');
+const { parseDateOnly, parseDateOnlyOrNull, getTodayDateOnly, getTodayDateString, buildDailyTrend } = require('../utils/date');
 const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
 const { incrementDoctorRevenue, decrementDoctorRevenue } = require('../services/lifecycle.service');
 const pdf = require('../services/pdf.service');
@@ -105,17 +105,23 @@ exports.uploadProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const doctor = await prisma.doctor.findUnique({ where: { id: req.user.id } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  await deleteOldPhoto(doctor.photoUrl);
   const photoUrl = photoUrlFor(req.file.filename);
-  const updated = await prisma.doctor.update({ where: { id: req.user.id }, data: { photoUrl } });
+  let updated;
+  try {
+    updated = await prisma.doctor.update({ where: { id: req.user.id }, data: { photoUrl } });
+  } catch (err) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    throw err;
+  }
+  await deleteOldPhoto(doctor.photoUrl);
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
 
 exports.removeProfileImage = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findUnique({ where: { id: req.user.id } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  await deleteOldPhoto(doctor.photoUrl);
   await prisma.doctor.update({ where: { id: req.user.id }, data: { photoUrl: null } });
+  await deleteOldPhoto(doctor.photoUrl);
   res.json({ success: true });
 });
 
@@ -670,7 +676,6 @@ exports.stats = asyncHandler(async (req, res) => {
   const PENDING = PENDING_PAYMENT_STATUSES;
 
   const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate() - 6);   // 7-day window incl. today
   const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13); // prior 7-day window for w/w delta
   const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 29);
   const prev30 = new Date(today); prev30.setUTCDate(prev30.getUTCDate() - 59);
@@ -714,24 +719,22 @@ exports.stats = asyncHandler(async (req, res) => {
   // Bucket the trailing 14 days into a per-day series (for the dashboard's
   // trend sparkline) and split it into this-week vs the prior week so the
   // UI can show a real week-over-week delta instead of a bare number.
-  const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
-  const daily = {};
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(last14); d.setUTCDate(d.getUTCDate() + i);
-    daily[dayKey(d)] = { date: dayKey(d), appointments: 0, completed: 0, revenue: 0 };
-  }
-  const last7Key = dayKey(last7);
-  let thisWeekCount = 0, prevWeekCount = 0, thisWeekRevenue = 0, prevWeekRevenue = 0;
-  for (const row of fortnightRows) {
-    const key = dayKey(row.date);
-    const bucket = daily[key];
-    if (!bucket) continue;
-    bucket.appointments += 1;
-    const amount = COLLECTED.includes(row.paymentStatus) ? Number(row.feeAtBooking || 0) : 0;
-    if (row.status === 'COMPLETED') { bucket.completed += 1; bucket.revenue += amount; }
-    if (key >= last7Key) { thisWeekCount += 1; if (row.status === 'COMPLETED') thisWeekRevenue += amount; }
-    else                 { prevWeekCount += 1; if (row.status === 'COMPLETED') prevWeekRevenue += amount; }
-  }
+  const { daily, thisWeek, prevWeek } = buildDailyTrend({
+    start: last14,
+    emptyBucket: () => ({ appointments: 0, completed: 0, revenue: 0 }),
+    sources: [{
+      rows: fortnightRows,
+      dateOf: (row) => row.date,
+      accumulate: (bucket, row) => {
+        bucket.appointments += 1;
+        const amount = COLLECTED.includes(row.paymentStatus) ? Number(row.feeAtBooking || 0) : 0;
+        if (row.status === 'COMPLETED') { bucket.completed += 1; bucket.revenue += amount; }
+      }
+    }],
+    weekFields: ['appointments', 'revenue']
+  });
+  const thisWeekCount = thisWeek.appointments, prevWeekCount = prevWeek.appointments;
+  const thisWeekRevenue = thisWeek.revenue, prevWeekRevenue = prevWeek.revenue;
 
   res.json({
     todayAppointments: todayCount,

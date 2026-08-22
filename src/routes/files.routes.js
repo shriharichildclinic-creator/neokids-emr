@@ -46,6 +46,16 @@ const router = express.Router();
    Helpers
    ───────────────────────────────────────────────────────────────────── */
 
+// The share-record page below builds raw HTML by string concatenation —
+// escape every interpolated value even though the input validators also
+// reject HTML tags now, since rows created before that validation existed
+// can still contain unescaped markup.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 // Strict UUID v1-v5 pattern. Refuses anything with `/`, `..`, etc.
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -499,13 +509,13 @@ router.get('/share-record/:token', asyncHandler(async (req, res) => {
   if (!r) return res.status(404).json({ error: 'Record not found' });
   const rows = r.attachments.map(a => {
     const t = histSvc.attachmentToken(a);
-    return '<li>' + (a.label || a.originalName) + ' - <a href="/api/files/share/' + t + '?dl=0" target="_blank">Preview</a> | <a href="/api/files/share/' + t + '?dl=1">Download</a></li>';
+    return '<li>' + esc(a.label || a.originalName) + ' - <a href="/api/files/share/' + encodeURIComponent(t) + '?dl=0" target="_blank">Preview</a> | <a href="/api/files/share/' + encodeURIComponent(t) + '?dl=1">Download</a></li>';
   }).join('');
-  const pdf = r.pdfUrl ? '<p><a href="' + r.pdfUrl + '" target="_blank">View Record Summary PDF</a></p>' : '';
+  const pdf = r.pdfUrl ? '<p><a href="' + esc(r.pdfUrl) + '" target="_blank">View Record Summary PDF</a></p>' : '';
   res.setHeader('Content-Type', 'text/html');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, no-store, max-age=0');
-  res.send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medical Record - NeoKidsPro</title></head><body style="font-family:sans-serif;max-width:640px;margin:40px auto;padding:0 16px"><h2>Medical Record Shared</h2><p><b>Patient:</b> ' + (r.patient ? r.patient.name : '') + '<br/><b>Record:</b> ' + (r.title || r.recordType || 'Historical Record') + '<br/><b>Date:</b> ' + new Date(r.recordDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + '</p>' + pdf + '<h3>Attachments</h3><ul>' + (rows || '<li>No attachments</li>') + '</ul><p style="color:#777;font-size:12px">Secure link - expires in 7 days. NeoKidsPro EMR.</p></body></html>');
+  res.send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medical Record - NeoKidsPro</title></head><body style="font-family:sans-serif;max-width:640px;margin:40px auto;padding:0 16px"><h2>Medical Record Shared</h2><p><b>Patient:</b> ' + esc(r.patient ? r.patient.name : '') + '<br/><b>Record:</b> ' + esc(r.title || r.recordType || 'Historical Record') + '<br/><b>Date:</b> ' + esc(new Date(r.recordDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })) + '</p>' + pdf + '<h3>Attachments</h3><ul>' + (rows || '<li>No attachments</li>') + '</ul><p style="color:#777;font-size:12px">Secure link - expires in 7 days. NeoKidsPro EMR.</p></body></html>');
 }));
 
 module.exports = router;

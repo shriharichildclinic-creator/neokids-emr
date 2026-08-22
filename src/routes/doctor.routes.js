@@ -26,6 +26,7 @@ router.delete('/profile-image',                             c.removeProfileImage
 
 // ─── Feature 3 — Doctor digital signature ───
 router.get('/signature',                                    sig.get);
+router.get('/signature/file',                               sig.streamFile);
 router.post('/signature', uploadSignature.single('signature'), sig.upload);
 router.post('/signature/drawn',                             sig.uploadDrawn);
 router.delete('/signature',                                 sig.remove);

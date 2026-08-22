@@ -155,12 +155,9 @@ function logout(){ localStorage.removeItem('np_pharmacy_token'); TOKEN=null; sho
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
 async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); setupProfileMenu(); try{ const me=await api('/auth/me'); __me=me.user||me; const __initials=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); $('#userName').textContent=__me.name; $('#userInitials').textContent=__initials; /* mirror into dropdown "logged in as" block -- stays visible on mobile once header hides .np-profile__meta */ if($('#userIdName'))$('#userIdName').textContent=__me.name; if($('#userIdInitials'))$('#userIdInitials').textContent=__initials; if($('#userIdEmail'))$('#userIdEmail').textContent=__me.email||''; setTopBarAvatar(__me.photoUrl||null); setOwnPhotoPreview(__me.photoUrl||null); }catch(e){} const __r=viewFromHash(); setView(__r||'dashView', __r?{skipHash:true}:undefined); }
 
-function trendChip(delta, label, isPercent){
-  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
-  const up = delta > 0;
-  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
-  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
-}
+// Shared with Admin (app.js + finance.js), Doctor and Receptionist — see
+// NPFmt.trendChip in /assets/np-ui.js (single source of truth).
+const trendChip = NPFmt.trendChip;
 
 // Single source of truth for the dashboard's analytics panels — used on
 // initial load and after every mutation (bill save/edit/stock adjust),

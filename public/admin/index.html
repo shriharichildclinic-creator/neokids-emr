@@ -113,7 +113,7 @@
         </button>
         <button class="np-nav-item" data-view="invoicesView" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          Invoices
+          Settlement Invoices
         </button>
         <button class="np-nav-item" data-view="recInvoicesView" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
@@ -225,6 +225,12 @@
               <div class="np-analytics-card__split" id="statSplit"></div>
               <div class="np-analytics-card__foot" id="statFoot"></div>
             </div>
+            <div class="np-analytics-card">
+              <div class="np-analytics-card__head"><div class="np-analytics-card__eyebrow">Booking source</div></div>
+              <div class="np-analytics-card__value" id="statBookingSourceValue">—</div>
+              <div class="np-analytics-card__split" id="statBookingSourceSplit"></div>
+              <div class="np-analytics-card__foot" id="statBookingSourceFoot"></div>
+            </div>
           </div>
           <div id="dashSecondGrid" class="np-dash-second">
             <div class="np-panel">
@@ -314,7 +320,7 @@
               
               <div id="apptFilterChips" style="display:none;"></div>
               <div class="np-table-wrap">
-                <table class="np-table np-sticky-head">
+                <table class="np-table np-sticky-head np-table--cards">
                   <thead>
                     <tr>
                       <th>Date / Time</th>
@@ -324,6 +330,7 @@
                       <th>Status</th>
                       <th>Payment</th>
                       <th style="text-align:right;">Fee</th>
+                      <th style="text-align:right;">Actions</th>
                     </tr>
                   </thead>
                   <tbody id="apptsTbody"></tbody>

@@ -182,12 +182,9 @@ async function loadRevenue() {
     }).join('');
   }
 
-  function trendChip(delta, label, isPercent){
-    if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
-    const up = delta > 0;
-    const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
-    return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
-  }
+  // Shared with Admin/app.js, Doctor, Receptionist and Pharmacy — see
+  // NPFmt.trendChip in /assets/np-ui.js (single source of truth).
+  const trendChip = NPFmt.trendChip;
 
   function pctDelta(curr, prev){
     if (!prev) return curr > 0 ? 100 : 0;

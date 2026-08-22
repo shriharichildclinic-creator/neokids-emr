@@ -1,3 +1,4 @@
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -8,7 +9,7 @@ const {
   prescriptionSchema,
   medicalCertificateSchema
 } = require('../utils/validators');
-const { parseDateOnly, parseDateOnlyOrNull, getTodayDateOnly, getTodayDateString, calcAge } = require('../utils/date');
+const { parseDateOnly, parseDateOnlyOrNull, getTodayDateOnly, getTodayDateString, calcAge, buildDailyTrend } = require('../utils/date');
 const { findOrCreatePatient } = require('../services/booking.service');
 const slotService = require('../services/slot.service');
 const staffAccess = require('../services/staffAccess.service');
@@ -60,17 +61,23 @@ exports.uploadProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const me = await staffAccess.getReceptionist(req.user.id);
   if (!me) return res.status(404).json({ error: 'Not found' });
-  await deleteOldPhoto(me.photoUrl);
   const photoUrl = photoUrlFor(req.file.filename);
-  const updated = await prisma.receptionist.update({ where: { id: me.id }, data: { photoUrl } });
+  let updated;
+  try {
+    updated = await prisma.receptionist.update({ where: { id: me.id }, data: { photoUrl } });
+  } catch (err) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    throw err;
+  }
+  await deleteOldPhoto(me.photoUrl);
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
 
 exports.removeProfileImage = asyncHandler(async (req, res) => {
   const me = await staffAccess.getReceptionist(req.user.id);
   if (!me) return res.status(404).json({ error: 'Not found' });
-  await deleteOldPhoto(me.photoUrl);
   await prisma.receptionist.update({ where: { id: me.id }, data: { photoUrl: null } });
+  await deleteOldPhoto(me.photoUrl);
   res.json({ success: true });
 });
 
@@ -97,7 +104,6 @@ exports.stats = asyncHandler(async (req, res) => {
   const CASH_METHODS = ['CASH', 'CARD', 'OTHER'];
 
   const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate() - 6);
   const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
 
   const [
@@ -143,26 +149,17 @@ exports.stats = asyncHandler(async (req, res) => {
   // 14-day daily series (appointments booked + cash/online collected) for
   // the dashboard's trend sparkline, split into this-week vs last-week
   // totals for a real week-over-week comparison.
-  const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
-  const daily = {};
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(last14); d.setUTCDate(d.getUTCDate() + i);
-    daily[dayKey(d)] = { date: dayKey(d), appointments: 0, collected: 0 };
-  }
-  for (const a of fortnightAppts) {
-    const bucket = daily[dayKey(a.date)];
-    if (bucket) bucket.appointments += 1;
-  }
-  for (const inv of fortnightInvoices) {
-    const bucket = daily[dayKey(inv.createdAt)];
-    if (bucket) bucket.collected += Number(inv.amount || 0);
-  }
-  const last7Key = dayKey(last7);
-  let thisWeekAppts = 0, prevWeekAppts = 0, thisWeekCollected = 0, prevWeekCollected = 0;
-  for (const bucket of Object.values(daily)) {
-    if (bucket.date >= last7Key) { thisWeekAppts += bucket.appointments; thisWeekCollected += bucket.collected; }
-    else                         { prevWeekAppts += bucket.appointments; prevWeekCollected += bucket.collected; }
-  }
+  const { daily, thisWeek, prevWeek } = buildDailyTrend({
+    start: last14,
+    emptyBucket: () => ({ appointments: 0, collected: 0 }),
+    sources: [
+      { rows: fortnightAppts, dateOf: (a) => a.date, accumulate: (bucket) => { bucket.appointments += 1; } },
+      { rows: fortnightInvoices, dateOf: (inv) => inv.createdAt, accumulate: (bucket, inv) => { bucket.collected += Number(inv.amount || 0); } }
+    ],
+    weekFields: ['appointments', 'collected']
+  });
+  const thisWeekAppts = thisWeek.appointments, prevWeekAppts = prevWeek.appointments;
+  const thisWeekCollected = thisWeek.collected, prevWeekCollected = prevWeek.collected;
 
   res.json({
     todayAppointments: todayCount,
@@ -243,6 +240,8 @@ exports.patientHistory = asyncHandler(async (req, res) => {
   const me = await requireConsultations(req, res);
   if (!me) return;
   const doctorIds = await staffAccess.getDoctorIds(me.id);
+  const scope = await staffAccess.getPatientScope(me.id);
+  if (!scope.includes(req.params.id)) return res.status(404).json({ error: 'Patient not found' });
   const visits = await prisma.appointment.findMany({
     where: { patientId: req.params.id, doctorId: { in: doctorIds } },
     include: {

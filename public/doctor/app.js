@@ -457,12 +457,9 @@ function handleHashRoute(){
   }
 }
 
-function trendChip(delta, label, isPercent){
-  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
-  const up = delta > 0;
-  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
-  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
-}
+// Shared with Admin (app.js + finance.js), Receptionist and Pharmacy — see
+// NPFmt.trendChip in /assets/np-ui.js (single source of truth).
+const trendChip = NPFmt.trendChip;
 
 async function loadStats(){
   const host = $('#dashAnalytics');
@@ -1695,22 +1692,10 @@ function __npCopyDoctorUuid(text, btn){
   } catch(_) { fallback(); }
 }
 function populateAvailability(d){
-  ['availableFromOnline_h','availableToOnline_h','availableFromOffline_h','availableToOffline_h'].forEach(name => {
-    const el = document.querySelector(`[name="${name}"]`);
-    if (!el || el.options.length) return;
-    let html = '';
-    for (let h=1; h<=12; h++) {
-      for (let m=0; m<60; m+=15){
-        const label = h + ':' + String(m).padStart(2,'0');
-        html += `<option value="${label}">${label}</option>`;
-      }
-    }
-    el.innerHTML = html;
+  ['availableFromOnline','availableToOnline','availableFromOffline','availableToOffline'].forEach(name => {
+    const el = document.getElementById(name);
+    if (el) el.value = d[name] || '';
   });
-  setTimePicker('availableFromOnline',  d.availableFromOnline);
-  setTimePicker('availableToOnline',    d.availableToOnline);
-  setTimePicker('availableFromOffline', d.availableFromOffline);
-  setTimePicker('availableToOffline',   d.availableToOffline);
   const dur = String(d.slotDuration || 15);
   $('#slotDurationVal').value = dur;
   $$('#slotDurationBtns .np-pill').forEach(b => b.classList.toggle('active', b.dataset.val === dur));
@@ -1720,29 +1705,9 @@ function populateAvailability(d){
   const availForm = $('#availForm');
   if (availForm) availForm.isAvailable.checked = !!d.isAvailable;
 }
-function setTimePicker(baseName, value24){
-  if (!value24) return;
-  const [hStr, mStr] = value24.split(':');
-  let h = parseInt(hStr, 10); const m = parseInt(mStr||'0', 10);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12; if (h === 0) h = 12;
-  const label = h + ':' + String(m).padStart(2,'0');
-  const hEl = document.querySelector(`[name="${baseName}_h"]`);
-  const aEl = document.querySelector(`[name="${baseName}_ampm"]`);
-  if (hEl) hEl.value = label;
-  if (aEl) aEl.value = ampm;
-  const hidden = document.getElementById(baseName);
-  if (hidden) hidden.value = value24;
-}
 function readTimePicker(baseName){
-  const hEl = document.querySelector(`[name="${baseName}_h"]`);
-  const aEl = document.querySelector(`[name="${baseName}_ampm"]`);
-  if (!hEl || !aEl) return '';
-  const [hStr, mStr] = (hEl.value || '12:00').split(':');
-  let h = parseInt(hStr,10); const m = parseInt(mStr||'0',10);
-  if (aEl.value === 'PM' && h !== 12) h += 12;
-  if (aEl.value === 'AM' && h === 12) h = 0;
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  const el = document.getElementById(baseName);
+  return el ? (el.value || '') : '';
 }
 function populateClinic(d){
   const f = $('#clinicForm'); if (!f) return;
@@ -2474,13 +2439,23 @@ async function submitCert(e){
 }
 
 /* ---------- Feature 3: Digital Signature ---------- */
+// The signature file is no longer publicly servable (it's exactly the
+// artifact needed to forge a certificate/prescription), so a plain
+// <img src> can't fetch it — a bare <img> can't send the Bearer token.
+// Fetch it as an authenticated blob and point the preview at that instead.
 async function loadSignature(){
   try {
     const s = await api('/doctor/signature');
     const img = $('#sigPreviewImg'), empty = $('#sigPreviewEmpty');
     if (s.signatureUrl){
-      img.src = s.signatureUrl + '?t=' + Date.now();
-      img.style.display = 'block'; empty.style.display = 'none';
+      const res = await fetch(API + '/doctor/signature/file', { headers: { Authorization: 'Bearer ' + TOKEN } });
+      if (res.ok) {
+        const blob = await res.blob();
+        img.src = URL.createObjectURL(blob);
+        img.style.display = 'block'; empty.style.display = 'none';
+      } else {
+        img.style.display = 'none'; empty.style.display = 'block';
+      }
     } else {
       img.style.display = 'none'; empty.style.display = 'block';
     }

@@ -195,6 +195,42 @@ async function isOrderTrulyPaid(orderId, expectedAmount) {
   };
 }
 
+/**
+ * Refund a previously-paid order via Cashfree's PG refunds API.
+ * `refundId` must be unique per refund attempt (Cashfree dedupes retries by
+ * this id) — callers should derive it deterministically from the
+ * appointment id rather than random, so a retried request after a network
+ * timeout doesn't double-refund.
+ */
+async function createRefund({ orderId, refundId, refundAmount, refundNote }) {
+  if (!hasRealCredentials()) {
+    return {
+      refund_id: refundId,
+      cf_refund_id: `mock_refund_${Date.now()}`,
+      refund_amount: Number(refundAmount),
+      refund_status: 'SUCCESS',
+      mock: true
+    };
+  }
+  const response = await fetch(`${getBaseUrl()}/pg/orders/${encodeURIComponent(orderId)}/refunds`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      refund_id: refundId,
+      refund_amount: Number(refundAmount),
+      refund_note: refundNote || 'Appointment cancelled — refund issued by clinic admin'
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(
+      new Error(data.message || data.type || 'Cashfree refund failed'),
+      { statusCode: 502, details: data }
+    );
+  }
+  return data;
+}
+
 function verifyWebhookSignature(rawBody, signature, timestamp, secret) {
   if (!rawBody || !signature || !timestamp) return false;
   const key = secret || getWebhookSigningSecret();
@@ -215,6 +251,7 @@ module.exports = {
   getOrderStatus,
   getOrderPayments,         // NEW
   isOrderTrulyPaid,         // NEW
+  createRefund,
   verifyWebhookSignature,
   getMode,
   getWebhookSigningSecret,

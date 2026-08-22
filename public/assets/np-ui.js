@@ -308,6 +308,15 @@
       const code = String(h % 10000).padStart(4, '0');
       return `NK-${yr}-${code}`;
     },
+    // Renders a "▲ 3 vs yesterday" / "▼ 12% this week" style trend chip.
+    // Was copy-pasted byte-for-byte across Admin (app.js + finance.js),
+    // Doctor, Receptionist and Pharmacy dashboards — one shared copy here.
+    trendChip(delta, label, isPercent) {
+      if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
+      const up = delta > 0;
+      const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
+      return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
+    },
   };
 
   const NPSkeleton = {

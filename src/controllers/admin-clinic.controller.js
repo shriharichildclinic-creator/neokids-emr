@@ -1,10 +1,12 @@
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
 const {
   createReceptionistSchema, updateReceptionistSchema,
   medicalCentreSchema, updateMedicalCentreSchema,
-  createPharmacyUserSchema, updatePharmacyUserSchema
+  createPharmacyUserSchema, updatePharmacyUserSchema,
+  flattenZod, randomPassword
 } = require('../utils/validators');
 const { revokeActivePasswordTokens } = require('../services/token.service');
 const { sendStaffInvite } = require('../services/invite.service');
@@ -13,20 +15,6 @@ const { buildSignedFileUrl } = require('../utils/fileTokens');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
-
-function flattenZod(err) {
-  const flat = err.flatten();
-  const lines = [];
-  for (const [k, msgs] of Object.entries(flat.fieldErrors || {})) {
-    (msgs || []).forEach(m => lines.push(`${k}: ${m}`));
-  }
-  (flat.formErrors || []).forEach(m => lines.push(m));
-  return lines.length ? lines.join(' | ') : 'Invalid input';
-}
-
-function randomPassword() {
-  return `Neo${Math.random().toString(36).slice(2, 6)}${Date.now().toString().slice(-4)}`;
-}
 
 function adminActor(req) {
   return { id: req.user.id, role: 'ADMIN', name: req.user.email };
@@ -268,17 +256,23 @@ exports.uploadReceptionistProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const r = await prisma.receptionist.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!r) return res.status(404).json({ error: 'Receptionist not found' });
-  await deleteOldPhoto(r.photoUrl);
   const photoUrl = photoUrlFor(req.file.filename);
-  const updated = await prisma.receptionist.update({ where: { id: r.id }, data: { photoUrl } });
+  let updated;
+  try {
+    updated = await prisma.receptionist.update({ where: { id: r.id }, data: { photoUrl } });
+  } catch (err) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    throw err;
+  }
+  await deleteOldPhoto(r.photoUrl);
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
 
 exports.removeReceptionistProfileImage = asyncHandler(async (req, res) => {
   const r = await prisma.receptionist.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!r) return res.status(404).json({ error: 'Receptionist not found' });
-  await deleteOldPhoto(r.photoUrl);
   await prisma.receptionist.update({ where: { id: r.id }, data: { photoUrl: null } });
+  await deleteOldPhoto(r.photoUrl);
   res.json({ success: true });
 });
 
@@ -431,17 +425,23 @@ exports.uploadPharmacyUserProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const u = await prisma.pharmacyUser.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!u) return res.status(404).json({ error: 'Pharmacy user not found' });
-  await deleteOldPhoto(u.photoUrl);
   const photoUrl = photoUrlFor(req.file.filename);
-  const updated = await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl } });
+  let updated;
+  try {
+    updated = await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl } });
+  } catch (err) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    throw err;
+  }
+  await deleteOldPhoto(u.photoUrl);
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
 
 exports.removePharmacyUserProfileImage = asyncHandler(async (req, res) => {
   const u = await prisma.pharmacyUser.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!u) return res.status(404).json({ error: 'Pharmacy user not found' });
-  await deleteOldPhoto(u.photoUrl);
   await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl: null } });
+  await deleteOldPhoto(u.photoUrl);
   res.json({ success: true });
 });
 

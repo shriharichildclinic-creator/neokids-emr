@@ -1,3 +1,4 @@
+const fs = require('fs');
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
 const {
@@ -7,7 +8,7 @@ const staffAccess = require('../services/staffAccess.service');
 const staffDocs = require('../services/staff-docs.service');
 const audit = require('../services/audit.service');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
-const { parseDateOnlyOrNull, getTodayDateString } = require('../utils/date');
+const { parseDateOnlyOrNull, getTodayDateString, buildDailyTrend } = require('../utils/date');
 const { findOrCreatePatient } = require('../services/booking.service');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 
@@ -57,6 +58,17 @@ async function resolveActor(req, res) {
 // Unified billing (PHARMACY / CONSULT / SERVICE) — a receptionist bills as long
 // as the account is active; no pharmacy permission required for non-medicine
 // line items. Pharmacy users always pass through.
+// "No pharmacy permission required for non-medicine line items" (see
+// resolveBillingActor above) only holds if inventory-linked items are
+// actually blocked for a receptionist without canManagePharmacy — itemId
+// lines pull real stock/pricing from PharmacyItem, so letting them through
+// here would let that receptionist dispense real inventory without ever
+// having pharmacy rights. Manual (no itemId) lines are unaffected.
+function blockedInventoryItems(actor, items) {
+  return actor.role === 'RECEPTIONIST' && !actor.user.canManagePharmacy &&
+    (items || []).some(i => i.itemId);
+}
+
 async function resolveBillingActor(req, res) {
   const role = roleOf(req);
   if (role === 'PHARMACY') return loadPharmacyActor(req, res);
@@ -145,17 +157,23 @@ exports.uploadProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const u = await staffAccess.getPharmacyUser(req.user.id);
   if (!u) return res.status(404).json({ error: 'Not found' });
-  await deleteOldPhoto(u.photoUrl);
   const photoUrl = photoUrlFor(req.file.filename);
-  const updated = await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl } });
+  let updated;
+  try {
+    updated = await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl } });
+  } catch (err) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    throw err;
+  }
+  await deleteOldPhoto(u.photoUrl);
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
 
 exports.removeProfileImage = asyncHandler(async (req, res) => {
   const u = await staffAccess.getPharmacyUser(req.user.id);
   if (!u) return res.status(404).json({ error: 'Not found' });
-  await deleteOldPhoto(u.photoUrl);
   await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl: null } });
+  await deleteOldPhoto(u.photoUrl);
   res.json({ success: true });
 });
 
@@ -176,7 +194,6 @@ exports.stats = asyncHandler(async (req, res) => {
   if (!actor) return;
   const todayStart = new Date(getTodayDateString() + 'T00:00:00.000Z');
   const yesterdayStart = new Date(todayStart); yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
-  const last7Start  = new Date(todayStart); last7Start.setUTCDate(last7Start.getUTCDate() - 6);
   const last14Start = new Date(todayStart); last14Start.setUTCDate(last14Start.getUTCDate() - 13);
   const itemWhere = { isActive: true, medicalCentreId: { in: actor.centreIds } };
   const billWhere = { createdAt: { gte: todayStart }, medicalCentreId: { in: actor.centreIds } };
@@ -209,24 +226,21 @@ exports.stats = asyncHandler(async (req, res) => {
   // 14-day daily series (bills + collected revenue) for the dashboard's
   // trend sparkline, split into this-week vs last-week for a real
   // week-over-week comparison.
-  const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
-  const daily = {};
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(last14Start); d.setUTCDate(d.getUTCDate() + i);
-    daily[dayKey(d)] = { date: dayKey(d), bills: 0, collected: 0 };
-  }
-  for (const b of fortnightBills) {
-    const bucket = daily[dayKey(b.createdAt)];
-    if (!bucket) continue;
-    bucket.bills += 1;
-    if (b.status === 'PAID') bucket.collected += Number(b.total || 0);
-  }
-  const last7Key = dayKey(last7Start);
-  let thisWeekBills = 0, prevWeekBills = 0, thisWeekCollected = 0, prevWeekCollected = 0;
-  for (const bucket of Object.values(daily)) {
-    if (bucket.date >= last7Key) { thisWeekBills += bucket.bills; thisWeekCollected += bucket.collected; }
-    else                         { prevWeekBills += bucket.bills; prevWeekCollected += bucket.collected; }
-  }
+  const { daily, thisWeek, prevWeek } = buildDailyTrend({
+    start: last14Start,
+    emptyBucket: () => ({ bills: 0, collected: 0 }),
+    sources: [{
+      rows: fortnightBills,
+      dateOf: (b) => b.createdAt,
+      accumulate: (bucket, b) => {
+        bucket.bills += 1;
+        if (b.status === 'PAID') bucket.collected += Number(b.total || 0);
+      }
+    }],
+    weekFields: ['bills', 'collected']
+  });
+  const thisWeekBills = thisWeek.bills, prevWeekBills = prevWeek.bills;
+  const thisWeekCollected = thisWeek.collected, prevWeekCollected = prevWeek.collected;
 
   res.json({
     totalItems, lowStock, todayBills,
@@ -497,6 +511,9 @@ exports.createBill = asyncHandler(async (req, res) => {
   const parsed = pharmacyBillSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
   const d = parsed.data;
+  if (blockedInventoryItems(actor, d.items)) {
+    return res.status(403).json({ error: 'Pharmacy management is not enabled for your account — you can only add manual (non-inventory) items to a bill' });
+  }
 
   // Optional patient link: use an existing patient, or quick-create a walk-in
   // from name + phone. Never forces a patient record.
@@ -621,6 +638,9 @@ exports.updateBill = asyncHandler(async (req, res) => {
   const parsed = pharmacyBillSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
   const d = parsed.data;
+  if (blockedInventoryItems(actor, d.items)) {
+    return res.status(403).json({ error: 'Pharmacy management is not enabled for your account — you can only add manual (non-inventory) items to a bill' });
+  }
 
   let patient = null;
   if (d.patientId) {
