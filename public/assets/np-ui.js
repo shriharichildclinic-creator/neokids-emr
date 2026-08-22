@@ -529,7 +529,19 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   .np-notif__btn{position:relative;width:40px;height:40px;border-radius:10px;border:1px solid var(--nk-border,#D9E6E6);background:var(--nk-card,#fff);color:var(--nk-muted,#64748b);cursor:pointer;display:grid;place-items:center;flex-shrink:0}
   .np-notif__btn:hover{color:var(--nk-teal-600,#5A9495);border-color:var(--nk-teal-200,#BFDCDC)}
   .np-notif__dot{position:absolute;top:6px;right:6px;min-width:16px;height:16px;padding:0 3px;border-radius:999px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center}
-  .np-notif__panel{position:absolute;top:calc(100% + 8px);right:0;width:340px;max-width:calc(100vw - 24px);max-height:70vh;overflow-y:auto;background:var(--nk-card,#fff);border:1px solid var(--nk-border,#D9E6E6);border-radius:12px;box-shadow:0 20px 45px -15px rgba(15,46,58,.35);z-index:9000;display:none}
+  .np-notif__panel{position:absolute;top:calc(100% + 8px);right:0;width:340px;max-height:70vh;overflow-y:auto;background:var(--nk-card,#fff);border:1px solid var(--nk-border,#D9E6E6);border-radius:12px;box-shadow:0 20px 45px -15px rgba(15,46,58,.35);z-index:9000;display:none}
+  /* Below ~600px, position:absolute anchored to the bell's own tiny wrapper
+     only stays on-screen if that wrapper happens to sit flush against the
+     viewport edge — it doesn't reliably in a cramped mobile header (other
+     icons/avatar crowd it inward). Switch to position:fixed with BOTH left
+     and right set (no width) so the browser stretches it to exactly fit
+     between two viewport-relative margins — it cannot overflow either
+     edge regardless of where the bell itself ends up. The top offset is
+     set inline by JS at open-time from the button's actual position,
+     since header height differs per portal. */
+  @media (max-width:600px){
+    .np-notif__panel{position:fixed;left:12px;right:12px;width:auto;max-height:min(70vh,480px)}
+  }
   .np-notif__panel.is-open{display:block}
   .np-notif__head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--nk-border,#D9E6E6);font-weight:700;font-size:.88rem;color:var(--nk-ink,#0F2E3A)}
   .np-notif__markall{background:none;border:0;color:var(--nk-teal-600,#5A9495);font-size:.76rem;font-weight:600;cursor:pointer;padding:0}
@@ -945,7 +957,18 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const open = panel.classList.toggle('is-open');
-        if (open) loadList();
+        if (open) {
+          // Only the mobile (position:fixed) layout needs a JS-computed
+          // top — desktop's position:absolute already sits correctly via
+          // top:calc(100% + 8px) in the stylesheet, and overwriting that
+          // with a viewport-relative value would misplace it there.
+          if (window.matchMedia('(max-width:600px)').matches) {
+            panel.style.top = (btn.getBoundingClientRect().bottom + 8) + 'px';
+          } else {
+            panel.style.top = '';
+          }
+          loadList();
+        }
       });
       markAll.addEventListener('click', async (e) => {
         e.stopPropagation();

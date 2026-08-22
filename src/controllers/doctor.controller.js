@@ -7,6 +7,11 @@ const path = require('path');
 const prisma = require('../config/prisma');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 const { asyncHandler } = require('../middleware/errorHandler');
+const audit = require('../services/audit.service');
+
+function doctorActor(req, name) {
+  return { id: req.user.id, role: 'DOCTOR', name: name || 'Dr. ' + req.user.id };
+}
 const {
   updateDoctorAvailabilitySchema,
   updateDoctorAvailabilitySchemaForMode,
@@ -432,6 +437,13 @@ exports.createPrescription = asyncHandler(async (req, res) => {
     create: { appointmentId: id, ...data, createdById: req.user.id, createdByRole: 'DOCTOR' }
   });
 
+  await audit.log({
+    actor: doctorActor(req, 'Dr. ' + appt.doctor.name), action: 'PRESCRIPTION_CREATED',
+    entityType: 'PRESCRIPTION', entityId: id,
+    summary: `Prescribed for ${appt.patient.name}`,
+    doctorId: req.user.id
+  });
+
   const delivery = await automation.onPrescriptionCreated(appt, rx);
 
   const refreshed = await prisma.appointment.findUnique({
@@ -558,6 +570,12 @@ exports.reschedule = asyncHandler(async (req, res) => {
     include: { doctor: true, patient: true }
   });
 
+  await audit.log({
+    actor: doctorActor(req, 'Dr. ' + existing.doctor.name), action: 'APPOINTMENT_RESCHEDULED',
+    entityType: 'APPOINTMENT', entityId: id,
+    summary: `Rescheduled ${existing.patient.name}'s appointment to ${date} ${startTime} (${reason})`,
+    doctorId: req.user.id
+  });
   await automation.onAppointmentRescheduled(updated);
   res.json(updated);
 });
@@ -597,6 +615,13 @@ exports.cancelAppointment = asyncHandler(async (req, res) => {
     where: { id },
     data: { status: 'CANCELLED', notes: reason || null, cancelledAt: new Date() },
     include: { doctor: true, patient: true }
+  });
+
+  await audit.log({
+    actor: doctorActor(req, 'Dr. ' + updated.doctor.name), action: 'APPOINTMENT_CANCELLED',
+    entityType: 'APPOINTMENT', entityId: id,
+    summary: `Cancelled ${updated.patient.name}'s appointment (${reason})`,
+    doctorId: req.user.id
   });
 
   automation.onAppointmentCancelled(updated, reason).catch(e => {
