@@ -6,13 +6,12 @@ const {
   medicalCentreSchema, updateMedicalCentreSchema,
   createPharmacyUserSchema, updatePharmacyUserSchema
 } = require('../utils/validators');
-const { createPasswordToken, revokeActivePasswordTokens } = require('../services/token.service');
-const { _helpers: authHelpers } = require('./auth.controller');
+const { revokeActivePasswordTokens } = require('../services/token.service');
+const { sendStaffInvite } = require('../services/invite.service');
 const audit = require('../services/audit.service');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
-const TOKEN_TTL_MINUTES = parseInt(process.env.PASSWORD_TOKEN_TTL_MINUTES || '60', 10);
 
 function flattenZod(err) {
   const flat = err.flatten();
@@ -30,25 +29,6 @@ function randomPassword() {
 
 function adminActor(req) {
   return { id: req.user.id, role: 'ADMIN', name: req.user.email };
-}
-
-async function sendStaffInvite({ user, userType, roleLabel }) {
-  await revokeActivePasswordTokens(userType, user.id, ['INVITE', 'RESET']);
-  const { rawToken } = await createPasswordToken({
-    userType, userId: user.id, purpose: 'INVITE', expiresInMinutes: TOKEN_TTL_MINUTES
-  });
-  let inviteLink;
-  let emailDelivered = false;
-  try {
-    inviteLink = await authHelpers.sendPasswordEmail({
-      to: user.email, name: user.name, rawToken, purpose: 'INVITE'
-    });
-    emailDelivered = !!process.env.SMTP_HOST;
-  } catch (e) {
-    console.error(`${roleLabel} invite email failed:`, e.message);
-    inviteLink = authHelpers.buildPasswordLink(rawToken);
-  }
-  return { inviteLink, emailDelivered };
 }
 
 async function assertOfflineDoctors(doctorIds) {
@@ -165,19 +145,30 @@ exports.createReceptionist = asyncHandler(async (req, res) => {
     throw e;
   }
 
-  const { inviteLink, emailDelivered } = await sendStaffInvite({ user: receptionist, userType: 'RECEPTIONIST', roleLabel: 'Receptionist' });
   await audit.log({
     actor: adminActor(req), action: 'RECEPTIONIST_CREATED', entityType: 'RECEPTIONIST', entityId: receptionist.id,
     summary: `Created receptionist ${receptionist.name} with ${receptionist.assignments.length} assignment(s)`
   });
 
+  // No invite email is sent here — the admin sends it separately via
+  // sendReceptionistInvite once they're ready.
   const { passwordHash: _, ...safe } = receptionist;
-  res.status(201).json({
-    ...safe,
-    inviteSent: emailDelivered,
-    invitePreviewUrl: inviteLink,
-    inviteExpiresInMinutes: TOKEN_TTL_MINUTES
+  res.status(201).json({ ...safe, inviteSent: false });
+});
+
+exports.sendReceptionistInvite = asyncHandler(async (req, res) => {
+  const receptionist = await prisma.receptionist.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!receptionist) return res.status(404).json({ error: 'Receptionist not found' });
+
+  const { inviteLink, emailDelivered, expiresInMinutes } = await sendStaffInvite({
+    user: receptionist, userType: 'RECEPTIONIST', roleLabel: 'Receptionist'
   });
+  await audit.log({
+    actor: adminActor(req), action: 'RECEPTIONIST_INVITE_SENT', entityType: 'RECEPTIONIST', entityId: receptionist.id,
+    summary: `Sent invite to receptionist ${receptionist.name}`
+  });
+
+  res.json({ inviteSent: emailDelivered, invitePreviewUrl: inviteLink, inviteExpiresInMinutes: expiresInMinutes });
 });
 
 exports.listReceptionists = asyncHandler(async (req, res) => {
@@ -309,19 +300,30 @@ exports.createPharmacyUser = asyncHandler(async (req, res) => {
     throw e;
   }
 
-  const { inviteLink, emailDelivered } = await sendStaffInvite({ user, userType: 'PHARMACY', roleLabel: 'Pharmacy user' });
   await audit.log({
     actor: adminActor(req), action: 'PHARMACY_USER_CREATED', entityType: 'PHARMACY_USER', entityId: user.id,
     summary: `Created pharmacy user ${user.name} with ${user.doctors.length} doctor assignment(s)`
   });
 
+  // No invite email is sent here — the admin sends it separately via
+  // sendPharmacyInvite once they're ready.
   const { passwordHash: _, ...safe } = user;
-  res.status(201).json({
-    ...safe,
-    inviteSent: emailDelivered,
-    invitePreviewUrl: inviteLink,
-    inviteExpiresInMinutes: TOKEN_TTL_MINUTES
+  res.status(201).json({ ...safe, inviteSent: false });
+});
+
+exports.sendPharmacyInvite = asyncHandler(async (req, res) => {
+  const user = await prisma.pharmacyUser.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!user) return res.status(404).json({ error: 'Pharmacy user not found' });
+
+  const { inviteLink, emailDelivered, expiresInMinutes } = await sendStaffInvite({
+    user, userType: 'PHARMACY', roleLabel: 'Pharmacy user'
   });
+  await audit.log({
+    actor: adminActor(req), action: 'PHARMACY_USER_INVITE_SENT', entityType: 'PHARMACY_USER', entityId: user.id,
+    summary: `Sent invite to pharmacy user ${user.name}`
+  });
+
+  res.json({ inviteSent: emailDelivered, invitePreviewUrl: inviteLink, inviteExpiresInMinutes: expiresInMinutes });
 });
 
 exports.listPharmacyUsers = asyncHandler(async (req, res) => {

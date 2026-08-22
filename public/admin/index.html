@@ -874,11 +874,12 @@
 
 <div id="doctorFormError" class="np-error hidden"></div>
         <div class="np-callout np-callout--warning" style="font-size:.78rem; margin-top:1.25rem; margin-bottom:.5rem;">
-          Best practice: leave the temporary password blank and let the doctor set their own via the email invite.
+          Best practice: leave the temporary password blank and let the doctor set their own via the invite link — send it whenever you're ready using "Send Invite" below.
         </div>
       </form>
     </div>
     <div class="np-modal__foot">
+      <button type="button" id="sendDoctorInviteBtn" class="np-btn hidden" onclick="sendDoctorInvite()">Send Invite</button>
       <button type="button" class="np-btn" onclick="closeDoctorModal()">Cancel</button>
       <button type="submit" form="doctorForm" class="np-btn np-btn--primary">Save</button>
     </div>

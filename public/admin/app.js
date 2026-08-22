@@ -758,6 +758,54 @@ document.addEventListener('change', (e) => {
   }
 });
 
+// Shared by app.js (doctors) and staff.js (receptionists/pharmacy) — shows
+// the outcome of an admin-triggered "Send Invite" call, with a copy-link
+// fallback for when SMTP delivery can't be confirmed.
+function showInviteResult(res, roleLabel) {
+  const ttl = res.inviteExpiresInMinutes ? ` (expires in ${res.inviteExpiresInMinutes} min)` : '';
+  const status = res.inviteSent
+    ? `Invite sent to the ${roleLabel}.`
+    : `Invite created — email delivery NOT confirmed.`;
+  if (!res.invitePreviewUrl) {
+    if (typeof NPToast !== 'undefined') NPToast.success(status);
+    else alert(status);
+    return;
+  }
+  if (typeof NPToast !== 'undefined') {
+    NPToast.success(status + ' Click "Copy link" to share' + ttl + '.', {
+      title: 'Invite link ready',
+      duration: 15000,
+      action: { label: 'Copy link', onClick: () => {
+        try {
+          navigator.clipboard.writeText(res.invitePreviewUrl);
+          NPToast.info('Invite link copied to clipboard');
+        } catch (_) {
+          NPModal.alert({ title: 'Invite link', message: res.invitePreviewUrl });
+        }
+      } }
+    });
+  } else {
+    alert(status + '\n\nInvite link' + ttl + ':\n' + res.invitePreviewUrl);
+  }
+}
+
+async function sendDoctorInvite() {
+  const f = $('#doctorForm');
+  const id = f.dataset.id;
+  if (!id) return;
+  const btn = $('#sendDoctorInviteBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('/admin/doctors/' + id + '/invite', { method: 'POST' });
+    showInviteResult(res, 'doctor');
+  } catch (err) {
+    if (typeof NPToast !== 'undefined') NPToast.error(err.message);
+    else alert(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function openDoctorModal() {
   $('#doctorModalTitle').textContent = 'Add Doctor';
   const f = $('#doctorForm');
@@ -766,6 +814,7 @@ function openDoctorModal() {
   f.email.disabled = false;
   f.email.readOnly = false;
   f.password.placeholder = '(invite link is preferred)';
+  $('#sendDoctorInviteBtn').classList.add('hidden');
   loadKycForDoctor(null);
   applyAdminModeVisibility(f.consultationModes ? f.consultationModes.value : 'BOTH');
   $('#doctorModal').classList.remove('hidden');
@@ -790,6 +839,7 @@ function openEditDoctor(id) {
   $('#doctorModalTitle').textContent = 'Edit Doctor';
   const f = $('#doctorForm');
   f.dataset.mode = 'edit'; f.dataset.id = id;
+  $('#sendDoctorInviteBtn').classList.remove('hidden');
   f.name.value  = d.name || '';
   f.email.value = d.email || '';
   f.email.disabled = false; f.email.readOnly = true;
@@ -859,35 +909,13 @@ $('#doctorForm').addEventListener('submit', async (e) => {
       alert('Doctor updated.');
     } else {
       const res = await api('/admin/doctors', { method: 'POST', body: JSON.stringify(payload) });
-      const ttl = res.inviteExpiresInMinutes ? ` (expires in ${res.inviteExpiresInMinutes} min)` : '';
-      if (res.invitePreviewUrl) {
-        const status = res.inviteSent
-          ? 'Doctor created — invite email sent.'
-          : 'Doctor created — email delivery NOT confirmed.';
-        if (typeof NPToast !== 'undefined') {
-          NPToast.success(status + ' Click "Copy link" to share' + ttl + '.', {
-            title: 'Invite link ready',
-            duration: 15000,
-            action: { label: 'Copy link', onClick: () => {
-              try {
-                navigator.clipboard.writeText(res.invitePreviewUrl);
-                NPToast.info('Invite link copied to clipboard');
-              } catch (_) {
-                NPModal.alert({ title:'Invite link', message: res.invitePreviewUrl });
-              }
-            } }
-          });
-        } else {
-          alert(status + '\n\nInvite link' + ttl + ':\n' + res.invitePreviewUrl);
-        }
-      } else {
-        if (typeof NPToast !== 'undefined') NPToast.success('Doctor created and invite email sent.');
-        else alert('Doctor created and invite email sent.');
-      }
+      if (typeof NPToast !== 'undefined') NPToast.success('Doctor created. Send the invite whenever you\'re ready.');
+      else alert('Doctor created. Send the invite whenever you\'re ready.');
       f.dataset.mode = 'edit';
       f.dataset.id   = res.id;
       f.email.readOnly = true;
       $('#doctorModalTitle').textContent = 'Edit Doctor';
+      $('#sendDoctorInviteBtn').classList.remove('hidden');
       await loadKycForDoctor(res.id);
       loadDoctors();
       return;

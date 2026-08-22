@@ -20,6 +20,7 @@ router.get('/doctors/:id/insights', c.doctorInsights);
 router.put('/doctors/:id', c.updateDoctor);
 router.delete('/doctors/:id', c.deleteDoctor);
 router.delete('/doctors/:id/hard', c.hardDeleteDoctor);
+router.post('/doctors/:id/invite', c.sendDoctorInvite);
 
 // KYC
 router.post('/doctors/:id/kyc',         uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);
@@ -57,6 +58,7 @@ router.get('/receptionists',        clinic.listReceptionists);
 router.get('/receptionists/:id',    clinic.getReceptionist);
 router.put('/receptionists/:id',    clinic.updateReceptionist);
 router.delete('/receptionists/:id', clinic.deleteReceptionist);
+router.post('/receptionists/:id/invite', clinic.sendReceptionistInvite);
 
 // v4.0.0 — Pharmacy users (separate role; no receptionist permissions)
 router.post('/pharmacy-users',       clinic.createPharmacyUser);
@@ -64,6 +66,7 @@ router.get('/pharmacy-users',        clinic.listPharmacyUsers);
 router.get('/pharmacy-users/:id',    clinic.getPharmacyUser);
 router.put('/pharmacy-users/:id',    clinic.updatePharmacyUser);
 router.delete('/pharmacy-users/:id', clinic.deletePharmacyUser);
+router.post('/pharmacy-users/:id/invite', clinic.sendPharmacyInvite);
 
 // v4.0.0 — Front-desk finance & audit
 router.get('/available-offline-doctors', c.availableOfflineDoctors);

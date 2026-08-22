@@ -138,7 +138,11 @@ async function openReceptionistModal(id){
       <div id="asnRows">${asnRows}</div>
       <button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="addAssignmentRow()">+ Add assignment</button>
     </div>
-    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:.75rem"><button type="button" class="np-btn" onclick="closeStaffModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Save</button></div>
+    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:.75rem">
+      ${r ? `<button type="button" class="np-btn" onclick="sendReceptionistInvite('${r.id}')">Send Invite</button>` : ''}
+      <button type="button" class="np-btn" onclick="closeStaffModal()">Cancel</button>
+      <button class="np-btn np-btn--primary" type="submit">Save</button>
+    </div>
     </form></div></div></div>`;
 
   $('#recForm').addEventListener('submit', async e => {
@@ -167,17 +171,20 @@ async function openReceptionistModal(id){
       const res = r
         ? await api('/admin/receptionists/' + r.id, { method:'PUT', body: JSON.stringify(payload) })
         : await api('/admin/receptionists', { method:'POST', body: JSON.stringify(payload) });
-      if (!r && res.invitePreviewUrl) {
-        try { await navigator.clipboard.writeText(res.invitePreviewUrl); } catch(_) {}
-        toast('Receptionist created — invite link copied to clipboard');
-      } else {
-        toast('Receptionist saved');
-      }
+      toast(r ? 'Receptionist saved' : 'Receptionist created. Send the invite whenever you\'re ready.');
       closeStaffModal(); loadReceptionists();
     } catch(err){ toast(err.message, 'error'); btn.disabled = false; }
   });
 }
 window.openReceptionistModal = openReceptionistModal;
+
+async function sendReceptionistInvite(id){
+  try {
+    const res = await api('/admin/receptionists/' + id + '/invite', { method: 'POST' });
+    showInviteResult(res, 'receptionist');
+  } catch (e) { toast(e.message, 'error'); }
+}
+window.sendReceptionistInvite = sendReceptionistInvite;
 
 function assignmentRowHtml(a){
   const docOpts = __offlineDoctors.map(d =>
@@ -251,7 +258,11 @@ async function openPharmUserModal(id){
       <div class="np-mut" style="font-size:.72rem;margin-bottom:.5rem">This pharmacy account sees prescriptions issued by these doctors only.</div>
       ${docChecks || '<div class="np-mut">No offline doctors available.</div>'}
     </div>
-    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:.75rem"><button type="button" class="np-btn" onclick="closeStaffModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Save</button></div>
+    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:.75rem">
+      ${u ? `<button type="button" class="np-btn" onclick="sendPharmUserInvite('${u.id}')">Send Invite</button>` : ''}
+      <button type="button" class="np-btn" onclick="closeStaffModal()">Cancel</button>
+      <button class="np-btn np-btn--primary" type="submit">Save</button>
+    </div>
     </form></div></div></div>`;
 
   $('#puForm').addEventListener('submit', async e => {
@@ -271,17 +282,20 @@ async function openPharmUserModal(id){
       const res = u
         ? await api('/admin/pharmacy-users/' + u.id, { method:'PUT', body: JSON.stringify(payload) })
         : await api('/admin/pharmacy-users', { method:'POST', body: JSON.stringify(payload) });
-      if (!u && res.invitePreviewUrl) {
-        try { await navigator.clipboard.writeText(res.invitePreviewUrl); } catch(_) {}
-        toast('Pharmacy user created — invite link copied to clipboard');
-      } else {
-        toast('Pharmacy user saved');
-      }
+      toast(u ? 'Pharmacy user saved' : 'Pharmacy user created. Send the invite whenever you\'re ready.');
       closeStaffModal(); loadPharmUsers();
     } catch(err){ toast(err.message, 'error'); btn.disabled = false; }
   });
 }
 window.openPharmUserModal = openPharmUserModal;
+
+async function sendPharmUserInvite(id){
+  try {
+    const res = await api('/admin/pharmacy-users/' + id + '/invite', { method: 'POST' });
+    showInviteResult(res, 'pharmacy user');
+  } catch (e) { toast(e.message, 'error'); }
+}
+window.sendPharmUserInvite = sendPharmUserInvite;
 
 async function deletePharmUser(id){
   if (!confirm('Deactivate this pharmacy user?')) return;

@@ -20,9 +20,9 @@
   /* Centralized responsive spacing scale — every section/card/topbar pulls
      from these instead of hard-coding pixels per breakpoint, so margins
      stay consistent and scale smoothly from 320px up through desktop. */
-  --g-pad-inline:clamp(16px,5vw,24px);
+  --g-pad-inline:clamp(20px,7vw,28px);
   --g-pad-section:clamp(28px,7vw,36px);
-  --g-pad-card:clamp(16px,4vw,22px);
+  --g-pad-card:clamp(18px,5vw,24px);
   --g-safe-l:max(var(--g-pad-inline),env(safe-area-inset-left));
   --g-safe-r:max(var(--g-pad-inline),env(safe-area-inset-right));
 }
@@ -141,7 +141,7 @@ html[data-theme="dark"] .g-pill{background:rgba(137,188,189,.12);border-color:rg
   <section class="g-wrap g-hero">
     <div class="g-hero__badge"><span class="g-dot"></span>All systems operational</div>
     <h1>The clinical gateway for<br/><span class="g-accent">NeoKidsPro EMR</span></h1>
-    <p>One secure entry point for every role in the clinic — appointments, records, prescriptions, billing and vaccination management, unified across a single pediatric platform.</p>
+    <p>One secure entry point for every role across the network — appointments, records, prescriptions, billing and vaccination management, unified across a single pediatric platform.</p>
   </section>
 
   <section class="g-wrap g-section" aria-labelledby="portals-title">
@@ -181,7 +181,7 @@ html[data-theme="dark"] .g-pill{background:rgba(137,188,189,.12);border-color:rg
   <section class="g-wrap g-section" aria-labelledby="capabilities-title">
     <div class="g-section__head">
       <div class="g-section__eyebrow">Platform capabilities</div>
-      <h2 class="g-section__title" id="capabilities-title">Everything the clinic runs on</h2>
+      <h2 class="g-section__title" id="capabilities-title">Everything the network runs on</h2>
     </div>
     <div class="g-features">
       <div class="g-feature"><div class="g-feature__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div><div class="g-feature__title">Appointment Management</div><div class="g-feature__desc">Online, walk-in and phone bookings with live slots.</div></div></div>

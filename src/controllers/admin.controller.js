@@ -2,13 +2,10 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { createDoctorSchema, updateDoctorByAdminSchema } = require('../utils/validators');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { createPasswordToken, revokeActivePasswordTokens } = require('../services/token.service');
-const { _helpers: authHelpers } = require('./auth.controller');
+const { sendStaffInvite } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
-const automation = require('../services/automation.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
-const TOKEN_TTL_MINUTES = parseInt(process.env.PASSWORD_TOKEN_TTL_MINUTES || '60', 10);
 
 function randomPassword() {
   return `Neo${Math.random().toString(36).slice(2, 6)}${Date.now().toString().slice(-4)}`;
@@ -52,37 +49,28 @@ exports.createDoctor = asyncHandler(async (req, res) => {
         data: { ...rest, passwordHash, mustChangePassword: true }
       });
 
-  await revokeActivePasswordTokens('DOCTOR', doctor.id, ['INVITE', 'RESET']);
-  const { rawToken } = await createPasswordToken({
-    userType: 'DOCTOR', userId: doctor.id, purpose: 'INVITE', expiresInMinutes: TOKEN_TTL_MINUTES
+  // No invite email is sent here — creating the account and inviting the
+  // doctor to activate it are separate, admin-controlled steps. The admin
+  // sends (or resends) the invite from the doctor list via sendDoctorInvite.
+  const { passwordHash: _, ...safe } = doctor;
+  res.status(201).json({ ...safe, inviteSent: false });
+});
+
+exports.sendDoctorInvite = asyncHandler(async (req, res) => {
+  const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+
+  const { inviteLink, emailDelivered, expiresInMinutes } = await sendStaffInvite({
+    user: doctor, userType: 'DOCTOR', roleLabel: 'Doctor'
   });
 
-  let emailDelivered = false;
-  let inviteLink;
-  try {
-    inviteLink = await authHelpers.sendPasswordEmail({
-      to: doctor.email, name: doctor.name, rawToken, purpose: 'INVITE'
-    });
-    emailDelivered = !!process.env.SMTP_HOST;
-  } catch (e) {
-    // SMTP failure must NOT break onboarding — we still return the link.
-    console.error('createDoctor: invite email send failed:', e.message);
-    inviteLink = authHelpers.buildPasswordLink(rawToken);
-    emailDelivered = false;
-  }
-
-  // Welcome WhatsApp + email (Feature: Full automations item 1)
-  automation.onDoctorCreated({ doctor, inviteLink }).catch(e => console.error('onDoctorCreated failed:', e.message));
-
-  const { passwordHash: _, ...safe } = doctor;
-  res.status(201).json({
-    ...safe,
+  res.json({
     inviteSent: emailDelivered,
     // Always returned so the admin can hand the link over manually if
     // the invite email doesn't arrive. Same link that was emailed;
     // treat it as a one-time secret.
     invitePreviewUrl: inviteLink,
-    inviteExpiresInMinutes: TOKEN_TTL_MINUTES
+    inviteExpiresInMinutes: expiresInMinutes
   });
 });
 

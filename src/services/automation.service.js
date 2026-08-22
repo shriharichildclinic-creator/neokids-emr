@@ -283,29 +283,6 @@ async function safeEmail({ appointmentId, recipient, template, direction, messag
 }
 
 // ═════════════════════════════════════════════════════════════════
-// 1. ADMIN CREATES DOCTOR
-// ═════════════════════════════════════════════════════════════════
-async function onDoctorCreated({ doctor, inviteLink }) {
-  if (doctor.email) {
-    await safeEmail({
-      appointmentId: null, recipient: doctor.email, template: 'doctor_welcome_email', direction: 'DOCTOR',
-      messageFactory: () => email.sendEmail({
-        to: doctor.email,
-        subject: 'Welcome to NeoKidsPro — set your password',
-        html: renderBrandedEmail({
-          preheader: 'Your NeoKidsPro EMR account is ready — set your password to log in.',
-          headline: `Welcome, Dr. ${esc(doctor.name)}`,
-          subhead: 'Your NeoKidsPro EMR account has been created by the clinic admin.',
-          bodyHtml: `<p>Set a password to log in and start using the doctor portal.</p>`,
-          ctas: [{ label: 'Set Password & Log In', url: inviteLink }],
-          footerNote: 'This invite link expires soon — please use it as soon as possible.'
-        })
-      })
-    });
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
 // 2. PHYSICAL BOOKING CONFIRMED — FIX (A): 5 body params, not 6
 // ═════════════════════════════════════════════════════════════════
 async function onPhysicalBookingConfirmed(appointment) {
@@ -1267,7 +1244,6 @@ async function processFollowUpRecalls() {
 const escapeForHtml = esc;
 
 module.exports = {
-  onDoctorCreated,
   onPhysicalBookingConfirmed,
   onOnlineBookingConfirmed,
   onAppointmentRescheduled,

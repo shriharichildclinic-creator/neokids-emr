@@ -1,7 +1,7 @@
 {
   "name": "NeoKidsPro EMR",
   "short_name": "NeoKidsPro",
-  "description": "NeoKidsPro pediatric clinic management — EMR, bookings & vaccinations.",
+  "description": "NeoKidsPro pediatric doctor network — EMR, bookings & vaccinations.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F7FAFA",
