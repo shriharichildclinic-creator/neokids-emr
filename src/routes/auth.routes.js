@@ -5,6 +5,7 @@ const { authenticate } = require('../middleware/auth');
 router.post('/login', c.login);
 router.get('/me', authenticate, c.me);
 router.post('/forgot-password', c.forgotPassword);
+router.get('/password-token/:token', c.validatePasswordToken);
 router.post('/reset-password', c.resetPassword);
 router.post('/change-password', authenticate, c.changePassword);
 

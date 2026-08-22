@@ -24,7 +24,7 @@ const {
   changePasswordSchema
 } = require('../utils/validators');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { createPasswordToken, consumePasswordToken, revokeActivePasswordTokens } = require('../services/token.service');
+const { createPasswordToken, peekPasswordToken, consumePasswordToken, revokeActivePasswordTokens } = require('../services/token.service');
 const emailService = require('../services/email.service');
 const { renderBrandedEmail, esc } = require('../services/email-brand.service');
 const logger = require('../utils/logger');
@@ -51,6 +51,19 @@ const FORGOT_GENERIC = Object.freeze({
 const DUMMY_HASH = bcrypt.hashSync(
   'timing-equalizer-not-a-real-password', 12
 );
+
+// Maps a PasswordToken.userType to the portal a just-onboarded or
+// password-reset user should land on next.
+const ROLE_PORTAL = {
+  ADMIN:        { path: '/admin',        label: 'Admin' },
+  DOCTOR:       { path: '/doctor',       label: 'Doctor' },
+  RECEPTIONIST: { path: '/receptionist', label: 'Receptionist' },
+  PHARMACY:     { path: '/pharmacy',     label: 'Pharmacy' }
+};
+
+function portalFor(userType) {
+  return ROLE_PORTAL[userType] || { path: '/', label: userType };
+}
 
 function buildPasswordLink(rawToken) {
   // The password reset / invite page is served by the EMR itself
@@ -261,6 +274,30 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
   return res.json(FORGOT_GENERIC);
 });
 
+// GET check used by the set-password page before the user submits the
+// form — lets it show which portal the invite/reset belongs to, and
+// surface an expired/invalid link immediately instead of only after
+// the user has typed a password and clicked submit.
+exports.validatePasswordToken = asyncHandler(async (req, res) => {
+  const rawToken = req.params.token;
+  const token = rawToken
+    ? await peekPasswordToken({ rawToken, purposes: ['RESET', 'INVITE'] })
+    : null;
+
+  if (!token) {
+    return res.status(400).json({ valid: false, error: 'Invalid or expired link' });
+  }
+
+  const portal = portalFor(token.userType);
+  res.json({
+    valid: true,
+    purpose: token.purpose,
+    role: token.userType,
+    portalPath: portal.path,
+    portalLabel: portal.label
+  });
+});
+
 exports.resetPassword = asyncHandler(async (req, res) => {
   const parsed = resetPasswordSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
@@ -281,7 +318,16 @@ exports.resetPassword = asyncHandler(async (req, res) => {
   });
 
   await revokeActivePasswordTokens(token.userType, token.userId, ['RESET', 'INVITE']);
-  res.json({ success: true, message: 'Password updated successfully' });
+
+  const portal = portalFor(token.userType);
+  res.json({
+    success: true,
+    message: 'Password updated successfully',
+    purpose: token.purpose,
+    role: token.userType,
+    portalPath: portal.path,
+    portalLabel: portal.label
+  });
 });
 
 exports.changePassword = asyncHandler(async (req, res) => {

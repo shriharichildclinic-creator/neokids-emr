@@ -21,6 +21,18 @@ async function createPasswordToken({ userType, userId, purpose, expiresInMinutes
   return { rawToken, expiresAt };
 }
 
+async function peekPasswordToken({ rawToken, purposes }) {
+  const tokenHash = sha256(rawToken);
+  return prisma.passwordToken.findFirst({
+    where: {
+      tokenHash,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+      ...(purposes?.length ? { purpose: { in: purposes } } : {})
+    }
+  });
+}
+
 async function consumePasswordToken({ rawToken, purposes }) {
   const tokenHash = sha256(rawToken);
   const token = await prisma.passwordToken.findFirst({
@@ -58,6 +70,7 @@ async function revokeActivePasswordTokens(userType, userId, purposes) {
 
 module.exports = {
   createPasswordToken,
+  peekPasswordToken,
   consumePasswordToken,
   revokeActivePasswordTokens
 };
