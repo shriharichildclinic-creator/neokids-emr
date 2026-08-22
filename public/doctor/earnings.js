@@ -90,12 +90,18 @@
 
 const t = dash.totals;
     const d = dash.doctor;
+    const cash = dash.cash || { consultations: 0, totalCash: 0 };
     $('#earnKpiGrid').innerHTML = [
-      kpi('Total Patients',     String(t.consultations), 'Cashfree-paid only', 'blue'),
-      kpi('Revenue Generated',  compactInr(t.totalRevenue), inr(t.totalRevenue), 'mint'),
-      kpi('My Gross Share',     compactInr(t.doctorGross), `${d.doctorSharePercent}% of revenue`, 'cream'),
+      kpi('Online Patients',    String(t.consultations), 'Paid via Cashfree', 'blue'),
+      kpi('Online Revenue',     compactInr(t.totalRevenue), inr(t.totalRevenue), 'mint'),
+      kpi('My Gross Share',     compactInr(t.doctorGross), `${d.doctorSharePercent}% of online revenue`, 'cream'),
       kpi('TDS Deducted',       compactInr(t.tds), `${d.tdsPercent}% of gross`, 'coral'),
-      kpi('Net Earnings',       compactInr(t.doctorNet), inr(t.doctorNet), 'blue')
+      kpi('Net Payout (Online)', compactInr(t.doctorNet), inr(t.doctorNet), 'blue'),
+      // Cash never passes through the platform, so it's never part of the
+      // clinic-share/TDS split above — it's shown here purely so a doctor
+      // doing both online and in-clinic work can see their real total,
+      // not just the online half.
+      kpi('Cash Collected (Clinic)', compactInr(cash.totalCash), `${cash.consultations} in-clinic visit${cash.consultations === 1 ? '' : 's'} — not part of settlement`, 'mint')
     ].join('');
 
 const sCard = $('#earnSettlementCard');

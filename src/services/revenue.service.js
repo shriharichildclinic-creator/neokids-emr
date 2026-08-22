@@ -288,6 +288,35 @@ async function getMonthlyRevenueReport({ year, month, doctorId, paymentType, sou
   });
 }
 
+/**
+ * Cash collected at the clinic — the mirror image of buildEligibleApptWhere.
+ * This money never passes through the platform's payment gateway, so it
+ * deliberately has ZERO weight in the settlement/TDS split above (the
+ * clinic doesn't owe the doctor a "payout" on cash the doctor already
+ * has in hand). But that filter was also the ONLY thing feeding a
+ * doctor's own "My Earnings" dashboard — for a doctor who does both
+ * online and in-clinic work, that made their real total income look
+ * like only their online half. This is purely informational: it is
+ * never linked to a settlement and never affects doctorNet/TDS.
+ */
+async function getCashCollectedTotal({ doctorId, year, month }) {
+  const { start, end } = monthRange(year, month);
+  const agg = await prisma.appointment.aggregate({
+    _sum: { feeAtBooking: true },
+    _count: { _all: true },
+    where: {
+      doctorId,
+      status: { in: ['CONFIRMED', 'COMPLETED'] },
+      paymentStatus: { in: ['CASH_PENDING', 'CASH_COLLECTED'] },
+      date: { gte: start, lt: end }
+    }
+  });
+  return {
+    consultations: agg._count._all,
+    totalCash: round2(toNum(agg._sum.feeAtBooking))
+  };
+}
+
 /* ---------- Materialise (freeze) a settlement ---------- */
 
 /**
@@ -496,6 +525,7 @@ module.exports = {
   // queries
   getMonthlyRevenueReport,
   getDoctorBreakdown,
+  getCashCollectedTotal,
   // mutations
   generateSettlement,
   ensureSettlementInvoicePdf

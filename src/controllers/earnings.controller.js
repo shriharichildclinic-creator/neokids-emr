@@ -36,10 +36,18 @@ exports.myDashboard = asyncHandler(async (req, res) => {
   const row = report[0];   // exactly one doctor → exactly one row
   if (!row) return res.status(404).json({ error: 'Doctor not found' });
 
+  // Cash collected at the clinic — separate from row.totals, which is
+  // deliberately Cashfree-only (that's the only money the platform ever
+  // holds and owes a payout on). Without this, a doctor doing both online
+  // and in-clinic work would see their in-clinic cash income nowhere at
+  // all on their own earnings dashboard.
+  const cash = await revenueSvc.getCashCollectedTotal({ doctorId, year, month });
+
   res.json({
     period: { year, month },
     doctor: row.doctor,
     totals: row.totals,
+    cash,
     settlement: row.settlement
   });
 });
