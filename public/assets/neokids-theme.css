@@ -367,6 +367,7 @@ h1,h2,h3{
   flex:1 1 0; min-width:4px; border-radius:3px 3px 0 0;
   background:var(--nk-grad-primary);
   opacity:.85;
+  cursor:pointer;
 }
 
 @media (max-width:720px){

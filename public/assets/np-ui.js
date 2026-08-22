@@ -566,6 +566,18 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   html[data-theme="dark"] .np-notif__item{border-color:#1B333D}
   html[data-theme="dark"] .np-notif__item:hover{background:rgba(137,188,189,.08)}
   html[data-theme="dark"] .np-notif__item-title{color:#F4F9FA}
+
+  .np-spark-tooltip{position:fixed;z-index:99998;background:var(--nk-card,#fff);color:var(--nk-ink,#0F2E3A);border:1px solid var(--nk-border,#D9E6E6);border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,.14),0 2px 6px rgba(0,0,0,.08);padding:.5rem .65rem;min-width:150px;font:500 13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease}
+  .np-spark-tooltip.is-visible{opacity:1;visibility:visible}
+  .np-spark-tooltip.is-pinned{pointer-events:auto}
+  .np-spark-tooltip__title{font-size:.72rem;font-weight:700;color:var(--nk-ink,#0F2E3A)}
+  .np-spark-tooltip__value{font-size:.82rem;font-weight:700;color:var(--nk-teal-700,#5A9495);margin-top:.1rem}
+  .np-spark-tooltip__link{display:block;width:100%;margin-top:.4rem;padding-top:.4rem;border:0;border-top:1px dashed var(--nk-border,#D9E6E6);background:transparent;color:var(--nk-teal-700,#5A9495);font-size:.72rem;font-weight:700;text-align:left;cursor:pointer}
+  .np-spark-tooltip__link:hover{text-decoration:underline}
+  html[data-theme="dark"] .np-spark-tooltip{background:#11202A;color:#E6EEF1;border-color:#234551;box-shadow:0 12px 30px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.35)}
+  html[data-theme="dark"] .np-spark-tooltip__title{color:#F4F9FA}
+  html[data-theme="dark"] .np-spark-tooltip__value{color:#B4D7D7}
+  html[data-theme="dark"] .np-spark-tooltip__link{color:#B4D7D7;border-top-color:#234551}
   `;
 
   function injectStyles() {
@@ -988,6 +1000,101 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     }
   };
 
+  // Shared "fancy" tooltip for the small revenue/count sparklines used on
+  // every dashboard (admin/doctor/receptionist/pharmacy). Replaces the
+  // plain OS tooltip a bare title="" attribute gives you, and — critically
+  // — separates "show me what this bar means" from "navigate away": a tap
+  // pins the tooltip open with an explicit link inside it, so touch users
+  // get a chance to read the value before deciding to drill in. A bar
+  // opts in with data-tt-title/data-tt-value/data-tt-link/data-tt-onclick
+  // instead of title/onclick.
+  const NPSparkTooltip = {
+    _el: null,
+    _pinnedBar: null,
+    _bound: new WeakSet(),
+    _ensureEl() {
+      injectStyles();
+      if (this._el) return this._el;
+      const el = document.createElement('div');
+      el.className = 'np-spark-tooltip';
+      el.setAttribute('role', 'tooltip');
+      document.body.appendChild(el);
+      el.addEventListener('click', (e) => {
+        const link = e.target.closest('.np-spark-tooltip__link');
+        if (link && link.dataset.onclick) {
+          try { new Function(link.dataset.onclick)(); } catch (_) {}
+          this.hide();
+        }
+      });
+      this._el = el;
+      return el;
+    },
+    show(bar, { pin = false } = {}) {
+      const el = this._ensureEl();
+      const title = bar.getAttribute('data-tt-title') || '';
+      const value = bar.getAttribute('data-tt-value') || '';
+      const linkLabel = bar.getAttribute('data-tt-link') || '';
+      const onclick = bar.getAttribute('data-tt-onclick') || '';
+      el.innerHTML =
+        (title ? '<div class="np-spark-tooltip__title"></div>' : '') +
+        (value ? '<div class="np-spark-tooltip__value"></div>' : '') +
+        (pin && linkLabel ? '<button type="button" class="np-spark-tooltip__link"></button>' : '');
+      const titleEl = el.querySelector('.np-spark-tooltip__title');
+      if (titleEl) titleEl.textContent = title;
+      const valueEl = el.querySelector('.np-spark-tooltip__value');
+      if (valueEl) valueEl.textContent = value;
+      const linkEl = el.querySelector('.np-spark-tooltip__link');
+      if (linkEl) { linkEl.textContent = linkLabel; linkEl.dataset.onclick = onclick; }
+
+      el.classList.add('is-visible');
+      el.classList.toggle('is-pinned', pin);
+
+      const barBox = bar.getBoundingClientRect();
+      const ttWidth = el.offsetWidth || 160;
+      const ttHeight = el.offsetHeight || 50;
+      let left = barBox.left + barBox.width / 2 - ttWidth / 2;
+      left = Math.max(8, Math.min(window.innerWidth - ttWidth - 8, left));
+      let top = barBox.top - ttHeight - 10;
+      if (top < 4) top = barBox.bottom + 10; // flip below if no room above
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+    },
+    hide() {
+      if (!this._el) return;
+      this._el.classList.remove('is-visible', 'is-pinned');
+      this._pinnedBar = null;
+    },
+    // Idempotent — safe to call every time a sparkline is re-rendered.
+    bind(container) {
+      if (!container || this._bound.has(container)) return;
+      this._bound.add(container);
+      container.addEventListener('pointerenter', (e) => {
+        const bar = e.target.closest('.np-sparkline__bar[data-tt-title]');
+        if (bar && !this._pinnedBar && e.pointerType !== 'touch') this.show(bar, { pin: false });
+      }, true);
+      container.addEventListener('pointerleave', (e) => {
+        const bar = e.target.closest('.np-sparkline__bar[data-tt-title]');
+        if (bar && !this._pinnedBar) this.hide();
+      }, true);
+      container.addEventListener('click', (e) => {
+        const bar = e.target.closest('.np-sparkline__bar[data-tt-title]');
+        if (!bar) return;
+        e.preventDefault();
+        if (this._pinnedBar === bar) { this.hide(); return; }
+        this._pinnedBar = bar;
+        this.show(bar, { pin: true });
+      });
+      if (!NPSparkTooltip._docBound) {
+        NPSparkTooltip._docBound = true;
+        document.addEventListener('click', (e) => {
+          if (!this._pinnedBar) return;
+          if (e.target.closest('.np-spark-tooltip') || e.target.closest('.np-sparkline__bar[data-tt-title]')) return;
+          this.hide();
+        });
+      }
+    }
+  };
+
   global.NPTheme      = NPTheme;
   global.NPPalette    = NPPalette;
   global.NPChips      = NPChips;
@@ -997,6 +1104,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   global.NPDatePicker = NPDatePicker;
   global.NPLightbox   = NPLightbox;
   global.NPNotifications = NPNotifications;
+  global.NPSparkTooltip  = NPSparkTooltip;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { NPTheme.init(); NPDatePicker.init(); });

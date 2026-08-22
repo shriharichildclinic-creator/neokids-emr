@@ -566,8 +566,11 @@ async function loadDashboard() {
     setHtml('statSparkline', thisWeek.map(d => {
       const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
-      return `<div class="np-sparkline__bar" style="height:${h}px;cursor:pointer" title="${label}: ${fmtCurrency(d.revenue)} — click to view that day's appointments" onclick="goToAppointmentsForDate('${d.date}')"></div>`;
+      return `<div class="np-sparkline__bar" style="height:${h}px" tabindex="0"
+        data-tt-title="${escapeHtml(label)}" data-tt-value="${escapeHtml(fmtCurrency(d.revenue))}"
+        data-tt-link="View appointments →" data-tt-onclick="goToAppointmentsForDate('${d.date}')"></div>`;
     }).join(''));
+    if (window.NPSparkTooltip) NPSparkTooltip.bind($('#statSparkline'));
 
     // Full 14 days is too dense for a comfortable bar width in the panel's
     // available space, and the analytics cards above already cover the

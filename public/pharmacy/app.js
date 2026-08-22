@@ -186,8 +186,11 @@ function renderPharmacyStats(s){
   setHtml('statSparkline', daily.map(d => {
     const h = Math.max(3, Math.round(((Number(d.collected) || 0) / maxDaily) * 32));
     const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
-    return `<div class="np-sparkline__bar" style="height:${h}px;cursor:pointer" title="${label}: ${inr(d.collected)} — click to view Bills" onclick="setView('billsView')"></div>`;
+    return `<div class="np-sparkline__bar" style="height:${h}px" tabindex="0"
+      data-tt-title="${esc(label)}" data-tt-value="${esc(inr(d.collected))}"
+      data-tt-link="View Bills →" data-tt-onclick="setView('billsView')"></div>`;
   }).join(''));
+  if (window.NPSparkTooltip) NPSparkTooltip.bind($('#statSparkline'));
 
   setText('statTotalItems', s.totalItems || 0);
   setHtml('statInventoryBreakdown',

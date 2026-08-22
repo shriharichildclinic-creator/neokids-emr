@@ -520,8 +520,11 @@ async function loadStats(){
     setHtml('statSparkline', daily.map(d => {
       const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
-      return `<div class="np-sparkline__bar" style="height:${h}px;cursor:pointer" title="${label}: ${fmtCurrencyFull(d.revenue)} — click to view that day's appointments" onclick="goToAppointmentsForDate('${d.date}')"></div>`;
+      return `<div class="np-sparkline__bar" style="height:${h}px" tabindex="0"
+        data-tt-title="${escapeHtml(label)}" data-tt-value="${escapeHtml(fmtCurrencyFull(d.revenue))}"
+        data-tt-link="View appointments →" data-tt-onclick="goToAppointmentsForDate('${d.date}')"></div>`;
     }).join(''));
+    if (window.NPSparkTooltip) NPSparkTooltip.bind($('#statSparkline'));
 
     const pendNote = (p) => Number(p) > 0 ? ` · ${fmtCurrencyFull(p)} pending` : '';
     setHtml('statSplit', `
