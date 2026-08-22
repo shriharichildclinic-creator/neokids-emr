@@ -1333,6 +1333,7 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #invView .np-table-wrap,
   #billsView .np-table-wrap,
   #recInvoicesView .np-table-wrap,
+  #onlineInvoicesView .np-table-wrap,
   #auditView .np-table-wrap{
     overflow:visible;
     max-height:none;
@@ -1360,7 +1361,9 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #billsView .np-table,
   #billsView .np-table tbody,
   #recInvoicesView .np-table,
+  #onlineInvoicesView .np-table,
   #recInvoicesView .np-table tbody,
+  #onlineInvoicesView .np-table tbody,
   #auditView .np-table,
   #auditView .np-table tbody{
     display:block;
@@ -1378,6 +1381,7 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #invView .np-table thead,
   #billsView .np-table thead,
   #recInvoicesView .np-table thead,
+  #onlineInvoicesView .np-table thead,
   #auditView .np-table thead{
     position:absolute;
     width:1px;
@@ -1399,6 +1403,7 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #invView .np-table tr,
   #billsView .np-table tr,
   #recInvoicesView .np-table tr,
+  #onlineInvoicesView .np-table tr,
   #auditView .np-table tr{
     display:block;
     width:100%;
@@ -1420,6 +1425,7 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #invView .np-table td[data-label],
   #billsView .np-table td[data-label],
   #recInvoicesView .np-table td[data-label],
+  #onlineInvoicesView .np-table td[data-label],
   #auditView .np-table td[data-label]{
     display:grid;
     grid-template-columns:minmax(84px,.6fr) minmax(0,1.4fr);
@@ -1443,6 +1449,7 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #invView .np-table td[data-label]::before,
   #billsView .np-table td[data-label]::before,
   #recInvoicesView .np-table td[data-label]::before,
+  #onlineInvoicesView .np-table td[data-label]::before,
   #auditView .np-table td[data-label]::before{
     content:attr(data-label);
     color:var(--np-muted);
@@ -1463,10 +1470,12 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #invView .np-table td[data-label]:last-child,
   #billsView .np-table td[data-label]:last-child{ border-bottom:0; }
   #recInvoicesView .np-table td[data-label]:last-child,
+  #onlineInvoicesView .np-table td[data-label]:last-child,
   #auditView .np-table td[data-label]:last-child{ border-bottom:0; }
   #settlementsView .np-table td[data-label="Doctor"],
   #invoicesView .np-table td[data-label="Doctor"],
-  #recInvoicesView .np-table td[data-label="Doctor"]{ grid-template-columns:1fr; gap:.25rem; }
+  #recInvoicesView .np-table td[data-label="Doctor"],
+  #onlineInvoicesView .np-table td[data-label="Doctor"]{ grid-template-columns:1fr; gap:.25rem; }
   #settlementsView .np-table td[data-label="Actions"],
   #invoicesView .np-table td[data-label="Actions"],
   #revenueView .np-table td[data-label="Actions"],
@@ -1498,6 +1507,7 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
     text-align:center;
   }
   #recInvoicesView .np-table td[colspan],
+  #onlineInvoicesView .np-table td[colspan],
   #auditView .np-table td[colspan]{
     display:block;
     padding:.25rem 0;
@@ -1515,6 +1525,7 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   #invView .np-empty,
   #billsView .np-empty{ padding:1.25rem .75rem; }
   #recInvoicesView .np-empty,
+  #onlineInvoicesView .np-empty,
   #auditView .np-empty{ padding:1.25rem .75rem; }
 }
 @media (max-width:520px){
