@@ -1897,7 +1897,7 @@ document.addEventListener('click', async (ev) => {
   ev.preventDefault();
   try {
     const res = await fetch(a.href, {
-      headers: { Authorization: 'Bearer ' + (localStorage.getItem('nkp_admin_token') || '') }
+      headers: { Authorization: 'Bearer ' + (typeof _admToken === 'function' ? (_admToken() || '') : (localStorage.getItem('np_admin_token') || '')) }
     });
     if (!res.ok) { alert('Could not open document (HTTP ' + res.status + ')'); return; }
     const blob = await res.blob();

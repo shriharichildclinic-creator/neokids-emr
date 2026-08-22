@@ -1467,6 +1467,11 @@ html[data-theme="dark"] .np-ui-empty__title{ color: var(--nk-ink) !important; }
 html[data-theme="dark"] .np-ui-modal__message,
 html[data-theme="dark"] .np-ui-empty__msg{ color: var(--nk-muted) !important; }
 
+/* Default "no photo yet" avatar icon in Settings > Profile photo (admin,
+   receptionist, pharmacy) — force the muted dark-mode color so it never
+   renders as a plain black silhouette on the dark card background. */
+html[data-theme="dark"] #ownPhotoPlaceholder{ color: var(--nk-muted) !important; }
+
 html[data-theme="dark"] input[type="date"],
 html[data-theme="dark"] input[type="time"],
 html[data-theme="dark"] input[type="datetime-local"]{
