@@ -669,12 +669,21 @@ exports.stats = asyncHandler(async (req, res) => {
   const COLLECTED = ['PAID', 'CASH_COLLECTED'];
   const PENDING = ['CASH_PENDING'];
 
+  const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate() - 6);   // 7-day window incl. today
+  const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13); // prior 7-day window for w/w delta
+  const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 29);
+  const prev30 = new Date(today); prev30.setUTCDate(prev30.getUTCDate() - 59);
+
   const [
     todayCount, completedToday, totalConsults,
     onlineConsults, offlineConsults,
     onlineCollected, offlineCollected,
     onlinePending, offlinePending,
-    completedAll, cancelledAll
+    completedAll, cancelledAll,
+    yesterdayCount,
+    fortnightRows,
+    last30Count, prev30Count
   ] = await Promise.all([
     prisma.appointment.count({ where: { doctorId, date: today, status: { not: 'CANCELLED' } } }),
     prisma.appointment.count({ where: { doctorId, date: today, status: 'COMPLETED' } }),
@@ -686,7 +695,14 @@ exports.stats = asyncHandler(async (req, res) => {
     prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: { in: PENDING } } }),
     prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: { in: PENDING } } }),
     prisma.appointment.count({ where: { doctorId, status: 'COMPLETED' } }),
-    prisma.appointment.count({ where: { doctorId, status: 'CANCELLED' } })
+    prisma.appointment.count({ where: { doctorId, status: 'CANCELLED' } }),
+    prisma.appointment.count({ where: { doctorId, date: yesterday, status: { not: 'CANCELLED' } } }),
+    prisma.appointment.findMany({
+      where: { doctorId, date: { gte: last14 }, status: { not: 'CANCELLED' } },
+      select: { date: true, status: true, paymentStatus: true, feeAtBooking: true }
+    }),
+    prisma.appointment.count({ where: { doctorId, date: { gte: last30 }, status: { not: 'CANCELLED' } } }),
+    prisma.appointment.count({ where: { doctorId, date: { gte: prev30, lt: last30 }, status: { not: 'CANCELLED' } } })
   ]);
 
   const onlineCollectedAmt  = Number(onlineCollected._sum.feeAtBooking || 0);
@@ -694,6 +710,28 @@ exports.stats = asyncHandler(async (req, res) => {
   const onlinePendingAmt    = Number(onlinePending._sum.feeAtBooking || 0);
   const offlinePendingAmt   = Number(offlinePending._sum.feeAtBooking || 0);
   const totalAll = completedAll + cancelledAll;
+
+  // Bucket the trailing 14 days into a per-day series (for the dashboard's
+  // trend sparkline) and split it into this-week vs the prior week so the
+  // UI can show a real week-over-week delta instead of a bare number.
+  const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+  const daily = {};
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(last14); d.setUTCDate(d.getUTCDate() + i);
+    daily[dayKey(d)] = { date: dayKey(d), appointments: 0, completed: 0, revenue: 0 };
+  }
+  const last7Key = dayKey(last7);
+  let thisWeekCount = 0, prevWeekCount = 0, thisWeekRevenue = 0, prevWeekRevenue = 0;
+  for (const row of fortnightRows) {
+    const key = dayKey(row.date);
+    const bucket = daily[key];
+    if (!bucket) continue;
+    bucket.appointments += 1;
+    const amount = COLLECTED.includes(row.paymentStatus) ? Number(row.feeAtBooking || 0) : 0;
+    if (row.status === 'COMPLETED') { bucket.completed += 1; bucket.revenue += amount; }
+    if (key >= last7Key) { thisWeekCount += 1; if (row.status === 'COMPLETED') thisWeekRevenue += amount; }
+    else                 { prevWeekCount += 1; if (row.status === 'COMPLETED') prevWeekRevenue += amount; }
+  }
 
   res.json({
     todayAppointments: todayCount,
@@ -706,7 +744,14 @@ exports.stats = asyncHandler(async (req, res) => {
     offline: { consults: offlineConsults, collected: offlineCollectedAmt, pending: offlinePendingAmt },
     pendingTotal: onlinePendingAmt + offlinePendingAmt,
     completionRate: totalAll > 0 ? Math.round((completedAll / totalAll) * 100) : 0,
-    cancelledAll
+    cancelledAll,
+    trend: {
+      today:    { appointments: todayCount, vsYesterday: todayCount - yesterdayCount },
+      daily:    Object.values(daily).slice(7), // last 7 days, oldest → newest
+      thisWeek: { appointments: thisWeekCount, revenue: thisWeekRevenue },
+      prevWeek: { appointments: prevWeekCount, revenue: prevWeekRevenue },
+      last30Days: { appointments: last30Count, vsPrevious: last30Count - prev30Count }
+    }
   });
 });
 

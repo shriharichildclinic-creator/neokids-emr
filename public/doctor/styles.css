@@ -2395,34 +2395,8 @@ html[data-theme="dark"] .np-modal pre{
   cursor:pointer; white-space:nowrap;
   transition:border-color .15s, color .15s, background .15s;
 }
-.np-welcome__badge:focus-visible,
-.np-welcome__stat:focus-visible{
+.np-welcome__badge:focus-visible{
   outline:2px solid var(--np-accent, #3b82f6); outline-offset:2px;
-}
-.np-welcome__stats{
-  flex:1 1 100%; display:grid;
-  grid-template-columns:repeat(3, minmax(0, 1fr));
-  gap:.55rem; margin-top:.65rem; padding-top:.65rem;
-  border-top:1px solid var(--nk-border);
-}
-.np-welcome__stat{
-  display:flex; flex-direction:column; align-items:flex-start; gap:.15rem;
-  padding:.55rem .7rem; border-radius:10px; text-align:left;
-  background:var(--np-surface-2);
-  border:1px solid var(--nk-border);
-  cursor:pointer; min-width:0; font:inherit;
-  transition:border-color .15s, background .15s, transform .1s;
-}
-.np-welcome__stat:hover{ border-color:rgba(137,188,189,.5); }
-.np-welcome__stat:active{ transform:scale(.985); }
-.np-welcome__stat-value{
-  font-size:1.15rem; font-weight:700; line-height:1.1;
-  color:var(--nk-text);
-}
-.np-welcome__stat-label{
-  font-size:.68rem; font-weight:600; letter-spacing:.04em;
-  text-transform:uppercase; color:var(--nk-muted);
-  line-height:1.25; word-break:break-word;
 }
 .np-welcome__badge::before{
   content:""; width:8px; height:8px; border-radius:50%;
@@ -2457,6 +2431,86 @@ html[data-theme="dark"] .np-modal pre{
 }
 [data-theme="dark"] .np-welcome__pill{ background:rgba(255,255,255,.04); }
 [data-theme="dark"] .np-welcome__badge{ background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.08); }
+
+/* ── Dashboard analytics — two rich panels instead of the welcome header's
+   old 3-stat row + a separate flat 4-card KPI grid. Today's numbers and
+   this week's revenue each get one panel with real context (a breakdown,
+   a trend vs. the prior period, and — for revenue — a 7-day sparkline)
+   instead of being scattered across seven disconnected tiles. ── */
+.np-analytics{
+  display:grid; grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:1rem; margin:0 0 1rem;
+}
+.np-analytics-card{
+  background:var(--nk-card); border:1px solid var(--np-border);
+  border-radius:var(--np-radius-card); box-shadow:var(--np-card-shadow);
+  padding:1.15rem 1.25rem; min-width:0;
+  border-top:3px solid transparent;
+}
+.np-analytics-card--today{ border-top-color:var(--nk-teal-400); }
+.np-analytics-card--revenue{ border-top-color:var(--nk-orange-400); }
+.np-analytics-card__head{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:.6rem; flex-wrap:wrap;
+}
+.np-analytics-card__eyebrow{
+  font-size:.72rem; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--nk-muted);
+}
+.np-analytics-card__value{
+  font-family:'Poppins','Inter',system-ui,sans-serif;
+  font-size:2.15rem; font-weight:700; color:var(--np-ink);
+  line-height:1.1; margin-top:.3rem;
+}
+.np-analytics-card__breakdown{
+  display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .9rem;
+  margin-top:.85rem; padding-top:.85rem; border-top:1px solid var(--nk-border-soft);
+  font-size:.85rem; color:var(--np-text);
+}
+.np-analytics-card__split{
+  display:flex; flex-direction:column; gap:.4rem;
+  margin-top:.7rem; font-size:.82rem; color:var(--np-text);
+}
+.np-analytics-card__split-row{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.np-analytics-card__foot{
+  margin-top:.7rem; padding-top:.6rem; border-top:1px solid var(--nk-border-soft);
+  font-size:.76rem; color:var(--nk-muted);
+}
+.np-dot{
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  margin-right:.15rem; vertical-align:middle;
+}
+.np-dot--mint{ background:var(--nk-teal-400); }
+.np-dot--amber{ background:var(--nk-orange-400); }
+.np-dot--blue{ background:#3b82f6; }
+
+.np-trend{
+  display:inline-flex; align-items:center; gap:.3rem;
+  font-size:.76rem; font-weight:700; padding:.2rem .55rem; border-radius:999px;
+  white-space:nowrap;
+}
+.np-trend--up{ color:#0f7a4d; background:rgba(16,185,129,.12); }
+.np-trend--down{ color:#b42318; background:rgba(239,68,68,.10); }
+.np-trend--flat{ color:var(--nk-muted); background:var(--np-surface-2); }
+
+.np-sparkline{
+  display:flex; align-items:flex-end; gap:.3rem;
+  height:36px; margin-top:.9rem;
+}
+.np-sparkline__bar{
+  flex:1 1 0; min-width:4px; border-radius:3px 3px 0 0;
+  background:var(--nk-grad-primary);
+  opacity:.85;
+}
+
+@media (max-width:720px){
+  .np-analytics{ grid-template-columns:1fr; gap:.85rem; }
+  .np-analytics-card{ padding:1rem 1.1rem; }
+  .np-analytics-card__value{ font-size:1.85rem; }
+}
+
+[data-theme="dark"] .np-trend--up{ color:#4ade80; background:rgba(74,222,128,.12); }
+[data-theme="dark"] .np-trend--down{ color:#f87171; background:rgba(248,113,113,.14); }
 
 /* My Profile modal card */
 .np-profile-card{

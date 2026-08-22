@@ -227,22 +227,27 @@
             <div class="np-welcome__side">
               <button type="button" class="np-welcome__badge" id="dashWaitingBadge">Waiting room: —</button>
             </div>
-            <div class="np-welcome__stats" id="dashWelcomeStats" aria-label="Today's summary">
-              <button type="button" class="np-welcome__stat" id="dashStatToday">
-                <span class="np-welcome__stat-value">—</span>
-                <span class="np-welcome__stat-label">Today's appointments</span>
-              </button>
-              <button type="button" class="np-welcome__stat" id="dashStatPending">
-                <span class="np-welcome__stat-value">—</span>
-                <span class="np-welcome__stat-label">Pending consultations</span>
-              </button>
-              <button type="button" class="np-welcome__stat" id="dashStatWaiting">
-                <span class="np-welcome__stat-value">—</span>
-                <span class="np-welcome__stat-label">In waiting room</span>
-              </button>
+          </div>
+          <div id="dashAnalytics" class="np-analytics" aria-label="Today's analytics">
+            <div class="np-analytics-card np-analytics-card--today">
+              <div class="np-analytics-card__head">
+                <div class="np-analytics-card__eyebrow">Today</div>
+                <div class="np-analytics-card__trend" id="trendToday"></div>
+              </div>
+              <div class="np-analytics-card__value" id="statToday">—</div>
+              <div class="np-analytics-card__breakdown" id="statTodayBreakdown"></div>
+            </div>
+            <div class="np-analytics-card np-analytics-card--revenue">
+              <div class="np-analytics-card__head">
+                <div class="np-analytics-card__eyebrow">Revenue this week</div>
+                <div class="np-analytics-card__trend" id="trendWeek"></div>
+              </div>
+              <div class="np-analytics-card__value" id="statWeekRevenue">—</div>
+              <div class="np-sparkline" id="statSparkline" aria-hidden="true"></div>
+              <div class="np-analytics-card__split" id="statSplit"></div>
+              <div class="np-analytics-card__foot" id="statFoot"></div>
             </div>
           </div>
-          <div id="statsBar" class="np-kpi-grid"></div>
           <div class="np-dash-grid np-dash-grid--2-1">
             <div class="np-panel">
               <div class="np-panel__head">

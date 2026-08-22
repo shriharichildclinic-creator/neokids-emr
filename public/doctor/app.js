@@ -452,45 +452,79 @@ function handleHashRoute(){
   }
 }
 
+function trendChip(delta, label, isPercent){
+  if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;
+  const up = delta > 0;
+  const val = isPercent ? `${Math.abs(delta)}%` : Math.abs(delta);
+  return `<span class="np-trend ${up ? 'np-trend--up' : 'np-trend--down'}">${up ? '▲' : '▼'} ${val} ${label}</span>`;
+}
+
 async function loadStats(){
+  const host = $('#dashAnalytics');
   try {
-    if (typeof NPSkeleton !== 'undefined') NPSkeleton.kpis($('#statsBar'), 3);
-  } catch (_) {}
-  try {
-    const s = await api('/doctor/stats');
-    const today = Number(s.todayAppointments || 0);
-    const done  = Number(s.completedToday || 0);
-    const total = Number(s.totalConsults || 0);
-    const on  = s.online  || { consults:0, collected:0, pending:0 };
-    const off = s.offline || { consults:0, collected:0, pending:0 };
-    // Online and offline are shown as two separate streams — a doctor who
-    // works both wants to compare them, not see one blended figure. Each
-    // card leads with collected money and notes pending separately.
+    const [s, waiting] = await Promise.all([
+      api('/doctor/stats'),
+      api('/doctor/waiting-room').catch(() => [])
+    ]);
+    const today     = Number(s.todayAppointments || 0);
+    const completed = Number(s.completedToday || 0);
+    const pending   = Math.max(0, today - completed);
+    const waitCount = Array.isArray(waiting) ? waiting.length : 0;
+    const total     = Number(s.totalConsults || 0);
+    const on  = s.online  || { consults: 0, collected: 0, pending: 0 };
+    const off = s.offline || { consults: 0, collected: 0, pending: 0 };
+    const trend    = s.trend || {};
+    const thisWeek = trend.thisWeek || { appointments: 0, revenue: 0 };
+    const prevWeek = trend.prevWeek || { appointments: 0, revenue: 0 };
+    const daily    = Array.isArray(trend.daily) ? trend.daily : [];
+    const vsYesterday = Number((trend.today && trend.today.vsYesterday) || 0);
+
+    // The waiting badge lives in the welcome header but the count comes
+    // from the same fetch this function already makes — no need for a
+    // second, separate waiting-room request just to fill it in.
+    const badge = document.getElementById('dashWaitingBadge');
+    if (badge){
+      badge.textContent = waitCount > 0
+        ? waitCount + ' patient' + (waitCount === 1 ? '' : 's') + ' waiting'
+        : 'Waiting room: all clear';
+      badge.classList.toggle('is-active', waitCount > 0);
+      badge.onclick = () => { const tab = document.querySelector('[data-tab=waitingTab]'); if (tab) tab.click(); };
+    }
+    const navBadge = $('#navBadgeWaiting');
+    if (navBadge){
+      if (waitCount){ navBadge.textContent = waitCount; navBadge.classList.remove('hidden'); }
+      else navBadge.classList.add('hidden');
+    }
+
+    $('#trendToday').innerHTML = trendChip(vsYesterday, 'vs yesterday');
+    $('#statToday').textContent = today;
+    $('#statTodayBreakdown').innerHTML = `
+      <span class="np-dot np-dot--mint"></span>${completed} completed
+      <span class="np-dot np-dot--amber"></span>${pending} pending
+      <span class="np-dot np-dot--blue"></span>${waitCount} waiting`;
+
+    const weekDelta = prevWeek.revenue > 0
+      ? Math.round(((thisWeek.revenue - prevWeek.revenue) / prevWeek.revenue) * 100)
+      : (thisWeek.revenue > 0 ? 100 : 0);
+    $('#trendWeek').innerHTML = trendChip(weekDelta, 'vs last week', true);
+    $('#statWeekRevenue').textContent = fmtCurrencyFull(thisWeek.revenue);
+
+    const maxDaily = Math.max(1, ...daily.map(d => Number(d.revenue) || 0));
+    $('#statSparkline').innerHTML = daily.map(d => {
+      const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
+      const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
+      return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${fmtCurrencyFull(d.revenue)}"></div>`;
+    }).join('');
+
     const pendNote = (p) => Number(p) > 0 ? ` · ${fmtCurrencyFull(p)} pending` : '';
-    $('#statsBar').innerHTML = `
-      <div class="np-kpi np-kpi--blue" title="Total appointments scheduled for today and how many you've completed.">
-        <div class="np-kpi__label">Today's Patients</div>
-        <div class="np-kpi__value">${today}</div>
-        <div class="np-kpi__sub">${done} of ${today} completed</div>
-      </div>
-      <div class="np-kpi np-kpi--mint" title="Online consultations you've completed, and the money collected from them.">
-        <div class="np-kpi__label">Online Consults</div>
-        <div class="np-kpi__value">${Number(on.consults||0)}</div>
-        <div class="np-kpi__sub">${fmtCurrencyFull(on.collected)} collected${pendNote(on.pending)}</div>
-      </div>
-      <div class="np-kpi np-kpi--cream" title="In-clinic (offline) consultations you've completed, and the money collected from them.">
-        <div class="np-kpi__label">In-Clinic Consults</div>
-        <div class="np-kpi__value">${Number(off.consults||0)}</div>
-        <div class="np-kpi__sub">${fmtCurrencyFull(off.collected)} collected${pendNote(off.pending)}</div>
-      </div>
-      <div class="np-kpi np-kpi--violet" title="All-time completed consultations across both online and in-clinic.">
-        <div class="np-kpi__label">Total Consults</div>
-        <div class="np-kpi__value">${total}</div>
-        <div class="np-kpi__sub">${s.completionRate != null ? s.completionRate + '% completion' : 'All-time'}</div>
-      </div>`;
+    $('#statSplit').innerHTML = `
+      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${Number(on.consults || 0)} consults · ${fmtCurrencyFull(on.collected)}${pendNote(on.pending)}</div>
+      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>In-Clinic</span> ${Number(off.consults || 0)} consults · ${fmtCurrencyFull(off.collected)}${pendNote(off.pending)}</div>`;
+
+    $('#statFoot').textContent = `${total} total consults all-time` + (s.completionRate != null ? ` · ${s.completionRate}% completion rate` : '');
   } catch (ex){
     console.warn('stats failed', ex);
-    $('#statsBar').innerHTML = '';
+    if (host) host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Could not load analytics</div><div class="np-empty__sub">Try refreshing.</div></div>';
   }
 }
 async function loadDashSnapshot(){
@@ -539,52 +573,11 @@ function updateDashWelcome(){
   } catch(_){ /* welcome is decorative — never fail dashboard load */ }
 }
 
-function wireWelcomeStatJump(id, tabId){
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener('click', () => {
-    const tab = document.querySelector('[data-tab=' + tabId + ']');
-    if (tab) tab.click();
-  });
-}
-
-function setWelcomeStat(id, value){
-  const el = document.querySelector('#' + id + ' .np-welcome__stat-value');
-  if (el) el.textContent = String(value);
-}
-
-async function loadDashWelcome(){
+function loadDashWelcome(){
+  // Data-driven parts of the welcome header (the waiting badge) are filled
+  // in by loadStats(), which already fetches everything needed — this only
+  // handles the purely time-of-day/client-local greeting and date.
   updateDashWelcome();
-  wireWelcomeStatJump('dashStatToday',   'allTab');
-  wireWelcomeStatJump('dashStatPending', 'allTab');
-  wireWelcomeStatJump('dashStatWaiting', 'waitingTab');
-  try {
-    const [stats, waiting] = await Promise.all([
-      api('/doctor/stats').catch(() => null),
-      api('/doctor/waiting-room').catch(() => [])
-    ]);
-
-    const today     = stats ? Number(stats.todayAppointments || 0) : 0;
-    const completed = stats ? Number(stats.completedToday || 0) : 0;
-    const pending   = Math.max(0, today - completed);
-    const waitCount = Array.isArray(waiting) ? waiting.length : 0;
-
-    setWelcomeStat('dashStatToday',   today);
-    setWelcomeStat('dashStatPending', pending);
-    setWelcomeStat('dashStatWaiting', waitCount);
-
-    const badge = document.getElementById('dashWaitingBadge');
-    if (badge){
-      badge.textContent = waitCount > 0
-        ? waitCount + ' patient' + (waitCount === 1 ? '' : 's') + ' waiting'
-        : 'Waiting room: all clear';
-      badge.classList.toggle('is-active', waitCount > 0);
-      badge.onclick = () => {
-        const tab = document.querySelector('[data-tab=waitingTab]');
-        if (tab) tab.click();
-      };
-    }
-  } catch(_){}
 }
 function emptyState(title, sub, ctaHtml){
   return `<div class="np-empty">
