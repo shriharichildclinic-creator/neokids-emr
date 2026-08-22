@@ -865,6 +865,101 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     _onKey(e) { if (e.key === 'Escape') NPLightbox.close(); },
   };
 
+  // Notification bell shared by all 4 portals. Each portal already has its
+  // own authenticated api() helper (baked-in Bearer token) — this component
+  // doesn't know or care about auth, it just calls api(basePath + '/...').
+  function notifEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+  function notifTimeAgo(iso) {
+    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+  const NPNotifications = {
+    _timer: null,
+    mount(container, api, opts) {
+      if (!container) return;
+      injectStyles();
+      opts = opts || {};
+      const base = opts.basePath || '';
+      const pollMs = opts.pollMs || 45000;
+
+      container.innerHTML =
+        '<div class="np-notif">' +
+          '<button type="button" class="np-notif__btn" aria-label="Notifications">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' +
+            '<span class="np-notif__dot" style="display:none">0</span>' +
+          '</button>' +
+          '<div class="np-notif__panel">' +
+            '<div class="np-notif__head"><span>Notifications</span><button type="button" class="np-notif__markall">Mark all read</button></div>' +
+            '<div class="np-notif__list"><div class="np-notif__empty">Loading…</div></div>' +
+          '</div>' +
+        '</div>';
+
+      const btn      = container.querySelector('.np-notif__btn');
+      const dot      = container.querySelector('.np-notif__dot');
+      const panel    = container.querySelector('.np-notif__panel');
+      const list     = container.querySelector('.np-notif__list');
+      const markAll  = container.querySelector('.np-notif__markall');
+
+      async function refreshCount() {
+        try {
+          const r = await api(base + '/notifications/unread-count');
+          const n = (r && r.count) || 0;
+          if (n > 0) { dot.style.display = ''; dot.textContent = n > 99 ? '99+' : String(n); }
+          else dot.style.display = 'none';
+        } catch (_) {}
+      }
+
+      async function loadList() {
+        list.innerHTML = '<div class="np-notif__empty">Loading…</div>';
+        try {
+          const rows = await api(base + '/notifications');
+          if (!rows.length) { list.innerHTML = '<div class="np-notif__empty">No notifications yet.</div>'; return; }
+          list.innerHTML = rows.map(n =>
+            '<button type="button" class="np-notif__item' + (n.isRead ? '' : ' is-unread') + '" data-id="' + n.id + '">' +
+              '<div class="np-notif__item-title">' + (n.isRead ? '' : '<span class="np-notif__item-dot"></span>') + notifEsc(n.title) + '</div>' +
+              '<div class="np-notif__item-msg">' + notifEsc(n.message) + '</div>' +
+              '<div class="np-notif__item-time">' + notifTimeAgo(n.createdAt) + '</div>' +
+            '</button>'
+          ).join('');
+          list.querySelectorAll('.np-notif__item').forEach(el => {
+            el.addEventListener('click', async () => {
+              if (!el.classList.contains('is-unread')) return;
+              el.classList.remove('is-unread');
+              const d = el.querySelector('.np-notif__item-dot'); if (d) d.remove();
+              try { await api(base + '/notifications/' + el.dataset.id + '/read', { method: 'POST' }); } catch (_) {}
+              refreshCount();
+            });
+          });
+        } catch (_) {
+          list.innerHTML = '<div class="np-notif__empty">Could not load notifications.</div>';
+        }
+      }
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = panel.classList.toggle('is-open');
+        if (open) loadList();
+      });
+      markAll.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try { await api(base + '/notifications/read-all', { method: 'POST' }); loadList(); refreshCount(); } catch (_) {}
+      });
+      panel.addEventListener('click', (e) => e.stopPropagation());
+      document.addEventListener('click', () => panel.classList.remove('is-open'));
+
+      refreshCount();
+      if (NPNotifications._timer) clearInterval(NPNotifications._timer);
+      NPNotifications._timer = setInterval(refreshCount, pollMs);
+    }
+  };
+
   global.NPTheme      = NPTheme;
   global.NPPalette    = NPPalette;
   global.NPChips      = NPChips;
@@ -873,6 +968,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   global.NPSticky     = NPSticky;
   global.NPDatePicker = NPDatePicker;
   global.NPLightbox   = NPLightbox;
+  global.NPNotifications = NPNotifications;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { NPTheme.init(); NPDatePicker.init(); });

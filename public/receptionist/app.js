@@ -270,6 +270,9 @@ async function showDashboard(){
   $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden');
   setupSidebar();
   setupProfileMenu();
+  if (typeof NPNotifications !== 'undefined') {
+    NPNotifications.mount($('#notifMount'), api, { basePath: '/receptionist' });
+  }
   try{
     const meRes = await api('/auth/me'); __me = meRes.user || meRes;
     const __initials = __me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();

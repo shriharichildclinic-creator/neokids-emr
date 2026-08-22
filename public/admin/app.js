@@ -1251,7 +1251,9 @@ async function loadAppointments() {
         <td data-label="Actions" style="text-align:right;">
           ${a.status === 'CANCELLED' && a.paymentStatus === 'PAID' && a.cashfreeOrderId
             ? `<button class="np-btn np-btn--danger np-btn--sm" onclick="refundAppointment('${a.id}','${escapeHtml(a.patient.name).replace(/'/g, "\\'")}')">Refund</button>`
-            : ''}
+            : (a.paymentStatus === 'REFUNDED'
+                ? '<span class="np-mut" style="font-size:.78rem;">Refunded</span>'
+                : '<span class="np-mut" style="font-size:.78rem;">—</span>')}
         </td>
       </tr>`;
     }).join('');
@@ -1731,6 +1733,9 @@ async function removeOwnPhoto(){
 async function showDashboard() {
   $('#loginScreen').classList.add('hidden');
   $('#dashboard').classList.remove('hidden');
+  if (typeof NPNotifications !== 'undefined') {
+    NPNotifications.mount($('#notifMount'), api, { basePath: '/admin' });
+  }
   try {
     const me = await api('/auth/me');
     const u = (me && me.user) || me; // backend returns {role, user:{...}}

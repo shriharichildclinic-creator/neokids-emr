@@ -206,6 +206,9 @@ function logout(){
 async function init(){
   $('#loginScreen').classList.add('hidden');
   $('#dashboard').classList.remove('hidden');
+  if (typeof NPNotifications !== 'undefined') {
+    NPNotifications.mount($('#notifMount'), api, { basePath: '/doctor' });
+  }
   try {
     const me = await api('/doctor/me');
     doctorCache = me;
