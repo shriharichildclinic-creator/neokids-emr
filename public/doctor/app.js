@@ -9,6 +9,10 @@ let activeConsultId = null;
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+// Null-safe innerHTML/textContent setters — a missing element should
+// never throw and blank an entire dashboard section.
+function setHtml(id, html){ const el = document.getElementById(id); if (el) el.innerHTML = html; }
+function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
 
 async function api(path, opts={}){
   const headers = opts.headers || {};
@@ -496,32 +500,32 @@ async function loadStats(){
       else navBadge.classList.add('hidden');
     }
 
-    $('#trendToday').innerHTML = trendChip(vsYesterday, 'vs yesterday');
-    $('#statToday').textContent = today;
-    $('#statTodayBreakdown').innerHTML = `
+    setHtml('trendToday', trendChip(vsYesterday, 'vs yesterday'));
+    setText('statToday', today);
+    setHtml('statTodayBreakdown', `
       <span class="np-dot np-dot--mint"></span>${completed} completed
       <span class="np-dot np-dot--amber"></span>${pending} pending
-      <span class="np-dot np-dot--blue"></span>${waitCount} waiting`;
+      <span class="np-dot np-dot--blue"></span>${waitCount} waiting`);
 
     const weekDelta = prevWeek.revenue > 0
       ? Math.round(((thisWeek.revenue - prevWeek.revenue) / prevWeek.revenue) * 100)
       : (thisWeek.revenue > 0 ? 100 : 0);
-    $('#trendWeek').innerHTML = trendChip(weekDelta, 'vs last week', true);
-    $('#statWeekRevenue').textContent = fmtCurrencyFull(thisWeek.revenue);
+    setHtml('trendWeek', trendChip(weekDelta, 'vs last week', true));
+    setText('statWeekRevenue', fmtCurrencyFull(thisWeek.revenue));
 
     const maxDaily = Math.max(1, ...daily.map(d => Number(d.revenue) || 0));
-    $('#statSparkline').innerHTML = daily.map(d => {
+    setHtml('statSparkline', daily.map(d => {
       const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
       return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${fmtCurrencyFull(d.revenue)}"></div>`;
-    }).join('');
+    }).join(''));
 
     const pendNote = (p) => Number(p) > 0 ? ` · ${fmtCurrencyFull(p)} pending` : '';
-    $('#statSplit').innerHTML = `
+    setHtml('statSplit', `
       <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${Number(on.consults || 0)} consults · ${fmtCurrencyFull(on.collected)}${pendNote(on.pending)}</div>
-      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>In-Clinic</span> ${Number(off.consults || 0)} consults · ${fmtCurrencyFull(off.collected)}${pendNote(off.pending)}</div>`;
+      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>In-Clinic</span> ${Number(off.consults || 0)} consults · ${fmtCurrencyFull(off.collected)}${pendNote(off.pending)}</div>`);
 
-    $('#statFoot').textContent = `${total} total consults all-time` + (s.completionRate != null ? ` · ${s.completionRate}% completion rate` : '');
+    setText('statFoot', `${total} total consults all-time` + (s.completionRate != null ? ` · ${s.completionRate}% completion rate` : ''));
   } catch (ex){
     console.warn('stats failed', ex);
     if (host) host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Could not load analytics</div><div class="np-empty__sub">Try refreshing.</div></div>';

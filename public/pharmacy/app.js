@@ -2,6 +2,10 @@ const API = '/api';
 let TOKEN = localStorage.getItem('np_pharmacy_token');
 const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+// Null-safe innerHTML/textContent setters — a missing element should
+// never throw and blank an entire dashboard section.
+function setHtml(id, html){ const el = document.getElementById(id); if (el) el.innerHTML = html; }
+function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
 let __me=null, __items=[], __doctors=[], __bills=[];
 
 async function api(path, opts={}){ const headers={'Content-Type':'application/json',...(TOKEN&&{Authorization:'Bearer '+TOKEN}),...(opts.headers||{})}; const r=await fetch(API+path,{...opts,headers}); let d=null; try{d=await r.json();}catch(_){}
@@ -101,36 +105,36 @@ function renderPharmacyStats(s){
   const vsYesterday = Number((trend.today && trend.today.vsYesterday) || 0);
 
   const todayCollected = s.todayCollected != null ? s.todayCollected : s.todayRevenue;
-  $('#trendTodayBills').innerHTML = trendChip(vsYesterday, 'vs yesterday');
-  $('#statTodayBills').textContent = s.todayBills || 0;
-  $('#statTodayBreakdown').innerHTML =
+  setHtml('trendTodayBills', trendChip(vsYesterday, 'vs yesterday'));
+  setText('statTodayBills', s.todayBills || 0);
+  setHtml('statTodayBreakdown',
     `<span class="np-dot np-dot--mint"></span>${inr(todayCollected)} collected` +
-    (s.todayPending > 0 ? ` <span class="np-dot np-dot--amber"></span>${inr(s.todayPending)} pending` : '');
+    (s.todayPending > 0 ? ` <span class="np-dot np-dot--amber"></span>${inr(s.todayPending)} pending` : ''));
 
   const weekDelta = prevWeek.collected > 0
     ? Math.round(((thisWeek.collected - prevWeek.collected) / prevWeek.collected) * 100)
     : (thisWeek.collected > 0 ? 100 : 0);
-  $('#trendWeekCollected').innerHTML = trendChip(weekDelta, 'vs last week', true);
-  $('#statWeekCollected').textContent = inr(thisWeek.collected);
+  setHtml('trendWeekCollected', trendChip(weekDelta, 'vs last week', true));
+  setText('statWeekCollected', inr(thisWeek.collected));
 
   const maxDaily = Math.max(1, ...daily.map(d => Number(d.collected) || 0));
-  $('#statSparkline').innerHTML = daily.map(d => {
+  setHtml('statSparkline', daily.map(d => {
     const h = Math.max(3, Math.round(((Number(d.collected) || 0) / maxDaily) * 32));
     const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
     return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${inr(d.collected)}"></div>`;
-  }).join('');
+  }).join(''));
 
-  $('#statTotalItems').textContent = s.totalItems || 0;
-  $('#statInventoryBreakdown').innerHTML =
+  setText('statTotalItems', s.totalItems || 0);
+  setHtml('statInventoryBreakdown',
     `<span class="np-dot np-dot--amber"></span>${s.lowStock || 0} low stock` +
     `<span class="np-dot np-dot--blue"></span>${s.expiringSoon || 0} expiring ≤30d` +
-    (s.expired > 0 ? `<span class="np-dot np-dot--red"></span>${s.expired} already expired` : '');
+    (s.expired > 0 ? `<span class="np-dot np-dot--red"></span>${s.expired} already expired` : ''));
 }
 
 async function loadDash(){ try{ const s=await api('/pharmacy/stats');
   renderPharmacyStats(s);
-  const bills=await api('/pharmacy/bills'); $('#recentBills').innerHTML=(bills.slice(0,8).map(b=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(b.billNumber)}</div><div class="np-appt-row__meta">${esc(b.customerName||'Walk-in')} · ${esc(fmtDate(b.createdAt))}</div></div><div class="np-appt-row__right"><b>${inr(b.total)}</b></div></div>`).join('')||'<div class="np-empty"><div class="np-empty__sub">No bills yet.</div></div>');
- }catch(e){ $('#dashAnalytics').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+  const bills=await api('/pharmacy/bills'); setHtml('recentBills', bills.slice(0,8).map(b=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(b.billNumber)}</div><div class="np-appt-row__meta">${esc(b.customerName||'Walk-in')} · ${esc(fmtDate(b.createdAt))}</div></div><div class="np-appt-row__right"><b>${inr(b.total)}</b></div></div>`).join('')||'<div class="np-empty"><div class="np-empty__sub">No bills yet.</div></div>');
+ }catch(e){ setHtml('dashAnalytics', `<div class="np-error">${esc(e.message)}</div>`); } }
 
 async function loadRx(){ const list=$('#rxList'); const f=$('#rxFilter').value; try{ const rows=await api('/pharmacy/prescriptions'+(f?('?dispensed='+f):''));
   list.innerHTML=rows.length?rows.map(rx=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(rx.patient.name)} ${rx.dispensed?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Dispensed</span>':'<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Pending</span>'}</div><div class="np-appt-row__assign">Dr. ${esc(rx.doctor.name)} · ${esc(fmtDate(rx.visitDate))}</div><div class="np-appt-row__meta">${(rx.medications||[]).map(m=>`<div class="np-rx-med-line">${esc(m.name)} ${esc(m.dose||'')} ${esc(m.frequency||'')}</div>`).join('')}</div></div><div class="np-appt-row__right"><span class="np-badge ${rx.createdByRole==='RECEPTIONIST'?'np-badge--violet':'np-badge--mint'}">${rx.createdByRole==='RECEPTIONIST'?'by reception':'by doctor'}</span>${!rx.dispensed?` <button class="np-btn np-btn--sm np-btn--primary" onclick="openBillModal('${rx.id}')">Dispense & bill</button>`:''}</div></div>`).join(''):'<div class="np-empty"><div class="np-empty__title">No prescriptions</div></div>';

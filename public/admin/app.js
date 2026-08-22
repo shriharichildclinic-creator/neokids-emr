@@ -5,6 +5,11 @@ let TOKEN = localStorage.getItem('np_admin_token');
 
 const $  = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
+// Null-safe innerHTML/textContent setters — a missing element (stale
+// cached HTML mid-deploy, a renamed id, a view that isn't mounted yet)
+// should never throw and blank an entire dashboard section.
+function setHtml(id, html){ const el = document.getElementById(id); if (el) el.innerHTML = html; }
+function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
 
 let __doctorsCache = [];
 let __apptsCache = [];
@@ -503,13 +508,13 @@ async function loadDashboard() {
     const a = await api('/admin/analytics');
     const daily = Array.isArray(a.daily) ? a.daily : [];
 
-    $('#trendToday').innerHTML = trendChip(a.todayDelta, 'vs yesterday');
-    $('#statToday').textContent = a.todayAppointments;
-    $('#statTodayBreakdown').innerHTML =
+    setHtml('trendToday', trendChip(a.todayDelta, 'vs yesterday'));
+    setText('statToday', a.todayAppointments);
+    setHtml('statTodayBreakdown',
       `<span class="np-dot np-dot--mint"></span>${a.last7Appointments} in last 7 days` +
-      `<span class="np-dot np-dot--blue"></span>${a.last30Appointments} in last 30 days`;
-    $('#statTodayFoot').textContent =
-      `${a.completionRate}% completion · ${a.cancellationRate}% cancellation · ${a.totalDoctors} doctors · ${a.totalPatients} patients`;
+      `<span class="np-dot np-dot--blue"></span>${a.last30Appointments} in last 30 days`);
+    setText('statTodayFoot',
+      `${a.completionRate}% completion · ${a.cancellationRate}% cancellation · ${a.totalDoctors} doctors · ${a.totalPatients} patients`);
 
     // The API only returns a 14-day daily series (not a pre-computed
     // week-over-week total), so the this-week/last-week split is derived
@@ -523,17 +528,17 @@ async function loadDashboard() {
     const weekDelta = prevWeekRevenue > 0
       ? Math.round(((thisWeekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100)
       : (thisWeekRevenue > 0 ? 100 : 0);
-    $('#trendWeek').innerHTML = trendChip(weekDelta, 'vs last week', true);
-    $('#statWeekRevenue').textContent = fmtCurrency(thisWeekRevenue);
+    setHtml('trendWeek', trendChip(weekDelta, 'vs last week', true));
+    setText('statWeekRevenue', fmtCurrency(thisWeekRevenue));
 
     const maxDaily = Math.max(1, ...thisWeek.map(d => Number(d.revenue) || 0));
-    $('#statSparkline').innerHTML = thisWeek.map(d => {
+    setHtml('statSparkline', thisWeek.map(d => {
       const h = Math.max(3, Math.round(((Number(d.revenue) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
       return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${fmtCurrency(d.revenue)}"></div>`;
-    }).join('');
+    }).join(''));
 
-    renderDailyChart(daily);
+    try { renderDailyChart(daily); } catch (_) {}
 
     // Revenue by source — online / in-clinic / pharmacy, each showing money
     // actually collected with pending noted separately so nothing is inflated.
@@ -541,12 +546,12 @@ async function loadDashboard() {
     const rbs = a.revenueBySource;
     if (rbs) {
       const pend = (p) => Number(p) > 0 ? ` · ${fmtCurrency(p)} pending` : '';
-      $('#statSplit').innerHTML = `
+      setHtml('statSplit', `
         <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${fmtCurrency(rbs.online.collected)} collected${pend(rbs.online.pending)}</div>
         <div class="np-analytics-card__split-row"><span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>In-Clinic</span> ${fmtCurrency(rbs.offline.collected)} collected${pend(rbs.offline.pending)}</div>
-        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Pharmacy</span> ${fmtCurrency(rbs.pharmacy.collected)} collected${pend(rbs.pharmacy.pending)}</div>`;
-      $('#statFoot').textContent =
-        `${fmtCurrency(rbs.totalCollected)} collected all-time · ${rbs.outstandingInvoices || 0} unpaid invoice(s)`;
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Pharmacy</span> ${fmtCurrency(rbs.pharmacy.collected)} collected${pend(rbs.pharmacy.pending)}</div>`);
+      setText('statFoot',
+        `${fmtCurrency(rbs.totalCollected)} collected all-time · ${rbs.outstandingInvoices || 0} unpaid invoice(s)`);
     }
 
     const fail = a.notificationsFailed || 0;
@@ -575,7 +580,7 @@ async function loadDashboard() {
           </div>
         </div>`).join('');
   } catch (err) {
-    $('#dashAnalytics').innerHTML = `<div class="np-error">${escapeHtml(err.message)}</div>`;
+    setHtml('dashAnalytics', `<div class="np-error">${escapeHtml(err.message)}</div>`);
   }
 }
 

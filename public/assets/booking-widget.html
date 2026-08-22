@@ -1388,6 +1388,29 @@ function unlockMode() {
   renderStep1ModeUI();
 }
 
+// Display-order only — does not affect data, selection, or booking logic.
+// Dr. Vishal Parmar always leads; the rest group by specialty in the
+// order: Pediatricians, Gynecologists, General Physicians,
+// Dietician/Nutritionist, Skin Specialist. Anything outside these groups
+// keeps its place after them, in the order the API returned it.
+function doctorDisplayRank(d){
+  const name = String(d.name || '').replace(/^dr\.?\s*/i, '').trim().toLowerCase();
+  if (name === 'vishal parmar') return -1;
+  const spec = String(d.specialization || '').toLowerCase();
+  if (/pediatric|paediatric/.test(spec)) return 0;
+  if (/gynec|gynaec|obstetric/.test(spec)) return 1;
+  if (/general physician|general medicine|\bphysician\b/.test(spec)) return 2;
+  if (/dietician|dietitian|nutrition/.test(spec)) return 3;
+  if (/skin|dermat/.test(spec)) return 4;
+  return 5;
+}
+function sortDoctorsForDisplay(docs){
+  return docs
+    .map((d, i) => ({ d, i, rank: doctorDisplayRank(d) }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map(x => x.d);
+}
+
 async function loadDoctors(){
   const list = $('#doctorsList');
   list.setAttribute('aria-busy','true');
@@ -1404,7 +1427,7 @@ async function loadDoctors(){
     </div>`;
     return;
   }
-  list.innerHTML = docs.map(d => {
+  list.innerHTML = sortDoctorsForDisplay(docs).map(d => {
     const id      = escapeHtml(d.id);
     const name    = escapeHtml(d.name);
     const spec    = escapeHtml(d.specialization || '');

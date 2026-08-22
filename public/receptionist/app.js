@@ -2,6 +2,10 @@ const API = '/api';
 let TOKEN = localStorage.getItem('np_reception_token');
 const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+// Null-safe innerHTML/textContent setters — a missing element should
+// never throw and blank an entire dashboard section.
+function setHtml(id, html){ const el = document.getElementById(id); if (el) el.innerHTML = html; }
+function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
 let __me = null, __doctors = [], __assignments = [], __appts = [], __bills = [], __inv = [];
 
 async function api(path, opts = {}) {
@@ -227,30 +231,30 @@ async function loadDashboard(){
     const daily = Array.isArray(trend.daily) ? trend.daily : [];
     const vsYesterday = Number((trend.today && trend.today.vsYesterday) || 0);
 
-    $('#trendToday').innerHTML = trendChip(vsYesterday, 'vs yesterday');
-    $('#statToday').textContent = s.todayAppointments || 0;
-    $('#statTodayBreakdown').innerHTML =
+    setHtml('trendToday', trendChip(vsYesterday, 'vs yesterday'));
+    setText('statToday', s.todayAppointments || 0);
+    setHtml('statTodayBreakdown',
       `<span class="np-dot np-dot--mint"></span>${s.bookedToday||0} booked` +
       `<span class="np-dot np-dot--blue"></span>${s.walkinToday||0} walk-in` +
-      `<span class="np-dot np-dot--amber"></span>${s.pendingToday||0} awaiting arrival`;
-    $('#statTodayFoot').textContent = `${s.arrivedToday||0} checked in today · ${s.patientsTotal||0} patients in your scope`;
+      `<span class="np-dot np-dot--amber"></span>${s.pendingToday||0} awaiting arrival`);
+    setText('statTodayFoot', `${s.arrivedToday||0} checked in today · ${s.patientsTotal||0} patients in your scope`);
 
     const weekDelta = prevWeek.collected > 0
       ? Math.round(((thisWeek.collected - prevWeek.collected) / prevWeek.collected) * 100)
       : (thisWeek.collected > 0 ? 100 : 0);
-    $('#trendWeek').innerHTML = trendChip(weekDelta, 'vs last week', true);
-    $('#statWeekCollected').textContent = inr(thisWeek.collected);
+    setHtml('trendWeek', trendChip(weekDelta, 'vs last week', true));
+    setText('statWeekCollected', inr(thisWeek.collected));
 
     const maxDaily = Math.max(1, ...daily.map(d => Number(d.collected) || 0));
-    $('#statSparkline').innerHTML = daily.map(d => {
+    setHtml('statSparkline', daily.map(d => {
       const h = Math.max(3, Math.round(((Number(d.collected) || 0) / maxDaily) * 32));
       const label = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short' });
       return `<div class="np-sparkline__bar" style="height:${h}px" title="${label}: ${inr(d.collected)}"></div>`;
-    }).join('');
-    $('#statTodaySplit').innerHTML =
+    }).join(''));
+    setHtml('statTodaySplit',
       `<span class="np-dot np-dot--mint"></span>${inr(s.cashCollectedToday||0)} cash today` +
       `<span class="np-dot np-dot--blue"></span>${inr(s.onlineCollectedToday||0)} online today` +
-      (s.pendingCollectionToday > 0 ? `<span class="np-dot np-dot--amber"></span>${inr(s.pendingCollectionToday)} pending` : '');
+      (s.pendingCollectionToday > 0 ? `<span class="np-dot np-dot--amber"></span>${inr(s.pendingCollectionToday)} pending` : ''));
 
     const rows = await api('/receptionist/appointments?date='+todayIso());
     __appts = rows;
@@ -260,7 +264,7 @@ async function loadDashboard(){
       <div class="np-appt-row__right">${statusBadge(a.status)} ${sourceBadge(a.source)}
         ${apptActionsHtml(a)}
       </div></div>`).join('') : '<div class="np-empty"><div class="np-empty__title">No appointments today</div></div>';
-  }catch(e){ $('#dashAnalytics').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; }
+  }catch(e){ setHtml('dashAnalytics', `<div class="np-error">${esc(e.message)}</div>`); }
 }
 
 async function loadAppointments(){

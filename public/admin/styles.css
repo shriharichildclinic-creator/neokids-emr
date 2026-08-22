@@ -149,6 +149,11 @@ html,body{
   color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.85rem;
 }
 .np-profile__avatar img{ width:100%; height:100%; object-fit:cover; }
+/* Same fix as .np-doc-card__avatar above — the doctor-insights drawer puts
+   this class directly on the <img> (see admin/app.js), which the
+   descendant rule above never matches, so the photo stretched to fill
+   the box instead of cropping. */
+img.np-profile__avatar{ width:100%; height:100%; object-fit:cover; }
 .np-profile__meta{ text-align:left; }
 .np-profile__name{ font-weight:600; color:var(--np-ink); font-size:.85rem; line-height:1.1; }
 .np-profile__role{ font-size:.7rem; color:var(--np-muted); }
@@ -417,6 +422,11 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   overflow:hidden;
 }
 .np-doc-card__avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+/* When a doctor has a photo, .np-doc-card__avatar is applied directly to
+   the <img> itself (not a wrapping div) — the descendant rule above never
+   matches that case, so the image fell back to the default object-fit:fill
+   and got stretched/squished to the circle instead of cropped to it. */
+img.np-doc-card__avatar{ object-fit:cover; display:block; }
 .np-doc-card__head-meta{ min-width:0; flex:1 1 auto; }
 
 .np-doc-card__name{
