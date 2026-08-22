@@ -285,12 +285,11 @@ html,body{
 }
 .np-panel__head{
   display:flex; align-items:center; gap:.75rem;
-  padding: 1rem 1.2rem;
-  border-bottom: 1px solid var(--np-border);
+  padding: 1rem 1.2rem .5rem;
 }
 .np-panel__title{ font-size:1rem; font-weight:700; color:var(--np-ink); }
-.np-panel__subtitle{ font-size:.78rem; color:var(--np-muted); }
-.np-panel__body{ padding: 1rem 1.2rem 1.2rem; }
+.np-panel__subtitle{ font-size:.78rem; color:var(--np-muted); margin-top:.1rem; }
+.np-panel__body{ padding: .5rem 1.2rem 1.2rem; }
 
 .np-tabbar{
   display:flex; gap:.25rem;
