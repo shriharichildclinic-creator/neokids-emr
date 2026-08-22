@@ -145,11 +145,12 @@
         (bill.notes !== undefined ? '<div class="np-field"><label class="np-field__label">Notes</label><textarea id="billNotes" class="np-textarea">' + esc_(bill.notes || '') + '</textarea></div>' : '<div class="np-field"><label class="np-field__label">Notes</label><textarea id="billNotes" class="np-textarea"></textarea></div>') +
 
         '<div class="np-bill-total"><span>Total</span><span id="billGrandTotal">' + inr(Number(bill.total) || 0) + '</span></div>' +
-        '<div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem">' +
+        '</form></div>' +
+        '<div class="np-modal__foot">' +
           '<button type="button" class="np-btn" onclick="NPBilling.close()">Cancel</button>' +
-          (editing ? '<button class="np-btn np-btn--primary" type="submit">Save changes</button>'
-                   : '<button class="np-btn np-btn--ghost" type="button" id="savePaidBtn">Save & mark paid</button><button class="np-btn np-btn--primary" type="submit">Save as draft</button>') +
-        '</div></form></div></div></div>';
+          (editing ? '<button class="np-btn np-btn--primary" type="submit" form="billForm">Save changes</button>'
+                   : '<button class="np-btn np-btn--ghost" type="button" id="savePaidBtn">Save & mark paid</button><button class="np-btn np-btn--primary" type="submit" form="billForm">Save as draft</button>') +
+        '</div></div></div>';
 
       // Wire patient search
       var pInput = qs('#billPatient');

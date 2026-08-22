@@ -1,5 +1,137 @@
 # CHANGELOG
 
+## v4.0.x — Role-aware analytics & consistent routing
+
+### Better analytics for all four panels (real data, collected vs pending)
+Revenue is now reported ethically everywhere: the headline figure is money
+actually **collected**, with **pending** shown separately — never blended.
+- **Doctor:** dashboard splits work into Online vs In-Clinic streams — consult
+  counts and collected revenue for each, with pending noted, plus completion
+  rate. Backed by an upgraded `/doctor/stats`.
+- **Admin:** new "Revenue by source" row — Online / In-Clinic / Pharmacy
+  collected totals (pending noted), total collected, and outstanding invoice
+  count. Backed by new aggregations in `/admin/analytics`.
+- **Receptionist:** front-desk ops rollup — booked vs walk-in today, checked-in
+  vs awaiting, cash vs UPI/online collected today, and pending collection.
+  Backed by an upgraded `/receptionist/stats`.
+- **Pharmacy:** collected-today (paid bills only) with draft/pending noted,
+  bills today, in-stock, low-stock and expiring-soon counts. Backed by a split
+  `/pharmacy/stats`.
+
+### Routing consistency
+- Audited navigation across panels: the app is a set of SPAs, so hash routing
+  (e.g. `/admin/#receptionists`) is the intended pattern — it makes views
+  deep-linkable and refresh-safe. It was applied in Admin but missing in
+  Receptionist and Pharmacy. Both now use the same hash-sync + restore-on-load
+  + back/forward strategy, so refreshing or deep-linking keeps you on the same
+  view with the correct active sidebar item.
+
+
+## v4.0.x — EMR gateway & dashboard welcome headers
+
+### Landing gateway
+- Replaced the JSON response at `/` with a professional, responsive NeoKidsPro
+  EMR gateway page (`public/assets/gateway.html`): portal cards for Admin,
+  Doctor, Reception and Pharmacy, platform-capability and security sections,
+  live version/environment footer, and light/dark theming. All existing routes
+  (`/admin`, `/doctor`, `/receptionist`, `/pharmacy`) are unchanged. The former
+  JSON service descriptor is still available at `/api`.
+
+### Dashboard welcome headers
+- Added a personalized welcome header (time-of-day greeting + live date/clock)
+  to the Admin and Receptionist dashboards, reusing the doctor portal's
+  `.np-welcome` design tokens for a consistent, cohesive look across roles.
+
+
+## v4.0.x — Pharmacy modal, mobile & reporting fixes
+
+### Pharmacy / billing modal (mobile)
+- Fixed the Add Bill line-item grid: the "Price (₹)" and "Line total" labels
+  overlapped into unreadable text on mobile because the CSS grid declared four
+  columns while the row renders three fields. The grid now matches the real
+  Qty / Price / Line total structure and gives each field its own cell on
+  phones.
+- Removed a stray empty pill that appeared under "Search medicine": the stock
+  hint now collapses when it has no text (`.np-bill-stock:empty`).
+- The Add Bill modal footer already uses the shared `.np-modal__foot`
+  component (consistent padding, spacing, and responsive button wrapping).
+
+### Prescriptions & row lists
+- Fixed truncated prescription text: row meta now wraps correctly and the
+  row stacks on phones so the action column no longer squeezes the content.
+
+### Mobile date pickers & dropdowns
+- Native date inputs across all panels now show a visible, inset calendar icon
+  with a pointer cursor and dark-mode-aware colouring, matching the dropdown
+  spacing used elsewhere.
+
+### Table / list scalability
+- Added a reusable bounded scroll container (`.np-scroll-list`) and applied it
+  to previously unbounded card lists (patients, prescriptions, certificates,
+  today's queue, recent bills, doctor all-appointments and Rx archive) so large
+  datasets no longer grow the page indefinitely. Backend list endpoints already
+  cap results server-side (200–500 rows).
+
+### Revenue reporting
+- Added an Appointment Source filter (Online booking / Walk-in-Reception /
+  Phone / Other) to the Revenue report, threaded safely through the report
+  query. Settlement generation and doctor breakdowns are unaffected — the
+  filter only narrows the report view, never what counts as settleable revenue.
+
+
+## v4.0.x — Billing, invoicing & UI consistency fixes
+
+### Auto-refresh & search
+- Receptionist lists (dashboard, appointments, patients, invoices, billing,
+  pharmacy bills, prescriptions) now refresh automatically after create, edit,
+  save, draft, paid, invoice and status-change actions via a single
+  `refreshAfterMutation` helper. The patient search term is preserved across
+  refreshes.
+
+### Receptionist patient search
+- Fixed: a patient registered at the front desk could not be found in search
+  until a first appointment linked them. Added a `patient_registrations`
+  linkage (new migration `20260825090000_patient_registration_scope`) so
+  registered patients enter the staff member's search scope immediately.
+  Applied to receptionist and pharmacy patient creation.
+
+### Appointment source
+- Merged the redundant "Clinic Reception" and "Walk-in" sources into a single
+  "Walk-in / Reception" (`WALK_IN`) in-person channel. `Phone` and `Other`
+  remain distinct. Legacy `CLINIC_RECEPTION` rows are still accepted and shown
+  under the merged label across appointments, badges, audit logs and the
+  booking confirmation logic.
+
+### Doctor settlements
+- Fixed the settlement doctor filter: period selects now default to
+  "All months/years" (so a doctor's prior-month settlements are no longer
+  hidden), filters apply immediately on change, and the selected doctor
+  persists across reloads.
+
+### Admin invoice coverage
+- Added an "Online Booking Invoices" admin view + `GET /admin/online-invoices`
+  endpoint surfacing NeoKidsPro online-booking invoices with admin-scoped PDF
+  URLs.
+- Added search and filters (invoice #/patient, doctor, clinic, date range) to
+  the Reception Invoices admin view.
+
+### PDFs
+- Fixed amount-column clipping in the consultation, online, pharmacy and
+  settlement invoice PDFs by right-aligning amounts within bounded columns
+  that end at the page margin.
+
+### UI / design system
+- Added a reusable `.np-modal__foot` footer component; converted the booking,
+  register-patient, reschedule, cancel, certificate, send and shared billing
+  modals to use it so action buttons are consistently spaced and no longer
+  stuck to the modal's bottom edge.
+- Re-centered modals over the content area on desktop (offset by the fixed
+  sidebar) so the Notification Details and other modals are no longer shifted
+  left.
+- Notification Logs: clearer date-picker affordance and calendar-icon spacing,
+  mobile pagination cohesion, and a design-system-consistent empty state.
+
+
 ## Files merged
 - Merged `public/assets/np-ux.js` into `public/assets/np-ui.js`
 - Merged responsive and stabilization rules from `public/assets/neokids-fixes.css` into:

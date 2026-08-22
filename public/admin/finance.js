@@ -29,21 +29,38 @@ function populatePeriodSelects() {
     const years = [];
     for (let y = curYear; y >= curYear - 4; y--) years.push(y);
 
+    // Revenue is always computed for one concrete month, so it defaults to the
+    // current period. Settlements and invoices span many months, so they get
+    // an "All" option and default to it — otherwise selecting a doctor would
+    // silently hide any settlement not generated in the current month, which
+    // read as "no results even though records exist".
     ['revMonth','stlMonth','invMonth'].forEach(id => {
       const sel = $('#' + id); if (!sel || sel.options.length) return;
+      const allowAll = id !== 'revMonth';
+      if (allowAll) {
+        const o = document.createElement('option');
+        o.value = ''; o.textContent = 'All months'; o.selected = true;
+        sel.appendChild(o);
+      }
       MONTH_NAMES.forEach((nm, idx) => {
         const o = document.createElement('option');
         o.value = String(idx + 1); o.textContent = nm;
-        if (idx + 1 === curMonth) o.selected = true;
+        if (!allowAll && idx + 1 === curMonth) o.selected = true;
         sel.appendChild(o);
       });
     });
     ['revYear','stlYear','invYear'].forEach(id => {
       const sel = $('#' + id); if (!sel || sel.options.length) return;
+      const allowAll = id !== 'revYear';
+      if (allowAll) {
+        const o = document.createElement('option');
+        o.value = ''; o.textContent = 'All years'; o.selected = true;
+        sel.appendChild(o);
+      }
       years.forEach(y => {
         const o = document.createElement('option');
         o.value = String(y); o.textContent = String(y);
-        if (y === curYear) o.selected = true;
+        if (!allowAll && y === curYear) o.selected = true;
         sel.appendChild(o);
       });
     });
@@ -94,10 +111,12 @@ async function loadRevenue() {
     const month    = Number($('#revMonth').value);
     const doctorId = $('#revDoctor').value || '';
     const ptype    = $('#revPaymentType').value || '';
+    const source   = ($('#revSource') && $('#revSource').value) || '';
 
     const q = new URLSearchParams({ year, month });
     if (doctorId) q.set('doctorId', doctorId);
     if (ptype)    q.set('paymentType', ptype);
+    if (source)   q.set('source', source);
 
     const tbody = $('#revenueTbody');
     tbody.innerHTML = `<tr><td colspan="9" class="np-empty"><div>Loading…</div></td></tr>`;
@@ -452,17 +471,32 @@ async function downloadInvoice(settlementId) {
 
 function bindFilters() {
     const safe = (id, fn) => { const el = $('#' + id); if (el && !el.__bound) { el.__bound = true; el.addEventListener('click', fn); } };
+    // Selecting a filter value should apply immediately — the Apply buttons
+    // remain for discoverability but are no longer required, which is what
+    // made the doctor filter feel like it "reset" (users changed the dropdown
+    // and nothing loaded until a separate click).
+    const onChange = (id, fn) => { const el = $('#' + id); if (el && !el.__changeBound) { el.__changeBound = true; el.addEventListener('change', fn); } };
+
     safe('refreshRevenue',    loadRevenue);
     safe('applyRevenue',      loadRevenue);
+    ['revYear','revMonth','revDoctor','revPaymentType','revSource'].forEach(id => onChange(id, loadRevenue));
+
     safe('refreshSettlements', loadSettlements);
     safe('applySettlements',   loadSettlements);
+    ['stlYear','stlMonth','stlDoctor','stlStatus'].forEach(id => onChange(id, loadSettlements));
     safe('clearSettlements',   () => {
       $('#stlDoctor').value = ''; $('#stlStatus').value = '';
+      $('#stlMonth').value = ''; $('#stlYear').value = '';
       loadSettlements();
     });
+
     safe('refreshInvoices', loadInvoices);
     safe('applyInvoices',   loadInvoices);
-    safe('clearInvoices',   () => { $('#invDoctor').value = ''; loadInvoices(); });
+    ['invYear','invMonth','invDoctor'].forEach(id => onChange(id, loadInvoices));
+    safe('clearInvoices',   () => {
+      $('#invDoctor').value = ''; $('#invMonth').value = ''; $('#invYear').value = '';
+      loadInvoices();
+    });
   }
 
 function init() {

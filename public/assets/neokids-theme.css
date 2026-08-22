@@ -462,6 +462,30 @@ select.np-select:focus, select.np-input:focus, .np-select:focus{
 /* Native-arrow selects (hour/AM-PM pickers) keep the OS glyph but still
    reserve room so the value never sits underneath it. */
 .np-select-native{ appearance: auto; -webkit-appearance: auto; padding-right: 2rem; }
+/* Native date/time inputs everywhere (not just filter bars): keep a visible,
+   inset calendar glyph with breathing room from the right edge, a pointer
+   cursor so they read as pickers, and theme-aware colouring so the icon is
+   never invisible in dark mode. This is the single app-wide treatment for
+   Admin, Doctor, Receptionist and Pharmacy. */
+.np-input[type="date"], .np-input[type="time"], .np-input[type="datetime-local"],
+input.np-input[type="date"], input.np-input[type="time"], input.np-input[type="datetime-local"]{
+  cursor: pointer;
+  color-scheme: light;
+  padding-right: 2.1rem;
+}
+html[data-theme="dark"] .np-input[type="date"],
+html[data-theme="dark"] .np-input[type="time"],
+html[data-theme="dark"] .np-input[type="datetime-local"]{ color-scheme: dark; }
+.np-input[type="date"]::-webkit-calendar-picker-indicator,
+.np-input[type="time"]::-webkit-calendar-picker-indicator,
+.np-input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+  cursor: pointer;
+  margin-left: .35rem;
+  opacity: .8;
+}
+.np-input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.np-input[type="time"]::-webkit-calendar-picker-indicator:hover,
+.np-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover{ opacity: 1; }
 /* File inputs (KYC docs, doctor photo/signature, historical-record
    attachments) were inheriting the same fixed padding/height box model
    as text inputs. That model fights the browser's own internal
@@ -643,6 +667,21 @@ input[type="file"].np-input::file-selector-button:hover{
 .np-pagination__btn:disabled{
   opacity: .45;
   cursor: not-allowed;
+}
+/* On narrow screens the split info/controls layout drifted apart and read as
+   detached from the list above it. Stack them, keep the divider, and give the
+   controls full-width equal buttons so the block stays visually tied to its
+   table/card list. */
+@media (max-width:640px){
+  .np-pagination{
+    flex-direction:column;
+    align-items:stretch;
+    gap:.5rem;
+    text-align:center;
+  }
+  .np-pagination__info{ order:2; }
+  .np-pagination__controls{ order:1; justify-content:center; gap:.5rem; }
+  .np-pagination__controls .np-pagination__btn{ flex:1 1 auto; min-height:40px; }
 }
 
 .np-badge, .np-pill, .np-chip{
@@ -2486,7 +2525,7 @@ html[data-theme="dark"] .np-cert-card__reason{ color: var(--nk-text); }
    ========================================================================== */
 .bill-line{
   display: grid;
-  grid-template-columns: minmax(0,2.3fr) 84px 100px 34px;
+  grid-template-columns: 84px minmax(0,1fr) minmax(0,1fr);
   gap: .5rem;
   align-items: end;
   margin-bottom: .6rem;
@@ -2517,18 +2556,18 @@ html[data-theme="dark"] .np-cert-card__reason{ color: var(--nk-text); }
 .bill-line__remove:hover{ background: #FEE2E2; color: #DC2626; border-color: #FCA5A5; }
 html[data-theme="dark"] .bill-line__remove:hover{ background: rgba(220,38,38,.18); border-color: #DC2626; color: #FCA5A5; }
 @media (max-width: 480px){
-  /* Below ~480px even the desktop grid gets cramped — stack medicine full
-     width, Qty/Price side by side underneath, remove button on that row. */
+  /* Below ~480px the three fields (Qty / Price / Line total) no longer fit on
+     one row without the Price and Line-total labels colliding. Qty takes the
+     first row full width; Price and Line total share the second row. */
   .bill-line{
-    grid-template-columns: 1fr 1fr 34px;
+    grid-template-columns: 1fr 1fr;
     grid-template-areas:
-      "med  med  med"
-      "qty  price remove";
+      "qty   qty"
+      "price total";
   }
-  .bill-line__med{ grid-area: med; }
   .bill-line__qty{ grid-area: qty; }
-  .bill-line__price{ grid-area: price; }
-  .bill-line__remove{ grid-area: remove; width: 100%; height: 38px; }
+  .bill-line__price:nth-child(2){ grid-area: price; }
+  .bill-line__price:nth-child(3){ grid-area: total; }
 }
 
 /* ==========================================================================
@@ -2681,6 +2720,9 @@ td .np-error, .np-table .np-error, b.np-error, span.np-error{
   color: var(--nk-teal-700);
   border: 1px solid var(--nk-teal-100);
 }
+/* Before a medicine is picked the hint has no text — collapse it entirely so
+   an empty padded pill doesn't render as a stray artifact under the search. */
+.np-bill-stock:empty{ display: none; }
 .np-bill-stock.is-low{ background:#FEF3CC; color:#8A5A0F; border-color:#F4D9A3; }
 .np-bill-stock.is-out{ background:#FEE2E5; color:#9F1E36; border-color:#F5BFBF; }
 html[data-theme="dark"] .np-bill-stock{ background:rgba(137,188,189,.14); color:#B4D7D7; border-color:rgba(137,188,189,.3); }

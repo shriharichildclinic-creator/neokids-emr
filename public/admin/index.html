@@ -119,6 +119,10 @@
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
           Reception Invoices
         </button>
+        <button class="np-nav-item" data-view="onlineInvoicesView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20v14H2z"/><path d="M8 21h8M12 17v4"/></svg>
+          Online Booking Invoices
+        </button>
 
         <div class="np-sidebar__section">Monitor</div>
         <button class="np-nav-item" data-view="notifView" type="button">
@@ -188,7 +192,21 @@
       <div class="np-content">
 
 <section id="dashboardView" class="tab-pane">
+          <div id="dashWelcome" class="np-welcome" role="region" aria-label="Dashboard welcome">
+            <div class="np-welcome__main">
+              <div class="np-welcome__eyebrow" id="dashGreeting">Good morning</div>
+              <div class="np-welcome__titlerow">
+                <h1 class="np-welcome__title" id="dashWelcomeName">Welcome back 👋</h1>
+                <span class="np-welcome__pill" id="dashWelcomeDate">—</span>
+                <span class="np-welcome__pill" id="dashWelcomeTime">—</span>
+              </div>
+            </div>
+            <div class="np-welcome__side">
+              <button type="button" class="np-btn np-btn--primary np-btn--sm" onclick="setView('doctorsView'); setTimeout(function(){ if(typeof openDoctorModal==='function') openDoctorModal(); }, 60);">+ Add doctor</button>
+            </div>
+          </div>
           <div id="statsGrid" class="np-kpi-grid"></div>
+          <div id="revBySourceGrid" class="np-kpi-grid" style="margin-top:1rem;"></div>
           <div id="dashSecondGrid" class="np-dash-second">
             <div class="np-panel">
               <div class="np-panel__head">
@@ -330,6 +348,13 @@
                   <option value="">All payment types</option>
                   <option value="ONLINE">Online</option>
                   <option value="OFFLINE">In-person</option>
+                </select>
+                <select id="revSource" class="np-select" aria-label="Appointment source">
+                  <option value="">All sources</option>
+                  <option value="NEOKIDSPRO">Online booking</option>
+                  <option value="WALK_IN">Walk-in / Reception</option>
+                  <option value="PHONE">Phone</option>
+                  <option value="OTHER">Other</option>
                 </select>
                 <div class="np-filter-actions">
                   <button id="applyRevenue" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
@@ -596,9 +621,51 @@
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="loadRecInvoices()">Refresh</button>
             </div>
             <div class="np-panel__body">
-              <div class="np-table-wrap"><table class="np-table">
+              <form id="recInvFilters" class="np-filterbar np-filterbar--toolbar" novalidate>
+                <div class="np-search">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input id="recInvSearch" type="search" placeholder="Invoice # or patient" autocomplete="off"/>
+                </div>
+                <select id="recInvDoctor" class="np-select"><option value="">All doctors</option></select>
+                <select id="recInvCentre" class="np-select"><option value="">All clinics</option></select>
+                <input id="recInvFrom" type="date" class="np-select" aria-label="From date"/>
+                <input id="recInvTo" type="date" class="np-select" aria-label="To date"/>
+                <div class="np-filter-actions">
+                  <button id="recInvApply" type="submit" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                  <button id="recInvClear" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                </div>
+              </form>
+              <div class="np-table-wrap np-table-wrap--responsive"><table class="np-table">
                 <thead><tr><th>Invoice #</th><th>Patient</th><th>Doctor</th><th>Clinic</th><th>Receptionist</th><th style="text-align:right">Amount</th><th>Date</th><th style="text-align:right">PDF</th></tr></thead>
                 <tbody id="recInvTbody"></tbody>
+              </table></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="onlineInvoicesView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Online Booking Invoices</div><div class="np-panel__subtitle">Invoices from NeoKidsPro patient online bookings</div></div>
+              <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="loadOnlineInvoices()">Refresh</button>
+            </div>
+            <div class="np-panel__body">
+              <form id="onlineInvFilters" class="np-filterbar np-filterbar--toolbar" novalidate>
+                <div class="np-search">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input id="onlineInvSearch" type="search" placeholder="Patient name or phone" autocomplete="off"/>
+                </div>
+                <select id="onlineInvDoctor" class="np-select"><option value="">All doctors</option></select>
+                <input id="onlineInvFrom" type="date" class="np-select" aria-label="From date"/>
+                <input id="onlineInvTo" type="date" class="np-select" aria-label="To date"/>
+                <div class="np-filter-actions">
+                  <button id="onlineInvApply" type="submit" class="np-btn np-btn--primary np-btn--sm">Apply</button>
+                  <button id="onlineInvClear" type="button" class="np-btn np-btn--ghost np-btn--sm">Clear</button>
+                </div>
+              </form>
+              <div class="np-table-wrap np-table-wrap--responsive"><table class="np-table">
+                <thead><tr><th>Invoice #</th><th>Patient</th><th>Doctor</th><th>Payment</th><th style="text-align:right">Amount</th><th>Date</th><th style="text-align:right">PDF</th></tr></thead>
+                <tbody id="onlineInvTbody"></tbody>
               </table></div>
             </div>
           </div>

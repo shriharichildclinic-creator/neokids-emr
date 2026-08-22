@@ -660,24 +660,53 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
 // ────────────────────────────────────────────────────────────────────
 exports.stats = asyncHandler(async (req, res) => {
   const today = getTodayDateOnly();
-  const [todayCount, completedToday, totalConsults, revenueAgg] = await Promise.all([
-    prisma.appointment.count({ where: { doctorId: req.user.id, date: today, status: { not: 'CANCELLED' } } }),
-    prisma.appointment.count({ where: { doctorId: req.user.id, date: today, status: 'COMPLETED' } }),
-    prisma.appointment.count({ where: { doctorId: req.user.id, status: 'COMPLETED' } }),
-    prisma.appointment.aggregate({
-      _sum: { feeAtBooking: true },
-      where: {
-        doctorId: req.user.id,
-        status: 'COMPLETED',
-        paymentStatus: { in: ['PAID', 'CASH_COLLECTED', 'CASH_PENDING'] }
-      }
-    })
+  const doctorId = req.user.id;
+
+  // "Collected" = money actually received (PAID / CASH_COLLECTED).
+  // "Pending"   = billed but not yet received (CASH_PENDING).
+  // We keep these apart on purpose: an EMR dashboard should never present
+  // billed-but-uncollected money as earned revenue.
+  const COLLECTED = ['PAID', 'CASH_COLLECTED'];
+  const PENDING = ['CASH_PENDING'];
+
+  const [
+    todayCount, completedToday, totalConsults,
+    onlineConsults, offlineConsults,
+    onlineCollected, offlineCollected,
+    onlinePending, offlinePending,
+    completedAll, cancelledAll
+  ] = await Promise.all([
+    prisma.appointment.count({ where: { doctorId, date: today, status: { not: 'CANCELLED' } } }),
+    prisma.appointment.count({ where: { doctorId, date: today, status: 'COMPLETED' } }),
+    prisma.appointment.count({ where: { doctorId, status: 'COMPLETED' } }),
+    prisma.appointment.count({ where: { doctorId, status: 'COMPLETED', consultationType: 'ONLINE'  } }),
+    prisma.appointment.count({ where: { doctorId, status: 'COMPLETED', consultationType: 'OFFLINE' } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: { in: PENDING } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: { in: PENDING } } }),
+    prisma.appointment.count({ where: { doctorId, status: 'COMPLETED' } }),
+    prisma.appointment.count({ where: { doctorId, status: 'CANCELLED' } })
   ]);
+
+  const onlineCollectedAmt  = Number(onlineCollected._sum.feeAtBooking || 0);
+  const offlineCollectedAmt = Number(offlineCollected._sum.feeAtBooking || 0);
+  const onlinePendingAmt    = Number(onlinePending._sum.feeAtBooking || 0);
+  const offlinePendingAmt   = Number(offlinePending._sum.feeAtBooking || 0);
+  const totalAll = completedAll + cancelledAll;
+
   res.json({
     todayAppointments: todayCount,
     completedToday,
     totalConsults,
-    totalRevenue: Number(revenueAgg._sum.feeAtBooking || 0)
+    // Headline revenue = collected only (online + offline).
+    totalRevenue: onlineCollectedAmt + offlineCollectedAmt,
+    // Online vs offline split — the doctor's two work streams tracked apart.
+    online:  { consults: onlineConsults,  collected: onlineCollectedAmt,  pending: onlinePendingAmt  },
+    offline: { consults: offlineConsults, collected: offlineCollectedAmt, pending: offlinePendingAmt },
+    pendingTotal: onlinePendingAmt + offlinePendingAmt,
+    completionRate: totalAll > 0 ? Math.round((completedAll / totalAll) * 100) : 0,
+    cancelledAll
   });
 });
 

@@ -291,11 +291,47 @@ async function deletePharmUser(id){
 window.deletePharmUser = deletePharmUser;
 
 // ─────────── Reception Invoices (admin read-only) ───────────
+let __invDoctors = [];
+async function __ensureInvDoctors(){
+  if (__invDoctors.length) return __invDoctors;
+  try { __invDoctors = await api('/admin/doctors'); } catch(_) { __invDoctors = []; }
+  return __invDoctors;
+}
+function __fillDoctorSelect(sel){
+  if (!sel) return;
+  const prev = sel.value;
+  const head = sel.options[0];
+  sel.innerHTML = '';
+  if (head) sel.appendChild(head);
+  __invDoctors.forEach(d => { const o = document.createElement('option'); o.value = d.id; o.textContent = 'Dr. ' + (d.name || ''); sel.appendChild(o); });
+  if (prev && __invDoctors.some(d => d.id === prev)) sel.value = prev;
+}
+function __fillCentreSelect(sel){
+  if (!sel) return;
+  const prev = sel.value;
+  const head = sel.options[0];
+  sel.innerHTML = '';
+  if (head) sel.appendChild(head);
+  (__centres || []).forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name || ''; sel.appendChild(o); });
+  if (prev && (__centres || []).some(c => c.id === prev)) sel.value = prev;
+}
+
 async function loadRecInvoices(){
   const tb = $('#recInvTbody'); if (!tb) return;
+  await __ensureInvDoctors();
+  if (!__centres.length) { try { __centres = await api('/admin/medical-centres'); } catch(_) {} }
+  __fillDoctorSelect($('#recInvDoctor'));
+  __fillCentreSelect($('#recInvCentre'));
   tb.innerHTML = '<tr><td colspan="8" class="np-mut" style="text-align:center;padding:1.4rem">Loading…</td></tr>';
+  const qs = new URLSearchParams();
+  const q = ($('#recInvSearch') && $('#recInvSearch').value || '').trim();
+  if (q.length >= 2) qs.set('q', q);
+  if ($('#recInvDoctor') && $('#recInvDoctor').value) qs.set('doctorId', $('#recInvDoctor').value);
+  if ($('#recInvCentre') && $('#recInvCentre').value) qs.set('centreId', $('#recInvCentre').value);
+  if ($('#recInvFrom') && $('#recInvFrom').value) qs.set('from', $('#recInvFrom').value);
+  if ($('#recInvTo') && $('#recInvTo').value) qs.set('to', $('#recInvTo').value);
   try {
-    const rows = await api('/admin/consultation-invoices');
+    const rows = await api('/admin/consultation-invoices' + (qs.toString() ? '?' + qs.toString() : ''));
     tb.innerHTML = rows.length ? rows.map(i => `<tr>
       <td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td>
       <td data-label="Patient">${esc(i.appointment.patient.name)}</td>
@@ -305,10 +341,41 @@ async function loadRecInvoices(){
       <td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td>
       <td data-label="Date">${esc(fmtDateTime(i.createdAt))}</td>
       <td data-label="PDF" style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
-    </tr>`).join('') : '<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No reception invoices yet</div></div></td></tr>';
+    </tr>`).join('') : '<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No reception invoices match</div></div></td></tr>';
   } catch(e){ tb.innerHTML = `<tr><td colspan="8"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
 }
 window.loadRecInvoices = loadRecInvoices;
+
+// ─────────── Online Booking Invoices (admin read-only) ───────────
+async function loadOnlineInvoices(){
+  const tb = $('#onlineInvTbody'); if (!tb) return;
+  await __ensureInvDoctors();
+  __fillDoctorSelect($('#onlineInvDoctor'));
+  tb.innerHTML = '<tr><td colspan="7" class="np-mut" style="text-align:center;padding:1.4rem">Loading…</td></tr>';
+  const qs = new URLSearchParams();
+  const q = ($('#onlineInvSearch') && $('#onlineInvSearch').value || '').trim();
+  if (q.length >= 2) qs.set('q', q);
+  if ($('#onlineInvDoctor') && $('#onlineInvDoctor').value) qs.set('doctorId', $('#onlineInvDoctor').value);
+  if ($('#onlineInvFrom') && $('#onlineInvFrom').value) qs.set('from', $('#onlineInvFrom').value);
+  if ($('#onlineInvTo') && $('#onlineInvTo').value) qs.set('to', $('#onlineInvTo').value);
+  try {
+    const rows = await api('/admin/online-invoices' + (qs.toString() ? '?' + qs.toString() : ''));
+    const payBadge = p => {
+      const paid = p === 'PAID' || p === 'CASH_COLLECTED';
+      return `<span class="np-badge ${paid ? 'np-badge--green' : 'np-badge--amber'}"><span class="np-badge__dot"></span>${esc(p || '—')}</span>`;
+    };
+    tb.innerHTML = rows.length ? rows.map(i => `<tr>
+      <td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td>
+      <td data-label="Patient">${esc(i.patient.name)}<div class="np-mut" style="font-size:.72rem">+91 ${esc(i.patient.phone || '')}</div></td>
+      <td data-label="Doctor">Dr. ${esc(i.doctor.name)}</td>
+      <td data-label="Payment">${payBadge(i.paymentStatus)}</td>
+      <td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td>
+      <td data-label="Date">${esc(fmtDateTime(i.createdAt))}</td>
+      <td data-label="PDF" style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
+    </tr>`).join('') : '<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No online booking invoices match</div></div></td></tr>';
+  } catch(e){ tb.innerHTML = `<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
+}
+window.loadOnlineInvoices = loadOnlineInvoices;
 
 // ─────────── Staff Audit ───────────
 async function loadAudit(){
@@ -342,6 +409,7 @@ function wire(){
     ['receptionistsView', loadReceptionists],
     ['pharmUsersView', loadPharmUsers],
     ['recInvoicesView', loadRecInvoices],
+    ['onlineInvoicesView', loadOnlineInvoices],
     ['auditView', loadAudit]
   ];
   binds.forEach(([view, loader]) => {
@@ -350,11 +418,27 @@ function wire(){
   });
   const af = $('#auditFilters');
   if (af && !af.__wired) { af.__wired = true; af.addEventListener('submit', e => { e.preventDefault(); loadAudit(); }); }
+
+  const rif = $('#recInvFilters');
+  if (rif && !rif.__wired) { rif.__wired = true; rif.addEventListener('submit', e => { e.preventDefault(); loadRecInvoices(); }); }
+  const ris = $('#recInvSearch');
+  if (ris && !ris.__wired) { ris.__wired = true; ris.addEventListener('input', () => { clearTimeout(window.__recInvT); window.__recInvT = setTimeout(loadRecInvoices, 280); }); }
+  const ric = $('#recInvClear');
+  if (ric && !ric.__wired) { ric.__wired = true; ric.addEventListener('click', () => { ['recInvSearch','recInvDoctor','recInvCentre','recInvFrom','recInvTo'].forEach(id => { const el = $('#' + id); if (el) el.value = ''; }); loadRecInvoices(); }); }
+
+  const oif = $('#onlineInvFilters');
+  if (oif && !oif.__wired) { oif.__wired = true; oif.addEventListener('submit', e => { e.preventDefault(); loadOnlineInvoices(); }); }
+  const ois = $('#onlineInvSearch');
+  if (ois && !ois.__wired) { ois.__wired = true; ois.addEventListener('input', () => { clearTimeout(window.__onlineInvT); window.__onlineInvT = setTimeout(loadOnlineInvoices, 280); }); }
+  const oic = $('#onlineInvClear');
+  if (oic && !oic.__wired) { oic.__wired = true; oic.addEventListener('click', () => { ['onlineInvSearch','onlineInvDoctor','onlineInvFrom','onlineInvTo'].forEach(id => { const el = $('#' + id); if (el) el.value = ''; }); loadOnlineInvoices(); }); }
   if (window.NPPalette) {
     [
       ['Go to Medical Centres', '🏥', () => setView('centresView')],
       ['Go to Receptionists',   '🖥️', () => setView('receptionistsView')],
       ['Go to Pharmacy Users',  '💊', () => setView('pharmUsersView')],
+      ['Go to Reception Invoices', '🧾', () => setView('recInvoicesView')],
+      ['Go to Online Invoices', '🌐', () => setView('onlineInvoicesView')],
       ['Go to Staff Audit',     '🕒', () => setView('auditView')]
     ].forEach(([label, icon, run]) => { try { NPPalette.register({ label, icon, run, keywords: label }); } catch(_) {} });
   }

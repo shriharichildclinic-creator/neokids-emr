@@ -67,19 +67,57 @@ exports.assignments = asyncHandler(async (req, res) => {
 exports.stats = asyncHandler(async (req, res) => {
   const doctorIds = await staffAccess.getDoctorIds(req.user.id);
   if (!doctorIds.length) {
-    return res.json({ todayAppointments: 0, arrivedToday: 0, pendingToday: 0, invoicesToday: 0, patientsTotal: 0 });
+    return res.json({
+      todayAppointments: 0, arrivedToday: 0, pendingToday: 0, invoicesToday: 0, patientsTotal: 0,
+      bookedToday: 0, walkinToday: 0, cashCollectedToday: 0, onlineCollectedToday: 0, pendingCollectionToday: 0
+    });
   }
   const today = getTodayDateOnly();
-  const [todayCount, arrived, pending, invToday, patients] = await Promise.all([
+  const dayStart = new Date(getTodayDateString() + 'T00:00:00.000Z');
+  const CASH_METHODS = ['CASH', 'CARD', 'OTHER'];
+
+  const [
+    todayCount, arrived, pending, invToday, patients,
+    walkinToday, todayInvoices
+  ] = await Promise.all([
     prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, status: { not: 'CANCELLED' } } }),
     prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, arrivedAt: { not: null } } }),
     prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, status: { in: ['PENDING', 'CONFIRMED'] }, arrivedAt: null } }),
-    prisma.consultationInvoice.count({
-      where: { receptionistId: req.user.id, createdAt: { gte: new Date(getTodayDateString() + 'T00:00:00.000Z') } }
-    }),
-    staffAccess.getPatientScope(req.user.id).then(ids => ids.length)
+    prisma.consultationInvoice.count({ where: { receptionistId: req.user.id, createdAt: { gte: dayStart } } }),
+    staffAccess.getPatientScope(req.user.id).then(ids => ids.length),
+    // Walk-in / reception in-person bookings today (WALK_IN + legacy CLINIC_RECEPTION).
+    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, source: { in: ['WALK_IN', 'CLINIC_RECEPTION'] } } }),
+    // This receptionist's invoices today, to split collected cash vs online.
+    prisma.consultationInvoice.findMany({
+      where: { receptionistId: req.user.id, createdAt: { gte: dayStart } },
+      select: { amount: true, status: true, paymentMethod: true }
+    })
   ]);
-  res.json({ todayAppointments: todayCount, arrivedToday: arrived, pendingToday: pending, invoicesToday: invToday, patientsTotal: patients });
+
+  let cashCollectedToday = 0, onlineCollectedToday = 0, pendingCollectionToday = 0;
+  for (const inv of todayInvoices) {
+    const amt = Number(inv.amount || 0);
+    if (inv.status === 'PAID') {
+      if (CASH_METHODS.includes(inv.paymentMethod)) cashCollectedToday += amt;
+      else onlineCollectedToday += amt; // UPI / ONLINE
+    } else {
+      pendingCollectionToday += amt;
+    }
+  }
+  const bookedToday = Math.max(todayCount - walkinToday, 0);
+
+  res.json({
+    todayAppointments: todayCount,
+    arrivedToday: arrived,
+    pendingToday: pending,
+    invoicesToday: invToday,
+    patientsTotal: patients,
+    bookedToday,
+    walkinToday,
+    cashCollectedToday,
+    onlineCollectedToday,
+    pendingCollectionToday
+  });
 });
 
 exports.slots = asyncHandler(async (req, res) => {
@@ -127,10 +165,12 @@ exports.registerPatient = asyncHandler(async (req, res) => {
     await prisma.patient.update({ where: { id: patient.id }, data: { address: d.address } }).catch(() => null);
     patient.address = d.address;
   }
+  const centreId = await staffAccess.primaryCentreId(me.id);
+  await staffAccess.recordPatientRegistration({ patientId: patient.id, receptionistId: me.id, medicalCentreId: centreId });
   await audit.log({
     actor: actorOf(req, me), action: 'PATIENT_REGISTERED', entityType: 'PATIENT', entityId: patient.id,
     summary: `Registered patient ${patient.name} (+91 ${patient.phone})`,
-    medicalCentreId: await staffAccess.primaryCentreId(me.id)
+    medicalCentreId: centreId
   });
   res.status(201).json(patient);
 });
@@ -272,10 +312,12 @@ exports.createAppointment = asyncHandler(async (req, res) => {
         feeAtBooking,
         status: 'CONFIRMED',
         paymentStatus: 'CASH_PENDING',
-        // Explicit source from the booking form (Clinic Reception / Walk-in /
-        // Phone / Other) takes priority; isWalkIn is only a fallback for a
-        // stale cached frontend mid-deploy.
-        source: d.source || (d.isWalkIn ? 'WALK_IN' : 'CLINIC_RECEPTION'),
+        // Explicit source from the booking form. "Walk-in / Reception" is the
+        // single in-person channel (WALK_IN); Phone and Other stay distinct.
+        // Legacy CLINIC_RECEPTION rows are still accepted and shown under the
+        // merged label. isWalkIn is only a fallback for a stale cached
+        // frontend mid-deploy.
+        source: d.source || 'WALK_IN',
         medicalCentreId,
         createdByReceptionistId: me.id,
         addedById: me.id,
@@ -290,8 +332,8 @@ exports.createAppointment = asyncHandler(async (req, res) => {
     throw e;
   }
 
-  const bookedSource = d.source || (d.isWalkIn ? 'WALK_IN' : 'CLINIC_RECEPTION');
-  const sourceLabel = { WALK_IN: 'walk-in', PHONE: 'phone', OTHER: 'other', CLINIC_RECEPTION: 'reception' }[bookedSource];
+  const bookedSource = d.source || 'WALK_IN';
+  const sourceLabel = { WALK_IN: 'walk-in / reception', PHONE: 'phone', OTHER: 'other', CLINIC_RECEPTION: 'walk-in / reception' }[bookedSource] || 'walk-in / reception';
   await audit.log({
     actor: actorOf(req, me), action: 'APPOINTMENT_CREATED', entityType: 'APPOINTMENT', entityId: appointment.id,
     summary: `Booked ${patient.name} with Dr. ${doctor.name} on ${d.date} ${d.startTime} (${sourceLabel})`,

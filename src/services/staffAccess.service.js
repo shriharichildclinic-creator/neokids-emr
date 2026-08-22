@@ -75,15 +75,25 @@ async function canAccessAppointment(receptionistId, appointmentId) {
 
 async function getPatientScope(receptionistId) {
   const doctorIds = await getDoctorIds(receptionistId);
-  if (!doctorIds.length) return [];
-  const [appts, certs] = await Promise.all([
-    prisma.appointment.findMany({
-      where: { doctorId: { in: doctorIds } },
-      select: { patientId: true },
-      distinct: ['patientId']
-    }),
-    prisma.medicalCertificate.findMany({
-      where: { doctorId: { in: doctorIds } },
+  // A receptionist with no assigned doctors can still register patients, so
+  // their own registrations must remain in scope even here.
+  const [appts, certs, registrations] = await Promise.all([
+    doctorIds.length
+      ? prisma.appointment.findMany({
+          where: { doctorId: { in: doctorIds } },
+          select: { patientId: true },
+          distinct: ['patientId']
+        })
+      : [],
+    doctorIds.length
+      ? prisma.medicalCertificate.findMany({
+          where: { doctorId: { in: doctorIds } },
+          select: { patientId: true },
+          distinct: ['patientId']
+        })
+      : [],
+    prisma.patientRegistration.findMany({
+      where: { receptionistId },
       select: { patientId: true },
       distinct: ['patientId']
     })
@@ -91,6 +101,7 @@ async function getPatientScope(receptionistId) {
   const ids = new Set();
   appts.forEach(a => ids.add(a.patientId));
   certs.forEach(c => ids.add(c.patientId));
+  registrations.forEach(r => ids.add(r.patientId));
   return [...ids];
 }
 
@@ -130,15 +141,23 @@ async function patientHasDoctorLink(patientId, doctorId) {
 
 async function getPharmacyPatientScope(pharmacyUserId) {
   const doctorIds = await getPharmacyDoctorIds(pharmacyUserId);
-  if (!doctorIds.length) return [];
-  const [appts, certs] = await Promise.all([
-    prisma.appointment.findMany({
-      where: { doctorId: { in: doctorIds } },
-      select: { patientId: true },
-      distinct: ['patientId']
-    }),
-    prisma.medicalCertificate.findMany({
-      where: { doctorId: { in: doctorIds } },
+  const [appts, certs, registrations] = await Promise.all([
+    doctorIds.length
+      ? prisma.appointment.findMany({
+          where: { doctorId: { in: doctorIds } },
+          select: { patientId: true },
+          distinct: ['patientId']
+        })
+      : [],
+    doctorIds.length
+      ? prisma.medicalCertificate.findMany({
+          where: { doctorId: { in: doctorIds } },
+          select: { patientId: true },
+          distinct: ['patientId']
+        })
+      : [],
+    prisma.patientRegistration.findMany({
+      where: { pharmacyUserId },
       select: { patientId: true },
       distinct: ['patientId']
     })
@@ -146,7 +165,24 @@ async function getPharmacyPatientScope(pharmacyUserId) {
   const ids = new Set();
   appts.forEach(a => ids.add(a.patientId));
   certs.forEach(c => ids.add(c.patientId));
+  registrations.forEach(r => ids.add(r.patientId));
   return [...ids];
+}
+
+// Records that a staff member registered a patient, bringing that patient
+// immediately into the staff member's search scope. Idempotent per
+// (patient, staff) pair so repeated registrations never throw.
+async function recordPatientRegistration({ patientId, receptionistId, pharmacyUserId, medicalCentreId }) {
+  if (!patientId || (!receptionistId && !pharmacyUserId)) return;
+  try {
+    await prisma.patientRegistration.upsert({
+      where: receptionistId
+        ? { patientId_receptionistId: { patientId, receptionistId } }
+        : { patientId_pharmacyUserId: { patientId, pharmacyUserId } },
+      update: { medicalCentreId: medicalCentreId || undefined },
+      create: { patientId, receptionistId: receptionistId || null, pharmacyUserId: pharmacyUserId || null, medicalCentreId: medicalCentreId || null }
+    });
+  } catch (_) { /* linkage is best-effort; never block the registration */ }
 }
 
 module.exports = {
@@ -159,6 +195,7 @@ module.exports = {
   isAssignedDoctor,
   canAccessAppointment,
   getPatientScope,
+  recordPatientRegistration,
   patientHasDoctorLink,
   getPharmacyUser,
   getPharmacyDoctorIds,

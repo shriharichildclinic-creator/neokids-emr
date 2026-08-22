@@ -18,10 +18,29 @@ function fmtDate(d){ if(!d) return ''; return new Date(d).toLocaleDateString('en
 function fmtTime(t){ if(!t) return ''; const m=String(t).match(/^(\d{1,2}):(\d{2})/); if(!m) return t; let h=parseInt(m[1],10); const s=h>=12?'PM':'AM'; h=h%12||12; return h+':'+m[2]+' '+s; }
 function inr(n){ return '₹' + Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2}); }
 function todayIso(){ return new Date().toISOString().slice(0,10); }
+// Dashboard welcome header: time-of-day greeting + live date/clock. Purely
+// presentational; never throws.
+let __dashClockTimer = null;
+function startDashClock(){
+  const greetEl = document.getElementById('dashGreeting');
+  const dateEl  = document.getElementById('dashWelcomeDate');
+  const timeEl  = document.getElementById('dashWelcomeTime');
+  if (!dateEl && !timeEl && !greetEl) return;
+  function tick(){
+    const now = new Date();
+    const h = now.getHours();
+    const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    if (greetEl) greetEl.textContent = greet;
+    if (dateEl) dateEl.textContent = now.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+    if (timeEl) timeEl.textContent = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  }
+  tick();
+  if (__dashClockTimer) clearInterval(__dashClockTimer);
+  __dashClockTimer = setInterval(tick, 30000);
+}
 function statusBadge(s){ const m={CONFIRMED:'np-badge--green',PENDING:'np-badge--amber',COMPLETED:'np-badge--blue',CANCELLED:'np-badge--red'}; return `<span class="np-badge ${m[s]||'np-badge--slate'}"><span class="np-badge__dot"></span>${esc(s||'—')}</span>`; }
 function sourceBadge(s){
-  if (s==='CLINIC_RECEPTION') return `<span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Reception</span>`;
-  if (s==='WALK_IN') return `<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Walk-in</span>`;
+  if (s==='WALK_IN' || s==='CLINIC_RECEPTION') return `<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Walk-in / Reception</span>`;
   if (s==='PHONE') return `<span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>Phone</span>`;
   if (s==='OTHER') return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Other</span>`;
   if (s==='NEOKIDSPRO') return `<span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span>`;
@@ -79,8 +98,9 @@ function openInvoiceSendModal(invoiceId, phone, email){
       ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendChWa" checked/> Send via WhatsApp</label>`:''}
       ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendChEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
     </div>
-    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendInvoiceConfirm">Send</button></div>
-  </div></div></div>`;
+  </div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendInvoiceConfirm">Send</button></div>
+  </div></div>`;
   $('#sendInvoiceConfirm').addEventListener('click', async ()=>{
     const channels=[];
     if(hasPhone && $('#sendChWa').checked) channels.push('whatsapp');
@@ -96,8 +116,13 @@ function openInvoiceSendModal(invoiceId, phone, email){
 }
 
 const VIEWS = { dashView:['Dashboard','Today at your clinic'], apptsView:['Appointments','Bookings for your doctors'], patientsView:['Patients','Search & register'], invoicesView:['Consultation Invoices','Reception billing'], billingView:['Billing','Consultation · medicines · services · other'], certsView:['Certificates','Issued in the doctor name'], rxView:['Prescriptions','Offline prescriptions'], pharmBillsView:['Pharmacy Bills','Medicine sales'], settingsView:['Settings','Account'] };
-function setView(v){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
+function setView(v, opts){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
+  // Keep the URL hash in sync so the view is deep-linkable and survives a
+  // refresh — the same strategy the admin panel uses (#dash, #appts, …).
+  try{ if(!(opts&&opts.skipHash)){ const slug=v.replace(/View$/,''); if(location.hash!=='#'+slug) history.replaceState(null,'','#'+slug); } }catch(_){}
   if(v==='dashView')loadDashboard(); if(v==='apptsView')loadAppointments(); if(v==='patientsView')loadPatients(); if(v==='invoicesView')loadInvoices(); if(v==='billingView')loadBilling(); if(v==='certsView')loadCerts(); if(v==='rxView')loadRx(); if(v==='pharmBillsView')loadPharmBills(); }
+function viewFromHash(){ const h=(location.hash||'').replace(/^#/,'').trim(); if(!h) return null; const v=h.endsWith('View')?h:h+'View'; return VIEWS[v]?v:null; }
+window.addEventListener('hashchange', ()=>{ const v=viewFromHash(); if(v) setView(v,{skipHash:true}); });
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 
 function setupSidebar(){
@@ -168,6 +193,9 @@ async function showDashboard(){
     const meRes = await api('/auth/me'); __me = meRes.user || meRes;
     const __initials = __me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
     $('#userName').textContent = __me.name; $('#userInitials').textContent = __initials;
+    const __first = (__me.name || '').split(/\s+/)[0] || __me.name;
+    if ($('#dashWelcomeName')) $('#dashWelcomeName').textContent = 'Welcome back, ' + __first + ' 👋';
+    startDashClock();
     // Same identity, mirrored into the dropdown's "logged in as" block --
     // stays visible on mobile even once the header hides .np-profile__meta.
     if($('#userIdName')) $('#userIdName').textContent = __me.name;
@@ -179,19 +207,20 @@ async function showDashboard(){
     const asn = await api('/receptionist/assignments'); __assignments = asn; __doctors = asn.map(a=>a.doctor);
     const sel=$('#fDoctor'); if(sel) sel.innerHTML='<option value="">All doctors</option>'+__doctors.map(d=>`<option value="${d.id}">Dr. ${esc(d.name)}</option>`).join('');
   }catch(e){ if(e.message!=='Session expired') toast(e.message,'error'); }
-  setView('dashView');
+  const __restore = viewFromHash();
+  setView(__restore || 'dashView', __restore ? { skipHash: true } : undefined);
 }
 
 async function loadDashboard(){
   try{
     const s = await api('/receptionist/stats');
     $('#kpiGrid').innerHTML = [
-      {k:'blue', l:"Today's appointments", v:s.todayAppointments},
-      {k:'green', l:'Arrived', v:s.arrivedToday},
-      {k:'amber', l:'Awaiting arrival', v:s.pendingToday},
-      {k:'mint', l:'Invoices today', v:s.invoicesToday},
-      {k:'violet', l:'Clinic patients', v:s.patientsTotal}
-    ].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div></div>`).join('');
+      {k:'blue', l:"Today's appointments", v:s.todayAppointments, sub:`${s.bookedToday||0} booked · ${s.walkinToday||0} walk-in`},
+      {k:'green', l:'Checked in', v:s.arrivedToday, sub:`${s.pendingToday} awaiting arrival`},
+      {k:'mint', l:'Cash collected today', v:inr(s.cashCollectedToday||0), sub:`${inr(s.onlineCollectedToday||0)} via UPI/online`},
+      {k:'amber', l:'Pending collection', v:inr(s.pendingCollectionToday||0), sub:`${s.invoicesToday} invoice(s) today`},
+      {k:'violet', l:'Clinic patients', v:s.patientsTotal, sub:'in your scope'}
+    ].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div>${c.sub?`<div class="np-kpi__sub">${esc(c.sub)}</div>`:''}</div>`).join('');
     const rows = await api('/receptionist/appointments?date='+todayIso());
     __appts = rows;
     $('#todayList').innerHTML = rows.length ? rows.map(a=>`
@@ -226,7 +255,9 @@ function resched(id){
   <div class="np-field"><label class="np-field__label">New date *</label><input name="date" type="date" required class="np-input" value="${curDate}"/></div>
   <div class="np-field"><label class="np-field__label">Available slot *</label><select name="startTime" required class="np-select" id="reschedSlotSel"><option value="">Loading…</option></select></div>
   <div class="np-field"><label class="np-field__label">Reason *</label><textarea name="reason" required minlength="3" class="np-textarea" placeholder="Min 3 characters"></textarea></div>
-  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Reschedule</button></div></form></div></div></div>`;
+  </form></div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit" form="reschedForm">Reschedule</button></div>
+  </div></div>`;
   const f=$('#reschedForm');
   async function refreshReschedSlots(){ const date=f.date.value; if(!date||!docId){ $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; return; } try{ const r=await api(`/receptionist/slots?doctorId=${docId}&date=${date}&type=OFFLINE`); $('#reschedSlotSel').innerHTML=(r.slots||[]).filter(s=>s.available).map(s=>`<option value="${s.startTime}">${fmtTime(s.startTime)}</option>`).join('')||'<option value="">No slots available</option>'; }catch(e){ $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; } }
   f.date.addEventListener('change',refreshReschedSlots); refreshReschedSlots();
@@ -235,13 +266,16 @@ function resched(id){
 function cancelAppt(id){
   $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Cancel appointment</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="cancelForm">
   <div class="np-field"><label class="np-field__label">Cancellation reason *</label><textarea name="reason" required minlength="3" class="np-textarea" placeholder="Min 3 characters"></textarea></div>
-  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Back</button><button class="np-btn np-btn--primary" type="submit">Confirm cancellation</button></div></form></div></div></div>`;
+  </form></div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Back</button><button class="np-btn np-btn--primary" type="submit" form="cancelForm">Confirm cancellation</button></div>
+  </div></div>`;
   $('#cancelForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries()); if(!raw.reason||raw.reason.trim().length<3){toast('Reason required (min 3 chars)','error');return;} try{ await api('/receptionist/appointments/'+id+'/cancel',{method:'POST',body:JSON.stringify({reason:raw.reason})}); toast('Cancelled'); closeModal(); loadAppointments(); loadDashboard(); }catch(err){toast(err.message,'error');} });
 }
-async function genInvoice(id){ try{ const r=await api('/receptionist/appointments/'+id+'/invoice',{method:'POST',body:JSON.stringify({})}); toast(r.existing?'Invoice already exists':'Invoice generated'); loadAppointments(); loadDashboard(); }catch(e){toast(e.message,'error');} }
+async function genInvoice(id){ try{ const r=await api('/receptionist/appointments/'+id+'/invoice',{method:'POST',body:JSON.stringify({})}); toast(r.existing?'Invoice already exists':'Invoice generated'); refreshAfterMutation(['apptsView','dashView','invoicesView']); }catch(e){toast(e.message,'error');} }
 
 // Patients
-async function loadPatients(q){ const list=$('#patientsList'); try{ const rows=await api('/receptionist/patients'+(q?('?q='+encodeURIComponent(q)):'')); list.innerHTML=rows.length?rows.map(p=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(p.name)}</div><div class="np-appt-row__meta">+91 ${esc(p.phone||'')}${p.parentName?' · Guardian: '+esc(p.parentName):''}</div></div><div class="np-appt-row__right"><button class="np-btn np-btn--sm" onclick="openBookModal(null,'${p.id}')">Book</button></div></div>`).join(''):'<div class="np-empty"><div class="np-empty__sub">Type a name or phone to search, or register a new patient.</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+let __patientQuery='';
+async function loadPatients(q){ __patientQuery=q||''; const list=$('#patientsList'); try{ const rows=await api('/receptionist/patients'+(q?('?q='+encodeURIComponent(q)):'')); list.innerHTML=rows.length?rows.map(p=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(p.name)}</div><div class="np-appt-row__meta">+91 ${esc(p.phone||'')}${p.parentName?' · Guardian: '+esc(p.parentName):''}</div></div><div class="np-appt-row__right"><button class="np-btn np-btn--sm" onclick="openBookModal(null,'${p.id}')">Book</button></div></div>`).join(''):'<div class="np-empty"><div class="np-empty__sub">Type a name or phone to search, or register a new patient.</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 $('#patientSearch').addEventListener('input',e=>{clearTimeout(window.__ps); window.__ps=setTimeout(()=>loadPatients(e.target.value.trim()),300);});
 
 function openPatientModal(){
@@ -253,11 +287,28 @@ function openPatientModal(){
   <div class="np-field"><label class="np-field__label">Date of birth</label><input name="dateOfBirth" type="date" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">Gender</label><select name="gender" class="np-select"><option value="">—</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option></select></div></div>
   <div class="np-field"><label class="np-field__label">Address</label><textarea name="address" class="np-textarea"></textarea></div>
-  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Register</button></div></form></div></div></div>`;
-  $('#pForm').addEventListener('submit',async e=>{e.preventDefault(); const f=e.target; const raw=Object.fromEntries(new FormData(f).entries()); try{ const p=await api('/receptionist/patients',{method:'POST',body:JSON.stringify(raw)}); toast('Patient registered'); closeModal(); loadPatients(); }catch(err){toast(err.message,'error');}});
+  </form></div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit" form="pForm">Register</button></div>
+  </div></div>`;
+  $('#pForm').addEventListener('submit',async e=>{e.preventDefault(); const f=e.target; const raw=Object.fromEntries(new FormData(f).entries()); try{ const p=await api('/receptionist/patients',{method:'POST',body:JSON.stringify(raw)}); toast('Patient registered'); closeModal(); loadPatients(__patientQuery); }catch(err){toast(err.message,'error');}});
 }
 
 function closeModal(){ $('#modalHost').innerHTML=''; }
+
+// After any create/edit/delete/status-change, refresh the affected lists so
+// the newest data appears without a manual browser refresh. Only the views
+// passed in are reloaded, and the patients list keeps its active search term.
+function refreshAfterMutation(views){
+  const set = new Set(views || []);
+  if (set.has('dashView')) loadDashboard();
+  if (set.has('apptsView')) loadAppointments();
+  if (set.has('patientsView')) loadPatients(__patientQuery);
+  if (set.has('invoicesView')) loadInvoices();
+  if (set.has('billingView')) loadBilling();
+  if (set.has('certsView')) loadCerts();
+  if (set.has('rxView')) loadRx();
+  if (set.has('pharmBillsView')) loadPharmBills();
+}
 
 // Booking
 async function openBookModal(_, patientId){
@@ -274,8 +325,10 @@ async function openBookModal(_, patientId){
   <div class="np-field"><label class="np-field__label">DOB</label><input name="dateOfBirth" type="date" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">Gender</label><select name="gender" class="np-select"><option value="">—</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option></select></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Reason / problem *</label><input name="primaryProblem" required class="np-input"/></div>
-  <div class="np-field"><label class="np-field__label">Source</label><select name="source" class="np-select"><option value="CLINIC_RECEPTION">Clinic reception</option><option value="WALK_IN">Walk-in</option><option value="PHONE">Phone</option><option value="OTHER">Other</option></select></div></div></div>
-  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Book</button></div></form></div></div></div>`;
+  <div class="np-field"><label class="np-field__label">Source</label><select name="source" class="np-select"><option value="WALK_IN">Walk-in / Reception</option><option value="PHONE">Phone</option><option value="OTHER">Other</option></select></div></div>
+  </form></div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit" form="bForm">Book</button></div>
+  </div></div>`;
   const f=$('#bForm');
   async function bPrefillPatient(pid){ try{ const data=await api('/receptionist/patients/'+pid+'/history'); const p=data&&data.patient; if(!p)return; $('#bPatientId').value=p.id; $('#bPatient').value=`${p.name} — ${p.phone||''}`; if(f.phone) f.phone.value=p.phone||''; if(f.email) f.email.value=p.email||''; if(f.parentName) f.parentName.value=p.parentName||''; if(f.dateOfBirth) f.dateOfBirth.value=p.dateOfBirth?String(p.dateOfBirth).slice(0,10):''; if(f.gender) f.gender.value=p.gender||''; }catch(_){} }
   if (patientId) bPrefillPatient(patientId);
@@ -285,12 +338,12 @@ async function openBookModal(_, patientId){
   f.addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(f).entries()); const [docId,centreId]=raw.docCentre.split('|');
     let pid=$('#bPatientId').value||null; const typed=bP.value.trim();
     if(!pid && window.__bplist){ const match=window.__bplist.find(p=>`${p.name} — ${p.phone}`===typed); if(match) pid=match.id; }
-    const payload={ doctorId:docId, medicalCentreId:centreId, date:raw.date, startTime:raw.startTime, consultationType:'OFFLINE', primaryProblem:raw.primaryProblem, source:raw.source||'CLINIC_RECEPTION' };
+    const payload={ doctorId:docId, medicalCentreId:centreId, date:raw.date, startTime:raw.startTime, consultationType:'OFFLINE', primaryProblem:raw.primaryProblem, source:raw.source||'WALK_IN' };
     if(pid){ payload.patientId=pid; } else {
       const namePart=typed.split(' — ')[0]; payload.patientName=namePart; payload.phone=raw.phone; payload.email=raw.email||''; payload.parentName=raw.parentName||''; payload.dateOfBirth=raw.dateOfBirth||''; payload.gender=raw.gender||undefined;
       if(!raw.phone){ toast('Phone is required for a new patient','error'); return; }
     }
-    try{ const r=await api('/receptionist/appointments',{method:'POST',body:JSON.stringify(payload)}); toast('Appointment booked'); closeModal(); loadDashboard(); }catch(err){ toast(err.message,'error'); }
+    try{ const r=await api('/receptionist/appointments',{method:'POST',body:JSON.stringify(payload)}); toast('Appointment booked'); closeModal(); refreshAfterMutation(['dashView','apptsView','patientsView']); }catch(err){ toast(err.message,'error'); }
   });
 }
 
@@ -308,8 +361,9 @@ function openCertSendModal(certId, phone, email){
       ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendCertWa" checked/> Send via WhatsApp</label>`:''}
       ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendCertEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
     </div>
-    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendCertConfirm">Send</button></div>
-  </div></div></div>`;
+  </div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendCertConfirm">Send</button></div>
+  </div></div>`;
   $('#sendCertConfirm').addEventListener('click', async ()=>{
     const channels=[];
     if(hasPhone && $('#sendCertWa').checked) channels.push('whatsapp');
@@ -330,7 +384,9 @@ async function openCertModal(appointmentId){
   <div class="np-field"><label class="np-field__label">Rest days</label><input name="restDays" type="number" min="0" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">From date</label><input name="fromDate" type="date" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">To date</label><input name="toDate" type="date" class="np-input"/></div></div>
-  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Issue & generate PDF</button></div></form></div></div></div>`;
+  </form></div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit" form="cForm">Issue & generate PDF</button></div>
+  </div></div>`;
   if(!appointmentId){
     const cP=$('#certPatient');
     cP.addEventListener('input',e=>{ $('#certPatientId').value=''; clearTimeout(window.__cp); const q=e.target.value.trim(); if(q.length<2)return; window.__cp=setTimeout(async()=>{ try{ const rows=await api('/receptionist/patients?q='+encodeURIComponent(q)); $('#certPatients').innerHTML=rows.map(p=>`<option value="${esc(p.name)} — ${esc(p.phone)}" data-id="${p.id}"></option>`).join(''); window.__cplist=rows; }catch(_){}} ,250); });
@@ -354,12 +410,15 @@ async function loadPharmBills(){ const tb=$('#pharmBillsTbody'); if(!tb)return; 
 async function __ensureBillingCtx(){ if(!__doctors.length){ try{ const asn=await api('/receptionist/assignments'); __doctors=(asn||[]).map(a=>a.doctor); }catch(_){__doctors=__doctors||[];} } if(!__inv.length){ try{ __inv=await api('/receptionist/pharmacy/inventory'); }catch(_){__inv=__inv||[];} } }
 async function loadBilling(){ const tb=$('#billingTbody'); if(!tb)return; try{ const qs=new URLSearchParams(); const t=$('#billTypeFilter').value, st=$('#billStatusFilter').value; if(t)qs.set('billType',t); if(st)qs.set('status',st); const rows=await api('/receptionist/pharmacy/bills?'+(qs.toString()||'')); __bills=rows; tb.innerHTML=rows.length?rows.map(b=>`<tr><td data-label="Bill #"><b>${esc(b.billNumber)}</b></td><td data-label="Type">${billTypeBadge(b.billType)}</td><td data-label="Customer">${esc(b.customerName||'')}${b.patient?`<div class="np-mut" style="font-size:.72rem">${esc(b.patient.name||'')}</div>`:''}</td><td data-label="Total" style="text-align:right"><b>${inr(b.total)}</b></td><td data-label="Status">${billStatusBadge(b.status)}</td><td data-label="Date">${esc(fmtDate(b.createdAt))}</td><td data-label="Actions" style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="showRecBillActions('${b.id}')">Actions</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 function showRecBillActions(id){ const b=__bills.find(x=>x.id===id); if(!b)return; const isPaid=b.status==='PAID'; let rows=''; if(isPaid){ rows+='<button type="button" class="np-btn np-btn--block" disabled>Paid — locked</button>'; } else { rows+='<button type="button" class="np-btn np-btn--block" onclick="closeModal();editRecBill(\''+id+'\')">Edit draft</button>'; rows+='<button type="button" class="np-btn np-btn--block np-btn--primary" onclick="closeModal();__markRecPaid(\''+id+'\')">Mark paid</button>'; } if(b.pdfUrl){ rows+='<button type="button" class="np-btn np-btn--block" onclick="window.open(\''+b.pdfUrl+'\',\'_blank\')">View PDF</button><button type="button" class="np-btn np-btn--block" onclick="printPdf(\''+b.pdfUrl+'\')">Print</button>'; } $('#modalHost').innerHTML='<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Bill actions — '+esc(b.billNumber)+'</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><div class="np-action-list">'+rows+'</div></div></div></div>'; }
-function __markRecPaid(id){ NPBilling.markPaid({api:api,esc:esc,fmt:fmtDate,toast:toast,onSaved:loadBilling,billsBase:'/receptionist/pharmacy/bills'},id,loadBilling); }
-async function editRecBill(id){ await __ensureBillingCtx(); try{ const b=await api('/receptionist/pharmacy/bills/'+id); if(b.status!=='DRAFT'){ toast('This bill is already paid and locked','warn'); return; } NPBilling.open({ api, esc, fmt:fmtDate, toast, onSaved:loadBilling, inventory:__inv, doctors:__doctors, billsBase:'/receptionist/pharmacy/bills', role:'RECEPTIONIST', host:'#modalHost', canSwitchType:true, patientSearch:q=>api('/receptionist/patients?q='+encodeURIComponent(q)) }, b); }catch(e){ toast(e.message,'error'); } }
+// Both bill tables (Billing + Pharmacy Bills) and the Rx queue read from the
+// same bills API, so any save/mark-paid/dispense refreshes all of them.
+function refreshBillingViews(){ refreshAfterMutation(['billingView','pharmBillsView','rxView','dashView']); }
+function __markRecPaid(id){ NPBilling.markPaid({api:api,esc:esc,fmt:fmtDate,toast:toast,onSaved:refreshBillingViews,billsBase:'/receptionist/pharmacy/bills'},id,refreshBillingViews); }
+async function editRecBill(id){ await __ensureBillingCtx(); try{ const b=await api('/receptionist/pharmacy/bills/'+id); if(b.status!=='DRAFT'){ toast('This bill is already paid and locked','warn'); return; } NPBilling.open({ api, esc, fmt:fmtDate, toast, onSaved:refreshBillingViews, inventory:__inv, doctors:__doctors, billsBase:'/receptionist/pharmacy/bills', role:'RECEPTIONIST', host:'#modalHost', canSwitchType:true, patientSearch:q=>api('/receptionist/patients?q='+encodeURIComponent(q)) }, b); }catch(e){ toast(e.message,'error'); } }
 async function openBillModal(_, rxId){
   await __ensureBillingCtx();
   NPBilling.open({
-    api, esc, fmt: fmtDate, toast, onSaved: loadBilling,
+    api, esc, fmt: fmtDate, toast, onSaved: refreshBillingViews,
     inventory: __inv, doctors: __doctors, billsBase: '/receptionist/pharmacy/bills',
     role: 'RECEPTIONIST', host: '#modalHost', canSwitchType: true, rxId: rxId,
     defaultBillType: 'SERVICE',

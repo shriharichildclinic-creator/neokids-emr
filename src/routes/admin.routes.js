@@ -68,6 +68,7 @@ router.delete('/pharmacy-users/:id', clinic.deletePharmacyUser);
 // v4.0.0 — Front-desk finance & audit
 router.get('/available-offline-doctors', c.availableOfflineDoctors);
 router.get('/consultation-invoices',     c.consultationInvoices);
+router.get('/online-invoices',           c.onlineInvoices);
 router.get('/pharmacy/bills',            clinic.listPharmacyBillsAdmin);
 router.get('/audit-trail',               c.auditTrail);
 

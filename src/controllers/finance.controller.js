@@ -145,10 +145,10 @@ exports.revenueReport = asyncHandler(async (req, res, next) => {
     return next(e);
   }
   const { year, month, defaulted } = period;
-  const { doctorId, paymentType } = req.query;
+  const { doctorId, paymentType, source } = req.query;
 
   const rows = await revenueSvc.getMonthlyRevenueReport({
-    year, month, doctorId, paymentType
+    year, month, doctorId, paymentType, source
   });
 
   const grand = rows.reduce((g, r) => {
@@ -164,7 +164,7 @@ exports.revenueReport = asyncHandler(async (req, res, next) => {
 
   res.json({
     period: { year, month, defaulted },
-    filters: { doctorId: doctorId || null, paymentType: paymentType || null },
+    filters: { doctorId: doctorId || null, paymentType: paymentType || null, source: source || null },
     rows,
     grandTotals: grand
   });

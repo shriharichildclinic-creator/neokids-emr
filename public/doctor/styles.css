@@ -506,6 +506,12 @@ html,body{
   isolation:isolate;
 }
 .np-modal.hidden{ display:none; }
+/* Re-center modals over the content area on desktop: the fixed 264px sidebar
+   otherwise pushes the visual centre to the left. Below 1024px the sidebar is
+   an overlay drawer, so the modal keeps the full viewport. */
+@media (min-width:1024px){
+  .np-modal{ left:264px; }
+}
 .np-modal__panel{
   background: rgba(255,255,255,.96);
   border:1px solid rgba(255,255,255,.6);
@@ -959,6 +965,16 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   overflow: auto;
   max-height: 70vh;
   background: var(--nk-card);
+}
+/* Intentional bounded scroll container for card/row-based lists so they never
+   grow indefinitely on large datasets — matches the other portals. */
+.np-scroll-list{
+  max-height: 62vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width:640px){
+  .np-scroll-list{ max-height: 70vh; }
 }
 .np-table{
   width: 100%;

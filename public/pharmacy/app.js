@@ -46,8 +46,13 @@ function fmtDate(d){ if(!d)return''; return new Date(d).toLocaleDateString('en-I
 function inr(n){ return '₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2}); }
 
 const VIEWS={dashView:['Dashboard','Store overview'],rxView:['Prescriptions','Offline prescriptions'],invView:['Inventory','Medicines & stock'],billsView:['Bills','Sales & invoices'],settingsView:['Settings','Account']};
-function setView(v){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
+function setView(v, opts){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
+  // Keep the URL hash in sync so views are deep-linkable and survive refresh,
+  // matching the admin panel's routing strategy.
+  try{ if(!(opts&&opts.skipHash)){ const slug=v.replace(/View$/,''); if(location.hash!=='#'+slug) history.replaceState(null,'','#'+slug); } }catch(_){}
   if(v==='dashView')loadDash(); if(v==='rxView')loadRx(); if(v==='invView')loadInv(); if(v==='billsView')loadBills(); }
+function viewFromHash(){ const h=(location.hash||'').replace(/^#/,'').trim(); if(!h) return null; const v=h.endsWith('View')?h:h+'View'; return VIEWS[v]?v:null; }
+window.addEventListener('hashchange', ()=>{ const v=viewFromHash(); if(v) setView(v,{skipHash:true}); });
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 
 function setupSidebar(){
@@ -76,10 +81,10 @@ function setupProfileMenu(){
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='PHARMACY')throw new Error('Not a pharmacy account'); TOKEN=d.token; localStorage.setItem('np_pharmacy_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
 function logout(){ localStorage.removeItem('np_pharmacy_token'); TOKEN=null; showLogin(); }
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
-async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); setupProfileMenu(); try{ const me=await api('/auth/me'); __me=me.user||me; const __initials=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); $('#userName').textContent=__me.name; $('#userInitials').textContent=__initials; /* mirror into dropdown "logged in as" block -- stays visible on mobile once header hides .np-profile__meta */ if($('#userIdName'))$('#userIdName').textContent=__me.name; if($('#userIdInitials'))$('#userIdInitials').textContent=__initials; if($('#userIdEmail'))$('#userIdEmail').textContent=__me.email||''; }catch(e){} setView('dashView'); }
+async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); setupProfileMenu(); try{ const me=await api('/auth/me'); __me=me.user||me; const __initials=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); $('#userName').textContent=__me.name; $('#userInitials').textContent=__initials; /* mirror into dropdown "logged in as" block -- stays visible on mobile once header hides .np-profile__meta */ if($('#userIdName'))$('#userIdName').textContent=__me.name; if($('#userIdInitials'))$('#userIdInitials').textContent=__initials; if($('#userIdEmail'))$('#userIdEmail').textContent=__me.email||''; }catch(e){} const __r=viewFromHash(); setView(__r||'dashView', __r?{skipHash:true}:undefined); }
 
 async function loadDash(){ try{ const s=await api('/pharmacy/stats');
-  $('#kpiGrid').innerHTML=[{k:'blue',l:'Medicines in stock',v:s.totalItems},{k:'amber',l:'Low stock (≤10)',v:s.lowStock},{k:'red',l:'Expiring ≤30 days',v:s.expiringSoon},{k:'green',l:'Bills today',v:s.todayBills},{k:'mint',l:'Revenue today',v:inr(s.todayRevenue)}].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div></div>`).join('');
+  $('#kpiGrid').innerHTML=[{k:'mint',l:'Collected today',v:inr(s.todayCollected!=null?s.todayCollected:s.todayRevenue),sub:(s.todayPending>0?inr(s.todayPending)+' in draft bills':(s.todayBills||0)+' bill(s) today')},{k:'green',l:'Bills today',v:s.todayBills},{k:'blue',l:'Medicines in stock',v:s.totalItems},{k:'amber',l:'Low stock (≤10)',v:s.lowStock,sub:'reorder soon'},{k:'red',l:'Expiring ≤30 days',v:s.expiringSoon,sub:'check batches'}].map(c=>`<div class="np-kpi np-kpi--${c.k}"><div class="np-kpi__label">${c.l}</div><div class="np-kpi__value">${c.v}</div>${c.sub?`<div class="np-kpi__sub">${esc(c.sub)}</div>`:''}</div>`).join('');
   const bills=await api('/pharmacy/bills'); $('#recentBills').innerHTML=(bills.slice(0,8).map(b=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(b.billNumber)}</div><div class="np-appt-row__meta">${esc(b.customerName||'Walk-in')} · ${esc(fmtDate(b.createdAt))}</div></div><div class="np-appt-row__right"><b>${inr(b.total)}</b></div></div>`).join('')||'<div class="np-empty"><div class="np-empty__sub">No bills yet.</div></div>');
  }catch(e){ $('#kpiGrid').innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 
@@ -102,7 +107,9 @@ function openItemModal(id){ const it=id?__items.find(x=>x.id===id):null;
   <div class="np-field"><label class="np-field__label">Stock</label><input name="stock" type="number" class="np-input" value="${it?it.stock:'0'}"/></div>
   <div class="np-field"><label class="np-field__label">Expiry</label><input name="expiryDate" type="date" class="np-input" value="${it&&it.expiryDate?String(it.expiryDate).slice(0,10):''}"/></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Manufacturer</label><input name="manufacturer" class="np-input" value="${it?esc(it.manufacturer||''):''}"/></div></div>
-  <div class="np-row" style="justify-content:flex-end;gap:.5rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit">Save</button></div></form></div></div></div>`;
+  </form></div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit" form="iForm">Save</button></div>
+  </div></div>`;
   $('#iForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries()); try{ if(it){ await api('/pharmacy/inventory/'+it.id,{method:'PUT',body:JSON.stringify(raw)});} else { await api('/pharmacy/inventory',{method:'POST',body:JSON.stringify(raw)});} toast('Saved'); closeModal(); loadInv(); }catch(err){toast(err.message,'error');} });
 }
 function closeModal(){ $('#modalHost').innerHTML=''; }
@@ -127,8 +134,9 @@ function openBillSendModal(billId, phone, email){
       ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendBillWa" checked/> Send via WhatsApp</label>`:''}
       ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendBillEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
     </div>
-    <div class="np-row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendBillConfirm">Send</button></div>
-  </div></div></div>`;
+    </div>
+    <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendBillConfirm">Send</button></div>
+    </div></div>`;
   $('#sendBillConfirm').addEventListener('click', async ()=>{
     const channels=[];
     if(hasPhone && $('#sendBillWa').checked) channels.push('whatsapp');

@@ -683,6 +683,14 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 
 .np-modal{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:1rem; background: rgba(15,42,71,.45); }
 .np-modal.hidden{ display:none; }
+/* On desktop the fixed sidebar occupies the leftmost 264px, so a modal
+   centered across the whole viewport reads as shifted left of the content
+   area. Offsetting the modal's left edge by the sidebar width re-centers it
+   over the content the user is actually looking at. Below 1024px the sidebar
+   is an overlay drawer (not in flow), so the modal spans the full viewport. */
+@media (min-width:1024px){
+  .np-modal{ left:264px; }
+}
 /* The panel owns the rounded corners + shadow and clips its children
    (overflow:hidden) — it is NOT the scrolling element. Only .np-modal__body
    scrolls (flex:1; min-height:0), so a native scrollbar is always drawn
@@ -712,6 +720,23 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
   flex:1 1 auto;
   min-height:0;
   overflow-y:auto;
+}
+/* Consistent modal footer: a flex:none sibling of the scrolling body so the
+   action buttons keep even spacing and a divider above them instead of
+   sitting flush against the panel's bottom edge. Buttons align right on
+   desktop and stack full-width on narrow screens. */
+.np-modal__foot{
+  flex:none;
+  display:flex; align-items:center; justify-content:flex-end;
+  gap:.6rem; flex-wrap:wrap;
+  padding: .85rem 1.25rem;
+  border-top:1px solid var(--np-border);
+  background: var(--nk-card);
+}
+.np-modal__foot .np-btn{ min-width:96px; justify-content:center; }
+@media (max-width:640px){
+  .np-modal__foot{ padding:.85rem 1rem; }
+  .np-modal__foot .np-btn{ flex:1 1 auto; }
 }
 
 .np-modal__body{ min-width:0; }
@@ -809,11 +834,63 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 .np-appt-row__name{ font-weight:600; color: var(--np-ink); }
 
 .np-appt-row__assign{ font-size:.8rem; color:var(--np-muted); margin-top:.1rem; }
-.np-appt-row__name, .np-appt-row__assign{ overflow-wrap:anywhere; }
-.np-appt-row__meta{ font-size:.78rem; color: var(--np-muted); margin-top:.15rem; }
+.np-appt-row__name, .np-appt-row__assign, .np-appt-row__meta{ overflow-wrap:anywhere; word-break:break-word; }
+.np-appt-row__meta{ font-size:.78rem; color: var(--np-muted); margin-top:.15rem; line-height:1.45; }
 .np-appt-row__right{ text-align:right; flex-shrink:0; }
+/* On phones the fixed-width action column squeezed the text body and forced
+   medication/detail lines to clip. Stack the row so content takes the full
+   width and actions drop underneath, left-aligned and wrapping cleanly. */
+@media (max-width:560px){
+  .np-appt-row{ flex-direction:column; gap:.5rem; }
+  .np-appt-row__right{ text-align:left; width:100%; display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
+}
 
 .tab-pane.hidden{ display:none; }
+
+/* Personalized dashboard welcome header — mirrors the doctor portal's
+   .np-welcome tokens so Admin and Receptionist dashboards greet the user
+   consistently with a live date/time. Kept compact so it never pushes the
+   KPI cards below the fold on mobile. */
+.np-welcome{
+  display:flex; gap:.9rem; align-items:center; flex-wrap:wrap;
+  padding:.8rem 1.05rem; margin:0 0 1rem;
+  border-radius:16px;
+  background:var(--nk-card);
+  border:1px solid var(--np-border);
+  box-shadow:0 1px 2px rgba(15,42,71,.04);
+}
+.np-welcome__main{ flex:1 1 220px; min-width:0; }
+.np-welcome__eyebrow{ font-size:.72rem; font-weight:700; letter-spacing:.05em; color:var(--np-muted); text-transform:uppercase; }
+.np-welcome__titlerow{ display:flex; align-items:center; gap:.55rem; flex-wrap:wrap; margin-top:.15rem; }
+.np-welcome__title{ font-size:1.2rem; font-weight:700; margin:0; color:var(--np-ink); line-height:1.25; font-family:inherit; }
+.np-welcome__pill{
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.28rem .7rem; border-radius:999px;
+  background:var(--nk-teal-50); border:1px solid var(--nk-teal-100);
+  font-size:.76rem; font-weight:600; color:var(--nk-teal-700); white-space:nowrap;
+}
+html[data-theme="dark"] .np-welcome__pill{ background:rgba(137,188,189,.12); border-color:rgba(137,188,189,.28); color:#B4D7D7; }
+.np-welcome__side{ flex:0 0 auto; margin-left:auto; display:flex; align-items:center; gap:.5rem; }
+@media (max-width:560px){
+  .np-welcome{ padding:.75rem .9rem; }
+  .np-welcome__title{ font-size:1.05rem; }
+  .np-welcome__side{ width:100%; margin-left:0; }
+  .np-welcome__side .np-btn{ flex:1 1 auto; justify-content:center; }
+}
+
+/* Intentional bounded scroll container for card/row-based lists (patients,
+   prescriptions, certificates, today's queue, recent bills). Without a bound
+   these lists grew indefinitely and became unusable on large datasets and on
+   mobile. Capped height with its own scroll keeps every module's list
+   behaviour consistent and the surrounding page controls reachable. */
+.np-scroll-list{
+  max-height: 62vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width:640px){
+  .np-scroll-list{ max-height: 70vh; }
+}
 
 .np-notif-row td.np-notif-error{ color:#B91C1C; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.78rem; }
 
@@ -888,6 +965,30 @@ html[data-theme="dark"] #notifModal pre{
 }
 .np-filterbar--appointments select,
 .np-filterbar--notifications select{ appearance:auto; }
+/* Native date fields previously read as plain text boxes and their calendar
+   glyph sat flush against the right edge. Give them the same inner padding as
+   other controls, keep the picker indicator inset from the edge, and show a
+   pointer cursor so they clearly read as date pickers. */
+.np-filterbar--appointments input[type="date"],
+.np-filterbar--notifications input[type="date"],
+.np-filterbar--toolbar input[type="date"]{
+  padding:.5rem .7rem;
+  cursor:pointer;
+  color-scheme:light;
+}
+html[data-theme="dark"] .np-filterbar--appointments input[type="date"],
+html[data-theme="dark"] .np-filterbar--notifications input[type="date"],
+html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:dark; }
+.np-filterbar--appointments input[type="date"]::-webkit-calendar-picker-indicator,
+.np-filterbar--notifications input[type="date"]::-webkit-calendar-picker-indicator,
+.np-filterbar--toolbar input[type="date"]::-webkit-calendar-picker-indicator{
+  cursor:pointer;
+  margin-left:.35rem;
+  opacity:.75;
+}
+.np-filterbar--appointments input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.np-filterbar--notifications input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.np-filterbar--toolbar input[type="date"]::-webkit-calendar-picker-indicator:hover{ opacity:1; }
 .np-filter-actions{
   display:inline-flex;
   align-items:center;

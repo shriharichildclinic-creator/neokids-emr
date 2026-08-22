@@ -159,18 +159,25 @@ exports.stats = asyncHandler(async (req, res) => {
   const itemWhere = { isActive: true, medicalCentreId: { in: actor.centreIds } };
   const billWhere = { createdAt: { gte: todayStart }, medicalCentreId: { in: actor.centreIds } };
 
-  const [totalItems, lowStock, todayBills, todayRevenue, expiring] = await Promise.all([
+  const [totalItems, lowStock, todayBills, todayCollectedAgg, todayPendingAgg, expiring] = await Promise.all([
     prisma.pharmacyItem.count({ where: itemWhere }),
     prisma.pharmacyItem.count({ where: { ...itemWhere, stock: { lte: 10 } } }),
     prisma.pharmacyBill.count({ where: billWhere }),
-    prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: billWhere }),
+    prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { ...billWhere, status: 'PAID' } }),
+    prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { ...billWhere, status: 'DRAFT' } }),
     prisma.pharmacyItem.count({
       where: { ...itemWhere, expiryDate: { not: null, lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } }
     })
   ]);
+  const collected = Number(todayCollectedAgg._sum.total || 0);
+  const pending = Number(todayPendingAgg._sum.total || 0);
   res.json({
     totalItems, lowStock, todayBills,
-    todayRevenue: Number(todayRevenue._sum.total || 0),
+    // Collected = paid bills only; draft/unpaid bills are reported as pending
+    // rather than counted as today's takings.
+    todayRevenue: collected,
+    todayCollected: collected,
+    todayPending: pending,
     expiringSoon: expiring
   });
 });
@@ -440,6 +447,11 @@ exports.createBill = asyncHandler(async (req, res) => {
       patient = null;
     }
   }
+  if (patient && actor.role === 'PHARMACY') {
+    await staffAccess.recordPatientRegistration({ patientId: patient.id, pharmacyUserId: actor.user.id, medicalCentreId: actor.centreId });
+  } else if (patient && actor.role === 'RECEPTIONIST') {
+    await staffAccess.recordPatientRegistration({ patientId: patient.id, receptionistId: actor.user.id, medicalCentreId: actor.centreId });
+  }
 
   let doctorId = d.doctorId || null;
   if (doctorId) {
@@ -552,6 +564,11 @@ exports.updateBill = asyncHandler(async (req, res) => {
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
   } else if (d.customerName && d.customerPhone) {
     try { patient = await findOrCreatePatient({ patientName: d.customerName, phone: d.customerPhone }); } catch (_) { patient = null; }
+  }
+  if (patient && actor.role === 'PHARMACY') {
+    await staffAccess.recordPatientRegistration({ patientId: patient.id, pharmacyUserId: actor.user.id, medicalCentreId: actor.centreId });
+  } else if (patient && actor.role === 'RECEPTIONIST') {
+    await staffAccess.recordPatientRegistration({ patientId: patient.id, receptionistId: actor.user.id, medicalCentreId: actor.centreId });
   }
 
   let doctorId = d.doctorId || null;

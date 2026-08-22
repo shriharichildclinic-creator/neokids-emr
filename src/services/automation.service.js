@@ -315,10 +315,13 @@ async function onPhysicalBookingConfirmed(appointment) {
   // Walk-ins are registered by reception while the patient is standing
   // at the desk — the patient-facing WhatsApp confirmation exists to get
   // someone THERE (it carries a Maps directions button), which is moot
-  // when they've already arrived. Skipped for a.source === 'WALK_IN';
-  // the doctor's new-booking WhatsApp below still fires either way, since
-  // the doctor still needs to know a patient was added to their queue.
-  if (a.source !== 'WALK_IN') {
+  // when they've already arrived. Skipped for the in-person channel
+  // (WALK_IN, plus legacy CLINIC_RECEPTION which now maps to it); Phone
+  // and Other still get the confirmation. The doctor's new-booking
+  // WhatsApp below fires either way, since the doctor still needs to know
+  // a patient was added to their queue.
+  const isInPerson = a.source === 'WALK_IN' || a.source === 'CLINIC_RECEPTION';
+  if (!isInPerson) {
     // Meta template neokids_booking_confirms_offline_v2:
     //   {{1}} Patient Name  {{2}} Doctor Name  {{3}} Date  {{4}} Time  {{5}} Fee
     // (URL button takes Maps suffix as its single param)

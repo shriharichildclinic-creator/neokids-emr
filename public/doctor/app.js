@@ -130,10 +130,8 @@ function paymentBadge(p){
 }
 // Feature 1 — visual distinction for manually added (historical) records.
 function sourceBadge(source){
-  if (source === 'CLINIC_RECEPTION')
-    return `<span class="np-badge np-badge--violet" title="Booked at the clinic front desk"><span class="np-badge__dot"></span>Clinic reception</span>`;
-  if (source === 'WALK_IN')
-    return `<span class="np-badge np-badge--amber" title="Walk-in patient, no prior booking"><span class="np-badge__dot"></span>Walk-in</span>`;
+  if (source === 'WALK_IN' || source === 'CLINIC_RECEPTION')
+    return `<span class="np-badge np-badge--amber" title="In-person patient handled at the clinic front desk"><span class="np-badge__dot"></span>Walk-in / Reception</span>`;
   if (source === 'PHONE')
     return `<span class="np-badge np-badge--blue" title="Booked over a phone call to reception"><span class="np-badge__dot"></span>Phone</span>`;
   if (source === 'OTHER')
@@ -463,27 +461,32 @@ async function loadStats(){
     const today = Number(s.todayAppointments || 0);
     const done  = Number(s.completedToday || 0);
     const total = Number(s.totalConsults || 0);
-    const rev   = Number(s.totalRevenue || 0);
-    /* v3.4.13 — dedupe: "Today's Patients" / "Completed Today" duplicated
-       each other (same two numbers), so the grid is now three cards:
-       one day-of card (today + completed progress), one lifetime
-       consults card, one lifetime revenue card. Remaining / waiting is
-       surfaced by the header badge in the welcome strip. */
+    const on  = s.online  || { consults:0, collected:0, pending:0 };
+    const off = s.offline || { consults:0, collected:0, pending:0 };
+    // Online and offline are shown as two separate streams — a doctor who
+    // works both wants to compare them, not see one blended figure. Each
+    // card leads with collected money and notes pending separately.
+    const pendNote = (p) => Number(p) > 0 ? ` · ${fmtCurrencyFull(p)} pending` : '';
     $('#statsBar').innerHTML = `
-      <div class="np-kpi np-kpi--blue" title="Total appointments scheduled for today (across all statuses) and how many you've completed.">
+      <div class="np-kpi np-kpi--blue" title="Total appointments scheduled for today and how many you've completed.">
         <div class="np-kpi__label">Today's Patients</div>
         <div class="np-kpi__value">${today}</div>
         <div class="np-kpi__sub">${done} of ${today} completed</div>
       </div>
-      <div class="np-kpi np-kpi--mint" title="All-time consultations you've completed since joining.">
+      <div class="np-kpi np-kpi--mint" title="Online consultations you've completed, and the money collected from them.">
+        <div class="np-kpi__label">Online Consults</div>
+        <div class="np-kpi__value">${Number(on.consults||0)}</div>
+        <div class="np-kpi__sub">${fmtCurrencyFull(on.collected)} collected${pendNote(on.pending)}</div>
+      </div>
+      <div class="np-kpi np-kpi--cream" title="In-clinic (offline) consultations you've completed, and the money collected from them.">
+        <div class="np-kpi__label">In-Clinic Consults</div>
+        <div class="np-kpi__value">${Number(off.consults||0)}</div>
+        <div class="np-kpi__sub">${fmtCurrencyFull(off.collected)} collected${pendNote(off.pending)}</div>
+      </div>
+      <div class="np-kpi np-kpi--violet" title="All-time completed consultations across both online and in-clinic.">
         <div class="np-kpi__label">Total Consults</div>
         <div class="np-kpi__value">${total}</div>
-        <div class="np-kpi__sub">All-time consultations</div>
-      </div>
-      <div class="np-kpi np-kpi--cream" title="Gross fee revenue billed to your patients (before clinic split).">
-        <div class="np-kpi__label">Revenue</div>
-        <div class="np-kpi__value">${fmtCurrencyFull(rev)}</div>
-        <div class="np-kpi__sub">Lifetime</div>
+        <div class="np-kpi__sub">${s.completionRate != null ? s.completionRate + '% completion' : 'All-time'}</div>
       </div>`;
   } catch (ex){
     console.warn('stats failed', ex);

@@ -58,6 +58,27 @@ function fmtTime(hhmm){
   const suffix = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
   return `${h}:${min} ${suffix}`;
 }
+// Dashboard welcome header: greeting by time of day + a live-updating date and
+// clock. Purely presentational — never throws, and only runs while the
+// welcome elements are on the page.
+let __dashClockTimer = null;
+function startDashClock(){
+  const greetEl = document.getElementById('dashGreeting');
+  const dateEl  = document.getElementById('dashWelcomeDate');
+  const timeEl  = document.getElementById('dashWelcomeTime');
+  if (!dateEl && !timeEl && !greetEl) return;
+  function tick(){
+    const now = new Date();
+    const h = now.getHours();
+    const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    if (greetEl) greetEl.textContent = greet;
+    if (dateEl) dateEl.textContent = now.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+    if (timeEl) timeEl.textContent = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  }
+  tick();
+  if (__dashClockTimer) clearInterval(__dashClockTimer);
+  __dashClockTimer = setInterval(tick, 30000);
+}
 function fmtDateTime(iso){
   if (!iso) return '';
   const d = new Date(iso);
@@ -200,6 +221,8 @@ const VIEW_META = {
   revenueView:     { title:'Revenue Reports',    sub:'Monthly clinic revenue — Cashfree only' },
   settlementsView: { title:'Doctor Settlements', sub:'Generate, review, and pay monthly doctor settlements' },
   invoicesView:    { title:'Invoices',           sub:'Settlement invoices issued to doctors' },
+  recInvoicesView: { title:'Reception Invoices',  sub:'Consultation invoices generated at clinic front desks' },
+  onlineInvoicesView: { title:'Online Booking Invoices', sub:'Invoices from NeoKidsPro patient online bookings' },
   notifView:       { title:'Notification Logs',  sub:'Audit WhatsApp & email deliveries' },
   settingsView:    { title:'Settings',           sub:'Account management' }
 };
@@ -507,6 +530,28 @@ async function loadDashboard() {
       </div>`).join('');
 
     renderDailyChart(a.daily || []);
+
+    // Revenue by source — online / in-clinic / pharmacy, each showing money
+    // actually collected with pending noted separately so nothing is inflated.
+    const rbs = a.revenueBySource;
+    const rbsEl = $('#revBySourceGrid');
+    if (rbs && rbsEl) {
+      const pend = (p) => Number(p) > 0 ? `${fmtCurrency(p)} pending` : 'Fully collected';
+      const srcCards = [
+        { kind:'mint',   label:'Online Revenue',   d: rbs.online,   tip:'Collected from NeoKidsPro online (Cashfree) consultations.' },
+        { kind:'blue',   label:'In-Clinic Revenue',d: rbs.offline,  tip:'Collected from in-person (offline) consultations.' },
+        { kind:'violet', label:'Pharmacy Revenue',  d: rbs.pharmacy, tip:'Collected from paid pharmacy bills.' },
+        { kind:'cream',  label:'Total Collected',   d: { collected: rbs.totalCollected, pending: null },
+          tip:'All money actually received across every source.',
+          sub: `${rbs.outstandingInvoices || 0} unpaid invoice(s)` }
+      ];
+      rbsEl.innerHTML = srcCards.map(c => `
+        <div class="np-kpi np-kpi--${c.kind}" title="${escapeHtml(c.tip)}">
+          <div class="np-kpi__label">${escapeHtml(c.label)}</div>
+          <div class="np-kpi__value">${escapeHtml(fmtCurrency(c.d.collected))}</div>
+          <div class="np-kpi__sub">${escapeHtml(c.sub != null ? c.sub : pend(c.d.pending))}</div>
+        </div>`).join('');
+    }
 
     const fail = a.notificationsFailed || 0;
     const badge = $('#navBadgeFailed');
@@ -1358,7 +1403,7 @@ async function loadNotifications(){
     ].join('');
     renderNotifPagination(data);
     if (!rows.length){
-      tbody.innerHTML = `<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No notifications match</div><div class="np-empty__sub">Adjust filters or wait for the next event.</div></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6"><div class="np-empty"><div class="np-empty__icon" aria-hidden="true">🔔</div><div class="np-empty__title">No notifications match</div><div class="np-empty__sub">Adjust filters or wait for the next event.</div></div></td></tr>`;
       return;
     }
   tbody.innerHTML = rows.map(n => `
@@ -1489,7 +1534,11 @@ async function showDashboard() {
       if ($('#adminIdName')) $('#adminIdName').textContent = u.name;
       if ($('#adminIdInitials')) $('#adminIdInitials').textContent = initials;
       if ($('#adminIdEmail')) $('#adminIdEmail').textContent = u.email || '';
+      const first = u.name.split(/\s+/)[0] || u.name;
+      const nameEl = $('#dashWelcomeName');
+      if (nameEl) nameEl.textContent = 'Welcome back, ' + first + ' 👋';
     }
+    startDashClock();
   } catch(e) {
     if (e && e.status === 401) return;
   }

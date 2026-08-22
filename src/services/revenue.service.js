@@ -141,7 +141,7 @@ function monthRange(year, month) {
  *   - date within [start, end)
  *   - optional doctorId filter
  */
-function buildEligibleApptWhere({ doctorId, start, end, paymentTypeFilter } = {}) {
+function buildEligibleApptWhere({ doctorId, start, end, paymentTypeFilter, source } = {}) {
   const where = {
     paymentStatus:   'PAID',
     // SECURITY/FINANCE FIX (audit finding #3): a doctor-cancelled (or
@@ -162,6 +162,13 @@ function buildEligibleApptWhere({ doctorId, start, end, paymentTypeFilter } = {}
   if (paymentTypeFilter === 'ONLINE' || paymentTypeFilter === 'OFFLINE') {
     where.consultationType = paymentTypeFilter;
   }
+  // Optional appointment-source filter (NEOKIDSPRO online, WALK_IN/reception,
+  // PHONE, OTHER). Narrows the already-eligible dataset only — it never
+  // changes what counts as settleable revenue. Legacy CLINIC_RECEPTION is
+  // treated as WALK_IN so the merged in-person channel filters together.
+  if (source) {
+    where.source = source === 'WALK_IN' ? { in: ['WALK_IN', 'CLINIC_RECEPTION'] } : source;
+  }
   return where;
 }
 
@@ -175,7 +182,7 @@ function buildEligibleApptWhere({ doctorId, start, end, paymentTypeFilter } = {}
  *
  * Returns one row per doctor with full split breakdown and settlement status.
  */
-async function getMonthlyRevenueReport({ year, month, doctorId, paymentType }) {
+async function getMonthlyRevenueReport({ year, month, doctorId, paymentType, source }) {
   const { start, end, last } = monthRange(year, month);
 
   // 1. Pull doctors in scope (active only). If a specific doctor is asked
@@ -197,7 +204,7 @@ async function getMonthlyRevenueReport({ year, month, doctorId, paymentType }) {
 
   // 2. Pull all eligible appointments for these doctors in one query.
   const apptWhere = buildEligibleApptWhere({
-    start, end, paymentTypeFilter: paymentType
+    start, end, paymentTypeFilter: paymentType, source
   });
   apptWhere.doctorId = { in: doctors.map(d => d.id) };
 

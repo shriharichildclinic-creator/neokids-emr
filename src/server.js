@@ -165,6 +165,12 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'assets', 'gateway.html'));
+});
+
+// Machine-readable service descriptor kept available for health checks and
+// integrations that previously relied on the JSON at the root.
+app.get('/api', (req, res) => {
   res.json({
     name: 'NeoKidsPro EMR API',
     version: '4.0.0',

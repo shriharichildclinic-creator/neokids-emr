@@ -88,6 +88,7 @@ model Patient {
   previousRecords PreviousRecord[]
   certificates MedicalCertificate[]
   pharmacyBills PharmacyBill[]
+  registrations PatientRegistration[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -494,6 +495,7 @@ model Receptionist {
   assignments         ReceptionistAssignment[]
   createdAppointments Appointment[]
   consultationInvoices ConsultationInvoice[]
+  patientRegistrations PatientRegistration[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -532,6 +534,7 @@ model PharmacyUser {
 
   medicalCentre MedicalCentre?      @relation(fields: [medicalCentreId], references: [id], onDelete: SetNull)
   doctors       PharmacyUserDoctor[]
+  patientRegistrations PatientRegistration[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -553,6 +556,29 @@ model PharmacyUserDoctor {
   @@unique([pharmacyUserId, doctorId])
   @@index([doctorId])
   @@map("pharmacy_user_doctors")
+}
+
+// Explicit registration linkage so a patient created at the front desk is
+// immediately visible to the staff member who registered them, without
+// waiting for a first appointment or certificate to bring them into scope.
+model PatientRegistration {
+  id              String   @id @default(uuid())
+  patientId       String
+  receptionistId  String?
+  pharmacyUserId  String?
+  medicalCentreId String?
+  createdAt       DateTime @default(now())
+
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  receptionist Receptionist? @relation(fields: [receptionistId], references: [id], onDelete: Cascade)
+  pharmacyUser PharmacyUser? @relation(fields: [pharmacyUserId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, receptionistId])
+  @@unique([patientId, pharmacyUserId])
+  @@index([receptionistId])
+  @@index([pharmacyUserId])
+  @@index([patientId])
+  @@map("patient_registrations")
 }
 
 model ConsultationInvoice {

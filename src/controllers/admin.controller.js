@@ -458,7 +458,38 @@ exports.analytics = asyncHandler(async (req, res) => {
     }
   });
 
+  // Revenue by source, split into collected vs pending. Consultation revenue
+  // is separated into online (Cashfree) and in-clinic (offline); pharmacy
+  // revenue comes from paid pharmacy bills. Collected = money received;
+  // pending = billed but not yet collected — never blended into one figure.
+  const COLLECTED = ['PAID', 'CASH_COLLECTED'];
+  const [
+    onlineCollectedAgg, offlineCollectedAgg,
+    onlinePendingAgg, offlinePendingAgg,
+    pharmacyPaidAgg, pharmacyDraftAgg,
+    outstandingInvoices
+  ] = await Promise.all([
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: 'CASH_PENDING' } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: 'CASH_PENDING' } }),
+    prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { status: 'PAID' } }).catch(() => ({ _sum: { total: 0 } })),
+    prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { status: 'DRAFT' } }).catch(() => ({ _sum: { total: 0 } })),
+    prisma.consultationInvoice.count({ where: { status: 'PENDING' } }).catch(() => 0)
+  ]);
+  const onlineRev   = Number(onlineCollectedAgg._sum.feeAtBooking || 0);
+  const offlineRev  = Number(offlineCollectedAgg._sum.feeAtBooking || 0);
+  const pharmacyRev = Number(pharmacyPaidAgg._sum.total || 0);
+  const revenueBySource = {
+    online:   { collected: onlineRev,  pending: Number(onlinePendingAgg._sum.feeAtBooking || 0) },
+    offline:  { collected: offlineRev, pending: Number(offlinePendingAgg._sum.feeAtBooking || 0) },
+    pharmacy: { collected: pharmacyRev, pending: Number(pharmacyDraftAgg._sum.total || 0) },
+    totalCollected: onlineRev + offlineRev + pharmacyRev,
+    outstandingInvoices
+  };
+
   res.json({
+    revenueBySource,
     totalDoctors, totalPatients, totalAppointments,
     completedAppointments: completed,
     cancelledAppointments: cancelled,
@@ -537,6 +568,64 @@ exports.consultationInvoices = asyncHandler(async (req, res) => {
   res.json(rows.map(r => ({
     ...r,
     pdfUrl: buildSignedFileUrl({ kind: 'consultation-invoice', appointmentId: r.id, userId: req.user.id, role: req.user.role })
+  })));
+});
+
+// NeoKidsPro online-booking invoices. Online consultations are booked and
+// paid by the patient through the public flow; their invoice PDF lives on
+// the appointment (invoiceUrl) rather than in the ConsultationInvoice table,
+// so admins previously had no place to see or re-share them. This surfaces
+// every paid online booking with a re-signed, admin-scoped invoice URL,
+// using the same filter surface (doctorId / centreId / from / to / q) as the
+// reception invoices for consistent invoice access across billing sources.
+exports.onlineInvoices = asyncHandler(async (req, res) => {
+  const { doctorId, from, to, q } = req.query;
+  const where = {
+    source: 'NEOKIDSPRO',
+    OR: [
+      { cashfreePaymentId: { not: null } },
+      { invoiceUrl: { not: null } }
+    ]
+  };
+  if (doctorId) where.doctorId = doctorId;
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from + 'T00:00:00.000Z');
+    if (to)   where.createdAt.lte = new Date(to + 'T23:59:59.999Z');
+  }
+  const andQ = [];
+  if (q && String(q).trim().length >= 2) {
+    const term = String(q).trim();
+    andQ.push({ OR: [
+      { patient: { is: { name: { contains: term } } } },
+      { patient: { is: { phone: { contains: term.replace(/\D/g, '') } } } }
+    ] });
+  }
+  const finalWhere = andQ.length ? { AND: [where, ...andQ] } : where;
+  const rows = await prisma.appointment.findMany({
+    where: finalWhere,
+    select: {
+      id: true, date: true, startTime: true, createdAt: true,
+      feeAtBooking: true, paymentStatus: true, cashfreePaymentId: true, invoiceUrl: true,
+      patient: { select: { id: true, name: true, phone: true, email: true } },
+      doctor:  { select: { id: true, name: true, specialization: true } }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: Math.min(Math.max(parseInt(req.query.limit || '200', 10) || 200, 1), 500)
+  });
+  const { buildSignedFileUrl } = require('../utils/fileTokens');
+  res.json(rows.map(r => ({
+    id: r.id,
+    invoiceNumber: `INV-${r.id.slice(0, 8).toUpperCase()}`,
+    date: r.date,
+    startTime: r.startTime,
+    createdAt: r.createdAt,
+    amount: r.feeAtBooking,
+    paymentStatus: r.paymentStatus,
+    paymentId: r.cashfreePaymentId || null,
+    patient: r.patient,
+    doctor: r.doctor,
+    pdfUrl: buildSignedFileUrl({ kind: 'invoice', appointmentId: r.id, userId: req.user.id, role: req.user.role })
   })));
 });
 
