@@ -765,10 +765,19 @@ exports.markPaid = asyncHandler(async (req, res) => {
       select: { name: true, stock: true }
     });
     for (const item of lowNow) {
+      const lowMsg = `${item.name} is down to ${item.stock} unit(s) in stock.`;
       await notifications.create({
         userType: actor.role, userId: actor.user.id,
-        type: 'LOW_STOCK', title: 'Low stock',
-        message: `${item.name} is down to ${item.stock} unit(s) in stock.`,
+        type: 'LOW_STOCK', title: 'Low stock', message: lowMsg,
+        entityType: 'PHARMACY_ITEM'
+      }).catch(() => {});
+      // Admin oversight — the acting pharmacy/reception user already got
+      // their own copy above; this is a separate clinic-wide notice since
+      // admin manages inventory across every location, not just the one
+      // this sale happened at.
+      await notifications.create({
+        userType: 'ADMIN', userId: null,
+        type: 'LOW_STOCK', title: 'Low stock', message: lowMsg,
         entityType: 'PHARMACY_ITEM'
       }).catch(() => {});
     }

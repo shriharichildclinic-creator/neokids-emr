@@ -355,10 +355,19 @@ async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
   await automation.onOnlineBookingConfirmed(updated);
 
   const notifications = require('./notification.service');
+  const bookingMsg = `${updated.patient.name} booked a ${updated.consultationType === 'ONLINE' ? 'video' : 'clinic'} consultation with Dr. ${updated.doctor.name} on ${String(updated.date).slice(0, 10)} at ${updated.startTime}.`;
   await notifications.create({
     userType: 'DOCTOR', userId: updated.doctorId,
     type: 'NEW_ONLINE_BOOKING', title: 'New online booking',
-    message: `${updated.patient.name} booked a ${updated.consultationType === 'ONLINE' ? 'video' : 'clinic'} consultation on ${String(updated.date).slice(0, 10)} at ${updated.startTime}.`,
+    message: bookingMsg,
+    entityType: 'APPOINTMENT', entityId: updated.id
+  }).catch(() => {});
+  // userId: null = every admin account sees this, not just one — there's
+  // no concept of "the" admin who owns a booking the way a doctor does.
+  await notifications.create({
+    userType: 'ADMIN', userId: null,
+    type: 'NEW_ONLINE_BOOKING', title: 'New online booking',
+    message: bookingMsg,
     entityType: 'APPOINTMENT', entityId: updated.id
   }).catch(() => {});
 
