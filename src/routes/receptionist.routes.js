@@ -8,10 +8,10 @@ const { uploadProfileImage } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('RECEPTIONIST'));
 
-router.get('/notifications',                notif.list);
-router.get('/notifications/unread-count',   notif.unreadCount);
-router.post('/notifications/:id/read',      notif.markRead);
-router.post('/notifications/read-all',      notif.markAllRead);
+router.get('/my-notifications',                notif.list);
+router.get('/my-notifications/unread-count',   notif.unreadCount);
+router.post('/my-notifications/:id/read',      notif.markRead);
+router.post('/my-notifications/read-all',      notif.markAllRead);
 
 router.get('/me',           c.me);
 router.post('/profile-image',   uploadProfileImage.single('photo'), c.uploadProfileImage);

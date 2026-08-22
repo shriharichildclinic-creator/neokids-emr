@@ -921,7 +921,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
 
       async function refreshCount() {
         try {
-          const r = await api(base + '/notifications/unread-count');
+          const r = await api(base + '/my-notifications/unread-count');
           const n = (r && r.count) || 0;
           if (n > 0) { dot.style.display = ''; dot.textContent = n > 99 ? '99+' : String(n); }
           else dot.style.display = 'none';
@@ -931,7 +931,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       async function loadList() {
         list.innerHTML = '<div class="np-notif__empty">Loading…</div>';
         try {
-          const rows = await api(base + '/notifications');
+          const rows = await api(base + '/my-notifications');
           if (!rows.length) { list.innerHTML = '<div class="np-notif__empty">No notifications yet.</div>'; return; }
           list.innerHTML = rows.map(n =>
             '<button type="button" class="np-notif__item' + (n.isRead ? '' : ' is-unread') + '" data-id="' + n.id + '">' +
@@ -945,7 +945,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
               if (!el.classList.contains('is-unread')) return;
               el.classList.remove('is-unread');
               const d = el.querySelector('.np-notif__item-dot'); if (d) d.remove();
-              try { await api(base + '/notifications/' + el.dataset.id + '/read', { method: 'POST' }); } catch (_) {}
+              try { await api(base + '/my-notifications/' + el.dataset.id + '/read', { method: 'POST' }); } catch (_) {}
               refreshCount();
             });
           });
@@ -972,7 +972,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       });
       markAll.addEventListener('click', async (e) => {
         e.stopPropagation();
-        try { await api(base + '/notifications/read-all', { method: 'POST' }); loadList(); refreshCount(); } catch (_) {}
+        try { await api(base + '/my-notifications/read-all', { method: 'POST' }); loadList(); refreshCount(); } catch (_) {}
       });
       panel.addEventListener('click', (e) => e.stopPropagation());
       document.addEventListener('click', () => panel.classList.remove('is-open'));

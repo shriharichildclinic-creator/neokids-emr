@@ -13,10 +13,15 @@ const {
 
 router.use(authenticate, requireRole('ADMIN'));
 
-router.get('/notifications',                notif.list);
-router.get('/notifications/unread-count',   notif.unreadCount);
-router.post('/notifications/:id/read',      notif.markRead);
-router.post('/notifications/read-all',      notif.markAllRead);
+// NOTE: named "my-notifications" (not "/notifications") — this route file
+// already has a pre-existing GET /notifications (c.listNotifications, the
+// WhatsApp/email delivery audit log below). Reusing that path here silently
+// shadowed it, since Express matches route registration order and this
+// handler always responds instead of calling next().
+router.get('/my-notifications',                notif.list);
+router.get('/my-notifications/unread-count',   notif.unreadCount);
+router.post('/my-notifications/:id/read',      notif.markRead);
+router.post('/my-notifications/read-all',      notif.markAllRead);
 
 router.get('/analytics', c.analytics);
 

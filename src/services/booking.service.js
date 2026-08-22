@@ -347,6 +347,15 @@ async function confirmOnlineBooking(appointmentId, cashfreePaymentId) {
 
   const automation = require('./automation.service');
   await automation.onOnlineBookingConfirmed(updated);
+
+  const notifications = require('./notification.service');
+  await notifications.create({
+    userType: 'DOCTOR', userId: updated.doctorId,
+    type: 'NEW_ONLINE_BOOKING', title: 'New online booking',
+    message: `${updated.patient.name} booked a ${updated.consultationType === 'ONLINE' ? 'video' : 'clinic'} consultation on ${String(updated.date).slice(0, 10)} at ${updated.startTime}.`,
+    entityType: 'APPOINTMENT', entityId: updated.id
+  }).catch(() => {});
+
   return updated;
 }
 
