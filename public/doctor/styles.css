@@ -2503,3 +2503,21 @@ html[data-theme="dark"] .np-modal pre{
 [data-theme="dark"] .np-profile-card__name{ color:#e2e8f0; }
 [data-theme="dark"] .np-profile-dl dd{ color:#e2e8f0; }
 [data-theme="dark"] .np-profile-dl > div{ border-color:rgba(255,255,255,.08); }
+
+/* ── Mobile card consistency pass (mirrors public/admin/styles.css) ─────
+   Numeric columns (Fee, My Gross, TDS, My Net, Consults, Total Revenue)
+   are right-aligned on desktop via inline `style="text-align:right"`
+   but the shared table-to-card rule forces every cell left on phones.
+   Re-apply right alignment on exactly those cells, and make sure no
+   inline `white-space:nowrap` ever locks a card cell into overflowing
+   sideways, consistent with every other panel in the app. */
+@media (max-width:720px){
+  .np-table td[data-label]{
+    white-space:normal !important;
+  }
+  .np-table td[data-label][style*="text-align:right"],
+  .np-table td[data-label][style*="text-align: right"]{
+    text-align:right !important;
+    justify-self:end;
+  }
+}

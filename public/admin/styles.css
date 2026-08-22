@@ -1709,6 +1709,29 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-profile__meta{ display:none; }
 }
 
+@media (max-width:640px){
+  /* Doctor name and clinic pill were hard single-line ellipsis at any
+     width, so a longer doctor or clinic name got cut mid-word on a
+     phone even though every card in the app now wraps freely. Let
+     these two wrap onto a second line on phones instead of truncating
+     — role/qualification stay single-line since they're short labels,
+     not identifying information. */
+  .np-doc-card__name{
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+  }
+  .np-doc-card__clinic{
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+    max-width:100%;
+  }
+}
+
 @media (max-width:420px){
   .np-doc-card{ padding:1rem .95rem .85rem; }
   .np-doc-card__actions{
@@ -1765,4 +1788,41 @@ html, body{ max-width:100%; overflow-x:hidden; }
 
 @media (max-width:380px){
   .np-grid-2{ grid-template-columns:1fr; }
+}
+
+/* ── Mobile card consistency pass ──────────────────────────────────────
+   Every table-to-card view on phones (Settlements, Invoices, Revenue,
+   Reception/Online Invoices, Centres, Receptionists, Pharmacy Users,
+   Certificates, Pharmacy/Reception Bills, Audit, Appointments,
+   Notifications — and by extension the Receptionist & Pharmacy portals,
+   which load this same stylesheet) previously had two inconsistencies:
+
+   1. Cells authored for a desktop table with an inline
+      `white-space:nowrap` (mainly "Actions" cells holding 2-3 buttons)
+      kept that nowrap on mobile too. On a card only ~300px wide, a
+      nowrap run of buttons doesn't shrink — it forces the whole card
+      to overflow sideways, which reads as "text getting cut off".
+      Since author-stylesheet !important always beats a plain inline
+      style, one rule here fixes it everywhere at once.
+
+   2. Numeric columns (Amount, Total, Fee, TDS, Stock, etc.) are
+      right-aligned in the desktop table via inline
+      `style="text-align:right"`, but the shared mobile card rule forces
+      every cell to `text-align:left !important` (so the field label and
+      value line up on the left). That's correct for text fields but
+      left numbers looking randomly mis-aligned next to the same numbers
+      shown right-aligned elsewhere (e.g. the Fee column in Appointments,
+      which already special-cases this). Detecting the desktop
+      right-align via the inline style itself — rather than hard-coding
+      every column name per view — re-applies right alignment
+      consistently on every numeric cell, in every card, everywhere. */
+@media (max-width:720px){
+  .np-table td[data-label]{
+    white-space:normal !important;
+  }
+  .np-table td[data-label][style*="text-align:right"],
+  .np-table td[data-label][style*="text-align: right"]{
+    text-align:right !important;
+    justify-self:end;
+  }
 }
