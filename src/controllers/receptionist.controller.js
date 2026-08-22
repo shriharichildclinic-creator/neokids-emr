@@ -16,6 +16,7 @@ const staffDocs = require('../services/staff-docs.service');
 const audit = require('../services/audit.service');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
 const logger = require('../utils/logger');
+const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -53,6 +54,24 @@ exports.me = asyncHandler(async (req, res) => {
   if (!me) return res.status(404).json({ error: 'Not found' });
   const { passwordHash, ...safe } = me;
   res.json(safe);
+});
+
+exports.uploadProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
+  const me = await staffAccess.getReceptionist(req.user.id);
+  if (!me) return res.status(404).json({ error: 'Not found' });
+  await deleteOldPhoto(me.photoUrl);
+  const photoUrl = photoUrlFor(req.file.filename);
+  const updated = await prisma.receptionist.update({ where: { id: me.id }, data: { photoUrl } });
+  res.json({ success: true, photoUrl: updated.photoUrl });
+});
+
+exports.removeProfileImage = asyncHandler(async (req, res) => {
+  const me = await staffAccess.getReceptionist(req.user.id);
+  if (!me) return res.status(404).json({ error: 'Not found' });
+  await deleteOldPhoto(me.photoUrl);
+  await prisma.receptionist.update({ where: { id: me.id }, data: { photoUrl: null } });
+  res.json({ success: true });
 });
 
 exports.assignments = asyncHandler(async (req, res) => {

@@ -13,6 +13,57 @@ function inr(n){ return '₹'+Number(n||0).toLocaleString('en-IN',{minimumFracti
 function closeStaffModal(){ const h=$('#staffModalHost'); if(h) h.innerHTML=''; }
 window.closeStaffModal = closeStaffModal;
 
+// Shared admin-set profile-photo block for the Receptionist/Pharmacy edit
+// modals — same optional-photo pattern as the Doctor edit modal in
+// admin/app.js, just inline here since these modals are fully
+// regenerated on every open (no persistent show/hide state to manage).
+function staffPhotoBlockHtml(entity, kind){
+  if (!entity) return '';
+  const photoUrl = entity.photoUrl || '';
+  return `
+    <div class="np-row" style="align-items:center;gap:.75rem;margin-bottom:1rem;">
+      <div style="width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--np-surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        ${photoUrl
+          ? `<img src="${esc(photoUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in" onclick="NPLightbox.open('${esc(photoUrl)}','${esc(entity.name).replace(/'/g,"\\'")}')"/>`
+          : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--np-muted)"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-6 8-6s8 2 8 6"/></svg>`}
+      </div>
+      <div>
+        <button type="button" class="np-btn np-btn--sm" onclick="document.getElementById('staffPhotoInput').click()">Upload photo</button>
+        ${photoUrl ? `<button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="removeStaffPhoto('${kind}','${entity.id}')">Remove</button>` : ''}
+        <input id="staffPhotoInput" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" onchange="uploadStaffPhoto('${kind}','${entity.id}',this.files[0])"/>
+      </div>
+    </div>`;
+}
+
+async function uploadStaffPhoto(kind, id, file){
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  try {
+    const r = await fetch(API + '/admin/' + (kind === 'RECEPTIONIST' ? 'receptionists' : 'pharmacy-users') + '/' + id + '/profile-image', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN },
+      body: fd
+    });
+    let data = null; try { data = await r.json(); } catch(_) {}
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    toast('Photo updated.');
+    if (kind === 'RECEPTIONIST') { await loadReceptionists(); openReceptionistModal(id); }
+    else { await loadPharmUsers(); openPharmUserModal(id); }
+  } catch (err) { toast(err.message, 'error'); }
+}
+window.uploadStaffPhoto = uploadStaffPhoto;
+
+async function removeStaffPhoto(kind, id){
+  try {
+    await api('/admin/' + (kind === 'RECEPTIONIST' ? 'receptionists' : 'pharmacy-users') + '/' + id + '/profile-image', { method: 'DELETE' });
+    toast('Photo removed.');
+    if (kind === 'RECEPTIONIST') { await loadReceptionists(); openReceptionistModal(id); }
+    else { await loadPharmUsers(); openPharmUserModal(id); }
+  } catch (err) { toast(err.message, 'error'); }
+}
+window.removeStaffPhoto = removeStaffPhoto;
+
 try {
   VIEW_META.centresView       = { title:'Medical Centres',   sub:'Clinics & branches' };
   VIEW_META.receptionistsView = { title:'Receptionists',     sub:'Front-desk accounts & permissions' };
@@ -119,7 +170,7 @@ async function openReceptionistModal(id){
   const asnRows = (r && r.assignments.length ? r.assignments : [null]).map(a => assignmentRowHtml(a)).join('');
   $('#staffModalHost').innerHTML = `<div class="np-modal"><div class="np-modal__panel np-modal__panel--lg">
     <header class="np-modal__head"><div class="np-modal__title">${r ? 'Edit' : 'Add'} Receptionist</div><button class="np-modal__close" onclick="closeStaffModal()">×</button></header>
-    <div class="np-modal__body"><form id="recForm"><div class="np-grid-2">
+    <div class="np-modal__body">${staffPhotoBlockHtml(r, 'RECEPTIONIST')}<form id="recForm"><div class="np-grid-2">
       <div class="np-field"><label class="np-field__label">Full name *</label><input name="name" required class="np-input" value="${r ? esc(r.name) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">Mobile (10 digits) *</label><input name="phone" required maxlength="10" class="np-input" value="${r ? esc(r.phone) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">Email / username *</label><input name="email" type="email" required ${r ? 'readonly' : ''} class="np-input" value="${r ? esc(r.email) : ''}"/></div>
@@ -245,7 +296,7 @@ async function openPharmUserModal(id){
 
   $('#staffModalHost').innerHTML = `<div class="np-modal"><div class="np-modal__panel np-modal__panel--lg">
     <header class="np-modal__head"><div class="np-modal__title">${u ? 'Edit' : 'Add'} Pharmacy User</div><button class="np-modal__close" onclick="closeStaffModal()">×</button></header>
-    <div class="np-modal__body"><form id="puForm"><div class="np-grid-2">
+    <div class="np-modal__body">${staffPhotoBlockHtml(u, 'PHARMACY')}<form id="puForm"><div class="np-grid-2">
       <div class="np-field"><label class="np-field__label">Full name *</label><input name="name" required class="np-input" value="${u ? esc(u.name) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">Mobile (10 digits) *</label><input name="phone" required maxlength="10" class="np-input" value="${u ? esc(u.phone) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">Email / username *</label><input name="email" type="email" required ${u ? 'readonly' : ''} class="np-input" value="${u ? esc(u.email) : ''}"/></div>

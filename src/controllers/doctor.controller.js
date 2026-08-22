@@ -5,6 +5,7 @@ const { clinicSettingsSchema } = require('../utils/validators');
 const fs   = require('fs');
 const path = require('path');
 const prisma = require('../config/prisma');
+const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 const { asyncHandler } = require('../middleware/errorHandler');
 const {
   updateDoctorAvailabilitySchema,
@@ -104,14 +105,8 @@ exports.uploadProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const doctor = await prisma.doctor.findUnique({ where: { id: req.user.id } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  const photoUrl = `${process.env.PUBLIC_STORAGE_URL || '/files'}/profile-images/${req.file.filename}`;
-  if (doctor.photoUrl) {
-    const oldPath = path.resolve(
-      process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'),
-      doctor.photoUrl.replace(`${process.env.PUBLIC_STORAGE_URL || '/files'}/`, '')
-    );
-    fs.promises.unlink(oldPath).catch(() => null);
-  }
+  await deleteOldPhoto(doctor.photoUrl);
+  const photoUrl = photoUrlFor(req.file.filename);
   const updated = await prisma.doctor.update({ where: { id: req.user.id }, data: { photoUrl } });
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
@@ -119,13 +114,7 @@ exports.uploadProfileImage = asyncHandler(async (req, res) => {
 exports.removeProfileImage = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findUnique({ where: { id: req.user.id } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  if (doctor.photoUrl) {
-    const filePath = path.resolve(
-      process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'),
-      doctor.photoUrl.replace(`${process.env.PUBLIC_STORAGE_URL || '/files'}/`, '')
-    );
-    fs.promises.unlink(filePath).catch(() => null);
-  }
+  await deleteOldPhoto(doctor.photoUrl);
   await prisma.doctor.update({ where: { id: req.user.id }, data: { photoUrl: null } });
   res.json({ success: true });
 });

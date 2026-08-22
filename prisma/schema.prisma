@@ -12,6 +12,7 @@ model Admin {
   email              String   @unique
   passwordHash       String
   name               String
+  photoUrl           String?
   mustChangePassword Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -485,6 +486,7 @@ model Receptionist {
   phone              String
   email              String    @unique
   passwordHash       String
+  photoUrl           String?
   status             String    @default("ACTIVE") // ACTIVE | SUSPENDED
   canManageConsultations Boolean @default(true)
   canManagePharmacy  Boolean   @default(false)
@@ -527,6 +529,7 @@ model PharmacyUser {
   phone            String
   email            String    @unique
   passwordHash     String
+  photoUrl         String?
   status           String    @default("ACTIVE")
   medicalCentreId  String?
   mustChangePassword Boolean @default(false)

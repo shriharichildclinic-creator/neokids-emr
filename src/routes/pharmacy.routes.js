@@ -1,10 +1,13 @@
 const router = require('express').Router();
 const ph = require('../controllers/pharmacy.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { uploadProfileImage } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('PHARMACY'));
 
 router.get('/me',            ph.me);
+router.post('/profile-image',   uploadProfileImage.single('photo'), ph.uploadProfileImage);
+router.delete('/profile-image', ph.removeProfileImage);
 router.get('/stats',         ph.stats);
 router.get('/assignments',   ph.assignments);
 router.get('/prescriptions', ph.myPrescriptions);

@@ -1,12 +1,11 @@
 const bcrypt = require('bcryptjs');
-const fs = require('fs');
-const path = require('path');
 const prisma = require('../config/prisma');
 const { createDoctorSchema, updateDoctorByAdminSchema } = require('../utils/validators');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { sendStaffInvite } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
 const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
+const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -84,14 +83,8 @@ exports.uploadDoctorProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
   const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  const photoUrl = `${process.env.PUBLIC_STORAGE_URL || '/files'}/profile-images/${req.file.filename}`;
-  if (doctor.photoUrl) {
-    const oldPath = path.resolve(
-      process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'),
-      doctor.photoUrl.replace(`${process.env.PUBLIC_STORAGE_URL || '/files'}/`, '')
-    );
-    fs.promises.unlink(oldPath).catch(() => null);
-  }
+  await deleteOldPhoto(doctor.photoUrl);
+  const photoUrl = photoUrlFor(req.file.filename);
   const updated = await prisma.doctor.update({ where: { id: doctor.id }, data: { photoUrl } });
   res.json({ success: true, photoUrl: updated.photoUrl });
 });
@@ -99,14 +92,27 @@ exports.uploadDoctorProfileImage = asyncHandler(async (req, res) => {
 exports.removeDoctorProfileImage = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-  if (doctor.photoUrl) {
-    const filePath = path.resolve(
-      process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'),
-      doctor.photoUrl.replace(`${process.env.PUBLIC_STORAGE_URL || '/files'}/`, '')
-    );
-    fs.promises.unlink(filePath).catch(() => null);
-  }
+  await deleteOldPhoto(doctor.photoUrl);
   await prisma.doctor.update({ where: { id: doctor.id }, data: { photoUrl: null } });
+  res.json({ success: true });
+});
+
+// Admin's own profile photo (self-service, same shape as Doctor's).
+exports.uploadOwnProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
+  const me = await prisma.admin.findUnique({ where: { id: req.user.id } });
+  if (!me) return res.status(404).json({ error: 'Not found' });
+  await deleteOldPhoto(me.photoUrl);
+  const photoUrl = photoUrlFor(req.file.filename);
+  const updated = await prisma.admin.update({ where: { id: me.id }, data: { photoUrl } });
+  res.json({ success: true, photoUrl: updated.photoUrl });
+});
+
+exports.removeOwnProfileImage = asyncHandler(async (req, res) => {
+  const me = await prisma.admin.findUnique({ where: { id: req.user.id } });
+  if (!me) return res.status(404).json({ error: 'Not found' });
+  await deleteOldPhoto(me.photoUrl);
+  await prisma.admin.update({ where: { id: me.id }, data: { photoUrl: null } });
   res.json({ success: true });
 });
 

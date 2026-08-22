@@ -14,6 +14,10 @@ router.use(authenticate, requireRole('ADMIN'));
 
 router.get('/analytics', c.analytics);
 
+// Admin's own profile photo (self-service)
+router.post('/profile-image', uploadProfileImage.single('photo'), c.uploadOwnProfileImage);
+router.delete('/profile-image', c.removeOwnProfileImage);
+
 // Data Management — permanent deletion. Kept apart from the regular
 // Doctors/Patients screens on purpose: same admin auth as every other
 // route here, but a separate, clearly-labeled surface for an irreversible
@@ -70,6 +74,8 @@ router.get('/receptionists/:id',    clinic.getReceptionist);
 router.put('/receptionists/:id',    clinic.updateReceptionist);
 router.delete('/receptionists/:id', clinic.deleteReceptionist);
 router.post('/receptionists/:id/invite', clinic.sendReceptionistInvite);
+router.post('/receptionists/:id/profile-image', uploadProfileImage.single('photo'), clinic.uploadReceptionistProfileImage);
+router.delete('/receptionists/:id/profile-image', clinic.removeReceptionistProfileImage);
 
 // v4.0.0 — Pharmacy users (separate role; no receptionist permissions)
 router.post('/pharmacy-users',       clinic.createPharmacyUser);
@@ -78,6 +84,8 @@ router.get('/pharmacy-users/:id',    clinic.getPharmacyUser);
 router.put('/pharmacy-users/:id',    clinic.updatePharmacyUser);
 router.delete('/pharmacy-users/:id', clinic.deletePharmacyUser);
 router.post('/pharmacy-users/:id/invite', clinic.sendPharmacyInvite);
+router.post('/pharmacy-users/:id/profile-image', uploadProfileImage.single('photo'), clinic.uploadPharmacyUserProfileImage);
+router.delete('/pharmacy-users/:id/profile-image', clinic.removePharmacyUserProfileImage);
 
 // v4.0.0 — Front-desk finance & audit
 router.get('/available-offline-doctors', c.availableOfflineDoctors);

@@ -10,6 +10,7 @@ const { revokeActivePasswordTokens } = require('../services/token.service');
 const { sendStaffInvite } = require('../services/invite.service');
 const audit = require('../services/audit.service');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
+const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -261,6 +262,26 @@ exports.deleteReceptionist = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Receptionist deactivated' });
 });
 
+// Admin-set profile photo — optional; a receptionist can still set their
+// own via POST /api/receptionist/profile-image. Mirrors the doctor pattern.
+exports.uploadReceptionistProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
+  const r = await prisma.receptionist.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!r) return res.status(404).json({ error: 'Receptionist not found' });
+  await deleteOldPhoto(r.photoUrl);
+  const photoUrl = photoUrlFor(req.file.filename);
+  const updated = await prisma.receptionist.update({ where: { id: r.id }, data: { photoUrl } });
+  res.json({ success: true, photoUrl: updated.photoUrl });
+});
+
+exports.removeReceptionistProfileImage = asyncHandler(async (req, res) => {
+  const r = await prisma.receptionist.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!r) return res.status(404).json({ error: 'Receptionist not found' });
+  await deleteOldPhoto(r.photoUrl);
+  await prisma.receptionist.update({ where: { id: r.id }, data: { photoUrl: null } });
+  res.json({ success: true });
+});
+
 // ═══════════════ PHARMACY USERS ═══════════════
 exports.createPharmacyUser = asyncHandler(async (req, res) => {
   const parsed = createPharmacyUserSchema.safeParse(req.body);
@@ -402,6 +423,26 @@ exports.deletePharmacyUser = asyncHandler(async (req, res) => {
   await revokeActivePasswordTokens('PHARMACY', req.params.id, ['INVITE', 'RESET']);
   await audit.log({ actor: adminActor(req), action: 'PHARMACY_USER_DEACTIVATED', entityType: 'PHARMACY_USER', entityId: updated.id, summary: `Deactivated pharmacy user ${updated.name}` });
   res.json({ success: true, message: 'Pharmacy user deactivated' });
+});
+
+// Admin-set profile photo — optional; a pharmacy user can still set their
+// own via POST /api/pharmacy/profile-image. Mirrors the doctor pattern.
+exports.uploadPharmacyUserProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
+  const u = await prisma.pharmacyUser.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!u) return res.status(404).json({ error: 'Pharmacy user not found' });
+  await deleteOldPhoto(u.photoUrl);
+  const photoUrl = photoUrlFor(req.file.filename);
+  const updated = await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl } });
+  res.json({ success: true, photoUrl: updated.photoUrl });
+});
+
+exports.removePharmacyUserProfileImage = asyncHandler(async (req, res) => {
+  const u = await prisma.pharmacyUser.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!u) return res.status(404).json({ error: 'Pharmacy user not found' });
+  await deleteOldPhoto(u.photoUrl);
+  await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl: null } });
+  res.json({ success: true });
 });
 
 // ═══════════════ PHARMACY BILLS (admin read-only oversight) ═══════════════

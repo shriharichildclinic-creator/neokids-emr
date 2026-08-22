@@ -201,7 +201,7 @@ exports.login = asyncHandler(async (req, res) => {
 exports.me = asyncHandler(async (req, res) => {
   if (req.user.role === 'ADMIN') {
     const admin = await prisma.admin.findUnique({ where: { id: req.user.id } });
-    return res.json({ role: 'ADMIN', user: admin && { id: admin.id, name: admin.name, email: admin.email, mustChangePassword: admin.mustChangePassword } });
+    return res.json({ role: 'ADMIN', user: admin && { id: admin.id, name: admin.name, email: admin.email, photoUrl: admin.photoUrl, mustChangePassword: admin.mustChangePassword } });
   }
 
   if (req.user.role === 'RECEPTIONIST') {

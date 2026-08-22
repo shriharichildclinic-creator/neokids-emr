@@ -2,6 +2,19 @@ const { z } = require('zod');
 const { getTodayDateString } = require('./date');
 
 const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number (10 digits, starts 6-9, no +91)');
+
+// Strips digits down to a plain 10-digit Indian mobile number. Only removes
+// a leading "91" when the caller actually included a country code (12
+// digits total, e.g. a pasted "+91 9876543210") — a bare
+// replace(/^91/,'') would also mangle any valid 10-digit number that
+// simply starts with 91, e.g. "9177211867" -> "77211867" (8 digits, then
+// fails validation). This bit ourselves twice (doctor + receptionist/
+// pharmacy schemas both had the naive version independently).
+function stripPhoneCountryCode(v) {
+  if (typeof v !== 'string') return v;
+  const d = v.replace(/\D/g, '');
+  return d.length === 12 && d.startsWith('91') ? d.slice(2) : d;
+}
 const strongPassword = z.string().min(8).regex(/^(?=.*[A-Za-z])(?=.*\d).+$/, 'Password must contain letters and numbers');
 
 const timeSchema = z.string().regex(
@@ -78,10 +91,7 @@ const doctorShape = {
     v => (typeof v === 'string' && v.trim() === '' ? undefined : v),
     strongPassword.optional()
   ),
-  phone: z.preprocess(
-    v => (typeof v === 'string' ? v.replace(/\D/g, '').replace(/^91/, '') : v),
-    phoneSchema
-  ),
+  phone: z.preprocess(stripPhoneCountryCode, phoneSchema),
   specialization: safeOptStr('specialization'),
   qualification: safeOptStr('qualification'),
   experience: z.preprocess(
@@ -429,10 +439,7 @@ const medicalCertificateUpdateSchema = medicalCertificateBaseSchema.partial();
 // v4.0.0 — Receptionist, Medical Centre & Pharmacy module
 // ─────────────────────────────────────────────────────────────────────
 const staffStatus = z.enum(['ACTIVE', 'SUSPENDED']);
-const staffPhone = z.preprocess(
-  v => (typeof v === 'string' ? v.replace(/\D/g, '').replace(/^91/, '') : v),
-  phoneSchema
-);
+const staffPhone = z.preprocess(stripPhoneCountryCode, phoneSchema);
 
 const createReceptionistSchema = z.object({
   name: z.string().trim().min(2).max(120).pipe(safeText('name')),

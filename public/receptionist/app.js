@@ -8,6 +8,69 @@ function setHtml(id, html){ const el = document.getElementById(id); if (el) el.i
 function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
 let __me = null, __doctors = [], __assignments = [], __appts = [], __bills = [], __inv = [];
 
+function setTopBarAvatar(photoUrl){
+  ['myAvatar', 'myIdAvatar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const initials = el.querySelector('span');
+    let img = el.querySelector('img');
+    if (photoUrl){
+      if (!img){ img = document.createElement('img'); el.insertBefore(img, initials); }
+      img.src = photoUrl; img.alt = '';
+      if (initials) initials.style.display = 'none';
+    } else {
+      if (img) img.remove();
+      if (initials) initials.style.display = '';
+    }
+  });
+}
+
+function setOwnPhotoPreview(url){
+  const img = $('#ownPhotoPreview');
+  const placeholder = $('#ownPhotoPlaceholder');
+  const removeBtn = $('#ownPhotoRemoveBtn');
+  if (!img || !placeholder || !removeBtn) return;
+  if (url){
+    img.src = url; img.classList.remove('hidden');
+    img.style.cursor = 'zoom-in';
+    img.onclick = () => NPLightbox.open(url, 'Profile photo');
+    placeholder.classList.add('hidden');
+    removeBtn.classList.remove('hidden');
+  } else {
+    img.src = ''; img.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    removeBtn.classList.add('hidden');
+  }
+}
+
+async function uploadOwnPhoto(file){
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  try {
+    const r = await fetch(API + '/receptionist/profile-image', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN },
+      body: fd
+    });
+    let data = null; try { data = await r.json(); } catch(_) {}
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    setOwnPhotoPreview(data.photoUrl);
+    setTopBarAvatar(data.photoUrl);
+    toast('Photo updated.');
+  } catch (err) { toast(err.message, 'error'); }
+  finally { const input = $('#ownPhotoInput'); if (input) input.value = ''; }
+}
+
+async function removeOwnPhoto(){
+  try {
+    await api('/receptionist/profile-image', { method: 'DELETE' });
+    setOwnPhotoPreview(null);
+    setTopBarAvatar(null);
+    toast('Photo removed.');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(TOKEN && { Authorization: 'Bearer ' + TOKEN }), ...(opts.headers || {}) };
   const r = await fetch(API + path, { ...opts, headers });
@@ -197,6 +260,8 @@ async function showDashboard(){
     const meRes = await api('/auth/me'); __me = meRes.user || meRes;
     const __initials = __me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase();
     $('#userName').textContent = __me.name; $('#userInitials').textContent = __initials;
+    setTopBarAvatar(__me.photoUrl || null);
+    setOwnPhotoPreview(__me.photoUrl || null);
     const __first = (__me.name || '').split(/\s+/)[0] || __me.name;
     if ($('#dashWelcomeName')) $('#dashWelcomeName').textContent = 'Welcome back, ' + __first + ' 👋';
     startDashClock();

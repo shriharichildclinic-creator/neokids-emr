@@ -1627,6 +1627,76 @@ $('#passwordForm').addEventListener('submit', async (e) => {
   } catch (err) { alert(err.message); }
 });
 
+function setTopBarAvatar(photoUrl){
+  ['adminAvatar', 'adminIdAvatar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const initials = el.querySelector('span');
+    let img = el.querySelector('img');
+    if (photoUrl){
+      if (!img){ img = document.createElement('img'); el.insertBefore(img, initials); }
+      img.src = photoUrl; img.alt = '';
+      if (initials) initials.style.display = 'none';
+    } else {
+      if (img) img.remove();
+      if (initials) initials.style.display = '';
+    }
+  });
+}
+
+function setOwnPhotoPreview(url){
+  const img = $('#ownPhotoPreview');
+  const placeholder = $('#ownPhotoPlaceholder');
+  const removeBtn = $('#ownPhotoRemoveBtn');
+  if (!img || !placeholder || !removeBtn) return;
+  if (url){
+    img.src = url; img.classList.remove('hidden');
+    img.style.cursor = 'zoom-in';
+    img.onclick = () => NPLightbox.open(url, 'Profile photo');
+    placeholder.classList.add('hidden');
+    removeBtn.classList.remove('hidden');
+  } else {
+    img.src = ''; img.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    removeBtn.classList.add('hidden');
+  }
+}
+
+async function uploadOwnPhoto(file){
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  try {
+    const r = await fetch(API + '/admin/profile-image', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN },
+      body: fd
+    });
+    let data = null; try { data = await r.json(); } catch(_) {}
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    setOwnPhotoPreview(data.photoUrl);
+    setTopBarAvatar(data.photoUrl);
+    if (typeof NPToast !== 'undefined') NPToast.success('Photo updated.');
+  } catch (err) {
+    if (typeof NPToast !== 'undefined') NPToast.error(err.message);
+    else alert(err.message);
+  } finally {
+    const input = $('#ownPhotoInput'); if (input) input.value = '';
+  }
+}
+
+async function removeOwnPhoto(){
+  try {
+    await api('/admin/profile-image', { method: 'DELETE' });
+    setOwnPhotoPreview(null);
+    setTopBarAvatar(null);
+    if (typeof NPToast !== 'undefined') NPToast.success('Photo removed.');
+  } catch (err) {
+    if (typeof NPToast !== 'undefined') NPToast.error(err.message);
+    else alert(err.message);
+  }
+}
+
 async function showDashboard() {
   $('#loginScreen').classList.add('hidden');
   $('#dashboard').classList.remove('hidden');
@@ -1645,6 +1715,8 @@ async function showDashboard() {
       if ($('#adminIdEmail')) $('#adminIdEmail').textContent = u.email || '';
       const nameEl = $('#dashWelcomeName');
       if (nameEl) nameEl.textContent = 'Welcome back, ' + u.name + ' 👋';
+      setTopBarAvatar(u.photoUrl || null);
+      setOwnPhotoPreview(u.photoUrl || null);
     }
     startDashClock();
   } catch(e) {

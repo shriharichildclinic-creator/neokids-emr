@@ -8,6 +8,74 @@ function setHtml(id, html){ const el = document.getElementById(id); if (el) el.i
 function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
 let __me=null, __items=[], __doctors=[], __bills=[];
 
+function setTopBarAvatar(photoUrl){
+  ['myAvatar', 'myIdAvatar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const initials = el.querySelector('span');
+    let img = el.querySelector('img');
+    if (photoUrl){
+      if (!img){ img = document.createElement('img'); el.insertBefore(img, initials); }
+      img.src = photoUrl; img.alt = '';
+      if (initials) initials.style.display = 'none';
+    } else {
+      if (img) img.remove();
+      if (initials) initials.style.display = '';
+    }
+  });
+}
+
+function setOwnPhotoPreview(url){
+  const img = $('#ownPhotoPreview');
+  const placeholder = $('#ownPhotoPlaceholder');
+  const removeBtn = $('#ownPhotoRemoveBtn');
+  if (!img || !placeholder || !removeBtn) return;
+  if (url){
+    img.src = url; img.classList.remove('hidden');
+    img.style.cursor = 'zoom-in';
+    img.onclick = () => NPLightbox.open(url, 'Profile photo');
+    placeholder.classList.add('hidden');
+    removeBtn.classList.remove('hidden');
+  } else {
+    img.src = ''; img.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    removeBtn.classList.add('hidden');
+  }
+}
+
+async function uploadOwnPhoto(file){
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  try {
+    const r = await fetch(API + '/pharmacy/profile-image', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN },
+      body: fd
+    });
+    let data = null; try { data = await r.json(); } catch(_) {}
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    setOwnPhotoPreview(data.photoUrl);
+    setTopBarAvatar(data.photoUrl);
+    if (typeof NPToast !== 'undefined') NPToast.success('Photo updated.');
+  } catch (err) {
+    if (typeof NPToast !== 'undefined') NPToast.error(err.message); else alert(err.message);
+  } finally {
+    const input = $('#ownPhotoInput'); if (input) input.value = '';
+  }
+}
+
+async function removeOwnPhoto(){
+  try {
+    await api('/pharmacy/profile-image', { method: 'DELETE' });
+    setOwnPhotoPreview(null);
+    setTopBarAvatar(null);
+    if (typeof NPToast !== 'undefined') NPToast.success('Photo removed.');
+  } catch (err) {
+    if (typeof NPToast !== 'undefined') NPToast.error(err.message); else alert(err.message);
+  }
+}
+
 async function api(path, opts={}){ const headers={'Content-Type':'application/json',...(TOKEN&&{Authorization:'Bearer '+TOKEN}),...(opts.headers||{})}; const r=await fetch(API+path,{...opts,headers}); let d=null; try{d=await r.json();}catch(_){}
   if(r.status===401&&TOKEN){localStorage.removeItem('np_pharmacy_token');TOKEN=null;showLogin();throw new Error('Session expired');}
   if(!r.ok)throw new Error((d&&(d.error||d.message))||('HTTP '+r.status)); return d; }
@@ -85,7 +153,7 @@ function setupProfileMenu(){
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault(); try{ const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#email').value,password:$('#password').value})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||'Login failed'); if(d.role!=='PHARMACY')throw new Error('Not a pharmacy account'); TOKEN=d.token; localStorage.setItem('np_pharmacy_token',TOKEN); showDashboard(); }catch(err){ $('#loginError').textContent=err.message; $('#loginError').classList.remove('hidden'); }});
 function logout(){ localStorage.removeItem('np_pharmacy_token'); TOKEN=null; showLogin(); }
 function showLogin(){ $('#dashboard').classList.add('hidden'); $('#loginScreen').classList.remove('hidden'); }
-async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); setupProfileMenu(); try{ const me=await api('/auth/me'); __me=me.user||me; const __initials=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); $('#userName').textContent=__me.name; $('#userInitials').textContent=__initials; /* mirror into dropdown "logged in as" block -- stays visible on mobile once header hides .np-profile__meta */ if($('#userIdName'))$('#userIdName').textContent=__me.name; if($('#userIdInitials'))$('#userIdInitials').textContent=__initials; if($('#userIdEmail'))$('#userIdEmail').textContent=__me.email||''; }catch(e){} const __r=viewFromHash(); setView(__r||'dashView', __r?{skipHash:true}:undefined); }
+async function showDashboard(){ $('#loginScreen').classList.add('hidden'); $('#dashboard').classList.remove('hidden'); setupSidebar(); setupProfileMenu(); try{ const me=await api('/auth/me'); __me=me.user||me; const __initials=__me.name.split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(); $('#userName').textContent=__me.name; $('#userInitials').textContent=__initials; /* mirror into dropdown "logged in as" block -- stays visible on mobile once header hides .np-profile__meta */ if($('#userIdName'))$('#userIdName').textContent=__me.name; if($('#userIdInitials'))$('#userIdInitials').textContent=__initials; if($('#userIdEmail'))$('#userIdEmail').textContent=__me.email||''; setTopBarAvatar(__me.photoUrl||null); setOwnPhotoPreview(__me.photoUrl||null); }catch(e){} const __r=viewFromHash(); setView(__r||'dashView', __r?{skipHash:true}:undefined); }
 
 function trendChip(delta, label, isPercent){
   if (!delta) return `<span class="np-trend np-trend--flat">No change ${label}</span>`;

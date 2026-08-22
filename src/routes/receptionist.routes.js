@@ -3,10 +3,13 @@ const c      = require('../controllers/receptionist.controller');
 const cert   = require('../controllers/certificate.controller');
 const ph     = require('../controllers/pharmacy.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { uploadProfileImage } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('RECEPTIONIST'));
 
 router.get('/me',           c.me);
+router.post('/profile-image',   uploadProfileImage.single('photo'), c.uploadProfileImage);
+router.delete('/profile-image', c.removeProfileImage);
 router.get('/stats',        c.stats);
 router.get('/assignments',  c.assignments);
 router.get('/slots',        c.slots);

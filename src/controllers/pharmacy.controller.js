@@ -9,6 +9,7 @@ const audit = require('../services/audit.service');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
 const { parseDateOnlyOrNull, getTodayDateString } = require('../utils/date');
 const { findOrCreatePatient } = require('../services/booking.service');
+const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 
 function roleOf(req) {
   return req.user.role === 'PHARMACY' ? 'PHARMACY' : 'RECEPTIONIST';
@@ -138,6 +139,24 @@ exports.me = asyncHandler(async (req, res) => {
   if (!u) return res.status(404).json({ error: 'Not found' });
   const { passwordHash, ...safe } = u;
   res.json(safe);
+});
+
+exports.uploadProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Profile image file is required' });
+  const u = await staffAccess.getPharmacyUser(req.user.id);
+  if (!u) return res.status(404).json({ error: 'Not found' });
+  await deleteOldPhoto(u.photoUrl);
+  const photoUrl = photoUrlFor(req.file.filename);
+  const updated = await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl } });
+  res.json({ success: true, photoUrl: updated.photoUrl });
+});
+
+exports.removeProfileImage = asyncHandler(async (req, res) => {
+  const u = await staffAccess.getPharmacyUser(req.user.id);
+  if (!u) return res.status(404).json({ error: 'Not found' });
+  await deleteOldPhoto(u.photoUrl);
+  await prisma.pharmacyUser.update({ where: { id: u.id }, data: { photoUrl: null } });
+  res.json({ success: true });
 });
 
 exports.assignments = asyncHandler(async (req, res) => {
