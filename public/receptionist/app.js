@@ -196,12 +196,12 @@ function openInvoiceSendModal(invoiceId, phone, email){
   });
 }
 
-const VIEWS = { dashView:['Dashboard','Today at your clinic'], apptsView:['Appointments','Bookings for your doctors'], patientsView:['Patients','Search & register'], invoicesView:['Consultation Invoices','Reception billing'], billingView:['Billing','Consultation · medicines · services · other'], certsView:['Certificates','Issued in the doctor name'], rxView:['Prescriptions','Offline prescriptions'], pharmBillsView:['Pharmacy Bills','Medicine sales'], settingsView:['Settings','Account'] };
+const VIEWS = { dashView:['Dashboard','Today at your clinic'], onboardingView:['Getting Started','A quick tour of the reception portal'], apptsView:['Appointments','Bookings for your doctors'], patientsView:['Patients','Search & register'], invoicesView:['Consultation Invoices','Reception billing'], billingView:['Billing','Consultation · medicines · services · other'], certsView:['Certificates','Issued in the doctor name'], rxView:['Prescriptions','Offline prescriptions'], pharmBillsView:['Pharmacy Bills','Medicine sales'], settingsView:['Settings','Account'] };
 function setView(v, opts){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
   // Keep the URL hash in sync so the view is deep-linkable and survives a
   // refresh — the same strategy the admin panel uses (#dash, #appts, …).
   try{ if(!(opts&&opts.skipHash)){ const slug=v.replace(/View$/,''); if(location.hash!=='#'+slug) history.replaceState(null,'','#'+slug); } }catch(_){}
-  if(v==='dashView')loadDashboard(); if(v==='apptsView')loadAppointments(); if(v==='patientsView')loadPatients(); if(v==='invoicesView')loadInvoices(); if(v==='billingView')loadBilling(); if(v==='certsView')loadCerts(); if(v==='rxView')loadRx(); if(v==='pharmBillsView')loadPharmBills(); }
+  if(v==='dashView')loadDashboard(); if(v==='onboardingView'&&typeof NPOnboarding!=='undefined')NPOnboarding.mount($('#onboardingMount'),'RECEPTIONIST',__me); if(v==='apptsView')loadAppointments(); if(v==='patientsView')loadPatients(); if(v==='invoicesView')loadInvoices(); if(v==='billingView')loadBilling(); if(v==='certsView')loadCerts(); if(v==='rxView')loadRx(); if(v==='pharmBillsView')loadPharmBills(); }
 function viewFromHash(){ const h=(location.hash||'').replace(/^#/,'').trim(); if(!h) return null; const v=h.endsWith('View')?h:h+'View'; return VIEWS[v]?v:null; }
 window.addEventListener('hashchange', ()=>{ const v=viewFromHash(); if(v) setView(v,{skipHash:true}); });
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));

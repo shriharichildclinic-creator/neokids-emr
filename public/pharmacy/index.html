@@ -45,6 +45,10 @@
       <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
       <span>Dashboard</span>
     </button>
+    <button class="np-nav-item" data-view="onboardingView" type="button">
+      <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Getting Started</span>
+    </button>
     <button class="np-nav-item" data-view="rxView" type="button">
       <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
       <span>Prescriptions</span>
@@ -120,6 +124,7 @@
   </div>
   <div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Recent bills</div><div class="np-panel__subtitle">Latest medicine sales</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBillModal()">+ New bill</button></div><div id="recentBills" class="np-panel__body np-scroll-list" style="padding:0;"></div></div>
 </section>
+    <section id="onboardingView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Getting Started</div><div class="np-panel__subtitle">A quick tour of the pharmacy portal</div></div></div><div class="np-panel__body" id="onboardingMount"></div></div></section>
     <section id="rxView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Prescriptions</div><div class="np-panel__subtitle">Offline prescriptions issued by your assigned doctors or entered by reception</div></div><select id="rxFilter" class="np-select" onchange="loadRx()"><option value="">All</option><option value="no">Not dispensed</option><option value="yes">Dispensed</option></select></div><div class="np-panel__body np-scroll-list" id="rxList"></div></div></section>
     <section id="invView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Inventory</div><div class="np-panel__subtitle">Medicines, stock, batches & expiry</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openItemModal()">+ Add medicine</button></div><div class="np-panel__body"><div class="np-search" style="max-width:380px;margin-bottom:1rem;"><input id="invSearch" type="search" class="np-input" placeholder="Search medicine"/></div><div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Medicine</th><th>Batch</th><th style="text-align:right">Price</th><th style="text-align:right">Stock</th><th>Expiry</th><th style="text-align:right">Actions</th></tr></thead><tbody id="invTbody"></tbody></table></div></div></div></section>
     <section id="billsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Pharmacy Bills</div><div class="np-panel__subtitle">Print · WhatsApp · Email</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBillModal()">+ New bill</button></div><div class="np-panel__body"><div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Bill #</th><th>Type</th><th>Customer</th><th style="text-align:right">Items</th><th style="text-align:right">Total</th><th>Status</th><th>Date</th><th style="text-align:right">Actions</th></tr></thead><tbody id="billsTbody"></tbody></table></div></div></div></section>
@@ -131,6 +136,7 @@
 </div>
 <div id="modalHost"></div>
 <script src="/assets/np-ui.js"></script>
+<script src="/assets/onboarding.js"></script>
 <script src="/assets/billing.js"></script>
 <script src="app.js"></script>
 </body>

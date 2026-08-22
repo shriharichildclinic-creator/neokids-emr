@@ -110,6 +110,10 @@
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg>
           Dashboard
         </button>
+        <button class="np-nav-item tab-btn" data-tab="onboardingTab" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Getting Started
+        </button>
         <button class="np-nav-item tab-btn" data-tab="waitingTab" type="button">
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           Waiting Room
@@ -292,6 +296,15 @@
                 </ul>
               </div>
             </div>
+          </div>
+        </section>
+
+<section id="onboardingTab" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Getting Started</div><div class="np-panel__subtitle">A quick tour of the doctor portal</div></div>
+            </div>
+            <div class="np-panel__body" id="onboardingMount"></div>
           </div>
         </section>
 
@@ -1449,6 +1462,7 @@
 </div>
 
 <script src="/assets/np-ui.js"></script>
+<script src="/assets/onboarding.js"></script>
 <script src="app.js?v=3.4.13"></script>
 <script src="earnings.js"></script>
 

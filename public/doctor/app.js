@@ -410,6 +410,7 @@ window.closeMyProfile = closeMyProfile;
 
 const TAB_META = {
   dashboardTab:  { title:'Dashboard',           sub:"Welcome back — here's what's happening today." },
+  onboardingTab: { title:'Getting Started',     sub:'A quick tour of the doctor portal' },
   waitingTab:    { title:'Waiting Room',        sub:'Patients currently waiting to be seen' },
   allTab:        { title:'Appointments',        sub:'Search and manage all your appointments' },
   consultTab:    { title:'Consultation',        sub:'Active patient consultation workspace' },
@@ -431,6 +432,7 @@ function setActiveTab(tabId){
   else if (tabId === 'allTab') loadAll();
   else if (tabId === 'settingsTab') loadSettings();
   else if (tabId === 'dashboardTab'){ loadStats(); loadDashSnapshot(); loadDashWelcome(); }
+  else if (tabId === 'onboardingTab' && typeof NPOnboarding !== 'undefined') NPOnboarding.mount($('#onboardingMount'), 'DOCTOR', doctorCache);
   else if (tabId === 'rxArchiveTab') loadRxArchive();
   else if (tabId === 'earningsTab' && window.Earnings) Earnings.load();
   else if (tabId === 'certificatesTab') loadCertificates();

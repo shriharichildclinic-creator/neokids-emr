@@ -46,6 +46,10 @@
       <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
       <span>Dashboard</span>
     </button>
+    <button class="np-nav-item" data-view="onboardingView" type="button">
+      <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Getting Started</span>
+    </button>
     <button class="np-nav-item" data-view="apptsView" type="button">
       <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       <span>Appointments</span>
@@ -133,6 +137,7 @@
   </div>
 </div>
 <div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Today's queue</div><div class="np-panel__subtitle">Mark arrivals and manage the day</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBookModal()">+ New appointment</button></div><div id="todayList" class="np-panel__body np-scroll-list" style="padding:0;"></div></div></section>
+    <section id="onboardingView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Getting Started</div><div class="np-panel__subtitle">A quick tour of the reception portal</div></div></div><div class="np-panel__body" id="onboardingMount"></div></div></section>
     <section id="apptsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Appointments</div><div class="np-panel__subtitle">Your assigned doctors & clinics</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBookModal()">+ Book / Walk-in</button></div><div class="np-panel__body"><form id="apptFilters" class="np-filterbar" novalidate><input id="fDate" type="date" class="np-select"/><select id="fDoctor" class="np-select"><option value="">All doctors</option></select><select id="fStatus" class="np-select"><option value="">All statuses</option><option>PENDING</option><option>CONFIRMED</option><option>COMPLETED</option><option>CANCELLED</option></select><input id="fQ" type="search" class="np-input" placeholder="Search patient/phone" style="max-width:220px"/><button class="np-btn np-btn--primary np-btn--sm" type="submit">Apply</button></form><div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Date/Time</th><th>Patient</th><th>Doctor</th><th>Source</th><th>Status</th><th>Payment</th><th style="text-align:right">Actions</th></tr></thead><tbody id="apptsTbody"></tbody></table></div></div></div></section>
     <section id="patientsView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Patients</div><div class="np-panel__subtitle">Search or register patients for your clinic</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openPatientModal()">+ Register patient</button></div><div class="np-panel__body"><div class="np-search" style="max-width:420px;margin-bottom:1rem;"><input id="patientSearch" type="search" class="np-input" placeholder="Search name or phone"/></div><div id="patientsList" class="np-scroll-list"></div></div></div></section>
     <section id="invoicesView" class="tab-pane hidden"><div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Consultation Invoices</div><div class="np-panel__subtitle">Generated at reception · PDF / print / WhatsApp / email</div></div><button class="np-btn np-btn--ghost np-btn--sm" onclick="loadInvoices()">Refresh</button></div><div class="np-panel__body"><div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Invoice #</th><th>Patient</th><th>Doctor</th><th>Clinic</th><th style="text-align:right">Amount</th><th>Date</th><th style="text-align:right">Actions</th></tr></thead><tbody id="invTbody"></tbody></table></div></div></div></section>
@@ -148,6 +153,7 @@
 </div>
 <div id="modalHost"></div>
 <script src="/assets/np-ui.js"></script>
+<script src="/assets/onboarding.js"></script>
 <script src="/assets/billing.js"></script>
 <script src="app.js"></script>
 </body>

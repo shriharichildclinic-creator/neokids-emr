@@ -117,12 +117,12 @@ async function forgotPassword(){
 function fmtDate(d){ if(!d)return''; return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
 function inr(n){ return '₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2}); }
 
-const VIEWS={dashView:['Dashboard','Store overview'],rxView:['Prescriptions','Offline prescriptions'],invView:['Inventory','Medicines & stock'],billsView:['Bills','Sales & invoices'],settingsView:['Settings','Account']};
+const VIEWS={dashView:['Dashboard','Store overview'],onboardingView:['Getting Started','A quick tour of the pharmacy portal'],rxView:['Prescriptions','Offline prescriptions'],invView:['Inventory','Medicines & stock'],billsView:['Bills','Sales & invoices'],settingsView:['Settings','Account']};
 function setView(v, opts){ $$('.tab-pane').forEach(x=>x.classList.add('hidden')); const el=document.getElementById(v); if(el)el.classList.remove('hidden'); $$('.np-nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===v)); const m=VIEWS[v]; if(m){$('#pageTitle').textContent=m[0];$('#pageSubtitle').textContent=m[1];}
   // Keep the URL hash in sync so views are deep-linkable and survive refresh,
   // matching the admin panel's routing strategy.
   try{ if(!(opts&&opts.skipHash)){ const slug=v.replace(/View$/,''); if(location.hash!=='#'+slug) history.replaceState(null,'','#'+slug); } }catch(_){}
-  if(v==='dashView')loadDash(); if(v==='rxView')loadRx(); if(v==='invView')loadInv(); if(v==='billsView')loadBills(); }
+  if(v==='dashView')loadDash(); if(v==='onboardingView'&&typeof NPOnboarding!=='undefined')NPOnboarding.mount($('#onboardingMount'),'PHARMACY',__me); if(v==='rxView')loadRx(); if(v==='invView')loadInv(); if(v==='billsView')loadBills(); }
 function viewFromHash(){ const h=(location.hash||'').replace(/^#/,'').trim(); if(!h) return null; const v=h.endsWith('View')?h:h+'View'; return VIEWS[v]?v:null; }
 window.addEventListener('hashchange', ()=>{ const v=viewFromHash(); if(v) setView(v,{skipHash:true}); });
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
