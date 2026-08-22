@@ -370,6 +370,71 @@ h1,h2,h3{
   cursor:pointer;
 }
 
+/* ============================================================
+   Dashboard: rich SVG daily trend chart — gridlines, axis labels,
+   peak highlight, average reference line, hover/tap tooltips.
+   Originally Admin-only (defined again in admin/styles.css, loaded
+   by Admin/Receptionist/Pharmacy); copied here too so Doctor (which
+   does not load admin/styles.css) also has it for NPDailyChart.
+   ============================================================ */
+.np-chart{ position:relative; width:100%; }
+.np-chart__svg{ display:block; width:100%; height:auto; }
+.np-chart__grid{ stroke: var(--np-border); stroke-width:1; }
+.np-chart__axis{ stroke: var(--np-border); stroke-width:1; }
+.np-chart__avgline{ stroke: var(--np-coral); stroke-width:1; stroke-dasharray:4 3; opacity:.55; }
+.np-chart__avglabel{ fill: var(--np-coral); font-size:10px; font-weight:600; opacity:.85; }
+.np-chart__ylabel{ fill: var(--np-muted); font-size:10px; }
+.np-chart__xlabel{ fill: var(--np-muted); font-size:10px; }
+.np-chart__xlabel--today{ fill: var(--np-primary-600); font-weight:700; }
+.np-chart__bar{ fill: var(--np-primary); transition: opacity .15s ease; }
+.np-chart__bar--muted{ fill: var(--np-muted); opacity:.3; transition: opacity .15s ease; }
+.np-chart__bar--peak{ fill: var(--np-coral); transition: opacity .15s ease; }
+.np-chart__peaklabel{ fill: var(--np-coral); font-size:11px; font-weight:700; }
+.np-chart__hit{ fill: transparent; cursor:pointer; }
+.np-chart__col.is-active .np-chart__bar,
+.np-chart__col.is-active .np-chart__bar--muted,
+.np-chart__col.is-active .np-chart__bar--peak{ opacity:.75; }
+.np-chart__col:focus{ outline:none; }
+.np-chart__col:focus-visible .np-chart__hit{
+  outline:2px solid var(--np-primary); outline-offset:-2px; border-radius:4px;
+}
+.np-chart__col--today .np-chart__bar,
+.np-chart__col--today .np-chart__bar--muted{
+  stroke: var(--np-primary-600); stroke-width:1.5;
+}
+.np-chart__tooltip{
+  position:absolute; z-index:5;
+  transform: translate(-50%, calc(-100% - 12px));
+  background: var(--nk-card);
+  border:1px solid var(--np-border);
+  border-radius:10px;
+  box-shadow: var(--np-card-shadow-hover);
+  padding:.5rem .65rem;
+  min-width:150px;
+  pointer-events:none;
+  opacity:0; visibility:hidden;
+  transition: opacity .12s ease;
+}
+.np-chart__tooltip.is-visible{ opacity:1; visibility:visible; }
+.np-chart__tooltip.is-pinned{ pointer-events:auto; }
+.np-chart__tooltip-date{ font-size:.72rem; font-weight:700; color:var(--np-ink); margin-bottom:.15rem; }
+.np-chart__tooltip-main{ font-size:.82rem; font-weight:700; color:var(--np-primary-600); }
+.np-chart__tooltip-sub{ font-size:.72rem; color:var(--np-muted); margin-top:.1rem; }
+.np-chart__tooltip-link{
+  display:block; width:100%; margin-top:.4rem; padding-top:.4rem; border:0; border-top:1px dashed var(--np-border);
+  background:transparent; color:var(--np-primary-600); font-size:.72rem; font-weight:700; text-align:left; cursor:pointer;
+}
+.np-chart__tooltip-link:hover{ text-decoration:underline; }
+.np-chart__legend{
+  display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .9rem;
+  margin-top:.6rem; padding-top:.6rem; border-top:1px solid var(--np-border);
+}
+.np-chart__legend-item{ display:inline-flex; align-items:center; gap:.35rem; font-size:.72rem; color:var(--np-muted); }
+.np-chart__legend-swatch{ width:8px; height:8px; border-radius:2px; background: var(--np-primary); display:inline-block; }
+.np-chart__legend-swatch--peak{ background: var(--np-coral); }
+.np-chart__legend-note{ margin-left:auto; color:var(--np-text); font-weight:600; }
+@media (max-width:460px){ .np-chart__legend-note{ margin-left:0; width:100%; } }
+
 @media (max-width:720px){
   .np-analytics{ grid-template-columns:1fr; gap:.85rem; }
   .np-analytics-card{ padding:1rem 1.1rem; }

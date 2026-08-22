@@ -526,6 +526,22 @@ async function loadStats(){
     }).join(''));
     if (window.NPSparkTooltip) NPSparkTooltip.bind($('#statSparkline'));
 
+    if (window.NPDailyChart) {
+      NPDailyChart.render('dailyChart', daily, {
+        getTotal: d => Number(d.appointments) || 0,
+        unitLabel: n => n === 1 ? 'appointment' : 'appointments',
+        tooltipMain: (d, total) => `${total} appointment${total === 1 ? '' : 's'}`,
+        tooltipSub: (d, total) => {
+          const completed = Number(d.completed) || 0, revenue = Number(d.revenue) || 0;
+          return `${completed} completed${revenue > 0 ? ' · ' + fmtCurrencyFull(revenue) + ' revenue' : ''}`;
+        },
+        legendLabel: 'Appointments',
+        linkLabel: 'View appointments →',
+        onDayClick: goToAppointmentsForDate,
+        emptyText: 'No appointment data yet.'
+      });
+    }
+
     const pendNote = (p) => Number(p) > 0 ? ` · ${fmtCurrencyFull(p)} pending` : '';
     setHtml('statSplit', `
       <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${Number(on.consults || 0)} consults · ${fmtCurrencyFull(on.collected)}${pendNote(on.pending)}</div>

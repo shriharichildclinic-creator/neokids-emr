@@ -92,7 +92,7 @@ async function loadCentres(){
         <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc([c.phone, c.email].filter(Boolean).join(' · ') || '—')}</td>
         <td data-label="Staff / Appts" class="np-mut" style="font-size:.82rem">${(c._count && c._count.receptionistAssignments) || 0} reception · ${(c._count && c._count.appointments) || 0} appts</td>
         <td data-label="Status">${c.isActive ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Inactive</span>'}</td>
-        <td data-label="Actions" class="np-table__nowrap" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : ''}</td>
+        <td data-label="Actions" style="text-align:right"><div style="display:flex;flex-wrap:wrap;gap:.4rem;justify-content:flex-end"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : ''}</div></td>
       </tr>`).join('') + '</tbody></table></div>'
       : '<div class="np-empty"><div class="np-empty__title">No medical centres yet</div><div class="np-empty__sub">Create your first clinic to assign receptionists.</div></div>';
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }

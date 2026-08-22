@@ -48,6 +48,9 @@ const BRAND = {
     card:      '#FFFFFF',
     page:      '#F1F7F7',
     border:    '#D9E6E6',
+    // Light pink header wash — accentPk itself is too saturated to sit
+    // behind logo/body text, so this is a pale tint of the same hue.
+    pinkBg:    '#FDEEF2',
     warnBg:    '#FFF8E6',
     warnBd:    '#F2E3B3',
     warnTx:    '#6B5B21'
@@ -138,7 +141,7 @@ function renderBrandedEmail({ preheader = '', headline, subhead = '', bodyHtml, 
                thin teal accent rule underneath keeps the brand colour
                present without competing with the logo. -->
           <tr>
-            <td style="background:#ffffff; padding:20px 28px; border-bottom:3px solid ${c.primaryDk};">
+            <td style="background:${c.pinkBg}; padding:20px 28px; border-bottom:3px solid ${c.primaryDk};">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td style="vertical-align:middle;">

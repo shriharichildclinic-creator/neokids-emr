@@ -945,23 +945,35 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
         } catch (_) {}
       }
 
+      // The bell is a lightweight "what's new" indicator, not a history —
+      // a full permanent record already exists elsewhere (the audit /
+      // delivery logs). So it only ever lists UNREAD notifications, and
+      // reading one (individually or via "mark all") removes it from the
+      // list outright instead of just toggling a read/unread style — that
+      // half-state ("marked read but still sitting right there") is what
+      // read as "mark all as read doesn't make it disappear".
+      function noteEmptyIfNeeded() {
+        if (!list.querySelector('.np-notif__item')) {
+          list.innerHTML = '<div class="np-notif__empty">No notifications yet.</div>';
+        }
+      }
+
       async function loadList() {
         list.innerHTML = '<div class="np-notif__empty">Loading…</div>';
         try {
-          const rows = await api(base + '/my-notifications');
+          const rows = await api(base + '/my-notifications?unreadOnly=1');
           if (!rows.length) { list.innerHTML = '<div class="np-notif__empty">No notifications yet.</div>'; return; }
           list.innerHTML = rows.map(n =>
-            '<button type="button" class="np-notif__item' + (n.isRead ? '' : ' is-unread') + '" data-id="' + n.id + '">' +
-              '<div class="np-notif__item-title">' + (n.isRead ? '' : '<span class="np-notif__item-dot"></span>') + notifEsc(n.title) + '</div>' +
+            '<button type="button" class="np-notif__item is-unread" data-id="' + n.id + '">' +
+              '<div class="np-notif__item-title"><span class="np-notif__item-dot"></span>' + notifEsc(n.title) + '</div>' +
               '<div class="np-notif__item-msg">' + notifEsc(n.message) + '</div>' +
               '<div class="np-notif__item-time">' + notifTimeAgo(n.createdAt) + '</div>' +
             '</button>'
           ).join('');
           list.querySelectorAll('.np-notif__item').forEach(el => {
             el.addEventListener('click', async () => {
-              if (!el.classList.contains('is-unread')) return;
-              el.classList.remove('is-unread');
-              const d = el.querySelector('.np-notif__item-dot'); if (d) d.remove();
+              el.remove();
+              noteEmptyIfNeeded();
               try { await api(base + '/my-notifications/' + el.dataset.id + '/read', { method: 'POST' }); } catch (_) {}
               refreshCount();
             });
@@ -1095,6 +1107,239 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     }
   };
 
+  // Generic version of Admin's rich SVG daily-trend chart (gridlines, peak
+  // highlight, average line, hover/tap tooltip with a drill-down link) so
+  // Doctor/Receptionist/Pharmacy can have the same chart instead of only
+  // the flat sparkline. Admin keeps its own original implementation
+  // untouched (proven, iterated on already) — this is a fresh, parallel
+  // copy adapted to take field-access callbacks instead of hardcoded
+  // total/completed/revenue property names, since each portal's per-day
+  // bucket shape differs (appointments+completed+revenue for doctor,
+  // appointments+collected for receptionist, bills+collected for pharmacy).
+  const NPDailyChart = {
+    _state: {},
+    render(elId, data, opts) {
+      injectStyles();
+      const wrap = document.getElementById(elId);
+      if (!wrap) return;
+      this._state[elId] = { data: data || [], opts: opts || {} };
+      this._draw(elId);
+      const st = this._state[elId];
+      if (!st.resizeObs) {
+        if ('ResizeObserver' in window) {
+          let lastW = Math.round(wrap.getBoundingClientRect().width);
+          st.resizeObs = new ResizeObserver(entries => {
+            const w = Math.round(entries[0].contentRect.width);
+            if (Math.abs(w - lastW) < 4) return;
+            lastW = w;
+            this._draw(elId);
+          });
+          st.resizeObs.observe(wrap);
+        } else {
+          st.resizeObs = true;
+          window.addEventListener('resize', () => this._draw(elId));
+        }
+      }
+    },
+    _draw(elId) {
+      const wrap = document.getElementById(elId);
+      const st = this._state[elId];
+      if (!wrap || !st) return;
+      const { data, opts } = st;
+      const getTotal = opts.getTotal || (d => Number(d.total) || 0);
+      const unitWord = opts.unitLabel || ((n) => n === 1 ? 'item' : 'items');
+      const tooltipMain = opts.tooltipMain || ((d, total) => total + ' ' + unitWord(total));
+      const tooltipSub = opts.tooltipSub || (() => '');
+      const linkLabel = opts.linkLabel || '';
+      const onDayClick = opts.onDayClick || (() => {});
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+      if (!data.length) {
+        wrap.innerHTML = '<div class="np-empty" style="padding:2rem 0;"><div class="np-empty__sub">' + esc(opts.emptyText || 'No data yet.') + '</div></div>';
+        return;
+      }
+
+      const containerW = Math.max(240, Math.round(wrap.getBoundingClientRect().width) || 600);
+      const isNarrow = containerW < 460;
+      const W = containerW;
+      const H = isNarrow ? 220 : 290;
+      const marginTop = 28;
+      const marginRight = isNarrow ? 8 : 14;
+      const marginBottom = isNarrow ? 34 : 38;
+
+      const maxRaw = Math.max(0, ...data.map(d => getTotal(d)));
+      const stepsCount = 4;
+      const niceMax = Math.max(stepsCount, Math.ceil(maxRaw / stepsCount) * stepsCount);
+      const stepVal = niceMax / stepsCount;
+      const marginLeft = Math.min(50, Math.max(24, 14 + String(niceMax).length * 8));
+
+      const plotW = Math.max(10, W - marginLeft - marginRight);
+      const plotH = H - marginTop - marginBottom;
+      const n = data.length;
+      const band = plotW / n;
+      const barW = Math.max(isNarrow ? 4 : 6, Math.min(isNarrow ? 12 : 18, band * 0.38));
+
+      const avg = data.reduce((s, d) => s + getTotal(d), 0) / data.length;
+      const peakIdx = data.reduce((best, d, i) => getTotal(d) > getTotal(data[best]) ? i : best, 0);
+      const peakVal = getTotal(data[peakIdx]);
+
+      let gridLines = '', yLabels = '';
+      for (let s = 0; s <= stepsCount; s++) {
+        const val = Math.round(stepVal * s);
+        const y = marginTop + plotH - (val / niceMax) * plotH;
+        gridLines += '<line class="np-chart__grid" x1="' + marginLeft + '" x2="' + (W - marginRight).toFixed(1) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '"></line>';
+        yLabels += '<text class="np-chart__ylabel" x="' + (marginLeft - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end">' + val + '</text>';
+      }
+
+      let avgLine = '';
+      if (peakVal > 0 && avg > 0.15) {
+        const yAvg = marginTop + plotH - (avg / niceMax) * plotH;
+        const avgText = avg % 1 === 0 ? String(avg) : avg.toFixed(1);
+        avgLine = '<line class="np-chart__avgline" x1="' + marginLeft + '" x2="' + (W - marginRight).toFixed(1) + '" y1="' + yAvg.toFixed(1) + '" y2="' + yAvg.toFixed(1) + '"></line>' +
+          '<text class="np-chart__avglabel" x="' + (W - marginRight).toFixed(1) + '" y="' + (yAvg - 5).toFixed(1) + '" text-anchor="end">avg ' + avgText + '</text>';
+      }
+
+      const minLabelBand = 34;
+      const labelEvery = band < minLabelBand ? 2 : 1;
+
+      let bars = '', xlabels = '';
+      let lastMonth = null;
+      data.forEach((d, i) => {
+        const total = getTotal(d);
+        const cx = marginLeft + band * i + band / 2;
+        const h = total > 0 ? Math.max(3, (total / niceMax) * plotH) : 2;
+        const y = marginTop + plotH - h;
+        const isPeak = i === peakIdx && total > 0;
+        const isToday = i === data.length - 1;
+        const barCls = total === 0
+          ? 'np-chart__bar np-chart__bar--muted'
+          : (isPeak ? 'np-chart__bar np-chart__bar--peak' : 'np-chart__bar');
+
+        const dt = new Date(d.date + 'T00:00:00');
+        const dayNum = dt.getDate();
+        const monthAbbr = dt.toLocaleDateString('en-IN', { month: 'short' });
+        const weekday = dt.toLocaleDateString('en-IN', { weekday: 'short' });
+        const showMonth = lastMonth !== monthAbbr;
+        lastMonth = monthAbbr;
+
+        bars += '<g class="np-chart__col' + (isToday ? ' np-chart__col--today' : '') + '" data-i="' + i + '" tabindex="0" role="img" ' +
+          'aria-label="' + esc(weekday) + ', ' + dayNum + ' ' + esc(monthAbbr) + ': ' + esc(tooltipMain(d, total)) + (isToday ? ' (today)' : '') + '">' +
+          '<rect class="np-chart__hit" x="' + (cx - band / 2).toFixed(1) + '" y="' + marginTop + '" width="' + band.toFixed(1) + '" height="' + plotH.toFixed(1) + '"></rect>' +
+          '<rect class="' + barCls + '" x="' + (cx - barW / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + Math.min(4, barW / 2).toFixed(1) + '"></rect>' +
+          (isPeak ? '<text class="np-chart__peaklabel" x="' + cx.toFixed(1) + '" y="' + (y - 8).toFixed(1) + '" text-anchor="middle">' + total + '</text>' : '') +
+          '</g>';
+
+        const forceShow = isToday || i === 0;
+        if (forceShow || i % labelEvery === 0) {
+          xlabels += '<text class="np-chart__xlabel' + (isToday ? ' np-chart__xlabel--today' : '') + '" x="' + cx.toFixed(1) + '" y="' + (H - marginBottom + 16).toFixed(1) + '" text-anchor="middle">' + (showMonth ? esc(monthAbbr) + ' ' : '') + dayNum + '</text>';
+        }
+      });
+
+      const peakDateLabel = esc(new Date(data[peakIdx].date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }));
+
+      wrap.innerHTML =
+        '<svg class="np-chart__svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="Daily trend for the last ' + n + ' days">' +
+          '<g class="np-chart__grid-group">' + gridLines + '</g>' +
+          '<g class="np-chart__bars">' + bars + '</g>' +
+          avgLine +
+          '<g class="np-chart__ylabels">' + yLabels + '</g>' +
+          '<g class="np-chart__xlabels">' + xlabels + '</g>' +
+          '<line class="np-chart__axis" x1="' + marginLeft + '" x2="' + (W - marginRight).toFixed(1) + '" y1="' + (marginTop + plotH).toFixed(1) + '" y2="' + (marginTop + plotH).toFixed(1) + '"></line>' +
+        '</svg>' +
+        '<div class="np-chart__tooltip" id="' + elId + 'Tooltip" role="tooltip" aria-hidden="true"></div>' +
+        '<div class="np-chart__legend">' +
+          '<span class="np-chart__legend-item"><i class="np-chart__legend-swatch"></i>' + esc(opts.legendLabel || 'Volume') + '</span>' +
+          (peakVal > 0 ? '<span class="np-chart__legend-item"><i class="np-chart__legend-swatch np-chart__legend-swatch--peak"></i>Busiest day</span>' +
+          '<span class="np-chart__legend-item np-chart__legend-note">Peak: ' + peakVal + ' on ' + peakDateLabel + '</span>' : '') +
+        '</div>';
+
+      this._bind(elId);
+    },
+    _bind(elId) {
+      const wrap = document.getElementById(elId);
+      const st = this._state[elId];
+      if (!wrap || !st) return;
+      const { data, opts } = st;
+      const getTotal = opts.getTotal || (d => Number(d.total) || 0);
+      const unitWord = opts.unitLabel || ((n) => n === 1 ? 'item' : 'items');
+      const tooltipMain = opts.tooltipMain || ((d, total) => total + ' ' + unitWord(total));
+      const tooltipSub = opts.tooltipSub || (() => '');
+      const linkLabel = opts.linkLabel || '';
+      const onDayClick = opts.onDayClick || (() => {});
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+      const svg = wrap.querySelector('.np-chart__svg');
+      const tooltip = wrap.querySelector('.np-chart__tooltip');
+      if (!svg || !tooltip) return;
+      let pinned = null;
+
+      function contentFor(i) {
+        const d = data[i]; if (!d) return '';
+        const dt = new Date(d.date + 'T00:00:00');
+        const label = dt.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        const total = getTotal(d);
+        const sub = tooltipSub(d, total);
+        return '<div class="np-chart__tooltip-date">' + esc(label) + '</div>' +
+          '<div class="np-chart__tooltip-main">' + esc(tooltipMain(d, total)) + '</div>' +
+          (sub ? '<div class="np-chart__tooltip-sub">' + esc(sub) + '</div>' : '') +
+          (total > 0 && linkLabel ? '<button type="button" class="np-chart__tooltip-link" data-date="' + esc(d.date) + '">' + esc(linkLabel) + '</button>' : '');
+      }
+      function show(i, col) {
+        const rect = col.querySelector('rect:nth-child(2)');
+        if (!rect) return;
+        tooltip.innerHTML = contentFor(i);
+        tooltip.classList.add('is-visible');
+        tooltip.setAttribute('aria-hidden', 'false');
+        const barBox = rect.getBoundingClientRect();
+        const wrapBox = wrap.getBoundingClientRect();
+        let left = barBox.left - wrapBox.left + barBox.width / 2;
+        const top = barBox.top - wrapBox.top;
+        const ttWidth = tooltip.offsetWidth || 160;
+        const minLeft = ttWidth / 2 + 4;
+        const maxLeft = wrapBox.width - ttWidth / 2 - 4;
+        left = Math.max(minLeft, Math.min(maxLeft, left));
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+        Array.from(svg.querySelectorAll('.np-chart__col')).forEach(c => c.classList.toggle('is-active', c === col));
+      }
+      function hide() {
+        tooltip.classList.remove('is-visible', 'is-pinned');
+        tooltip.setAttribute('aria-hidden', 'true');
+        Array.from(svg.querySelectorAll('.np-chart__col')).forEach(c => c.classList.remove('is-active'));
+        pinned = null;
+      }
+      svg.addEventListener('pointermove', (e) => {
+        if (pinned != null || e.pointerType === 'touch') return;
+        const col = e.target.closest('.np-chart__col');
+        if (col) show(Number(col.dataset.i), col); else hide();
+      });
+      svg.addEventListener('pointerleave', () => { if (pinned == null) hide(); });
+      svg.addEventListener('click', (e) => {
+        const col = e.target.closest('.np-chart__col');
+        if (!col) { hide(); return; }
+        const i = Number(col.dataset.i);
+        if (pinned === i) { hide(); return; }
+        pinned = i;
+        show(i, col);
+        tooltip.classList.add('is-pinned');
+      });
+      tooltip.addEventListener('click', (e) => {
+        const link = e.target.closest('.np-chart__tooltip-link');
+        if (link && link.dataset.date) onDayClick(link.dataset.date);
+      });
+      svg.addEventListener('focusin', (e) => {
+        const col = e.target.closest('.np-chart__col');
+        if (col) show(Number(col.dataset.i), col);
+      });
+      svg.addEventListener('focusout', (e) => {
+        if (pinned == null && !svg.contains(e.relatedTarget)) hide();
+      });
+      document.addEventListener('click', (e) => {
+        if (pinned != null && !wrap.contains(e.target)) hide();
+      });
+    }
+  };
+
   global.NPTheme      = NPTheme;
   global.NPPalette    = NPPalette;
   global.NPChips      = NPChips;
@@ -1105,6 +1350,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   global.NPLightbox   = NPLightbox;
   global.NPNotifications = NPNotifications;
   global.NPSparkTooltip  = NPSparkTooltip;
+  global.NPDailyChart    = NPDailyChart;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { NPTheme.init(); NPDatePicker.init(); });
