@@ -74,6 +74,10 @@
           <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
           Dashboard
         </button>
+        <button class="np-nav-item" data-view="onboardingView" type="button">
+          <svg class="np-nav-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Getting Started
+        </button>
 
         <div class="np-sidebar__section">Manage</div>
         <button class="np-nav-item" data-view="doctorsView" type="button">
@@ -255,6 +259,15 @@
               </div>
               <div id="recentAppts" class="np-panel__body" style="padding:0;"></div>
             </div>
+          </div>
+        </section>
+
+<section id="onboardingView" class="tab-pane hidden">
+          <div class="np-panel">
+            <div class="np-panel__head">
+              <div style="flex:1"><div class="np-panel__title">Getting Started</div><div class="np-panel__subtitle">A quick tour of the admin portal</div></div>
+            </div>
+            <div class="np-panel__body" id="onboardingMount"></div>
           </div>
         </section>
 
@@ -1061,6 +1074,7 @@
 </div>
 
 <script src="/assets/np-ui.js"></script>
+<script src="/assets/onboarding.js"></script>
 <script src="app.js"></script>
 <script src="finance.js"></script>
 <script src="staff.js"></script>

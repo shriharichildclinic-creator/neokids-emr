@@ -131,10 +131,14 @@ function renderBrandedEmail({ preheader = '', headline, subhead = '', bodyHtml, 
                       overflow:hidden;border:1px solid ${c.border};
                       box-shadow:0 6px 24px rgba(15,46,58,.08);">
 
-          <!-- Header / Brand bar -->
+          <!-- Header / Brand bar — white, not the teal gradient the logo used
+               to sit on. The logo wordmark's "Neo" text is a pale colour
+               meant for a plain background (matches the app icon); it
+               washed out to near-illegible on a saturated teal fill. A
+               thin teal accent rule underneath keeps the brand colour
+               present without competing with the logo. -->
           <tr>
-            <td style="background:linear-gradient(135deg, ${c.primary} 0%, ${c.primaryDk} 100%);
-                       padding:20px 28px;">
+            <td style="background:#ffffff; padding:20px 28px; border-bottom:3px solid ${c.primaryDk};">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td style="vertical-align:middle;">
@@ -142,18 +146,18 @@ function renderBrandedEmail({ preheader = '', headline, subhead = '', bodyHtml, 
                     <img src="${BRAND.logoUrl}" alt="${esc(BRAND.name)}" width="132" height="auto"
                          style="display:block;max-width:132px;width:132px;height:auto;border:0;outline:none;">
                     ` : `
-                    <div style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:22px;
+                    <div style="color:${c.text};font-family:Arial,Helvetica,sans-serif;font-size:22px;
                                 font-weight:700;letter-spacing:.3px;">
                       ${esc(BRAND.name)}
                     </div>`}
-                    <div style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:12px;
-                                opacity:.9;margin-top:6px;">
+                    <div style="color:${c.primaryDk};font-family:Arial,Helvetica,sans-serif;font-size:12px;
+                                font-weight:600;margin-top:6px;">
                       ${esc(BRAND.tagline)}
                     </div>
                   </td>
-                  <td align="right" style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;
-                                            font-size:12px;opacity:.9;vertical-align:middle;">
-                    <a href="${BRAND.primaryUrl}" style="color:#ffffff;text-decoration:none;">
+                  <td align="right" style="color:${c.muted};font-family:Arial,Helvetica,sans-serif;
+                                            font-size:12px;vertical-align:middle;">
+                    <a href="${BRAND.primaryUrl}" style="color:${c.primaryDk};text-decoration:none;">
                       neokidspro.in
                     </a>
                   </td>

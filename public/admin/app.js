@@ -214,6 +214,7 @@ function showLogin() {
 
 const VIEW_META = {
   dashboardView:   { title:'Dashboard',          sub:'Overview of your clinic' },
+  onboardingView:  { title:'Getting Started',    sub:'A quick tour of the admin portal' },
   doctorsView:     { title:'Doctors',            sub:'Manage clinic doctors and their performance' },
   apptsView:       { title:'Appointments',       sub:'All bookings across the clinic' },
   revenueView:     { title:'Revenue Reports',    sub:'Monthly clinic revenue — Cashfree only' },
@@ -249,6 +250,7 @@ function setView(view, opts) {
     }
   } catch (_) {}
   if (view === 'dashboardView') loadDashboard();
+  if (view === 'onboardingView' && typeof NPOnboarding !== 'undefined') NPOnboarding.mount($('#onboardingMount'), 'ADMIN', null);
   if (view === 'doctorsView')   loadDoctors();
   if (view === 'apptsView')     { loadDoctorsForFilter(); loadAppointments(); _setupApptDateRange(); }
   if (view === 'notifView')     { loadNotifTemplates(); loadNotifications(); }

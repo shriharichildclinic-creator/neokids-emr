@@ -2680,6 +2680,15 @@ html[data-theme="dark"] .np-bill-total{ background:rgba(137,188,189,.12); }
    the sticky rule is inert (cells are grid children, not table cells).
    ========================================================================== */
 .np-table--scroll-x{ min-width: 920px; }
+/* np-table--fixed already gives every column a fluid % width via its own
+   <colgroup> — forcing a 920px minimum on top of that fights the very
+   responsiveness the fixed layout exists for, leaving the table stuck
+   horizontally scrollable at any width narrower than 920px even on tablet
+   widths where the mobile card transform hasn't kicked in yet (the Medical
+   Centres table hit exactly this). Two classes beats one, so this wins
+   over the plain .np-table--scroll-x rule above without touching any
+   table that uses scroll-x WITHOUT fixed layout. */
+.np-table--scroll-x.np-table--fixed{ min-width: 0; }
 .np-table--scroll-x th:last-child,
 .np-table--scroll-x td:last-child{
   position: sticky;

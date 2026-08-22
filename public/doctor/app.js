@@ -975,6 +975,8 @@ async function openConsultation(id){
               ${p.parentName ? `<div class="np-field"><div class="np-field__label">Parent / Guardian</div><div>${escapeHtml(p.parentName)}</div></div>` : ''}
               ${p.gender ? `<div class="np-field"><div class="np-field__label">Gender</div><div>${escapeHtml(p.gender)}</div></div>` : ''}
               ${p.dateOfBirth ? `<div class="np-field"><div class="np-field__label">Date of Birth</div><div>${escapeHtml(fmtDate(p.dateOfBirth))}</div></div>` : ''}
+              ${a.heightCm ? `<div class="np-field"><div class="np-field__label">Height</div><div>${escapeHtml(String(a.heightCm))} cm</div></div>` : ''}
+              ${a.weightKg ? `<div class="np-field"><div class="np-field__label">Weight</div><div>${escapeHtml(String(a.weightKg))} kg</div></div>` : ''}
               ${a.meetLink ? `<div class="np-field"><div class="np-field__label">Meet Link</div><div><a href="${escapeHtml(a.meetLink)}" target="_blank" rel="noopener" style="color:var(--np-primary);">Join consultation</a></div></div>` : ''}
             </div>
             ${a.primaryProblem ? `
@@ -1168,6 +1170,11 @@ function renderRxFormInto(slot, a, data){
   } else {
     const card = document.querySelector('#rxSuccessCard');
     if (card) card.classList.add('hidden');
+    // No prescription yet — pre-fill vitals from what the parent entered
+    // at booking (in-clinic visits only) so the doctor doesn't have to
+    // re-enter them from scratch; still fully editable before saving.
+    if (rxForm.vitalsWeight && a.weightKg) rxForm.vitalsWeight.value = String(a.weightKg);
+    if (rxForm.vitalsHeight && a.heightCm) rxForm.vitalsHeight.value = String(a.heightCm);
   }
 }
 

@@ -1116,6 +1116,16 @@ body.bw-cashfree-active.bw-keyboard-open [class*="sheet"] {
           placeholder="your@email.com" class="bw-input"/>
       </div>
 
+      <div id="bw-hw-row" class="bw-form-row hidden">
+        <label class="bw-label">Child's Height &amp; Weight <span style="font-weight:400;color:var(--bw-muted)">(optional, helps the doctor prepare)</span></label>
+        <div style="display:flex;gap:10px;">
+          <input id="f_height" name="heightCm" type="number" min="0" max="250" step="0.1"
+            placeholder="Height (cm)" class="bw-input" style="flex:1;"/>
+          <input id="f_weight" name="weightKg" type="number" min="0" max="150" step="0.1"
+            placeholder="Weight (kg)" class="bw-input" style="flex:1;"/>
+        </div>
+      </div>
+
       <div class="bw-form-row">
         <label for="f_problem" class="bw-label">Reason for Visit *</label>
         <textarea id="f_problem" name="primaryProblem" required rows="3"
@@ -1586,7 +1596,13 @@ function goTo(step){
   updateStepper(step);
 
   if (step === 1) { renderStep1ModeUI(); loadDoctors(); }
-  if (step === 2) { applyDobBounds(); $('#f_name').focus(); }
+  if (step === 2) {
+    applyDobBounds();
+    $('#f_name').focus();
+    // Height/weight only matter for an in-person exam — an online video
+    // consult has no way to actually take these measurements.
+    $('#bw-hw-row').classList.toggle('hidden', state.mode !== 'OFFLINE');
+  }
   if (step === 3) { initSlotPicker(); }
   if (step === 4) { renderSummary(); }
   reportHeightSoon();
@@ -1845,6 +1861,10 @@ async function submitBooking(){
       consultationType: state.mode,
       tncAccepted: true
     };
+    if (state.mode === 'OFFLINE') {
+      if ($('#f_height').value) payload.heightCm = $('#f_height').value;
+      if ($('#f_weight').value) payload.weightKg = $('#f_weight').value;
+    }
     const res = await api('/public/book', { method:'POST', body: JSON.stringify(payload) });
 
     if (res.requiresPayment && res.cashfree) {

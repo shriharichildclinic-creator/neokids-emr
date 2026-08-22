@@ -125,6 +125,8 @@ async function bookAppointment(input) {
     dateOfBirth,
     gender,
     primaryProblem,
+    heightCm,
+    weightKg,
     date,
     startTime,
     consultationType
@@ -211,6 +213,10 @@ async function bookAppointment(input) {
         doctorId,
         patientId: patient.id,
         primaryProblem,
+        // Only ever sent by the form for OFFLINE, but guard here too in
+        // case a client sends them for an ONLINE booking anyway.
+        heightCm: consultationType === 'OFFLINE' ? heightCm : undefined,
+        weightKg: consultationType === 'OFFLINE' ? weightKg : undefined,
         date: appointmentDate,
         startTime,
         endTime,

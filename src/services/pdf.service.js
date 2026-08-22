@@ -292,7 +292,7 @@ async function generatePrescription(appointment, prescription) {
       doc.font('Helvetica-Bold').text('Weight: ', 320, py + 45, { continued: true })
          .font('Helvetica').text(prescription.weight ? `${prescription.weight} kg` : '—');
       doc.font('Helvetica-Bold').text('Height: ', 320, py + 60, { continued: true })
-         .font('Helvetica').text(prescription.height);
+         .font('Helvetica').text(prescription.height ? `${prescription.height} cm` : '—');
     }
 
     doc.moveTo(50, py + 95).lineTo(doc.page.width - 50, py + 95).strokeColor(BRAND_BLUE).stroke();

@@ -103,6 +103,11 @@ model Appointment {
   doctorId          String
   patientId         String
   primaryProblem    String        @db.Text
+  // Captured at booking time for an in-clinic visit only — an online video
+  // consult has no way to actually take these measurements, so the public
+  // booking form only shows/sends them for OFFLINE. Both optional even then.
+  heightCm          Decimal?      @db.Decimal(5, 1)
+  weightKg          Decimal?      @db.Decimal(5, 1)
   date              DateTime      @db.Date
   startTime         String
   endTime           String

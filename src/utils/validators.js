@@ -256,6 +256,18 @@ const bookAppointmentSchema = z.object({
   dateOfBirth: dateSchema,
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
   primaryProblem: z.string().min(3).max(500).pipe(safeText('primaryProblem')),
+  // Only meaningful for an in-clinic visit — the booking form only shows/
+  // sends these when consultationType is OFFLINE, but accepted here as
+  // plain optional numbers rather than mode-conditionally required, since
+  // a parent may not have a scale/tape measure handy either way.
+  heightCm: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().positive().max(250)
+  ).optional(),
+  weightKg: z.preprocess(
+    v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().positive().max(150)
+  ).optional(),
   date: dateSchema,
   startTime: timeSchema,
   consultationType: z.enum(['ONLINE', 'OFFLINE']),
