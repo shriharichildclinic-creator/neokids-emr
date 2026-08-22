@@ -820,6 +820,13 @@ async function sendDoctorInvite() {
   const f = $('#doctorForm');
   const id = f.dataset.id;
   if (!id) return;
+  const name = (f.name && f.name.value) ? f.name.value.trim() : 'this doctor';
+  const ok = await NPModal.confirm({
+    title: 'Send onboarding invite?',
+    message: `This emails ${name} a one-time link to set their password and activate their account.`,
+    okText: 'Send invite'
+  });
+  if (!ok) return;
   const btn = $('#sendDoctorInviteBtn');
   btn.disabled = true;
   try {
@@ -905,14 +912,6 @@ function openDoctorModal() {
   loadKycForDoctor(null);
   applyAdminModeVisibility(f.consultationModes ? f.consultationModes.value : 'BOTH');
   $('#doctorModal').classList.remove('hidden');
-  if (typeof NPDropzone !== 'undefined') {
-    setTimeout(() => {
-      ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
-        const input = document.querySelector(`#doctorForm input[name="${name}"]`);
-        if (input) NPDropzone.bind(input, { label: 'Drop ' + name + ' here', hint: 'or click to browse (PDF or image)' });
-      });
-    }, 0);
-  }
 }
 function closeDoctorModal() {
   $('#doctorModal').classList.add('hidden');
@@ -1893,6 +1892,19 @@ async function loadKycForDoctor(doctorId){
 
   hint.classList.add('hidden');
   upload.classList.remove('hidden');
+
+  // The dropzone enhancement only makes sense once the upload block is
+  // actually visible (i.e. editing a doctor that already exists) — binding
+  // it in the "add doctor" flow was wasted effort against inputs hidden
+  // behind kycCreateHint above.
+  if (typeof NPDropzone !== 'undefined') {
+    setTimeout(() => {
+      ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
+        const input = document.querySelector(`#doctorForm input[name="${name}"]`);
+        if (input) NPDropzone.bind(input, { label: 'Drop ' + name + ' here', hint: 'or click to browse (PDF or image)' });
+      });
+    }, 0);
+  }
 
   let kyc;
   try {

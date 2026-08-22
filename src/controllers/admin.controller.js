@@ -7,6 +7,11 @@ const { sendStaffInvite } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
 const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
+const audit = require('../services/audit.service');
+
+function adminActor(req) {
+  return { id: req.user.id, role: 'ADMIN', name: req.user.email };
+}
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -40,6 +45,10 @@ exports.createDoctor = asyncHandler(async (req, res) => {
   // No invite email is sent here — creating the account and inviting the
   // doctor to activate it are separate, admin-controlled steps. The admin
   // sends (or resends) the invite from the doctor list via sendDoctorInvite.
+  await audit.log({
+    actor: adminActor(req), action: 'DOCTOR_CREATED', entityType: 'DOCTOR', entityId: doctor.id,
+    summary: `Created doctor Dr. ${doctor.name} (${doctor.email})`
+  });
   const { passwordHash: _, ...safe } = doctor;
   res.status(201).json({ ...safe, inviteSent: false });
 });
@@ -156,6 +165,10 @@ exports.updateDoctor = asyncHandler(async (req, res) => {
   if (!exists) return res.status(404).json({ error: 'Doctor not found' });
 
   const updated = await prisma.doctor.update({ where: { id }, data });
+  await audit.log({
+    actor: adminActor(req), action: 'DOCTOR_UPDATED', entityType: 'DOCTOR', entityId: updated.id,
+    summary: `Updated doctor Dr. ${updated.name}`
+  });
   const { passwordHash, ...safe } = updated;
   res.json(safe);
 });
@@ -163,9 +176,13 @@ exports.updateDoctor = asyncHandler(async (req, res) => {
 // Soft delete = Deactivate
 exports.deleteDoctor = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  await prisma.doctor.update({
+  const updated = await prisma.doctor.update({
     where: { id },
     data: { isAvailable: false, deletedAt: new Date() }
+  });
+  await audit.log({
+    actor: adminActor(req), action: 'DOCTOR_DEACTIVATED', entityType: 'DOCTOR', entityId: id,
+    summary: `Deactivated doctor Dr. ${updated.name}`
   });
   res.json({ success: true, message: 'Doctor deactivated' });
 });
@@ -177,8 +194,13 @@ exports.hardDeleteDoctor = asyncHandler(async (req, res) => {
   if (appointmentCount > 0) {
     return res.status(409).json({ error: `Doctor has ${appointmentCount} appointment(s). Hard delete is blocked. Use Deactivate instead.` });
   }
+  const doctor = await prisma.doctor.findUnique({ where: { id } });
   await prisma.passwordToken.deleteMany({ where: { userType: 'DOCTOR', userId: id } });
   await prisma.doctor.delete({ where: { id } });
+  await audit.log({
+    actor: adminActor(req), action: 'DOCTOR_HARD_DELETED', entityType: 'DOCTOR', entityId: id,
+    summary: `Permanently deleted doctor Dr. ${doctor ? doctor.name : id} (no appointments on record)`
+  });
   res.json({ success: true, message: 'Doctor permanently deleted' });
 });
 
@@ -228,7 +250,6 @@ exports.listAppointments = asyncHandler(async (req, res) => {
 // it back to the parent is a separate, more consequential action.
 exports.refundAppointment = asyncHandler(async (req, res) => {
   const cashfree = require('../services/cashfree.service');
-  const audit = require('../services/audit.service');
 
   const appt = await prisma.appointment.findUnique({
     where: { id: req.params.id },
@@ -261,7 +282,7 @@ exports.refundAppointment = asyncHandler(async (req, res) => {
   });
 
   await audit.log({
-    actor: { id: req.user.id, role: 'ADMIN', name: req.user.email },
+    actor: adminActor(req),
     action: 'APPOINTMENT_REFUNDED',
     entityType: 'APPOINTMENT',
     entityId: appt.id,

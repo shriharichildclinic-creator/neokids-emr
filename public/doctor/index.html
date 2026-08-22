@@ -841,7 +841,7 @@
 
 <!-- ================================================================
      Previous Records — Add / Edit modal.
-     Portaled to <body> at runtime by historical-fix.js so the fixed
+     Portaled to <body> at runtime by previous-records.js so the fixed
      sidebar can never trap it. Contains a working #historicalForm
      shell so any legacy wiring that looked up those IDs still binds.
      ================================================================ -->
@@ -880,7 +880,7 @@
 
           <!-- "Currently linked to" summary shown only when editing an
                existing record; populated by openRecordModal() in
-               historical-fix.js. -->
+               previous-records.js. -->
           <div id="hrOwnershipBadge" class="hidden"></div>
 
           <div class="np-seg hr-source-toggle" role="tablist" aria-label="Patient source">
@@ -987,9 +987,9 @@
         <!-- v3.4.12 — Type-specific fields.
              These extra inputs are only shown for the record types that
              actually need them; applyRecordTypeVisibility() in
-             historical-fix.js toggles them. They are stored as JSON on
+             previous-records.js toggles them. They are stored as JSON on
              the record's `notes` column via structured markers so no
-             backend schema change is required (see historical-fix.js). -->
+             backend schema change is required (see previous-records.js). -->
         <div class="np-field hidden" data-hr-field="findings">
           <label class="np-field__label" id="hrFindingsLabel">Findings</label>
           <textarea id="hrFindings" class="np-textarea" rows="3" placeholder="Key findings / results"></textarea>
@@ -1451,7 +1451,7 @@
 <script src="app.js?v=3.4.13"></script>
 <script src="earnings.js"></script>
 
-<script src="/doctor/historical-fix.js?v=3.4.10" defer></script>
+<script src="/doctor/previous-records.js?v=3.4.10" defer></script>
 <!-- ================================================================
      Previous Records — Attachment preview modal.
      Shared by both the Edit and View flows for the "Preview" action

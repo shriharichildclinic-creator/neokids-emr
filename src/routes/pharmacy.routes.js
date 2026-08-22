@@ -1,9 +1,15 @@
 const router = require('express').Router();
 const ph = require('../controllers/pharmacy.controller');
+const notif = require('../controllers/notification.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { uploadProfileImage } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('PHARMACY'));
+
+router.get('/notifications',                notif.list);
+router.get('/notifications/unread-count',   notif.unreadCount);
+router.post('/notifications/:id/read',      notif.markRead);
+router.post('/notifications/read-all',      notif.markAllRead);
 
 router.get('/me',            ph.me);
 router.post('/profile-image',   uploadProfileImage.single('photo'), ph.uploadProfileImage);

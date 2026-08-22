@@ -22,6 +22,7 @@ const path = require('path');
 const prisma = require('../config/prisma');
 const { asyncHandler } = require('../middleware/errorHandler');
 const logger = require('../utils/logger');
+const notifications = require('../services/notification.service');
 
 const STORAGE_ROOT  = path.resolve(process.env.STORAGE_PATH || path.join(__dirname, '..', '..', 'storage'));
 const KYC_DIR       = path.join(STORAGE_ROOT, 'kyc-documents');
@@ -156,7 +157,7 @@ exports.updateKycStatus = asyncHandler(async (req, res) => {
   const { id: doctorId } = req.params;
   const { status, rejectionReason } = req.body || {};
 
-  await assertDoctorExists(doctorId);
+  const doctor = await assertDoctorExists(doctorId);
 
   if (!ALLOWED_STATUSES.has(status)) {
     return res.status(400).json({ error: `status must be one of: ${[...ALLOWED_STATUSES].join(', ')}` });
@@ -193,6 +194,16 @@ exports.updateKycStatus = asyncHandler(async (req, res) => {
     where: { doctorId },
     data:  patch
   });
+
+  await notifications.create({
+    userType: 'DOCTOR', userId: doctorId,
+    type: status === 'VERIFIED' ? 'KYC_VERIFIED' : 'KYC_REJECTED',
+    title: status === 'VERIFIED' ? 'KYC verified' : 'KYC rejected',
+    message: status === 'VERIFIED'
+      ? 'Your KYC documents have been verified by the admin.'
+      : `Your KYC was rejected: ${patch.rejectionReason}`,
+    entityType: 'DOCTOR_KYC', entityId: doctorId
+  }).catch(() => {});
 
   res.json(updated);
 });

@@ -148,7 +148,7 @@ const staticOpts = {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
       // These ARE actively edited between deploys (app.js,
-      // historical-fix.js, styles.css) and aren't content-hashed, so the
+      // previous-records.js, styles.css) and aren't content-hashed, so the
       // default 1h cache was letting mobile browsers keep serving a stale
       // build well after a redeploy — symptoms looked like "the fix
       // didn't work" when really the device just hadn't re-fetched yet.

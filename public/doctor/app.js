@@ -91,7 +91,7 @@ function escapeHtml(s){
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
 }
-// v3.4.12 — Previous Records extras marker stripper. historical-fix.js
+// v3.4.12 — Previous Records extras marker stripper. previous-records.js
 // stores type-specific extras (findings / scanType / vaccine / referral
 // / discharge details) as a JSON tail on `notes`. When patient-history
 // timeline snippets or the legacy previous-records list echo `notes`
@@ -1220,7 +1220,7 @@ async function loadPatientHistoryInto(slot, patientId){
     // v3.4.9 (part 4) — Patient History Previous Records visibility fix:
     // every record now has an explicit View action AND the whole card is
     // clickable, both opening the existing View Previous Record modal
-    // (hrViewModal from historical-fix.js) so doctors can inspect the
+    // (hrViewModal from previous-records.js) so doctors can inspect the
     // full record, its attachments and metadata directly from history.
     const previousHtml = (h.previousRecords || []).map(pr => `
       <article class="np-history-rx hr-history-prev" data-prev-view="${escapeHtml(pr.id)}" style="cursor:pointer;" role="button" tabindex="0">
@@ -1269,7 +1269,7 @@ async function loadPatientHistoryInto(slot, patientId){
     `;
     // v3.4.9 (part 4) — Previous Records in Patient History are now
     // actionable: the View button and the whole card open the existing
-    // View Previous Record modal (historical-fix.js). Fallback: jump to
+    // View Previous Record modal (previous-records.js). Fallback: jump to
     // the Previous Records tab if the modal hook isn't available.
     slot.querySelectorAll('[data-prev-view]').forEach(el => {
       const openPrev = (e) => {
@@ -1880,7 +1880,7 @@ function _toast(kind, msg){
 
 /* ---------- Feature 1: Historical appointment form ----------
  * v3.4.6: The historical/previous-records UI has been fully refactored
- * into public/doctor/historical-fix.js (records-first layout with its
+ * into public/doctor/previous-records.js (records-first layout with its
  * own Add/Edit/View modals). The legacy fields this function relied on
  * (#histPhone, #histName, DOB, etc.) no longer exist, so wiring here
  * would just no-op AND conflict with the new module's submit handler
@@ -2964,7 +2964,7 @@ function injectConsultBackButton(){
   }
 
   // v3.4.6: the Previous Records IIFE's own initHistoricalForm() is now a
-  // no-op — the refactored public/doctor/historical-fix.js owns the
+  // no-op — the refactored public/doctor/previous-records.js owns the
   // #historicalForm submit + patient-lookup + reset wiring, and running
   // both handlers on the same form would double-fire (two POSTs per save)
   // and re-render results into containers that no longer exist. The

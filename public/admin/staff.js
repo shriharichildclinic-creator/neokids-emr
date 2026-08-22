@@ -230,6 +230,13 @@ async function openReceptionistModal(id){
 window.openReceptionistModal = openReceptionistModal;
 
 async function sendReceptionistInvite(id){
+  const r = __receptionists.find(x => x.id === id);
+  const ok = await NPModal.confirm({
+    title: 'Send onboarding invite?',
+    message: `This emails ${r ? esc(r.name) : 'this receptionist'} a one-time link to set their password and activate their account.`,
+    okText: 'Send invite'
+  });
+  if (!ok) return;
   try {
     const res = await api('/admin/receptionists/' + id + '/invite', { method: 'POST' });
     showInviteResult(res, 'receptionist');
@@ -341,6 +348,13 @@ async function openPharmUserModal(id){
 window.openPharmUserModal = openPharmUserModal;
 
 async function sendPharmUserInvite(id){
+  const u = __pharmUsers.find(x => x.id === id);
+  const ok = await NPModal.confirm({
+    title: 'Send onboarding invite?',
+    message: `This emails ${u ? esc(u.name) : 'this pharmacy user'} a one-time link to set their password and activate their account.`,
+    okText: 'Send invite'
+  });
+  if (!ok) return;
   try {
     const res = await api('/admin/pharmacy-users/' + id + '/invite', { method: 'POST' });
     showInviteResult(res, 'pharmacy user');

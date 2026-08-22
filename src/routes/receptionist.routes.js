@@ -2,10 +2,16 @@ const router = require('express').Router();
 const c      = require('../controllers/receptionist.controller');
 const cert   = require('../controllers/certificate.controller');
 const ph     = require('../controllers/pharmacy.controller');
+const notif  = require('../controllers/notification.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { uploadProfileImage } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('RECEPTIONIST'));
+
+router.get('/notifications',                notif.list);
+router.get('/notifications/unread-count',   notif.unreadCount);
+router.post('/notifications/:id/read',      notif.markRead);
+router.post('/notifications/read-all',      notif.markAllRead);
 
 router.get('/me',           c.me);
 router.post('/profile-image',   uploadProfileImage.single('photo'), c.uploadProfileImage);

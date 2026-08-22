@@ -6,6 +6,7 @@ const hist   = require('../controllers/historical.controller');
 const prev   = require('../controllers/previous.controller');
 const cert   = require('../controllers/certificate.controller');
 const sig    = require('../controllers/signature.controller');
+const notif  = require('../controllers/notification.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const {
   uploadProfileImage,
@@ -14,6 +15,11 @@ const {
 } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('DOCTOR'));
+
+router.get('/notifications',                notif.list);
+router.get('/notifications/unread-count',   notif.unreadCount);
+router.post('/notifications/:id/read',      notif.markRead);
+router.post('/notifications/read-all',      notif.markAllRead);
 
 // ─── Profile / settings ───
 router.get('/me',                                           c.me);

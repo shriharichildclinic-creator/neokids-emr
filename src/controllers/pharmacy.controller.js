@@ -11,6 +11,7 @@ const { buildSignedFileUrl } = require('../utils/fileTokens');
 const { parseDateOnlyOrNull, getTodayDateString, buildDailyTrend } = require('../utils/date');
 const { findOrCreatePatient } = require('../services/booking.service');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
+const notifications = require('../services/notification.service');
 
 function roleOf(req) {
   return req.user.role === 'PHARMACY' ? 'PHARMACY' : 'RECEPTIONIST';
@@ -753,6 +754,26 @@ exports.markPaid = asyncHandler(async (req, res) => {
     summary: `Marked ${bill.billType} bill ${bill.billNumber} as paid (₹${num(bill.total).toFixed(2)})`,
     medicalCentreId: bill.medicalCentreId, doctorId: bill.doctorId
   });
+
+  // Low-stock nudge for whoever just dispensed — same threshold listItems
+  // uses for its own lowStock filter, so "low" means the same thing in
+  // both places.
+  const dispensedItemIds = [...new Set(bill.items.map(i => i.itemId).filter(Boolean))];
+  if (dispensedItemIds.length) {
+    const lowNow = await prisma.pharmacyItem.findMany({
+      where: { id: { in: dispensedItemIds }, stock: { lte: 10 } },
+      select: { name: true, stock: true }
+    });
+    for (const item of lowNow) {
+      await notifications.create({
+        userType: actor.role, userId: actor.user.id,
+        type: 'LOW_STOCK', title: 'Low stock',
+        message: `${item.name} is down to ${item.stock} unit(s) in stock.`,
+        entityType: 'PHARMACY_ITEM'
+      }).catch(() => {});
+    }
+  }
+
   res.json({ bill: stored.bill, pdfUrl: stored.signedUrl });
 });
 

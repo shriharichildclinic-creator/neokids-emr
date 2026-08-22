@@ -1,6 +1,8 @@
 /* =====================================================================
-   historical-fix.js  \u2014  v3.4.6 Doctor Panel: full Previous Records
-   refactor.
+   previous-records.js  \u2014  v3.4.6 Doctor Panel: full Previous Records
+   refactor. (Renamed from historical-fix.js \u2014 this is the entire
+   Previous Records feature: search, multi-attachment upload, modals \u2014
+   not a small patch, so the old name was misleading.)
 
    Design goals (per v3.4.6 spec):
      \u2022 Records-first layout \u2014 list is always visible, no patient

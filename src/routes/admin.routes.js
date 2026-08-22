@@ -5,12 +5,18 @@ const fin  = require('../controllers/finance.controller');
 const kyc  = require('../controllers/kyc.controller');
 const cert = require('../controllers/certificate.controller');
 const dataMgmt = require('../controllers/admin-data.controller');
+const notif = require('../controllers/notification.controller');
 const { authenticate, requireRole } = require('../middleware/auth');
 const {
   uploadKycDocuments, KYC_FIELDS, uploadProfileImage
 } = require('../middleware/upload');
 
 router.use(authenticate, requireRole('ADMIN'));
+
+router.get('/notifications',                notif.list);
+router.get('/notifications/unread-count',   notif.unreadCount);
+router.post('/notifications/:id/read',      notif.markRead);
+router.post('/notifications/read-all',      notif.markAllRead);
 
 router.get('/analytics', c.analytics);
 

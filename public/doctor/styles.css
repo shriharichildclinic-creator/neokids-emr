@@ -2105,7 +2105,7 @@ html[data-theme="dark"] .np-modal pre{
 .hr-att__moreBtn{ font-size:1.1rem; line-height:1; padding:.35rem .55rem; }
 /* v3.4.10 (part 5) three-dot menu fix — in-flow the menu is
    position:absolute anchored to the trigger; when the menu has to open
-   above a scrolling modal body, historical-fix.js portals it to <body>
+   above a scrolling modal body, previous-records.js portals it to <body>
    and adds .is-portaled which switches to position:fixed with viewport
    coordinates set in JS. Without this, the portaled menu was still
    position:absolute (i.e. anchored to <html>) with a `right:0` from the
@@ -2137,7 +2137,7 @@ html[data-theme="dark"] .np-modal pre{
    Previous Record modal. Both buttons close only the preview modal (the
    preview + Escape stack fix from part 4 keeps the parent underneath
    open and in its previous state), and Android's hardware/browser back
-   button is intercepted via a pushState in historical-fix.js so it also
+   button is intercepted via a pushState in previous-records.js so it also
    returns to the Previous Record modal instead of navigating away. */
 .hr-preview__panel{ width:min(92vw, 760px); max-height:min(92vh, 820px); display:flex; flex-direction:column; }
 .hr-preview__head{

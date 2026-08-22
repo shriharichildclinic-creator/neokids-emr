@@ -732,6 +732,29 @@ model StaffAuditLog {
   @@map("staff_audit_logs")
 }
 
+// In-app notification bell, shared across all 4 portals. userId is null for
+// an admin-wide notice (every admin account sees it — there's no concept of
+// a single "team" admin, so a per-admin-id notice would silently go unseen
+// by other admins). Doctor/Receptionist/Pharmacy notifications always carry
+// a userId since those roles are single-account, not shared.
+model Notification {
+  id         String    @id @default(uuid())
+  userType   String
+  userId     String?
+  type       String
+  title      String
+  message    String    @db.Text
+  entityType String?
+  entityId   String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userType, userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
 model DoctorKyc {
   id       String @id @default(uuid())
   doctorId String @unique
