@@ -446,7 +446,10 @@ exports.createPrescription = asyncHandler(async (req, res) => {
     doctorId: req.user.id
   });
 
-  const delivery = await automation.onPrescriptionCreated(appt, rx);
+  // Generates the PDF and finalizes the appointment only. Delivery to
+  // the patient (email / WhatsApp) is a separate, explicit doctor
+  // action — see sendPrescription() below.
+  const pdfRes = await automation.onPrescriptionCreated(appt, rx);
 
   const pharmacyUserIds = await staffAccess.getPharmacyUserIdsForDoctor(req.user.id).catch(() => []);
   for (const pharmacyUserId of pharmacyUserIds) {
@@ -465,7 +468,8 @@ exports.createPrescription = asyncHandler(async (req, res) => {
   });
 
   // Returns a rich payload so the frontend can render a real success card
-  // instead of a bare acknowledgement.
+  // instead of a bare acknowledgement. No delivery has happened yet —
+  // the frontend prompts the doctor to choose Email / WhatsApp / Both.
   const signedPrescriptionUrl = signApptFileUrl(refreshed, 'prescription', req.user.id);
   res.json({
     success: true,
@@ -476,11 +480,13 @@ exports.createPrescription = asyncHandler(async (req, res) => {
       prescriptionUrl: signedPrescriptionUrl,
       completedAt: refreshed.completedAt
     },
-    delivery: {
-      pdfUrl: signedPrescriptionUrl,
-      pdfFilename: (delivery && delivery.filename) || null,
-      emailQueued: !!refreshed.patient.email,
-      emailRecipient: refreshed.patient.email || null
+    pdf: {
+      url: signedPrescriptionUrl,
+      filename: (pdfRes && pdfRes.filename) || null
+    },
+    patient: {
+      hasEmail: !!refreshed.patient.email,
+      hasPhone: !!refreshed.patient.phone
     }
   });
 });
@@ -521,23 +527,62 @@ exports.appointmentPrescription = asyncHandler(async (req, res) => {
   });
 });
 
-exports.resendPrescription = asyncHandler(async (req, res) => {
+// ────────────────────────────────────────────────────────────────────
+// Prescription delivery — explicit, doctor-chosen channel.
+// Triggered from the "Send Prescription" modal shown after save (and
+// reused for later resends). Saving a prescription never sends it by
+// itself; nothing goes out to the patient until this is called.
+// ────────────────────────────────────────────────────────────────────
+exports.sendPrescription = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const channel = String(req.body.channel || '').toUpperCase();
+  if (!['EMAIL', 'WHATSAPP', 'BOTH'].includes(channel)) {
+    return res.status(400).json({ error: 'Invalid channel. Choose Email, WhatsApp, or Both.' });
+  }
+
   const appt = await prisma.appointment.findFirst({
     where: { id, doctorId: req.user.id },
     include: { prescription: true, patient: true, doctor: true }
   });
   if (!appt)              return res.status(404).json({ error: 'Appointment not found' });
-  if (!appt.prescription) return res.status(400).json({ error: 'No prescription to resend' });
-  if (!appt.patient.email) return res.status(400).json({ error: 'Patient has no email on file' });
+  if (!appt.prescription) return res.status(400).json({ error: 'No prescription to send. Please save the prescription first.' });
 
+  const wantsEmail    = channel === 'EMAIL'    || channel === 'BOTH';
+  const wantsWhatsapp = channel === 'WHATSAPP' || channel === 'BOTH';
+  if (wantsEmail && !appt.patient.email)    return res.status(400).json({ error: 'Patient has no email on file.' });
+  if (wantsWhatsapp && !appt.patient.phone) return res.status(400).json({ error: 'Patient has no phone number on file.' });
+
+  let result;
   try {
-    await automation.resendPrescription(appt, appt.prescription);
-    res.json({ success: true, recipient: appt.patient.email });
+    result = await automation.deliverPrescription(appt, appt.prescription, { email: wantsEmail, whatsapp: wantsWhatsapp });
   } catch (e) {
-    logger.error('resendPrescription failed', e);
-    res.status(502).json({ error: 'Could not re-send prescription', detail: e.message });
+    logger.error('sendPrescription: PDF generation failed', e);
+    return res.status(502).json({ error: 'Could not generate the prescription PDF. Please try again.', detail: e.message });
   }
+
+  const emailOk    = !wantsEmail    || result.email    === 'sent';
+  const whatsappOk = !wantsWhatsapp || result.whatsapp === 'sent';
+
+  if (!emailOk && !whatsappOk) {
+    return res.status(502).json({
+      error: 'Could not send the prescription. Please try again.',
+      detail: { email: result.emailError, whatsapp: result.whatsappError }
+    });
+  }
+
+  if (!emailOk || !whatsappOk) {
+    const sentChannel   = !emailOk ? 'WhatsApp' : 'Email';
+    const failedChannel = !emailOk ? 'Email' : 'WhatsApp';
+    return res.status(207).json({
+      success: true,
+      partial: true,
+      message: `Prescription sent successfully via ${sentChannel}, but ${failedChannel} delivery failed.`,
+      detail: { email: result.emailError, whatsapp: result.whatsappError }
+    });
+  }
+
+  const label = channel === 'BOTH' ? 'Email and WhatsApp' : (channel === 'EMAIL' ? 'Email' : 'WhatsApp');
+  res.json({ success: true, message: `Prescription sent successfully via ${label}.` });
 });
 
 // ────────────────────────────────────────────────────────────────────

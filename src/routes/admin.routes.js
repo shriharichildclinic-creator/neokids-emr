@@ -52,9 +52,10 @@ router.post('/doctors/:id/profile-image', uploadProfileImage.single('photo'), c.
 router.delete('/doctors/:id/profile-image', c.removeDoctorProfileImage);
 
 // KYC
-router.post('/doctors/:id/kyc',         uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);
-router.get('/doctors/:id/kyc',          kyc.getKyc);
-router.patch('/doctors/:id/kyc/status', kyc.updateKycStatus);
+router.post('/doctors/:id/kyc',          uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);
+router.get('/doctors/:id/kyc',           kyc.getKyc);
+router.patch('/doctors/:id/kyc/status',  kyc.updateKycStatus);
+router.delete('/doctors/:id/kyc/:kind',  kyc.removeKycDocument);
 
 // Protected KYC document streaming (replaces the removed public static
 // mount on /files/kyc-documents — audit finding #2). Admin JWT required.

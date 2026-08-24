@@ -1276,7 +1276,11 @@ function formatTime(hhmm){ const [h,m]=hhmm.split(':').map(Number); const suf=h>
 async function api(path, opts={}){
   const r = await fetch(API_BASE+path, { ...opts, headers:{ 'Content-Type':'application/json', ...(opts.headers||{}) } });
   const d = await r.json().catch(()=>({}));
-  if (!r.ok) throw new Error(d.error || 'Request failed');
+  if (!r.ok) {
+    const err = new Error(d.error || 'Request failed');
+    err.code = d.code || null;
+    throw err;
+  }
   return d;
 }
 
@@ -1719,14 +1723,18 @@ async function loadSlots(){
   $('#slotsGrid').innerHTML = `<div class="bw-slots-loading"><div class="bw-spinner" aria-hidden="true"></div> Loading available slots…</div>`;
   try {
     const { slots } = await api(`/public/slots?doctorId=${state.doctor.id}&date=${state.date}&type=${state.mode}`);
-    const available = slots.filter(s => s.available);
-    if (!available.length) {
+    if (!slots.length) {
       $('#slotsGrid').innerHTML = `<div class="bw-slots-empty">😔 No slots available on this date.<br>Please try a different date.</div>`;
       return;
     }
-    $('#slotsGrid').innerHTML = available.map(s =>
-      `<button type="button" data-action="pickSlot" data-time="${escapeHtml(s.startTime)}"
-        class="bw-slot" aria-label="Select slot ${formatTime(s.startTime)}">${formatTime(s.startTime)}</button>`
+    // Render every slot on the grid, not just the open ones — a slot
+    // that's already booked shows disabled and struck through instead
+    // of disappearing, so the user can see it was never selectable
+    // rather than hitting a "not available" error after picking it.
+    $('#slotsGrid').innerHTML = slots.map(s =>
+      `<button type="button" ${s.available ? `data-action="pickSlot" data-time="${escapeHtml(s.startTime)}"` : 'disabled'}
+        class="bw-slot" aria-label="${formatTime(s.startTime)}${s.available ? '' : ' (unavailable)'}"
+        ${s.available ? '' : 'aria-disabled="true"'}>${formatTime(s.startTime)}</button>`
     ).join('');
   } catch (e) {
     $('#slotsGrid').innerHTML = `<div class="bw-slots-empty" style="color:#ef4444;">${escapeHtml(e.message)}</div>`;
@@ -1907,6 +1915,16 @@ async function submitBooking(){
   $('#btnSubmit').disabled = true;
   $('#btnSubmitText').textContent = 'Booking…';
   try {
+    // The slot was picked on step 3, but the user could have spent any
+    // amount of time on step 4 before hitting submit. Re-check it's still
+    // open right before booking so a slot someone else just took is
+    // caught here — sent back to a refreshed, correctly disabled slot
+    // grid — instead of surfacing as a raw error after the booking call.
+    const stillOpen = await isSlotStillAvailable(state.doctor.id, state.date, state.slot, state.mode);
+    if (!stillOpen) {
+      return handleSlotNoLongerAvailable();
+    }
+
     const payload = {
       doctorId: state.doctor.id,
       patientName: $('#f_name').value,
@@ -1977,10 +1995,43 @@ async function submitBooking(){
       showSuccess(res.appointment, false);
     }
   } catch (e) {
+    // A slot can still be taken in the split second between the
+    // pre-check above and this request landing — handle that the same
+    // graceful way instead of a raw popup; anything else is a genuine
+    // error and still surfaces to the user directly.
+    if (e.code === 'SLOT_TAKEN') {
+      return handleSlotNoLongerAvailable();
+    }
     alert(e.message);
     $('#btnSubmit').disabled = false;
     $('#btnSubmitText').textContent = 'Confirm Booking';
   }
+}
+
+// Re-fetches live slots and checks the one the user picked is still open.
+async function isSlotStillAvailable(doctorId, date, startTime, mode){
+  try {
+    const { slots } = await api(`/public/slots?doctorId=${doctorId}&date=${date}&type=${mode}`);
+    const match = slots.find(s => s.startTime === startTime);
+    return !!(match && match.available);
+  } catch (e) {
+    // Can't confirm either way — let the booking call itself be the
+    // source of truth rather than blocking submission on a network blip.
+    return true;
+  }
+}
+
+// Sends the user back to the slot picker with a clear inline explanation
+// instead of an alert() — the refreshed grid shows the taken slot as
+// disabled, same as the pre-emptive picker, so there's nothing left to
+// click on incorrectly.
+function handleSlotNoLongerAvailable(){
+  state.slot = null;
+  $('#btnSubmit').disabled = false;
+  $('#btnSubmitText').textContent = 'Confirm Booking';
+  goTo(3);
+  $('#slotsGrid').insertAdjacentHTML('beforebegin',
+    `<p class="bw-field-error" role="alert">That time was just booked by someone else — please pick another slot below.</p>`);
 }
 
 function startPaymentPolling(appt, orderId){

@@ -708,7 +708,12 @@ async function onAppointmentCancelled(appointment, reason) {
 }
 
 // ═════════════════════════════════════════════════════════════════
-// 6. PRESCRIPTION SAVED  — unchanged (kept for completeness)
+// 6. PRESCRIPTION SAVED
+//
+// Generates the PDF and finalizes the appointment (status/revenue).
+// Deliberately does NOT email or WhatsApp anything — the doctor
+// chooses the delivery channel explicitly afterwards via
+// deliverPrescription() / POST /doctor/appointments/:id/prescription/send.
 // ═════════════════════════════════════════════════════════════════
 async function onPrescriptionCreated(appointment, prescription) {
   const pdfRes = await pdf.generatePrescription(appointment, prescription);
@@ -727,10 +732,31 @@ async function onPrescriptionCreated(appointment, prescription) {
     await incrementDoctorRevenue(appointment.doctorId, appointment.feeAtBooking, appointment.paymentStatus);
   }
 
-  if (appointment.patient.email) {
-    await safeEmail({
-      appointmentId: appointment.id, recipient: appointment.patient.email, template: 'PRESCRIPTION', direction: 'PATIENT',
-      messageFactory: () => email.sendEmail({
+  return pdfRes;
+}
+
+// ═════════════════════════════════════════════════════════════════
+// 6b. PRESCRIPTION DELIVERY — explicit, doctor-initiated
+//
+// Called only after the doctor picks a channel in the "Send
+// Prescription" modal (Email / WhatsApp / Both). Regenerates the PDF
+// if it has drifted, then attempts each requested channel
+// independently so a failure on one never blocks the other. Returns
+// a per-channel status so the controller can report accurate
+// success/partial/failure messages back to the doctor.
+// ═════════════════════════════════════════════════════════════════
+async function deliverPrescription(appointment, prescription, { email: wantsEmail, whatsapp: wantsWhatsapp }) {
+  const pdfRes = await pdf.generatePrescription(appointment, prescription);
+
+  if (!appointment.prescriptionUrl || appointment.prescriptionUrl !== pdfRes.url) {
+    await prisma.appointment.update({ where: { id: appointment.id }, data: { prescriptionUrl: pdfRes.url } });
+  }
+
+  const result = { email: 'skipped', whatsapp: 'skipped' };
+
+  if (wantsEmail) {
+    try {
+      await email.sendEmail({
         to: appointment.patient.email,
         subject: 'Your prescription from NeoKidsPro',
         html: renderBrandedEmail({
@@ -743,14 +769,24 @@ async function onPrescriptionCreated(appointment, prescription) {
           `
         }),
         attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
-      })
-    });
+      });
+      await logNotification({
+        appointmentId: appointment.id, channel: 'EMAIL', recipient: appointment.patient.email,
+        template: 'PRESCRIPTION', direction: 'PATIENT', status: 'SENT'
+      });
+      result.email = 'sent';
+    } catch (e) {
+      logger.error(`Prescription email failed for ${appointment.id}: ${e.message}`);
+      await logNotification({
+        appointmentId: appointment.id, channel: 'EMAIL', recipient: appointment.patient.email,
+        template: 'PRESCRIPTION', direction: 'PATIENT', status: 'FAILED', errorMessage: e.message
+      });
+      result.email = 'failed';
+      result.emailError = e.message;
+    }
   }
 
-  // ── NEW: WhatsApp Prescription PDF share (Meta Cloud API) ──
-  // Preserves the existing email flow above. Runs after email so a
-  // WhatsApp failure never blocks the email delivery.
-  if (appointment.patient.phone) {
+  if (wantsWhatsapp) {
     try {
       const r = await waMedia.sendPrescriptionPdf({
         appointment, filepath: pdfRes.filepath, publicUrl: pdfRes.url
@@ -761,8 +797,9 @@ async function onPrescriptionCreated(appointment, prescription) {
         template: process.env.WA_TPL_PRESCRIPTION_PDF || 'neokids_prescription_pdf',
         direction: 'PATIENT', status: 'SENT', payload: r || undefined
       });
+      result.whatsapp = 'sent';
     } catch (e) {
-      logger.error(`WA prescription PDF failed for ${appointment.id}: ${e.message}`);
+      logger.error(`Prescription WhatsApp failed for ${appointment.id}: ${e.message}`);
       await logNotification({
         appointmentId: appointment.id, channel: 'WHATSAPP',
         recipient: appointment.patient.phone,
@@ -770,10 +807,12 @@ async function onPrescriptionCreated(appointment, prescription) {
         direction: 'PATIENT', status: 'FAILED',
         errorMessage: `${e.message}${e.code ? ` (code=${e.code})` : ''}`
       });
+      result.whatsapp = 'failed';
+      result.whatsappError = e.message;
     }
   }
 
-  return pdfRes;
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -855,65 +894,6 @@ async function onCertificateIssued({ certificate, pdfRes, sendWhatsapp = true, s
   }
 
   return delivery;
-}
-
-async function resendPrescription(appointment, prescription) {
-  if (!appointment.patient.email) throw new Error('Patient has no email on file');
-
-  let pdfRes;
-  try {
-    pdfRes = await pdf.generatePrescription(appointment, prescription);
-    if (!appointment.prescriptionUrl || appointment.prescriptionUrl !== pdfRes.url) {
-      await prisma.appointment.update({ where: { id: appointment.id }, data: { prescriptionUrl: pdfRes.url } });
-    }
-  } catch (e) {
-    logger.error('resendPrescription: PDF regen failed', e);
-    throw e;
-  }
-
-  await safeEmail({
-    appointmentId: appointment.id, recipient: appointment.patient.email,
-    template: 'PRESCRIPTION_RESEND', direction: 'PATIENT',
-    messageFactory: () => email.sendEmail({
-      to: appointment.patient.email,
-      subject: 'Your prescription from NeoKidsPro (resend)',
-      html: renderBrandedEmail({
-        preheader: `Your prescription from Dr. ${appointment.doctor.name} is attached again.`,
-        headline: 'Your Prescription',
-        subhead: 'Resend',
-        bodyHtml: `
-          <p>Dear ${esc(appointment.patient.name)},</p>
-          <p>As requested by Dr. ${esc(appointment.doctor.name)}, your prescription is attached again as a PDF.</p>
-        `
-      }),
-      attachments: [{ filename: pdfRes.filename, path: pdfRes.filepath }]
-    })
-  });
-
-  // ── NEW: re-share on WhatsApp as well ──
-  if (appointment.patient.phone) {
-    try {
-      await waMedia.sendPrescriptionPdf({
-        appointment, filepath: pdfRes.filepath, publicUrl: pdfRes.url
-      });
-      await logNotification({
-        appointmentId: appointment.id, channel: 'WHATSAPP',
-        recipient: appointment.patient.phone,
-        template: (process.env.WA_TPL_PRESCRIPTION_PDF || 'neokids_prescription_pdf') + '__resend',
-        direction: 'PATIENT', status: 'SENT'
-      });
-    } catch (e) {
-      await logNotification({
-        appointmentId: appointment.id, channel: 'WHATSAPP',
-        recipient: appointment.patient.phone,
-        template: (process.env.WA_TPL_PRESCRIPTION_PDF || 'neokids_prescription_pdf') + '__resend',
-        direction: 'PATIENT', status: 'FAILED',
-        errorMessage: `${e.message}${e.code ? ` (code=${e.code})` : ''}`
-      });
-    }
-  }
-
-  return pdfRes;
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -1181,7 +1161,7 @@ module.exports = {
   onAppointmentRescheduled,
   onAppointmentCancelled,
   onPrescriptionCreated,
-  resendPrescription,
+  deliverPrescription,
   onCertificateIssued,
   processReminders,
   processFollowUpRecalls

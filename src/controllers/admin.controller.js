@@ -357,7 +357,13 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
 
   const today = getTodayDateOnly();
-  const last30 = new Date(today); last30.setDate(last30.getDate() - 30);
+  // `today` is a UTC-midnight instant representing the current IST calendar
+  // date (see getTodayDateOnly). All derived cutoffs must stay in UTC too —
+  // .setDate()/.getDate() read/write the *server's local* timezone, which
+  // silently shifts these boundaries by a day on any host not running in
+  // UTC. Use the UTC-safe variants throughout, matching doctor/receptionist/
+  // pharmacy stats and utils/date.js.
+  const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 30);
 
   const [
     total, completed, cancelled, pending, confirmed,
@@ -393,14 +399,14 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
   ]);
 
   // 14-day daily series
-  const last14 = new Date(today); last14.setDate(last14.getDate() - 13);
+  const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
   const raw = await prisma.appointment.findMany({
     where: { doctorId: id, date: { gte: last14 } },
     select: { date: true, status: true }
   });
   const daily = {};
   for (let i = 0; i < 14; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - (13 - i));
+    const d = new Date(today); d.setUTCDate(d.getUTCDate() - (13 - i));
     daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0 };
   }
   raw.forEach(r => {
@@ -552,9 +558,12 @@ exports._classifyTemplateAudience = classifyTemplateAudience;
 exports.analytics = asyncHandler(async (req, res) => {
   // FIX 4 — richer analytics for the modernized admin dashboard
   const today = getTodayDateOnly();
-  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-  const last7  = new Date(today); last7.setDate(last7.getDate()  - 7);
-  const last30 = new Date(today); last30.setDate(last30.getDate() - 30);
+  // UTC-safe cutoffs — see doctorInsights() above for why .setDate()/
+  // .getDate() (server-local timezone) must never be mixed with a
+  // UTC-midnight `today` from getTodayDateOnly().
+  const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate()  - 7);
+  const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 30);
 
   const [
     totalDoctors, totalPatients, totalAppointments,
@@ -593,14 +602,14 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.notificationLog.count({ where: { status: 'FAILED' } }).catch(() => 0)
   ]);
 
-  const last14 = new Date(today); last14.setDate(last14.getDate() - 13);
+  const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
   const raw = await prisma.appointment.findMany({
     where: { date: { gte: last14 } },
     select: { date: true, status: true, feeAtBooking: true, paymentStatus: true }
   });
   const daily = {};
   for (let i = 0; i < 14; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - (13 - i));
+    const d = new Date(today); d.setUTCDate(d.getUTCDate() - (13 - i));
     daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0, revenue: 0, pending: 0 };
   }
   // "revenue" here must mean the same thing it means in revenueBySource

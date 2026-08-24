@@ -1933,42 +1933,66 @@ function setKycLocked(locked){
   if (banner) banner.classList.toggle('hidden', !locked);
   if (uploadBtn) uploadBtn.classList.toggle('hidden', locked);
 }
-async function unlockKycUpload(){
+
+// Verified KYC is locked against casual edits. Replace/Remove on an
+// individual document (and the banner's own "Replace documents" button)
+// all route through this same confirmation before anything unlocks.
+async function ensureKycUnlocked(){
+  const grid = $('#kycGrid');
+  if (!grid || !grid.classList.contains('is-locked')) return true;
   const ok = await NPModal.confirm({
     title: 'Replace verified documents?',
-    message: 'This doctor’s KYC is currently verified. Uploading a new document will drop the status back to Uploaded, and it will need to be re-verified.',
+    message: 'This doctor’s KYC is currently verified. Changing a document will drop the status back to Uploaded, and it will need to be re-verified.',
     okText: 'Unlock to replace',
     danger: true
   });
   if (ok) setKycLocked(false);
+  return ok;
 }
-function setKycFieldStatus(elId, viewElId, url){
-  // SECURITY FIX (audit finding #2): KYC documents are no longer served
-  // by a public static mount. Rewrite the stored /files/kyc-documents/...
-  // URL to the authenticated admin route (Bearer header attached by the
-  // panel's fetch; for <a> navigation we fall back to the fetch+blob
-  // helper below when the browser cannot attach headers).
+async function unlockKycUpload(){
+  await ensureKycUnlocked();
+}
 
-  const statusEl = $('#' + elId);
-  const viewEl   = $('#' + viewElId);
-  if (!statusEl || !viewEl) return;
+function kycCard(kind){
+  return document.querySelector(`.np-kyc-card[data-kyc-kind="${kind}"]`);
+}
+
+// SECURITY FIX (audit finding #2): KYC documents are no longer served by a
+// public static mount — every read goes through the authenticated admin
+// route below, with the Bearer token attached by the panel's own fetch
+// helpers (a plain <a href> navigation cannot send an Authorization header).
+function setKycFieldStatus(kind, url){
+  const card = kycCard(kind);
+  if (!card) return;
+  const statusEl  = card.querySelector('.js-kyc-status');
+  const actionsEl = card.querySelector('.np-kyc-card__actions');
+  const inputEl   = card.querySelector('.np-kyc-card__input');
+  const viewEl    = card.querySelector('.js-kyc-view');
+  if (!statusEl || !actionsEl || !inputEl || !viewEl) return;
+
   if (url) {
     statusEl.innerHTML = '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Uploaded</span>';
-    const KIND_BY_VIEW = {
-      kycAadhaarView: 'aadhaar',
-      kycPanView: 'pan',
-      kycChequeView: 'cancelledCheque',
-      kycMedCertView: 'medicalRegCert'
-    };
-    const kind = KIND_BY_VIEW[viewElId] || '';
-    viewEl.href = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) +
-                  '/' + encodeURIComponent(kind);
-    viewEl.classList.remove('hidden');
+    viewEl.href = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) + '/' + encodeURIComponent(kind);
+    actionsEl.classList.remove('hidden');
+    inputEl.classList.add('hidden');
   } else {
     statusEl.innerHTML = '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Not uploaded</span>';
-    viewEl.classList.add('hidden');
     viewEl.removeAttribute('href');
+    actionsEl.classList.add('hidden');
+    inputEl.classList.remove('hidden');
   }
+}
+
+function kycAuthHeader(){
+  return 'Bearer ' + (typeof _admToken === 'function' ? (_admToken() || '') : (localStorage.getItem('np_admin_token') || ''));
+}
+
+async function fetchKycBlob(kind, { download } = {}){
+  const url = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) + '/' + encodeURIComponent(kind) +
+              (download ? '?download=1' : '');
+  const res = await fetch(url, { headers: { Authorization: kycAuthHeader() } });
+  if (!res.ok) throw new Error('Could not open document (HTTP ' + res.status + ')');
+  return res.blob();
 }
 
 // KYC document links need the admin Bearer token, which a plain <a href>
@@ -1979,14 +2003,77 @@ document.addEventListener('click', async (ev) => {
   if (!a) return;
   ev.preventDefault();
   try {
-    const res = await fetch(a.href, {
-      headers: { Authorization: 'Bearer ' + (typeof _admToken === 'function' ? (_admToken() || '') : (localStorage.getItem('np_admin_token') || '')) }
+    const blob = await fetchKycBlob(a.closest('.np-kyc-card').dataset.kycKind);
+    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+  } catch (e) { alert(e.message); }
+});
+
+document.addEventListener('click', async (ev) => {
+  const downloadBtn = ev.target.closest('.js-kyc-download');
+  const replaceBtn  = ev.target.closest('.js-kyc-replace');
+  const removeBtn   = ev.target.closest('.js-kyc-remove');
+  const btn = downloadBtn || replaceBtn || removeBtn;
+  if (!btn) return;
+
+  const card = btn.closest('.np-kyc-card');
+  const kind = card && card.dataset.kycKind;
+  if (!kind) return;
+
+  if (downloadBtn) {
+    try {
+      const blob = await fetchKycBlob(kind, { download: true });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = kind;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) { alert(e.message); }
+    return;
+  }
+
+  if (replaceBtn) {
+    if (!(await ensureKycUnlocked())) return;
+    const input = card.querySelector('.np-kyc-card__input');
+    if (!input) return;
+    input.dataset.autoUpload = '1';
+    input.click();
+    return;
+  }
+
+  if (removeBtn) {
+    if (!(await ensureKycUnlocked())) return;
+    const ok = await NPModal.confirm({
+      title: 'Remove document?',
+      message: 'This will permanently delete the uploaded file. The doctor will need to re-submit it.',
+      okText: 'Remove file',
+      danger: true
     });
-    if (!res.ok) { alert('Could not open document (HTTP ' + res.status + ')'); return; }
-    const blob = await res.blob();
-    const obj = URL.createObjectURL(blob);
-    window.open(obj, '_blank', 'noopener');
-  } catch (e) { alert('Could not open document: ' + e.message); }
+    if (!ok) return;
+    try {
+      await api('/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc/' + encodeURIComponent(kind), {
+        method: 'DELETE'
+      });
+      NPToast.success('Document removed.');
+      await loadKycForDoctor(__currentKycDoctorId);
+      loadDoctors();
+    } catch (e) { alert(e.message); }
+  }
+});
+
+// A file picked via the "Replace" button uploads immediately as a single
+// field (no need to also press "Upload selected files"). A file picked
+// directly in the input — the normal first-time upload path — is left
+// alone for the batch "Upload selected files" button below.
+document.addEventListener('change', async (ev) => {
+  const input = ev.target.closest('.np-kyc-card__input');
+  if (!input || input.dataset.autoUpload !== '1') return;
+  delete input.dataset.autoUpload;
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const card = input.closest('.np-kyc-card');
+  await uploadKycField(card.dataset.kycKind, file);
 });
 
 async function loadKycForDoctor(doctorId){
@@ -1999,10 +2086,10 @@ async function loadKycForDoctor(doctorId){
   const badge  = $('#kycStatusBadge');
   const verifiedAt = $('#kycVerifiedAt');
 
-  setKycFieldStatus('kycAadhaarStatus', 'kycAadhaarView', null);
-  setKycFieldStatus('kycPanStatus',     'kycPanView',     null);
-  setKycFieldStatus('kycChequeStatus',  'kycChequeView',  null);
-  setKycFieldStatus('kycMedCertStatus', 'kycMedCertView', null);
+  setKycFieldStatus('aadhaar',         null);
+  setKycFieldStatus('pan',             null);
+  setKycFieldStatus('cancelledCheque', null);
+  setKycFieldStatus('medicalRegCert',  null);
   rejBox.classList.add('hidden');
   $('#kycRejectionText').textContent = '';
   verifiedAt.textContent = '';
@@ -2045,10 +2132,10 @@ async function loadKycForDoctor(doctorId){
   const bEl = $('#kycStatusBadge');
   if (bEl) bEl.outerHTML = kycBadge(kyc.kycStatus).replace('<span ', '<span id="kycStatusBadge" ');
 
-  setKycFieldStatus('kycAadhaarStatus', 'kycAadhaarView', kyc.aadhaarUrl);
-  setKycFieldStatus('kycPanStatus',     'kycPanView',     kyc.panUrl);
-  setKycFieldStatus('kycChequeStatus',  'kycChequeView',  kyc.cancelledChequeUrl);
-  setKycFieldStatus('kycMedCertStatus', 'kycMedCertView', kyc.medicalRegCertUrl);
+  setKycFieldStatus('aadhaar',         kyc.aadhaarUrl);
+  setKycFieldStatus('pan',             kyc.panUrl);
+  setKycFieldStatus('cancelledCheque', kyc.cancelledChequeUrl);
+  setKycFieldStatus('medicalRegCert',  kyc.medicalRegCertUrl);
 
   if (kyc.kycStatus === 'REJECTED' && kyc.rejectionReason){
     rejBox.classList.remove('hidden');
@@ -2063,6 +2150,17 @@ async function loadKycForDoctor(doctorId){
   if (kyc.kycStatus === 'VERIFIED' && kyc.verifiedAt){
     verifiedAt.textContent = '✓ Verified ' + fmtDateTime(kyc.verifiedAt);
   }
+}
+
+async function postKycFormData(fd){
+  const r = await fetch(API + '/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + TOKEN },  // NO Content-Type — browser sets multipart boundary
+    body: fd
+  });
+  let data = null; try { data = await r.json(); } catch(_) {}
+  if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+  return data;
 }
 
 async function uploadKycDocs(){
@@ -2093,20 +2191,34 @@ async function uploadKycDocs(){
   }
 
   try {
-    const r = await fetch(API + '/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + TOKEN },  // NO Content-Type — browser sets multipart boundary
-      body: fd
-    });
-    let data = null; try { data = await r.json(); } catch(_) {}
-    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    await postKycFormData(fd);
 
     ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
       const input = f.querySelector(`input[type="file"][name="${name}"]`);
       if (input) input.value = '';
     });
 
-    alert('KYC documents uploaded.');
+    NPToast.success('KYC documents uploaded.');
+    await loadKycForDoctor(__currentKycDoctorId);
+    loadDoctors();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  }
+}
+
+// Single-field upload used by each card's "Replace" button — uploads just
+// the one document instead of requiring the batch "Upload selected files".
+async function uploadKycField(kind, file){
+  const errEl = $('#kycUploadError');
+  errEl.textContent = ''; errEl.classList.add('hidden');
+  if (!__currentKycDoctorId) return;
+
+  const fd = new FormData();
+  fd.append(kind, file);
+  try {
+    await postKycFormData(fd);
+    NPToast.success('Document replaced.');
     await loadKycForDoctor(__currentKycDoctorId);
     loadDoctors();
   } catch (err) {

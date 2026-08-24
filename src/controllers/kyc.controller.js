@@ -13,6 +13,7 @@
      POST   /                 — upload / replace KYC files (multer.fields)
      GET    /                 — read KYC record for a doctor
      PATCH  /status           — VERIFIED | REJECTED (with rejectionReason?)
+     DELETE /:kind             — remove a single uploaded document
 
    Also exposes a read-only endpoint for the doctor panel (no file URLs).
    ===================================================================== */
@@ -29,6 +30,14 @@ const KYC_DIR       = path.join(STORAGE_ROOT, 'kyc-documents');
 const PUBLIC_PREFIX = (process.env.PUBLIC_STORAGE_URL || '/files') + '/kyc-documents';
 
 const ALLOWED_STATUSES = new Set(['PENDING', 'UPLOADED', 'VERIFIED', 'REJECTED']);
+
+const KYC_KIND_TO_COLUMN = {
+  aadhaar:         'aadhaarUrl',
+  pan:             'panUrl',
+  cancelledCheque: 'cancelledChequeUrl',
+  medicalRegCert:  'medicalRegCertUrl'
+};
+const KYC_COLUMNS = Object.values(KYC_KIND_TO_COLUMN);
 
 /* ---------- helpers ---------- */
 
@@ -262,14 +271,10 @@ exports.myKycStatus = asyncHandler(async (req, res) => {
    public express.static mount on /files/kyc-documents: KYC identity
    documents are now readable ONLY with an admin JWT, and the filename
    is resolved strictly inside KYC_DIR (path-traversal safe).
-   ===================================================================== */
-const KYC_KIND_TO_COLUMN = {
-  aadhaar:         'aadhaarUrl',
-  pan:             'panUrl',
-  cancelledCheque: 'cancelledChequeUrl',
-  medicalRegCert:  'medicalRegCertUrl'
-};
 
+   Pass ?download=1 to receive the file as an attachment (forces a
+   browser download) instead of the default inline view.
+   ===================================================================== */
 exports.streamKycDocument = asyncHandler(async (req, res) => {
   const { doctorId, kind } = req.params;
   const column = KYC_KIND_TO_COLUMN[kind];
@@ -292,10 +297,49 @@ exports.streamKycDocument = asyncHandler(async (req, res) => {
              : ext === '.png' ? 'image/png'
              : ext === '.webp' ? 'image/webp'
              : 'image/jpeg';
+  const disposition = req.query.download ? 'attachment' : 'inline';
   res.setHeader('Content-Type', mime);
-  res.setHeader('Content-Disposition', `inline; filename="${kind}_${doctorId}${ext}"`);
+  res.setHeader('Content-Disposition', `${disposition}; filename="${kind}_${doctorId}${ext}"`);
   // Identity documents must never be cached by browsers or intermediaries.
   res.setHeader('Cache-Control', 'private, no-store, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   fs.createReadStream(disk).pipe(res);
+});
+
+/* =====================================================================
+   DELETE /api/admin/doctors/:id/kyc/:kind
+   Removes a single uploaded document (unlinks the file, clears the
+   column). If the record was VERIFIED, removing a document invalidates
+   that verification — status drops to UPLOADED (other docs remain) or
+   PENDING (nothing left), same posture as a replacement upload.
+   ===================================================================== */
+exports.removeKycDocument = asyncHandler(async (req, res) => {
+  const { id: doctorId, kind } = req.params;
+  const column = KYC_KIND_TO_COLUMN[kind];
+  if (!column) return res.status(400).json({ error: 'Invalid KYC document kind' });
+
+  await assertDoctorExists(doctorId);
+
+  const existing = await prisma.doctorKyc.findUnique({ where: { doctorId } });
+  if (!existing || !existing[column]) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+
+  const diskPath = publicUrlToDiskPath(existing[column]);
+
+  const anyLeft = KYC_COLUMNS.some(col => col !== column && existing[col]);
+
+  const patch = { [column]: null };
+  if (existing.kycStatus === 'VERIFIED' || existing.kycStatus === 'UPLOADED') {
+    patch.kycStatus = anyLeft ? 'UPLOADED' : 'PENDING';
+    patch.rejectionReason = null;
+    patch.verifiedAt = null;
+    patch.verifiedById = null;
+  }
+
+  const updated = await prisma.doctorKyc.update({ where: { doctorId }, data: patch });
+
+  safeUnlink(diskPath);
+
+  res.json(updated);
 });

@@ -944,37 +944,57 @@
               <button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="unlockKycUpload()">Replace documents</button>
             </div>
             <div id="kycGrid" class="np-kyc-grid">
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="aadhaar">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Aadhaar Card</span>
-                  <span id="kycAadhaarStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="aadhaar" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycAadhaarView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="pan">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">PAN Card</span>
-                  <span id="kycPanStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="pan" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycPanView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="cancelledCheque">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Cancelled Cheque</span>
-                  <span id="kycChequeStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="cancelledCheque" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycChequeView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="medicalRegCert">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Medical Registration Cert.</span>
-                  <span id="kycMedCertStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="medicalRegCert" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycMedCertView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
             </div>
 

@@ -1,5 +1,71 @@
 # CHANGELOG
 
+## v4.0.x — Admin analytics: fixed a timezone bug in weekly/14-day revenue
+
+### Root cause
+`admin.controller.js` (`analytics` and `doctorInsights`) built its day-bucket
+cutoffs with `.setDate()` / `.getDate()` on a UTC-midnight `Date` (from
+`getTodayDateOnly()`). Those two methods read and write the **server's
+local timezone**, not UTC — every other place in the codebase that does
+this same "N days ago" arithmetic (`doctor.controller.js`,
+`receptionist.controller.js`, `pharmacy.controller.js`,
+`utils/date.js#buildDailyTrend`) correctly uses `.setUTCDate()` /
+`.getUTCDate()`. On any host whose process timezone isn't UTC, this
+silently shifted the day boundaries by up to a day, which:
+- misaligned appointments into the wrong day-bucket in the 14-day trend
+  (the data behind the admin dashboard's "Revenue this week" card and
+  sparkline, and per-doctor insights), and
+- shifted the `last7` / `last30` / `yesterday` cutoffs used for
+  `last7Appointments`, `last30Appointments`, `revenueLast30`, and
+  `todayDelta`.
+
+### Fix
+Switched every `.setDate(...getDate()...)` call in `admin.controller.js`
+to the UTC-safe `.setUTCDate(...getUTCDate()...)`, matching the rest of
+the app. No behavior change on a UTC-configured host; corrects the
+day-bucketing on any host where it wasn't.
+
+### Verified correct (no bug found)
+While auditing "This Week Revenue", also checked and confirmed as already
+correct:
+- **Week window**: `buildDailyTrend()` splits a 14-day UTC window into two
+  clean, non-overlapping 7-day halves (today − 6 … today) vs (today − 13 …
+  today − 7) — no off-by-one, no gap, no overlap.
+- **IST day boundary**: `getTodayDateOnly()` derives "today" from the IST
+  calendar date (`APP_TIMEZONE=Asia/Kolkata`) and stores it as UTC
+  midnight, consistently used both when appointments are created and when
+  they're queried — so the IST day boundary is honored end to end.
+- **Payment-status filtering**: revenue only sums `PAID` / `CASH_COLLECTED`
+  (`COLLECTED_PAYMENT_STATUSES`); `CASH_PENDING`/`UNPAID` are tracked
+  separately as `pending` and never blended into the revenue figure.
+- **Refund handling**: a refund is only issuable on an already-`CANCELLED`
+  appointment and sets `paymentStatus: 'REFUNDED'`, which is outside
+  `COLLECTED_PAYMENT_STATUSES` — refunded amounts fall out of revenue
+  automatically, no double-counting or stale balance.
+- **Cancelled/unpaid exclusion**: every revenue aggregate filters
+  `status: 'COMPLETED'` and a `paymentStatus` allowlist, so cancelled and
+  unpaid appointments are excluded by construction, not by a bolt-on check.
+
+
+## v4.0.x — Explicit prescription delivery
+
+### Prescription sending is no longer automatic
+Root cause: saving a prescription (`POST /doctor/appointments/:id/prescription`)
+directly emailed and WhatsApp-messaged the patient as a side effect of the
+save, with no way for the doctor to opt out or choose a channel.
+- Saving a prescription now only generates the PDF and finalizes the
+  appointment (status, revenue) — it never contacts the patient.
+- The doctor is prompted with a **Send Prescription** modal after saving
+  (Email / WhatsApp / Both / Cancel), and can reopen it any time via the
+  "Send Prescription" button in the Prescription tab.
+- New endpoint `POST /doctor/appointments/:id/prescription/send` with
+  `{ channel: 'EMAIL' | 'WHATSAPP' | 'BOTH' }` delivers on the chosen
+  channel(s) independently, so a failure on one never blocks the other, and
+  returns a precise success/partial/failure message. Replaces the old
+  `POST .../prescription/resend`, which always sent by email regardless of
+  doctor intent.
+
+
 ## v4.0.x — Role-aware analytics & consistent routing
 
 ### Better analytics for all four panels (real data, collected vs pending)

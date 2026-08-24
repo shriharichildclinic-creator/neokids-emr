@@ -836,15 +836,27 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
   flex-shrink:0;
 }
 .np-kyc-card__input{ margin:0; }
+.np-kyc-card__actions{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.4rem;
+  margin-top:auto;
+  padding-top:.15rem;
+}
+.np-kyc-card__actions .np-btn{ min-height:26px; padding:.25rem .55rem; font-size:.7rem; }
 .np-kyc-card__link{
   font-size:.72rem;
   font-weight:600;
-  margin-top:auto;
-  padding-top:.15rem;
   color: var(--nk-teal-700, #5A9495);
   text-decoration:none;
 }
 .np-kyc-card__link:hover{ text-decoration:underline; }
+/* Locked (VERIFIED) cards: View/Download stay usable, but Replace/Remove
+   route through the same "unlock to replace" confirmation as the banner
+   button — never a silent destructive action on verified documents. */
+#kycGrid.is-locked .js-kyc-replace,
+#kycGrid.is-locked .js-kyc-remove{ opacity:.6; }
 html[data-theme="dark"] .np-kyc-card__link{ color: var(--nk-teal-300, #B4D7D7); }
 .np-grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
 @media (max-width: 599px){ .np-grid-2{ grid-template-columns: 1fr; } }
