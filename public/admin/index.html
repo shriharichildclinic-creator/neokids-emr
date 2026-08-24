@@ -275,7 +275,7 @@
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
-                <div class="np-panel__title">Doctors</div>
+                <div class="np-panel__title">Doctors <span id="docCountBadge" class="np-badge np-badge--blue" style="margin-left:.4rem; vertical-align:middle;"></span></div>
                 <div class="np-panel__subtitle">Manage platform doctors, fees, and availability</div>
               </div>
               <button class="np-btn np-btn--primary np-btn--add-doctor" type="button" onclick="openDoctorModal()">
@@ -1002,6 +1002,7 @@
     </div>
     <div class="np-modal__foot">
       <button type="button" id="sendDoctorInviteBtn" class="np-btn hidden" onclick="sendDoctorInvite()">Send Invite</button>
+      <button type="button" id="sendDoctorInviteWhatsappBtn" class="np-btn hidden" onclick="sendDoctorInviteWhatsapp()">Send Invite (WhatsApp)</button>
       <button type="button" class="np-btn" onclick="closeDoctorModal()">Cancel</button>
       <button type="submit" form="doctorForm" class="np-btn np-btn--primary">Save</button>
     </div>

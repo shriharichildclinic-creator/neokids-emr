@@ -47,6 +47,7 @@ router.put('/doctors/:id', c.updateDoctor);
 router.delete('/doctors/:id', c.deleteDoctor);
 router.delete('/doctors/:id/hard', c.hardDeleteDoctor);
 router.post('/doctors/:id/invite', c.sendDoctorInvite);
+router.post('/doctors/:id/invite/whatsapp', c.sendDoctorInviteWhatsapp);
 router.post('/doctors/:id/profile-image', uploadProfileImage.single('photo'), c.uploadDoctorProfileImage);
 router.delete('/doctors/:id/profile-image', c.removeDoctorProfileImage);
 

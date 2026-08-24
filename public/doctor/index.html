@@ -354,7 +354,7 @@
                 <select id="apptStatusFilter" class="np-select" aria-label="Filter by status">
                   <option value="">All statuses</option>
                   <option value="CONFIRMED">Confirmed</option>
-                  <option value="PENDING">Pending</option>
+                  <option value="PENDING">Pending (incl. payment due)</option>
                   <option value="COMPLETED">Completed</option>
                   <option value="CANCELLED">Cancelled</option>
                 </select>
@@ -431,7 +431,7 @@
                 <button id="applyEarnings" type="button" class="np-btn np-btn--primary np-btn--sm">Apply</button>
               </div>
 
-              <div id="earnKpiGrid" class="np-kpi-grid" style="margin-bottom:1rem;"></div>
+              <div id="earnAnalytics" class="np-analytics" aria-label="Earnings analytics"></div>
 
               <div id="earnSettlementCard" style="display:none; padding:.75rem 1rem; border-radius:10px; margin-bottom:1rem;"></div>
 
@@ -1129,7 +1129,7 @@
       <button class="np-btn np-btn--primary np-btn--sm" type="button" id="newCertBtn">+ New certificate</button>
     </div>
     <div class="np-panel__body">
-      <div id="certList" class="np-scroll-list"><div class="np-empty"><div class="np-empty__title">Loading…</div></div></div>
+      <div id="certList"><div class="np-empty"><div class="np-empty__title">Loading…</div></div></div>
     </div>
   </div>
 </section>

@@ -97,7 +97,8 @@ async function deliverConsultationInvoice(invoiceId, { channels = ['whatsapp', '
     try {
       const r = await waMedia.sendInvoicePdf({
         appointment: { id: invoice.appointmentId, patient, doctor, feeAtBooking: invoice.amount },
-        filepath
+        filepath,
+        invoiceNumber: invoice.invoiceNumber
       });
       await logNotif({
         appointmentId: invoice.appointmentId, channel: 'WHATSAPP', recipient: patient.phone,
@@ -177,7 +178,8 @@ async function deliverPharmacyBill(billId, { channels = ['whatsapp', 'email'], u
     try {
       const r = await waMedia.sendInvoicePdf({
         appointment: { id: bill.id, patient: { name: customerName, phone }, feeAtBooking: bill.total },
-        filepath
+        filepath,
+        invoiceNumber: bill.billNumber
       });
       await logNotif({
         appointmentId: null, channel: 'WHATSAPP', recipient: phone,

@@ -2,6 +2,11 @@ const prisma  = require('../config/prisma');
 const logger  = require('../utils/logger');
 const { expirePendingAppointments } = require('./appointment-state.service');
 
+// Doctor.consults / Doctor.revenue are legacy running counters. Nothing in
+// the app reads them anymore (see admin.controller.listDoctors / doctorInsights,
+// which compute both live from Appointment rows) — kept updated here only
+// so the columns don't go stale for any other consumer that queries the
+// Doctor table directly.
 async function incrementDoctorRevenue(doctorId, feeAtBooking, paymentStatus) {
   if (!['PAID', 'CASH_PENDING', 'CASH_COLLECTED'].includes(paymentStatus)) return;
   await prisma.doctor.update({

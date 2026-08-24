@@ -36,7 +36,12 @@ async function api(path, opts = {}) {
     err.status = 401; throw err;
   }
 
-  if (!r.ok) throw new Error((data && (data.error || data.message)) || ('HTTP ' + r.status));
+  if (!r.ok) {
+    const err = new Error((data && (data.error || data.message)) || ('HTTP ' + r.status));
+    err.status = r.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -650,6 +655,8 @@ async function loadDoctors() {
     );
     docs.forEach((d, i) => { d.kycStatus = (kycs[i] && kycs[i].kycStatus) || 'PENDING'; });
     __doctorsCache = docs;
+    const countBadge = $('#docCountBadge');
+    if (countBadge) countBadge.textContent = `${docs.length} doctor${docs.length === 1 ? '' : 's'}`;
     renderDoctors();
   } catch (err) {
     $('#doctorsGrid').innerHTML = `<div class="np-error">${escapeHtml(err.message)}</div>`;
@@ -686,6 +693,23 @@ function _docContactStrip(d){
   if (!items.length) return '';
   return `<div class="np-doc-card__contact">${items.join('')}</div>`;
 }
+// Only show the fee(s) for modes the doctor actually offers — a doctor
+// set to ONLINE-only (or OFFLINE-only) was showing both fees, including
+// one that doesn't apply and can't be booked.
+function _docFeeStats(d){
+  const mode = String(d.consultationModes || 'BOTH').toUpperCase();
+  const online   = `<div class="np-doc-card__stat">
+    <div class="np-doc-card__stat-label">Online</div>
+    <div class="np-doc-card__stat-value">${fmtCurrency(d.onlineConsultFee)}</div>
+  </div>`;
+  const inPerson = `<div class="np-doc-card__stat">
+    <div class="np-doc-card__stat-label">In-person</div>
+    <div class="np-doc-card__stat-value">${fmtCurrency(d.physicalConsultFee)}</div>
+  </div>`;
+  if (mode === 'ONLINE')  return online;
+  if (mode === 'OFFLINE') return inPerson;
+  return online + inPerson;
+}
 function _docCard(d){
   const safeId = escapeHtml(d.id);
   const safeName = (d.name || '').replace(/'/g, "\\'");
@@ -713,14 +737,7 @@ function _docCard(d){
       ${_docContactStrip(d)}
 
       <div class="np-doc-card__stats" role="group" aria-label="Doctor statistics">
-        <div class="np-doc-card__stat">
-          <div class="np-doc-card__stat-label">Online</div>
-          <div class="np-doc-card__stat-value">${fmtCurrency(d.onlineConsultFee)}</div>
-        </div>
-        <div class="np-doc-card__stat">
-          <div class="np-doc-card__stat-label">In-person</div>
-          <div class="np-doc-card__stat-value">${fmtCurrency(d.physicalConsultFee)}</div>
-        </div>
+        ${_docFeeStats(d)}
         <div class="np-doc-card__stat">
           <div class="np-doc-card__stat-label">Consults</div>
           <div class="np-doc-card__stat-value">${d.consults || 0}</div>
@@ -752,6 +769,23 @@ function _docCard(d){
 
     </article>`;
 }
+// Category order for the doctor grid, applied after the Vishal Parmar pin.
+// "MD physician" vs "General physician" is decided by qualification text
+// (e.g. "MBBS, MD") rather than specialization, since that's where doctors
+// actually record their MD — specialization is often just "Physician".
+function _doctorCategoryRank(d){
+  const spec = String(d.specialization || '').toLowerCase();
+  const qual = String(d.qualification || '');
+  if (/pediatric|paediatric/.test(spec)) return 0;
+  if (/gynec|gynaec|obstetric/.test(spec)) return 1;
+  const isPhysician = /physician|general medicine|internal medicine/.test(spec);
+  const hasMD = /\bMD\b/i.test(qual);
+  if (isPhysician && hasMD)  return 2; // MD physicians
+  if (isPhysician)           return 3; // general physicians (no MD on record)
+  if (/dietician|dietitian|nutrition/.test(spec)) return 4;
+  if (/derma|skin/.test(spec)) return 5;
+  return 6; // others
+}
 function renderDoctors(){
   const q = ($('#docSearch').value || '').trim().toLowerCase();
   const av = $('#docFilterAvail').value;
@@ -762,8 +796,14 @@ function renderDoctors(){
     docs = docs.filter(d => [d.name, d.email, d.phone, d.clinicName, d.specialization, d.qualification]
       .some(v => v && String(v).toLowerCase().includes(q)));
   }
+  // Category first, then most-experienced doctor first within a category.
+  docs.sort((a, b) => {
+    const ra = _doctorCategoryRank(a), rb = _doctorCategoryRank(b);
+    if (ra !== rb) return ra - rb;
+    return (Number(b.experience) || 0) - (Number(a.experience) || 0);
+  });
   // Pinned: Dr. Vishal Parmar's card always leads the grid, regardless of
-  // search/filter/sort — the rest keep their normal relative order.
+  // search/filter/sort/category — the rest keep the order set above.
   const pinnedIdx = docs.findIndex(d => stripDrPrefix(d.name || '').trim().toLowerCase() === 'vishal parmar');
   if (pinnedIdx > 0) docs.unshift(docs.splice(pinnedIdx, 1)[0]);
   const grid = $('#doctorsGrid');
@@ -870,6 +910,38 @@ async function sendDoctorInvite() {
   }
 }
 
+async function sendDoctorInviteWhatsapp() {
+  const f = $('#doctorForm');
+  const id = f.dataset.id;
+  if (!id) return;
+  const name = (f.name && f.name.value) ? f.name.value.trim() : 'this doctor';
+  const ok = await NPModal.confirm({
+    title: 'Send onboarding invite over WhatsApp?',
+    message: `This sends ${name} a WhatsApp message with a one-time link to set their password and activate their account.`,
+    okText: 'Send invite'
+  });
+  if (!ok) return;
+  const btn = $('#sendDoctorInviteWhatsappBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('/admin/doctors/' + id + '/invite/whatsapp', { method: 'POST' });
+    showInviteResult(res, 'doctor');
+  } catch (err) {
+    // A fresh invite link is generated before delivery is attempted, so
+    // even a failed send still has a link the admin can copy manually.
+    const link = err.data && err.data.invitePreviewUrl;
+    if (link) {
+      showInviteResult({ inviteSent: false, invitePreviewUrl: link, inviteExpiresInMinutes: err.data.inviteExpiresInMinutes }, 'doctor');
+    } else if (typeof NPToast !== 'undefined') {
+      NPToast.error(err.message);
+    } else {
+      alert(err.message);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function setDoctorPhotoPreview(url){
   const img = $('#doctorPhotoPreview');
   const placeholder = $('#doctorPhotoPlaceholder');
@@ -938,6 +1010,7 @@ function openDoctorModal() {
   f.email.readOnly = false;
   f.password.placeholder = '(invite link is preferred)';
   $('#sendDoctorInviteBtn').classList.add('hidden');
+  $('#sendDoctorInviteWhatsappBtn').classList.add('hidden');
   $('#doctorPhotoBlock').classList.add('hidden');
   loadKycForDoctor(null);
   applyAdminModeVisibility(f.consultationModes ? f.consultationModes.value : 'BOTH');
@@ -956,6 +1029,7 @@ function openEditDoctor(id) {
   const f = $('#doctorForm');
   f.dataset.mode = 'edit'; f.dataset.id = id;
   $('#sendDoctorInviteBtn').classList.remove('hidden');
+  $('#sendDoctorInviteWhatsappBtn').classList.remove('hidden');
   $('#doctorPhotoBlock').classList.remove('hidden');
   setDoctorPhotoPreview(d.photoUrl || null);
   f.name.value  = d.name || '';

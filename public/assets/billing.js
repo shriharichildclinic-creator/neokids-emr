@@ -429,7 +429,24 @@
       cfg.api(url, { method: method, body: JSON.stringify(payload) }).then(function (r) {
         var doMarkPaid = markPaidNow && !g.editing && r.bill && r.bill.id;
         if (doMarkPaid) {
-          return cfg.api(g.billsBase + '/' + r.bill.id + '/mark-paid', { method: 'POST', body: JSON.stringify({ paymentMethod: payload.paymentMethod }) }).then(function (p) { return p; });
+          // IMPORTANT: the bill above was already created as a DRAFT and
+          // persisted server-side by the time we get here. If this
+          // mark-paid call fails (e.g. someone else just bought the last
+          // unit of a medicine in this line between form-fill and submit),
+          // that draft still exists — it is NOT rolled back. We must not
+          // let this rejection fall through to the generic "Failed to
+          // save bill" handler below, because that would tell the user
+          // nothing was saved when in fact a draft now sits in their bill
+          // list. Tag the error so the outer .catch can handle it
+          // differently (see savedAsDraft below).
+          return cfg.api(g.billsBase + '/' + r.bill.id + '/mark-paid', { method: 'POST', body: JSON.stringify({ paymentMethod: payload.paymentMethod }) })
+            .then(function (p) { return p; })
+            .catch(function (payErr) {
+              var err = new Error('Bill saved as draft, but marking it paid failed: ' + (payErr && payErr.message ? payErr.message : 'unknown error') + '. Fix the issue (e.g. restock or adjust quantity) and mark the draft paid from the bill list.');
+              err.savedAsDraft = true;
+              err.draftBill = r.bill;
+              throw err;
+            });
         }
         return r;
       }).then(function (r) {
@@ -438,8 +455,19 @@
           if (cfg.onPdf) cfg.onPdf(r.pdfUrl); else window.open(r.pdfUrl, '_blank');
         }
         NPBilling.close();
-        if (cfg.onSaved) cfg.onSaved(bill);
+        if (cfg.onSaved) cfg.onSaved(r && r.bill);
       }).catch(function (e) {
+        if (e && e.savedAsDraft) {
+          // The draft is real and already saved — closing the modal here
+          // is correct (there is nothing left to fix in this form; the
+          // fix happens on the saved draft itself), and we refresh the
+          // caller's list so the draft is visible instead of appearing
+          // to have vanished.
+          toast(e.message, 'warn');
+          NPBilling.close();
+          if (cfg.onSaved) cfg.onSaved(e.draftBill);
+          return;
+        }
         toast(e.message || 'Failed to save bill', 'error');
       });
     },

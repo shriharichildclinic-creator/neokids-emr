@@ -664,7 +664,16 @@ function renderAllAppointments(){
   if (!hideAutoEl || hideAutoEl.checked) {
     arr = arr.filter(a => !(a.status === 'CANCELLED' && a.paymentStatus === 'FAILED' && /auto-cancelled/i.test(a.notes || '')));
   }
-  if (status) arr = arr.filter(a => a.status === status);
+  // "Pending" covers two things a doctor means by it: appointments still
+  // awaiting confirmation (status PENDING) and completed/confirmed in-clinic
+  // visits whose cash hasn't been collected yet (paymentStatus CASH_PENDING).
+  // Matching only a.status here missed the second case entirely — e.g. an
+  // appointment marked COMPLETED with cash still pending never showed up.
+  if (status === 'PENDING') {
+    arr = arr.filter(a => a.status === 'PENDING' || a.paymentStatus === 'CASH_PENDING');
+  } else if (status) {
+    arr = arr.filter(a => a.status === status);
+  }
   if (type)   arr = arr.filter(a => a.consultationType === type);
   if (_apptDateFilter) arr = arr.filter(a => String(a.date).slice(0,10) === _apptDateFilter);
   if (search) {

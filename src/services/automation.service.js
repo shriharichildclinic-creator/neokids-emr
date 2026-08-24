@@ -1,103 +1,36 @@
-// =====================================================================
-// automation.service.js — FORENSIC FIX v3 (2026-06)
-// =====================================================================
-// All template names and bodyParams are now exactly matched against the
-// Meta WhatsApp template inventory ("Whtasapp Templates (1).pdf"):
+// automation.service.js
 //
-//   #1  reschedule_online_v2                  — 5 body, 1 URL btn   (Meet)
-//   #2  neokids_reminder_online_v2            — 4 body, 1 URL btn   (Meet)
-//   #3  neokids_reminder_offline_v2           — 4 body, 1 URL btn   (Maps)
-//   #4  neokids_booking_confirms_offline_v2   — 5 body, 1 URL btn   (Maps)
-//   #5  reschedule_offline                    — 5 body, 1 URL btn   (Maps)
-//   #6  cancellation_notice                   — 4 body, 0 btn
-//   #7  doctor_new_booking_offline            — 5 body, 0 btn
-//   #8  doctor_new_booking_online_v2             — 5 body, 1 URL btn   (Meet)
-//   #9  doctor_reminder_offline               — 3 body, 0 btn
-//   #10 neokids_online_appt_confirm_v2        — 6 body, 1 URL btn   (Meet)
-//   #11 doctor_reminder_online                — 3 body, 1 URL btn   (Meet)
+// Notification automation for the appointment lifecycle: booking
+// confirmations, reminders, reschedules, cancellations, and
+// prescription/invoice/certificate delivery over email + WhatsApp.
 //
-// CRITICAL BUG FIXES vs previous version
-// ──────────────────────────────────────
-//  A) onPhysicalBookingConfirmed was sending 6 body params (clinic +
-//     patient + doctor + date + time + fee) into a Meta template that
-//     defines exactly 5 — Meta rejected every send with code 132000
-//     "Number of parameters does not match the expected number of params"
-//     and patients silently never got the WhatsApp confirmation.
-//     Fix: drop the leading `clinic` param. The directions-URL still
-//     carries the clinic in the button suffix.
+// Meta WhatsApp template shapes (body params, URL button):
+//   reschedule_online_v2                    5 body, Meet URL
+//   neokids_reminder_online_v2              4 body, Meet URL
+//   neokids_reminder_offline_v2             4 body, Maps URL
+//   neokids_booking_confirms_offline_v2     5 body, Maps URL
+//   reschedule_offline                      5 body, Maps URL
+//   cancellation_notice                     4 body, no button
+//   doctor_new_booking_offline              5 body, no button
+//   doctor_new_booking_online_v2            5 body, Meet URL
+//   doctor_reminder_offline                 3 body, no button
+//   neokids_online_appt_confirm_v2          6 body, Meet URL
+//   doctor_reminder_online                  3 body, Meet URL
 //
-//  B) processReminders was sending 5 params into the 4-param reminder
-//     templates (leading meetCode/clinic), 132000 again. Fix: drop the
-//     leading extra param. The Meet/Maps code stays in the URL button
-//     param, which is exactly what the template defines.
+// Reschedules deliberately do NOT fall back to a booking-confirm
+// template — the body shapes differ and it reads as "new booking" to
+// the recipient. The fallback chain for reschedules is:
+//   primary template -> plain text (24h window) -> email (always runs)
 //
-//  C) processReminders for doctor_reminder_online was sending 4 params
-//     into a 3-param template. Fix: drop the leading meetCode param.
-//
-//  D) onAppointmentRescheduled used template names with a `neokids_`
-//     prefix (`neokids_reschedule_online_v2`, `neokids_reschedule_offline`)
-//     that do NOT exist in Meta. Real Meta names are `reschedule_online_v2`
-//     and `reschedule_offline`. Meta returned 132001 "Template name does
-//     not exist in the translation". The old fallback chain then routed
-//     the reschedule to the BOOKING-CONFIRM template, which is why the
-//     patient received a "new booking" message after a reschedule.
-//     Fix:
-//       • Default primary templates now exactly match Meta.
-//       • Removed booking-confirm templates from the fallback chain.
-//         Booking-confirm and reschedule have DIFFERENT body shapes,
-//         and re-using booking-confirm misled the patient into thinking
-//         a brand new booking was created. The chain is now:
-//             primary template  →  plain text (no booking re-confirm)
-//         If even the plain text fails (outside 24h window), we log it,
-//         and the email path still runs as a guaranteed second channel.
-//       • bodyParams are now exactly 5 in template order:
-//             [Patient, Doctor, NewDate, NewTime, Reason]
-//         which matches both reschedule_online_v2 and reschedule_offline.
-//
-//  E) Doctor reschedule notification used to fall back to the doctor
-//     NEW-booking templates (doctor_new_booking_*), which made the
-//     doctor see a "new booking" message after a reschedule. Removed.
-//     There is no Meta-approved doctor-reschedule template yet, so we
-//     send a plain-text WhatsApp inside the 24h window (which is the
-//     normal state for an active doctor) plus the existing email.
-//
-//  F) Reschedule email to doctor previously did NOT contain the new
-//     Meet link. Fix: include the regenerated Meet link.
-//
-//  G) Cancellation template (`cancellation_notice`) has 4 body vars by
-//     design (Patient, Doctor, Date, Time) — no reason placeholder. The
-//     CODE side is correct. The REASON cannot fit into v1 of this Meta
-//     template; we now ALSO send the reason via plain-text fallback (it
-//     runs inside the 24h customer-care window after the template
-//     send) so the patient always sees the reason. A v2 Meta template
-//     `cancellation_notice_v2` with a 5th `{{5}}=Reason` placeholder
-//     should be created and is documented in docs/META_TEMPLATE_FIXES.md.
-//     Once created, set WA_TPL_CANCELLATION=cancellation_notice_v2 and
-//     the code already passes `reason` as the 5th body param.
-//
-// REGRESSION IMPACT
-// ─────────────────
-//  • Offline booking flow: WhatsApp confirmations now succeed. No
-//    other code path was depending on the spurious leading `clinic`
-//    parameter. Email path unchanged.
-//  • Online booking flow: unchanged (template was already 6/6).
-//  • Reminders: param shape is now correct for all four reminder
-//    templates. The dedup query at the top of processReminders still
-//    keys on the same template list, so we still send at most one
-//    reminder per appointment.
-//  • Reschedule flow: patient now receives the RESCHEDULE template
-//    (not a booking-confirm). Doctor now receives a reschedule plain
-//    text (instead of a misleading new-booking). Email content for the
-//    doctor now includes the new Meet link.
-//  • Cancellation flow: patient still receives the 4-param Meta
-//    template (so existing acceptance/legal flow is unaffected) PLUS
-//    a plain-text reason. If you bump WA_TPL_CANCELLATION to v2 the
-//    reason is delivered via template only.
-// =====================================================================
+// cancellation_notice has no reason placeholder (4 body vars by design);
+// the reason is sent as a plain-text follow-up inside the 24h window.
+// A cancellation_notice_v2 template with a 5th {{5}}=Reason slot would
+// let this go through the template alone — see docs/META_TEMPLATE_FIXES.md.
+
 const prisma   = require('../config/prisma');
 const logger   = require('../utils/logger');
 const whatsapp = require('./whatsapp.service');
-const waMedia  = require('./whatsapp-media.service');   // NEW — WhatsApp PDF sharing
+const waMedia  = require('./whatsapp-media.service');
 const email    = require('./email.service');
 const { renderBrandedEmail, esc } = require('./email-brand.service');
 const pdf      = require('./pdf.service');
@@ -106,7 +39,6 @@ const { formatDateOnly, getTodayDateString, getCurrentTimeMinutes, parseDateOnly
 const { timeToMinutes } = require('./slot.service');
 const { incrementDoctorRevenue } = require('./lifecycle.service');
 
-// ─── helpers ───
 function fmtDate(d) { return formatDateOnly(d); }
 function fmtTime(hhmm) {
   if (!hhmm) return '';

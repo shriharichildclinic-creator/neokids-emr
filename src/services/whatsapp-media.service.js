@@ -220,11 +220,21 @@ async function sendCertificatePdf({ certificate, doctor, patient, filepath }) {
 }
 
 // Invoice — uses template neokids_invoice_pdf
-async function sendInvoicePdf({ appointment, filepath, publicUrl }) {
+//
+// `invoiceNumber` should be the SAME number printed on the PDF attached to
+// this message (invoice.invoiceNumber for a consultation invoice,
+// bill.billNumber for a pharmacy bill, or left unset for the original
+// online-booking invoice flow, whose PDF has no persisted invoice number
+// and is printed as INV-<id prefix> — the derived fallback below matches
+// that exactly). Passing the wrong/no number here previously meant the
+// WhatsApp text could cite an invoice number that doesn't exist anywhere
+// on the actual document or in the database.
+async function sendInvoicePdf({ appointment, filepath, publicUrl, invoiceNumber }) {
   const to      = appointment.patient.phone;
   const tplName = process.env.WA_TPL_INVOICE_PDF || 'neokids_invoice_pdf';
   const apptShort = appointment.id.slice(0, 8).toUpperCase();
   const fname   = `invoice_${apptShort}.pdf`;
+  const displayInvoiceNumber = invoiceNumber || `INV-${apptShort}`;
 
   const media = await uploadMediaToMeta(filepath, 'application/pdf');
   return sendDocumentTemplate({
@@ -234,7 +244,7 @@ async function sendInvoicePdf({ appointment, filepath, publicUrl }) {
     filename: fname,
     bodyParams: [
       appointment.patient.name,
-      `INV-${apptShort}`,
+      displayInvoiceNumber,
       Number(appointment.feeAtBooking).toFixed(2)
     ]
   });

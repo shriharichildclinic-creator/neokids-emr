@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { createDoctorSchema, updateDoctorByAdminSchema, flattenZod, randomPassword } = require('../utils/validators');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { sendStaffInvite } = require('../services/invite.service');
+const { sendStaffInvite, sendStaffInviteWhatsApp } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
 const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
@@ -72,6 +72,29 @@ exports.sendDoctorInvite = asyncHandler(async (req, res) => {
   });
 });
 
+exports.sendDoctorInviteWhatsapp = asyncHandler(async (req, res) => {
+  const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+
+  try {
+    const { inviteLink, expiresInMinutes } = await sendStaffInviteWhatsApp({
+      user: doctor, userType: 'DOCTOR', roleLabel: 'Doctor'
+    });
+    res.json({ inviteSent: true, invitePreviewUrl: inviteLink, inviteExpiresInMinutes: expiresInMinutes });
+  } catch (e) {
+    if (e.code === 'NO_PHONE') return res.status(400).json({ error: e.message });
+    // A new invite link was still generated (it replaces any previous
+    // link the moment this endpoint is called), so hand it back even
+    // though delivery failed — the admin can share it manually.
+    res.status(502).json({
+      error: 'Could not deliver the WhatsApp invite. Use the link below to share it manually.',
+      detail: e.message,
+      invitePreviewUrl: e.inviteLink,
+      inviteExpiresInMinutes: e.expiresInMinutes
+    });
+  }
+});
+
 // Admin-set profile photo — optional; a doctor can still set their own via
 // PUT /api/doctor/profile-image. Mirrors that handler exactly, just scoped
 // to req.params.id instead of the doctor's own session.
@@ -134,7 +157,7 @@ exports.listDoctors = asyncHandler(async (req, res) => {
       consultationModes: true, onlineConsultFee: true, physicalConsultFee: true,
       clinicName: true, clinicAddress: true, clinicMapUrl: true,
       registrationNumber: true, availableFromOffline: true, availableToOffline: true,
-     isAvailable: true, mustChangePassword: true, consults: true, revenue: true,
+     isAvailable: true, mustChangePassword: true,
 
 // Revenue Management
 clinicSharePercent: true,
@@ -146,7 +169,27 @@ photoUrl: true,
 createdAt: true
     }
   });
-  res.json(doctors);
+
+  // consults/revenue used to come from Doctor.consults / Doctor.revenue —
+  // counters bumped manually on complete/un-complete. Any write path that
+  // forgot to call that (or a status transition it didn't anticipate) let
+  // the counter drift from the appointments actually on record. Computing
+  // both live from Appointment rows here removes that whole class of bug —
+  // this is the same "completed + actually collected" definition the admin
+  // dashboard and doctor's own earnings view use elsewhere.
+  const agg = await prisma.appointment.groupBy({
+    by: ['doctorId'],
+    where: { status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } },
+    _sum: { feeAtBooking: true },
+    _count: { _all: true }
+  });
+  const byDoctor = new Map(agg.map(r => [r.doctorId, { consults: r._count._all, revenue: Number(r._sum.feeAtBooking || 0) }]));
+
+  res.json(doctors.map(d => ({
+    ...d,
+    consults: byDoctor.get(d.id)?.consults || 0,
+    revenue:  byDoctor.get(d.id)?.revenue  || 0
+  })));
 });
 
 exports.updateDoctor = asyncHandler(async (req, res) => {
@@ -329,13 +372,16 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { doctorId: id, status: 'CONFIRMED' } }),
     prisma.appointment.count({ where: { doctorId: id, consultationType: 'ONLINE'  } }),
     prisma.appointment.count({ where: { doctorId: id, consultationType: 'OFFLINE' } }),
+    // "Revenue" = actually collected (PAID / CASH_COLLECTED) — matches the
+    // definition used on the admin dashboard and the doctor's own earnings
+    // view. Cash still owed (CASH_PENDING) is not counted as revenue.
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { doctorId: id, status: 'COMPLETED', paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+      where: { doctorId: id, status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { doctorId: id, status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+      where: { doctorId: id, status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.count({ where: { doctorId: id, date: { gte: last30 } } }),
     prisma.appointment.findMany({
@@ -372,7 +418,7 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
       isAvailable: doctor.isAvailable,
       onlineConsultFee: doctor.onlineConsultFee, physicalConsultFee: doctor.physicalConsultFee,
       photoUrl: doctor.photoUrl, workingDays: doctor.workingDays, slotDuration: doctor.slotDuration,
-      consults: doctor.consults
+      consults: completed
     },
     summary: {
       total, completed, cancelled, pending, confirmed,
