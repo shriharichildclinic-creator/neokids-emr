@@ -1538,6 +1538,7 @@ const __NOTIF_TEMPLATE_LABELS = {
   neokids_vaccination_reminder:        'Vaccination Reminder',
   reschedule_online_v2:                'Appointment Rescheduled',
   cancellation_notice:                 'Appointment Cancelled',
+  cancellation_notice_v2:              'Appointment Cancelled',
   PHYSICAL_CONFIRMED:                  'Appointment Confirmation (Clinic)',
   ONLINE_CONFIRMED:                    'Appointment Confirmation (Online)',
   RESCHEDULED:                         'Appointment Rescheduled',

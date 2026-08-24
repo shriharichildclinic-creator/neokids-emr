@@ -145,6 +145,16 @@ exports.myAppointments = asyncHandler(async (req, res) => {
     if (from) where.date.gte = parseDateOnly(from);
     if (to)   where.date.lte = parseDateOnly(to);
   }
+  // Unpaid-expired online bookings, Cashfree order-creation failures, and
+  // gateway payment failures never became real bookings — they auto-cancel
+  // themselves and are pure noise here, so they're excluded unless the
+  // doctor explicitly asks to see cancelled appointments. Matched on
+  // status+paymentStatus (not notes text) since a genuine cancellation
+  // never sets paymentStatus to FAILED, so this reliably catches every
+  // path that produces one of these phantom rows.
+  if (status !== 'CANCELLED') {
+    where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED' };
+  }
   const appts = await prisma.appointment.findMany({
     where,
     include: { patient: true, prescription: true },
@@ -157,7 +167,11 @@ exports.myAppointments = asyncHandler(async (req, res) => {
 exports.todayWaitingRoom = asyncHandler(async (req, res) => {
   const today = getTodayDateOnly();
   const appts = await prisma.appointment.findMany({
-    where: { doctorId: req.user.id, date: today, status: { in: ['CONFIRMED', 'PENDING'] } },
+    // paymentStatus: FAILED is excluded defensively even though status
+    // should already be CANCELLED for these — see webhook/verifyPayment
+    // fixes that now cancel the appointment the moment payment fails,
+    // instead of leaving it sitting here as PENDING forever.
+    where: { doctorId: req.user.id, date: today, status: { in: ['CONFIRMED', 'PENDING'] }, paymentStatus: { not: 'FAILED' } },
     include: { patient: true },
     orderBy: { startTime: 'asc' }
   });
@@ -607,7 +621,7 @@ exports.reschedule = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Cannot reschedule a completed or cancelled appointment' });
   }
 
-  const liveSlots = await slotService.getLiveSlots(existing.doctorId, date, existing.consultationType);
+  const liveSlots = await slotService.getLiveSlots(existing.doctorId, date, existing.consultationType, existing.id);
   const slot = liveSlots.find(s => s.startTime === startTime);
   if (!slot || !slot.available) {
     return res.status(409).json({ error: 'Selected slot is not available for reschedule' });

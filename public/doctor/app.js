@@ -645,15 +645,22 @@ async function loadAll(){
     list.innerHTML = emptyState('Could not load appointments', ex.message || 'Try again later.', null);
   }
 }
-// Set by clicking a revenue sparkline bar — a lightweight date drill-down
-// since the Appointments tab has no date-range filter UI of its own.
+// Date filter for the Appointments tab. Settable two ways: typing/picking
+// a date directly in the #apptDateFilter input, or clicking a revenue
+// sparkline bar (goToAppointmentsForDate), which is a shortcut that also
+// fills in the same input so the two stay in sync.
 let _apptDateFilter = null;
 function goToAppointmentsForDate(dateStr){
   _apptDateFilter = dateStr;
+  const dateEl = $('#apptDateFilter');
+  if (dateEl) dateEl.value = dateStr || '';
   setActiveTab('allTab');
+  renderAllAppointments();
 }
 function clearApptDateFilter(){
   _apptDateFilter = null;
+  const dateEl = $('#apptDateFilter');
+  if (dateEl) dateEl.value = '';
   renderAllAppointments();
 }
 function renderAllAppointments(){
@@ -662,10 +669,15 @@ function renderAllAppointments(){
   const type   = $('#apptTypeFilter').value;
   const sort   = $('#apptSort').value;
   let arr = allAppointmentsCache.slice();
-  // Issue 4 — auto-cancelled (unpaid-expired) bookings are hidden by default.
+  // Auto-cancelled (unpaid-expired), Cashfree order-creation-failure, and
+  // gateway-payment-failure appointments are hidden by default. The server
+  // already excludes these from the /doctor/appointments response, but this
+  // client-side check matches by status+paymentStatus (not notes text) as a
+  // defensive backstop, since a genuine cancellation never sets paymentStatus
+  // to FAILED.
   const hideAutoEl = $('#apptHideAutoCancelled');
   if (!hideAutoEl || hideAutoEl.checked) {
-    arr = arr.filter(a => !(a.status === 'CANCELLED' && a.paymentStatus === 'FAILED' && /auto-cancelled/i.test(a.notes || '')));
+    arr = arr.filter(a => !(a.status === 'CANCELLED' && a.paymentStatus === 'FAILED'));
   }
   // "Pending" covers two things a doctor means by it: appointments still
   // awaiting confirmation (status PENDING) and completed/confirmed in-clinic
@@ -679,6 +691,8 @@ function renderAllAppointments(){
   }
   if (type)   arr = arr.filter(a => a.consultationType === type);
   if (_apptDateFilter) arr = arr.filter(a => String(a.date).slice(0,10) === _apptDateFilter);
+  const clearBtn = $('#apptDateFilterClear');
+  if (clearBtn) clearBtn.classList.toggle('hidden', !_apptDateFilter);
   if (search) {
     arr = arr.filter(a => {
       const p = a.patient || {};
@@ -708,6 +722,15 @@ function setupSearchFilters(){
     const ev = (el.tagName === 'INPUT') ? 'input' : 'change';
     el.addEventListener(ev, () => renderAllAppointments());
   });
+  const dateEl = $('#apptDateFilter');
+  if (dateEl) {
+    dateEl.addEventListener('change', () => {
+      _apptDateFilter = dateEl.value || null;
+      renderAllAppointments();
+    });
+  }
+  const dateClearBtn = $('#apptDateFilterClear');
+  if (dateClearBtn) dateClearBtn.addEventListener('click', clearApptDateFilter);
 }
 
 function apptCard(a){
@@ -1641,6 +1664,11 @@ function setupRescheduleModal(){
     const date = $('#rsDateInput').value;
     const reason = e.target.reason.value || '';
     if (!startTime){ alert('Please select a slot.'); return; }
+    const submitBtn = $('#rsSubmitBtn');
+    if (submitBtn.disabled) return; // already submitting — ignore duplicate click/submit
+    submitBtn.disabled = true;
+    const originalLabel = submitBtn.textContent;
+    submitBtn.textContent = 'Rescheduling…';
     try {
       await api('/doctor/appointments/' + encodeURIComponent(id) + '/reschedule', {
         method:'POST', body:{ date, startTime, reason }
@@ -1649,7 +1677,12 @@ function setupRescheduleModal(){
       loadWaiting(); loadAll(); loadStats(); loadDashSnapshot();
       if (activeConsultId === id) openConsultation(id);
       alert('Appointment rescheduled. Patient and doctor have been notified by email and WhatsApp.');
-    } catch (ex){ alert(ex.message || 'Could not reschedule'); }
+    } catch (ex){
+      alert(ex.message || 'Could not reschedule');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel;
+    }
   });
 }
 function setupCancelModal(){

@@ -275,13 +275,17 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   const where = { doctorId: { in: doctorIds } };
   if (doctorId && doctorIds.includes(doctorId)) where.doctorId = doctorId;
   if (status) where.status = status;
-  // Unpaid-and-expired online bookings auto-cancel themselves — they're
-  // noise, not a real cancellation reception needs to see, so they're
-  // filtered out unconditionally rather than behind a toggle (unless
-  // reception explicitly asks to see CANCELLED appointments, in which case
-  // showing everything including these is the actual expected behaviour).
+  // Unpaid-and-expired online bookings, Cashfree order-creation failures,
+  // and gateway payment failures all auto-cancel themselves — they never
+  // became real bookings, so they're noise, not a real cancellation
+  // reception needs to see. Filtered out unconditionally rather than
+  // behind a toggle (unless reception explicitly asks to see CANCELLED
+  // appointments, in which case showing everything including these is the
+  // actual expected behaviour). Matched on status+paymentStatus rather
+  // than notes text, since a genuine cancellation never sets paymentStatus
+  // to FAILED — this reliably covers every path that produces a phantom row.
   if (status !== 'CANCELLED') {
-    where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED', notes: { contains: 'Auto-cancelled' } };
+    where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED' };
   }
   if (date) where.date = parseDateOnly(date);
   if (from || to) {
@@ -461,7 +465,7 @@ exports.reschedule = asyncHandler(async (req, res) => {
   if (['COMPLETED', 'CANCELLED'].includes(existing.status)) {
     return res.status(400).json({ error: 'Cannot reschedule a completed or cancelled appointment' });
   }
-  const liveSlots = await slotService.getLiveSlots(existing.doctorId, date, existing.consultationType);
+  const liveSlots = await slotService.getLiveSlots(existing.doctorId, date, existing.consultationType, existing.id);
   const slot = liveSlots.find(s => s.startTime === startTime);
   if (!slot || !slot.available) return res.status(409).json({ error: 'Selected slot is not available for reschedule' });
 

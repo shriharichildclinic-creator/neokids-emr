@@ -257,10 +257,15 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   if (doctorId)  where.doctorId = doctorId;
   if (type)      where.consultationType = type;
   if (payment)   where.paymentStatus = payment;
-  // Auto-cancelled (unpaid-expired) appointments are noise in active
-  // listings, so the UI excludes them by default.
+  // Auto-cancelled (unpaid-expired) and payment-failed appointments never
+  // became real bookings, so they're noise in active listings. Match on
+  // status+paymentStatus rather than the notes text — a genuine cancel
+  // (by doctor/reception/patient) never sets paymentStatus to FAILED, so
+  // this pair reliably identifies phantom rows regardless of which path
+  // produced them (unpaid expiry, Cashfree order-creation failure, or a
+  // gateway payment failure).
   if (String(req.query.excludeAutoCancelled || '') === '1') {
-    where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED', notes: { contains: 'Auto-cancelled' } };
+    where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED' };
   }
   if (date)      where.date = parseDateOnly(date);
   if (from || to) {

@@ -211,9 +211,12 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
   // ── Mark FAILED only on explicit terminal states ──
   if (['EXPIRED', 'TERMINATED', 'CANCELLED', 'FAILED'].includes(cfStatus)) {
     if (appt.paymentStatus !== 'FAILED' && appt.paymentStatus !== 'PAID') {
+      // Also cancel the appointment itself, not just the payment flag —
+      // otherwise this row stays PENDING forever (see webhook.controller.js
+      // fix), lingering as a ghost booking and holding its slot.
       await prisma.appointment.update({
         where: { id: appt.id },
-        data: { paymentStatus: 'FAILED' }
+        data: { paymentStatus: 'FAILED', status: 'CANCELLED', cancelledAt: new Date(), notes: 'Payment failed at gateway' }
       });
     }
     return res.json({

@@ -109,13 +109,21 @@ exports.cashfree = async (req, res) => {
 
       await bookingService.confirmOnlineBooking(appt.id, verdict.cfPaymentId || paymentId || orderId);
     } else if (['FAILED', 'CANCELLED', 'USER_DROPPED', 'NOT_ATTEMPTED'].includes(paymentStatus)) {
+      // Previously this only flipped paymentStatus to FAILED and left
+      // status as PENDING. That left a permanent "ghost" appointment
+      // sitting in the doctor's waiting room / appointment list and
+      // holding the slot forever — expirePendingAppointments() only
+      // sweeps rows where paymentStatus is still UNPAID, so a row
+      // already marked FAILED here never got picked up by that job.
+      // Cancel it outright and free the slot, matching how a Cashfree
+      // order-creation failure or an unpaid-expiry is handled elsewhere.
       await prisma.appointment.updateMany({
         where: {
           cashfreeOrderId: orderId,
           paymentStatus: { not: 'PAID' },
           status: { not: 'CANCELLED' }
         },
-        data: { paymentStatus: 'FAILED' }
+        data: { paymentStatus: 'FAILED', status: 'CANCELLED', cancelledAt: new Date(), notes: 'Payment failed at gateway' }
       });
     }
 

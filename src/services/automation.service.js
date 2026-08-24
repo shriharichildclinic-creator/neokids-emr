@@ -10,7 +10,7 @@
 //   neokids_reminder_offline_v2             4 body, Maps URL
 //   neokids_booking_confirms_offline_v2     5 body, Maps URL
 //   reschedule_offline                      5 body, Maps URL
-//   cancellation_notice                     4 body, no button
+//   cancellation_notice_v2                  5 body, no button (reason as {{5}})
 //   doctor_new_booking_offline              5 body, no button
 //   doctor_new_booking_online_v2            5 body, Meet URL
 //   doctor_reminder_offline                 3 body, no button
@@ -22,10 +22,11 @@
 // the recipient. The fallback chain for reschedules is:
 //   primary template -> plain text (24h window) -> email (always runs)
 //
-// cancellation_notice has no reason placeholder (4 body vars by design);
-// the reason is sent as a plain-text follow-up inside the 24h window.
-// A cancellation_notice_v2 template with a 5th {{5}}=Reason slot would
-// let this go through the template alone — see docs/META_TEMPLATE_FIXES.md.
+// Default template is now cancellation_notice_v2, which carries the
+// reason as its 5th body param ({{5}}), so it goes through in one
+// message. If WA_TPL_CANCELLATION is overridden to a non-"_v2" name
+// (i.e. the old 4-var cancellation_notice), the code below falls back
+// to sending the reason as a plain-text follow-up inside the 24h window.
 
 const prisma   = require('../config/prisma');
 const logger   = require('../utils/logger');
@@ -656,7 +657,7 @@ async function onAppointmentCancelled(appointment, reason) {
     });
   }
   if (a.patient.phone) {
-    const cancelTpl = process.env.WA_TPL_CANCELLATION || 'cancellation_notice';
+    const cancelTpl = process.env.WA_TPL_CANCELLATION || 'cancellation_notice_v2';
 
     // Detect whether the configured template is the 5-var v2 or 4-var v1.
     const isV2 = /_v2$/.test(cancelTpl);

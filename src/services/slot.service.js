@@ -25,7 +25,7 @@ function minutesToTime(min) {
   return `${h}:${m}`;
 }
 
-async function getLiveSlots(doctorId, dateStr, consultationType) {
+async function getLiveSlots(doctorId, dateStr, consultationType, excludeAppointmentId) {
   // Defense in depth: never trust the caller. If the controller
   // forgets to validate, refuse anything that isn't a recognised mode
   // instead of silently mapping it to OFFLINE.
@@ -80,11 +80,21 @@ async function getLiveSlots(doctorId, dateStr, consultationType) {
   // doctor+date+startTime, regardless of consultationType — a doctor
   // cannot do two appointments at once. PENDING is included — the slot
   // is locked the moment a booking is created.
+  //
+  // excludeAppointmentId: when checking slots for a RESCHEDULE, the
+  // appointment being moved must not be allowed to block itself. If a
+  // reschedule request is submitted twice (e.g. a double-click before
+  // the UI disables the button), the first request lands and moves the
+  // appointment onto the target slot; without this exclusion, the
+  // second request's availability check would see that same
+  // appointment now sitting in the target slot and wrongly report the
+  // slot as "already taken" even though nothing else booked it.
   const bookedAppointments = await prisma.appointment.findMany({
     where: {
       doctorId,
       date,
-      status: { notIn: ['CANCELLED', 'NO_SHOW'] }
+      status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+      ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {})
       // NOTE: intentionally no consultationType filter here
     },
     select: { startTime: true }
