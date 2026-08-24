@@ -670,15 +670,12 @@ function renderAllAppointments(){
   const sort   = $('#apptSort').value;
   let arr = allAppointmentsCache.slice();
   // Auto-cancelled (unpaid-expired), Cashfree order-creation-failure, and
-  // gateway-payment-failure appointments are hidden by default. The server
-  // already excludes these from the /doctor/appointments response, but this
-  // client-side check matches by status+paymentStatus (not notes text) as a
-  // defensive backstop, since a genuine cancellation never sets paymentStatus
-  // to FAILED.
-  const hideAutoEl = $('#apptHideAutoCancelled');
-  if (!hideAutoEl || hideAutoEl.checked) {
-    arr = arr.filter(a => !(a.status === 'CANCELLED' && a.paymentStatus === 'FAILED'));
-  }
+  // gateway-payment-failure appointments never become real bookings. The
+  // server already excludes these from the /doctor/appointments response
+  // (see doctor.controller.myAppointments), so this is a defensive
+  // client-side backstop only — always on, no UI toggle needed since the
+  // server never sends these rows in the first place.
+  arr = arr.filter(a => !(a.status === 'CANCELLED' && a.paymentStatus === 'FAILED'));
   // "Pending" covers two things a doctor means by it: appointments still
   // awaiting confirmation (status PENDING) and completed/confirmed in-clinic
   // visits whose cash hasn't been collected yet (paymentStatus CASH_PENDING).
@@ -716,7 +713,7 @@ function renderAllAppointments(){
   list.innerHTML = dateChip + arr.map(apptCard).join('');
 }
 function setupSearchFilters(){
-  ['apptSearch','apptStatusFilter','apptTypeFilter','apptSort','apptHideAutoCancelled'].forEach(id => {
+  ['apptSearch','apptStatusFilter','apptTypeFilter','apptSort'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const ev = (el.tagName === 'INPUT') ? 'input' : 'change';
@@ -2186,7 +2183,7 @@ async function loadCertificates(){
               </div>
             </div>
             ${c.diagnosis ? `<div class="np-cert-row__diag"><b>Diagnosis:</b> ${escapeHtml(c.diagnosis)}</div>` : ''}
-            <div class="np-mut np-cert-row__reason">${escapeHtml(c.reason || '')}</div>
+            ${c.reason ? `<div class="np-mut np-cert-row__reason"><b>Reason:</b> ${escapeHtml(c.reason)}</div>` : ''}
           </div>
         </article>`).join('');
       wrap.querySelectorAll('[data-cert-edit]').forEach(btn => {

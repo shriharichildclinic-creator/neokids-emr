@@ -845,14 +845,21 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   min-width: 0;
 }
 .np-cert-row__actions { gap: .4rem; flex-wrap: wrap; }
-.np-cert-row__diag { font-size: .85rem; margin-top: .1rem; }
-.np-cert-row__reason { font-size: .82rem; margin-top: 0; }
+.np-cert-row__diag { font-size: .85rem; margin-top: .5rem; }
+.np-cert-row__reason {
+  font-size: .82rem;
+  margin-top: .5rem;
+  padding-top: .55rem;
+  border-top: 1px solid var(--nk-border);
+}
 
 @media (max-width: 640px) {
   .np-cert-row { padding: .65rem .7rem; gap: .4rem; }
   .np-cert-row__meta { font-size: .78rem; }
   .np-cert-row__top { flex-direction: column; align-items: flex-start; }
-  .np-cert-row__actions { width: 100%; }
+  .np-cert-row__actions { width: 100%; margin-top: .3rem; }
+  .np-cert-row__diag { margin-top: .6rem; }
+  .np-cert-row__reason { margin-top: .6rem; padding-top: .5rem; }
 }
 
 .np-history-rx {
@@ -1102,6 +1109,12 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   width:100%;
   min-width:0;
   align-self:end;
+}
+.np-filterbar--doctor > #apptDateFilterClear{
+  width:auto;
+  min-width:0;
+  justify-self:start;
+  align-self:center;
 }
 .np-filterbar--doctor > .np-select,
 .np-filterbar--doctor > input[type="date"],
@@ -1658,7 +1671,8 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-filterbar--doctor{ grid-template-columns:1fr; gap:.6rem; }
   .np-filterbar--doctor > .np-search{ grid-column:auto; }
   .np-filterbar--doctor > .np-btn{ width:100%; }
-  
+  .np-filterbar--doctor > #apptDateFilterClear{ width:auto; justify-self:start; }
+
   .np-filterbar--doctor .np-filter-control > .np-btn{ width:auto; align-self:flex-start; min-width:120px; }
 }
 
