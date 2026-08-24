@@ -532,6 +532,16 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   .np-dropzone__preview-file{font-size:12.5px;font-weight:600;color:#475569;background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:.4rem .6rem;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   html[data-theme="dark"] .np-dropzone__preview-file{color:#B4D7D7;background:#0E1A22;border-color:#234551}
 
+  /* Selected-file controls: appear the instant a file is picked (before
+     any upload request fires), and disappear the instant it's cleared —
+     no waiting on a network round trip either way. */
+  .np-dropzone__selected{display:none;align-items:center;justify-content:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .np-dropzone__selected.is-visible{display:flex}
+  .np-dropzone__clear{font-size:12px;font-weight:600;color:#B0413E;background:#fff;border:1px solid #E7B4B0;border-radius:8px;padding:.3rem .6rem;cursor:pointer;line-height:1.2}
+  .np-dropzone__clear:hover{background:#FBEAE9}
+  html[data-theme="dark"] .np-dropzone__clear{color:#F0A6A2;background:#0E1A22;border-color:#5B3230}
+  html[data-theme="dark"] .np-dropzone__clear:hover{background:#241615}
+
 .np-sticky-head thead th{position:sticky;top:0;z-index:5;background:inherit}
 
 .np-lightbox{position:fixed;inset:0;z-index:100002;display:flex;align-items:center;justify-content:center;padding:32px;background:rgba(8,12,18,.82);opacity:0;transition:opacity .15s ease;cursor:zoom-out}
@@ -854,15 +864,41 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       // circular avatar preview elsewhere) doesn't change appearance.
       let previewEl = null;
       let objectUrl = null;
+      let clearWrap = null;
+      let clearBtn = null;
       if (opts.preview) {
         previewEl = document.createElement('div');
         previewEl.className = 'np-dropzone__preview';
         wrap.appendChild(previewEl);
+
+        // "Remove" control for a file that's only been picked, not yet
+        // uploaded — shows the moment a file lands in the input, and
+        // clearing it here is purely local (nothing's been sent to the
+        // server yet, so there's nothing to delete server-side).
+        clearWrap = document.createElement('div');
+        clearWrap.className = 'np-dropzone__selected';
+        clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'np-dropzone__clear';
+        clearBtn.textContent = 'Remove';
+        clearWrap.appendChild(clearBtn);
+        wrap.appendChild(clearWrap);
+
+        clearBtn.addEventListener('click', (e) => {
+          // Stop this from bubbling up to the <label> that wraps the
+          // input — a click anywhere in the label would otherwise
+          // reopen the native file picker instead of just clearing it.
+          e.preventDefault();
+          e.stopPropagation();
+          input.value = '';
+          updateStatus();
+        });
       }
 
       function clearPreview() {
         if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
         if (previewEl) previewEl.innerHTML = '';
+        if (clearWrap) clearWrap.classList.remove('is-visible');
       }
 
       function renderPreview(f) {
@@ -881,6 +917,7 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
           badge.textContent = (f.type === 'application/pdf' ? '📄 ' : '📎 ') + f.name;
           previewEl.appendChild(badge);
         }
+        if (clearWrap) clearWrap.classList.add('is-visible');
       }
 
       function updateStatus() {

@@ -2030,16 +2030,36 @@ function setKycFieldStatus(kind, url){
   const viewEl    = card.querySelector('.js-kyc-view');
   if (!statusEl || !actionsEl || !inputEl || !viewEl) return;
 
+  // NPDropzone (once bound) wraps the raw <input> in its own styled
+  // "Drop file here / click to browse" box — that wrapper, not the input
+  // itself, is what's actually visible, so it has to be hidden/shown in
+  // step with inputEl or the drop-zone box stays on screen underneath the
+  // View/Download/Replace/Remove row once a document is uploaded.
+  // Only true once NPDropzone.bind() has run (it hasn't yet on the very
+  // first synchronous render) — falling back to inputEl.parentElement
+  // here would hide the whole .np-kyc-card instead of just the drop box.
+  const dzWrap = inputEl.closest('.np-dropzone');
+
   if (url) {
     statusEl.innerHTML = '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Uploaded</span>';
     viewEl.href = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) + '/' + encodeURIComponent(kind);
     actionsEl.classList.remove('hidden');
     inputEl.classList.add('hidden');
+    if (dzWrap) dzWrap.classList.add('hidden');
   } else {
     statusEl.innerHTML = '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Not uploaded</span>';
     viewEl.removeAttribute('href');
     actionsEl.classList.add('hidden');
     inputEl.classList.remove('hidden');
+    if (dzWrap) dzWrap.classList.remove('hidden');
+    // Clear any locally-picked-but-not-yet-uploaded file too (e.g. this
+    // runs when switching to a different doctor). Without this the
+    // dropzone's "Selected: ..." preview/Remove button from whichever
+    // doctor was open before could still be showing here.
+    if (inputEl.value) {
+      inputEl.value = '';
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   }
 }
 
@@ -2153,6 +2173,14 @@ document.addEventListener('change', async (ev) => {
   delete input.dataset.autoUpload;
   const file = input.files && input.files[0];
   input.value = '';
+  // The dropzone already rendered its "Selected: ..." preview + Remove
+  // button for this same change event (its own listener runs before this
+  // delegated one). Clearing .value here doesn't fire another 'change' on
+  // its own, so without this the stale preview would keep showing even
+  // though the file is now mid-upload / uploaded. dataset.autoUpload was
+  // already deleted above, so this re-dispatch hits the early return
+  // instead of looping.
+  input.dispatchEvent(new Event('change', { bubbles: true }));
   if (!file) return;
   const card = input.closest('.np-kyc-card');
   await uploadKycField(card.dataset.kycKind, file);
@@ -2279,7 +2307,15 @@ async function uploadKycDocs(){
 
     ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
       const input = f.querySelector(`input[type="file"][name="${name}"]`);
-      if (input) input.value = '';
+      if (input) {
+        input.value = '';
+        // Setting .value programmatically doesn't fire 'change', so the
+        // dropzone's own listener (which clears its "Selected: ..."
+        // preview and Remove control) never runs on its own — without
+        // this the old file preview keeps showing even though it's been
+        // uploaded and the input is now empty.
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     });
 
     NPToast.success('KYC documents uploaded.');
