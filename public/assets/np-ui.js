@@ -575,9 +575,9 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   .np-notif__item:last-child{border-bottom:0}
   .np-notif__item:hover{background:var(--nk-teal-50,#F1F7F7)}
   .np-notif__item.is-unread{background:rgba(137,188,189,.08)}
-  .np-notif__item-title{display:flex;align-items:center;gap:6px;font-weight:700;font-size:.82rem;color:var(--nk-ink,#0F2E3A)}
+  .np-notif__item-title{display:flex;align-items:center;gap:6px;font-weight:700;font-size:.82rem;color:var(--nk-ink,#0F2E3A);min-width:0;overflow-wrap:anywhere;word-break:break-word}
   .np-notif__item-dot{width:7px;height:7px;border-radius:50%;background:#89BCBD;flex-shrink:0}
-  .np-notif__item-msg{font-size:.78rem;color:var(--nk-muted,#64748b);margin-top:2px}
+  .np-notif__item-msg{font-size:.78rem;color:var(--nk-muted,#64748b);margin-top:2px;overflow-wrap:anywhere;word-break:break-word}
   .np-notif__item-time{font-size:.7rem;color:var(--nk-muted,#94a3b8);margin-top:4px}
   .np-notif__empty{padding:28px 14px;text-align:center;font-size:.82rem;color:var(--nk-muted,#64748b)}
   html[data-theme="dark"] .np-notif__btn{background:#11202A;border-color:#234551;color:#91A6B0}
@@ -1462,4 +1462,65 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     NPDatePicker.init();
   }
 })(window);
+
+// Mobile back-button support for modals/drawers, shared by all 4 portals.
+// Every portal opens a `.np-modal`/`.np-drawer` the same way (remove the
+// `hidden` class) but each has its own bespoke open/close functions — there
+// is no single shared open()/close() call to hook. Rather than touching
+// every call site, this watches the DOM directly: opening one of these
+// elements pushes a throwaway history entry, so the phone's hardware/
+// gesture back button closes the topmost open modal instead of leaving the
+// page entirely; closing it any other way (X button, Cancel, submit)
+// consumes that same entry so a later back press doesn't need pressing
+// twice to actually leave.
+(function () {
+  'use strict';
+  var openStack = [];
+  var closingViaPopstate = false;
+
+  function isModalLike(el) {
+    return !!(el && el.classList && (el.classList.contains('np-modal') || el.classList.contains('np-drawer')));
+  }
+
+  function onToggle(el) {
+    if (!isModalLike(el)) return;
+    var isHidden = el.classList.contains('hidden');
+    var idx = openStack.indexOf(el);
+    if (!isHidden && idx === -1) {
+      openStack.push(el);
+      try { history.pushState({ npModalDepth: openStack.length }, ''); } catch (_) {}
+    } else if (isHidden && idx !== -1) {
+      openStack.splice(idx, 1);
+      if (!closingViaPopstate) {
+        try { history.back(); } catch (_) {}
+      }
+    }
+  }
+
+  window.addEventListener('popstate', function () {
+    if (!openStack.length) return;
+    closingViaPopstate = true;
+    var el = openStack[openStack.length - 1];
+    el.classList.add('hidden');
+    Promise.resolve().then(function () { closingViaPopstate = false; });
+  });
+
+  function startObserving() {
+    try {
+      var mo = new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var m = muts[i];
+          if (m.type === 'attributes' && m.attributeName === 'class') onToggle(m.target);
+        }
+      });
+      mo.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true });
+    } catch (_) {}
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startObserving);
+  } else {
+    startObserving();
+  }
+})();
 

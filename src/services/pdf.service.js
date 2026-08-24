@@ -618,23 +618,28 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
     drawHeader(doc, 'PHARMACY BILL');
 
     doc.fontSize(11).font('Helvetica').fillColor('#333');
-    doc.text(`Bill No: ${bill.billNumber}`, 50, 110);
-    doc.text(`Date: ${dayjs(bill.createdAt).format('DD MMM YYYY, hh:mm A')}`, 50, 125);
-    doc.text(`Status: ${bill.status || 'DRAFT'}`, 50, 140);
-    doc.text(`Payment: ${bill.paymentMethod || 'CASH'}`, 50, 155);
-    if (bill.billType && bill.billType !== 'PHARMACY') doc.text(`Type: ${bill.billType === 'CONSULT' ? 'Consultation' : 'Service'}`, 50, 170);
+    let metaY = 110;
+    doc.text(`Bill No: ${bill.billNumber}`, 50, metaY); metaY += 15;
+    doc.text(`Date: ${dayjs(bill.createdAt).format('DD MMM YYYY, hh:mm A')}`, 50, metaY); metaY += 15;
+    doc.text(`Status: ${bill.status || 'DRAFT'}`, 50, metaY); metaY += 15;
+    doc.text(`Payment: ${bill.paymentMethod || 'CASH'}`, 50, metaY); metaY += 15;
+    if (bill.billType && bill.billType !== 'PHARMACY') {
+      doc.text(`Type: ${bill.billType === 'CONSULT' ? 'Consultation' : 'Service'}`, 50, metaY);
+      metaY += 15;
+    }
 
-    doc.fontSize(12).font('Helvetica-Bold').text('Customer:', 50, 175);
+    const partyY = metaY;
+    doc.fontSize(12).font('Helvetica-Bold').text('Customer:', 50, partyY);
     doc.fontSize(11).font('Helvetica');
-    doc.text(bill.customerName || (bill.patient && bill.patient.name) || 'Walk-in customer', 50, 192);
+    doc.text(bill.customerName || (bill.patient && bill.patient.name) || 'Walk-in customer', 50, partyY + 17);
     const phone = bill.customerPhone || (bill.patient && bill.patient.phone);
-    if (phone) doc.text(`Phone: +91 ${phone}`, 50, 207);
+    if (phone) doc.text(`Phone: +91 ${phone}`, 50, partyY + 32);
 
-    doc.fontSize(12).font('Helvetica-Bold').text('Store:', 320, 175);
+    doc.fontSize(12).font('Helvetica-Bold').text('Store:', 320, partyY);
     doc.fontSize(11).font('Helvetica');
-    doc.text(centreName, 320, 192, { width: 225 });
-    if (centreAddr) doc.fontSize(9).fillColor('#555').text(String(centreAddr), 320, 207, { width: 225 });
-    if (doctor) doc.fillColor('#555').fontSize(9).text(`Ref. Doctor: Dr. ${doctor.name}`, 320, 235, { width: 225 });
+    doc.text(centreName, 320, partyY + 17, { width: 225 });
+    if (centreAddr) doc.fontSize(9).fillColor('#555').text(String(centreAddr), 320, partyY + 32, { width: 225 });
+    if (doctor) doc.fillColor('#555').fontSize(9).text(`Ref. Doctor: Dr. ${doctor.name}`, 320, partyY + 60, { width: 225 });
     doc.fillColor('#333');
 
     const tableTop = 270;

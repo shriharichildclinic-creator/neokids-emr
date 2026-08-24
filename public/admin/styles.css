@@ -1767,6 +1767,7 @@ html, body{ max-width:100%; overflow-x:hidden; }
     max-width:100%;
     width:100%;
     max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1rem);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1rem);
     border-radius: 18px 18px 14px 14px;
   }
   .np-modal__head{ padding:.85rem 1rem; }
@@ -1788,6 +1789,7 @@ html, body{ max-width:100%; overflow-x:hidden; }
     right:0;
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 100px);
+    max-height: calc(100dvh - 100px);
     overflow-y:auto;
   }
   .np-profile__meta{ display:none; }
