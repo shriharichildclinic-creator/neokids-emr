@@ -664,16 +664,7 @@ function renderAllAppointments(){
   if (!hideAutoEl || hideAutoEl.checked) {
     arr = arr.filter(a => !(a.status === 'CANCELLED' && a.paymentStatus === 'FAILED' && /auto-cancelled/i.test(a.notes || '')));
   }
-  // "Pending" covers two things a doctor means by it: appointments still
-  // awaiting confirmation (status PENDING) and completed/confirmed in-clinic
-  // visits whose cash hasn't been collected yet (paymentStatus CASH_PENDING).
-  // Matching only a.status here missed the second case entirely — e.g. an
-  // appointment marked COMPLETED with cash still pending never showed up.
-  if (status === 'PENDING') {
-    arr = arr.filter(a => a.status === 'PENDING' || a.paymentStatus === 'CASH_PENDING');
-  } else if (status) {
-    arr = arr.filter(a => a.status === status);
-  }
+  if (status) arr = arr.filter(a => a.status === status);
   if (type)   arr = arr.filter(a => a.consultationType === type);
   if (_apptDateFilter) arr = arr.filter(a => String(a.date).slice(0,10) === _apptDateFilter);
   if (search) {
@@ -1047,11 +1038,11 @@ async function openConsultation(id){
           <div id="pm-prescription" class="np-pm-pane hidden" data-pm-pane-id="prescription">
             <div id="rxSuccessCard" class="np-success-card hidden" style="padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
               <div class="np-success-card__title" style="font-weight:700; margin-bottom:.25rem;">✓ Prescription saved</div>
-              <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">Not sent to the patient yet.</div>
+              <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">PDF generated and emailed to patient.</div>
               <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
                 <a id="rxViewBtn" class="np-btn np-btn--sm" href="#" target="_blank" rel="noopener">View PDF</a>
                 <a id="rxDownloadBtn" class="np-btn np-btn--sm" href="#" download>Download PDF</a>
-                <button id="rxResendBtn" type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="openSendRxModal()">Send Prescription</button>
+                <button id="rxResendBtn" type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="resendPrescription()">Resend to patient</button>
               </div>
             </div>
             <div id="rxFormSlot"></div>
@@ -1136,11 +1127,11 @@ function renderConsultBody(root, a, compact){
       <div id="pm-prescription" class="np-pm-pane hidden" data-pm-pane-id="prescription">
         <div id="rxSuccessCard" class="np-success-card hidden" style="padding:.85rem 1rem; border-radius:12px; margin-bottom:.85rem;">
           <div class="np-success-card__title" style="font-weight:700; margin-bottom:.25rem;">✓ Prescription saved</div>
-          <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">Not sent to the patient yet.</div>
+          <div id="rxSuccessSub" class="np-mut" style="font-size:.85rem; margin-bottom:.5rem;">PDF generated and emailed to patient.</div>
           <div class="np-row" style="gap:.5rem; flex-wrap:wrap;">
             <a id="rxViewBtn" class="np-btn np-btn--sm" href="#" target="_blank" rel="noopener">View PDF</a>
             <a id="rxDownloadBtn" class="np-btn np-btn--sm" href="#" download>Download PDF</a>
-            <button id="rxResendBtn" type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="openSendRxModal()">Send Prescription</button>
+            <button id="rxResendBtn" type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="resendPrescription()">Resend to patient</button>
           </div>
         </div>
         <div id="rxFormSlot"></div>
@@ -1209,9 +1200,8 @@ function renderRxFormInto(slot, a, data){
     }
     showRxSuccessCard({
       pdfUrl: a.prescriptionUrl,
-      hasEmail: !!p.email,
-      hasPhone: !!p.phone,
-      subtitle: 'Existing prescription on file. You can edit and re-save, or send it to the patient.'
+      emailRecipient: p.email,
+      subtitle: 'Existing prescription on file. You can edit and re-save, or re-send to the patient.'
     });
   } else {
     const card = document.querySelector('#rxSuccessCard');
@@ -1359,11 +1349,12 @@ function addMedRow(prefill){
   $('#medsList').appendChild(tr);
 }
 
-function showRxSuccessCard({ pdfUrl, hasEmail, hasPhone, subtitle }){
+function showRxSuccessCard({ pdfUrl, emailRecipient, subtitle }){
   const card = document.querySelector('#rxSuccessCard');
   if (!card) return;
   const sub = card.querySelector('#rxSuccessSub');
-  if (sub) sub.textContent = subtitle || 'Saved. Not sent to the patient yet — choose a delivery channel.';
+  if (sub) sub.textContent = subtitle ||
+    (emailRecipient ? `PDF generated and emailed to ${emailRecipient}.` : 'PDF generated. No patient email on file — use Resend after adding one.');
   const view = card.querySelector('#rxViewBtn');
   const dl   = card.querySelector('#rxDownloadBtn');
   if (pdfUrl){
@@ -1378,46 +1369,23 @@ function showRxSuccessCard({ pdfUrl, hasEmail, hasPhone, subtitle }){
     dl.classList.add('np-btn--disabled');
   }
   const resend = card.querySelector('#rxResendBtn');
-  if (resend) resend.disabled = !(hasEmail || hasPhone);
+  if (resend) resend.disabled = !emailRecipient;
   card.classList.remove('hidden');
 }
 
-// ─── Send Prescription modal ───────────────────────────────────────
-// Nothing is sent to the patient when a prescription is saved. The
-// doctor explicitly picks Email / WhatsApp / Both here.
-let _sendRxApptId = null;
-
-function openSendRxModal(){
+async function resendPrescription(){
   if (!currentAppointment){ alert('No appointment selected'); return; }
-  _sendRxApptId = currentAppointment.id;
-  npOpenModal('sendRxModal');
-}
-
-function closeSendRxModal(){
-  npCloseModal('sendRxModal');
-}
-
-async function sendPrescriptionVia(channel){
-  if (!_sendRxApptId) return;
-  const buttons = $$('#sendRxModal [data-send-rx-channel]');
-  buttons.forEach(b => b.disabled = true);
+  const btn = document.querySelector('#rxResendBtn'); if (btn) btn.disabled = true;
   try {
-    const r = await api('/doctor/appointments/' + encodeURIComponent(_sendRxApptId) + '/prescription/send',
-      { method:'POST', body: { channel } });
-    closeSendRxModal();
-    alert(r.message || 'Prescription sent successfully.');
+    const r = await api('/doctor/appointments/' + encodeURIComponent(currentAppointment.id) + '/prescription/resend',
+      { method:'POST' });
+    alert('Prescription re-sent to ' + (r.recipient || 'patient'));
   } catch (ex){
-    alert(ex.message || 'Could not send the prescription. Please try again.');
+    alert(ex.message || 'Could not resend');
   } finally {
-    buttons.forEach(b => b.disabled = false);
+    if (btn) btn.disabled = false;
   }
 }
-
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-send-rx-channel]');
-  if (!btn) return;
-  sendPrescriptionVia(btn.getAttribute('data-send-rx-channel'));
-});
 
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'rxForm') return;
@@ -1458,9 +1426,11 @@ document.addEventListener('submit', async (e) => {
       { method:'POST', body }
     );
     showRxSuccessCard({
-      pdfUrl: (r.pdf && r.pdf.url) || (r.appointment && r.appointment.prescriptionUrl),
-      hasEmail: r.patient && r.patient.hasEmail,
-      hasPhone: r.patient && r.patient.hasPhone
+      pdfUrl: (r.delivery && r.delivery.pdfUrl) || (r.appointment && r.appointment.prescriptionUrl),
+      emailRecipient: r.delivery && r.delivery.emailRecipient,
+      subtitle: r.delivery && r.delivery.emailQueued
+        ? `PDF generated and emailed to ${r.delivery.emailRecipient}.`
+        : 'PDF generated. Patient has no email — use Resend after adding one.'
     });
     const scope = e.target.closest('.np-pm-scope');
     if (scope){
@@ -1468,9 +1438,6 @@ document.addEventListener('submit', async (e) => {
       if (tab) tab.click();
     }
     loadStats(); loadDashSnapshot(); loadWaiting();
-    // Prescription is saved but not delivered yet — let the doctor
-    // explicitly choose how to send it.
-    openSendRxModal();
   } catch (ex){
     alert(ex.message || 'Could not save prescription');
   } finally {

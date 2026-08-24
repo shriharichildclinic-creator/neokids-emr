@@ -1,11 +1,21 @@
 // whatsapp.service.js
-//
-// Meta WhatsApp Cloud API client. Two send paths:
-//   - sendWhatsApp(): single template send, mock provider in dev.
-//   - sendWhatsAppWithFallback(): primary template -> fallback template
-//     -> plain text (24h customer-care window), used wherever a failed
-//     template send shouldn't silently drop the notification.
-// Phone numbers are normalized to E.164-ish "91XXXXXXXXXX" for India.
+// =====================================================================
+// Notable behavior:
+//   1. Returns rich structured errors (errorCode, errorTitle, errorDetail)
+//      so the caller can log WHY a send failed, not just "FAILED".
+//   2. Phone normalization is centralized and matches India (+91) but the
+//      "auto-prepend 91" only triggers when the number is exactly 10 digits.
+//      Previously a 12-digit number starting with "01" became "9101..." -
+//      now caught.
+//   3. Component builder always emits the URL button (sub_type=url, index=0)
+//      when urlButtonParam is provided — Meta rejects the request if the
+//      template defines a URL button but the request omits it.
+//   4. New sendPlainText() helper for the 24h customer-care window, used as
+//      a fallback by the rescheduler if Meta says "template_not_found".
+//   5. New sendWhatsAppWithFallback() — tries the primary template, and if
+//      Meta returns code 132001/132012 (template not found / param mismatch),
+//      falls back to the optional fallback template, then plain text.
+// =====================================================================
 
 const logger = require('../utils/logger');
 

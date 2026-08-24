@@ -275,7 +275,7 @@
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
-                <div class="np-panel__title">Doctors <span id="docCountBadge" class="np-badge np-badge--blue" style="margin-left:.4rem; vertical-align:middle;"></span></div>
+                <div class="np-panel__title">Doctors</div>
                 <div class="np-panel__subtitle">Manage platform doctors, fees, and availability</div>
               </div>
               <button class="np-btn np-btn--primary np-btn--add-doctor" type="button" onclick="openDoctorModal()">
@@ -944,57 +944,37 @@
               <button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="unlockKycUpload()">Replace documents</button>
             </div>
             <div id="kycGrid" class="np-kyc-grid">
-              <div class="np-kyc-card" data-kyc-kind="aadhaar">
+              <div class="np-kyc-card">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Aadhaar Card</span>
-                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
+                  <span id="kycAadhaarStatus" class="np-kyc-card__status">Not uploaded</span>
                 </div>
                 <input type="file" name="aadhaar" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <div class="np-kyc-card__actions hidden">
-                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
-                </div>
+                <a id="kycAadhaarView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
-              <div class="np-kyc-card" data-kyc-kind="pan">
+              <div class="np-kyc-card">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">PAN Card</span>
-                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
+                  <span id="kycPanStatus" class="np-kyc-card__status">Not uploaded</span>
                 </div>
                 <input type="file" name="pan" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <div class="np-kyc-card__actions hidden">
-                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
-                </div>
+                <a id="kycPanView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
-              <div class="np-kyc-card" data-kyc-kind="cancelledCheque">
+              <div class="np-kyc-card">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Cancelled Cheque</span>
-                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
+                  <span id="kycChequeStatus" class="np-kyc-card__status">Not uploaded</span>
                 </div>
                 <input type="file" name="cancelledCheque" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <div class="np-kyc-card__actions hidden">
-                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
-                </div>
+                <a id="kycChequeView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
-              <div class="np-kyc-card" data-kyc-kind="medicalRegCert">
+              <div class="np-kyc-card">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Medical Registration Cert.</span>
-                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
+                  <span id="kycMedCertStatus" class="np-kyc-card__status">Not uploaded</span>
                 </div>
                 <input type="file" name="medicalRegCert" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <div class="np-kyc-card__actions hidden">
-                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
-                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
-                </div>
+                <a id="kycMedCertView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
               </div>
             </div>
 
@@ -1022,7 +1002,6 @@
     </div>
     <div class="np-modal__foot">
       <button type="button" id="sendDoctorInviteBtn" class="np-btn hidden" onclick="sendDoctorInvite()">Send Invite</button>
-      <button type="button" id="sendDoctorInviteWhatsappBtn" class="np-btn hidden" onclick="sendDoctorInviteWhatsapp()">Send Invite (WhatsApp)</button>
       <button type="button" class="np-btn" onclick="closeDoctorModal()">Cancel</button>
       <button type="submit" form="doctorForm" class="np-btn np-btn--primary">Save</button>
     </div>

@@ -137,7 +137,7 @@ router.post('/previous-records/:id/share',                  prev.share);
 // ─── Prescription endpoints ───
 router.post('/appointments/:id/prescription',               c.createPrescription);
 router.get('/appointments/:id/prescription',                c.appointmentPrescription);
-router.post('/appointments/:id/prescription/send',          c.sendPrescription);
+router.post('/appointments/:id/prescription/resend',        c.resendPrescription);
 
 // ─── Feature 2 — Medical certificate endpoints ───
 router.get('/certificates/templates',                       cert.listTemplates);

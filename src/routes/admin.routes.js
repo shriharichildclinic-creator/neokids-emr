@@ -47,15 +47,13 @@ router.put('/doctors/:id', c.updateDoctor);
 router.delete('/doctors/:id', c.deleteDoctor);
 router.delete('/doctors/:id/hard', c.hardDeleteDoctor);
 router.post('/doctors/:id/invite', c.sendDoctorInvite);
-router.post('/doctors/:id/invite/whatsapp', c.sendDoctorInviteWhatsapp);
 router.post('/doctors/:id/profile-image', uploadProfileImage.single('photo'), c.uploadDoctorProfileImage);
 router.delete('/doctors/:id/profile-image', c.removeDoctorProfileImage);
 
 // KYC
-router.post('/doctors/:id/kyc',          uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);
-router.get('/doctors/:id/kyc',           kyc.getKyc);
-router.patch('/doctors/:id/kyc/status',  kyc.updateKycStatus);
-router.delete('/doctors/:id/kyc/:kind',  kyc.removeKycDocument);
+router.post('/doctors/:id/kyc',         uploadKycDocuments.fields(KYC_FIELDS), kyc.uploadKyc);
+router.get('/doctors/:id/kyc',          kyc.getKyc);
+router.patch('/doctors/:id/kyc/status', kyc.updateKycStatus);
 
 // Protected KYC document streaming (replaces the removed public static
 // mount on /files/kyc-documents — audit finding #2). Admin JWT required.
