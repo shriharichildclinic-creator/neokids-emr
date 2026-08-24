@@ -522,6 +522,16 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
      underneath the styled dropzone — beat it explicitly. */
   .np-dropzone input[type="file"].np-input{display:none}
 
+  /* Pre-upload preview (opt-in via NPDropzone.bind(input,{preview:true})) —
+     an image thumbnail or a filename badge for the file just picked, shown
+     before the caller's own "Upload" action has fired anything. */
+  .np-dropzone__preview{margin-top:8px}
+  .np-dropzone__preview:empty{margin-top:0}
+  .np-dropzone__preview-img{max-width:100%;max-height:120px;border-radius:8px;border:1px solid #E2E8F0;object-fit:contain;background:#fff}
+  html[data-theme="dark"] .np-dropzone__preview-img{border-color:#234551;background:#0E1A22}
+  .np-dropzone__preview-file{font-size:12.5px;font-weight:600;color:#475569;background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:.4rem .6rem;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  html[data-theme="dark"] .np-dropzone__preview-file{color:#B4D7D7;background:#0E1A22;border-color:#234551}
+
 .np-sticky-head thead th{position:sticky;top:0;z-index:5;background:inherit}
 
 .np-lightbox{position:fixed;inset:0;z-index:100002;display:flex;align-items:center;justify-content:center;padding:32px;background:rgba(8,12,18,.82);opacity:0;transition:opacity .15s ease;cursor:zoom-out}
@@ -836,9 +846,47 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       status.className = 'np-dropzone__hint'; status.style.marginTop = '6px';
       wrap.appendChild(status);
 
+      // Opt-in thumbnail/file preview shown the moment a file is picked —
+      // before the caller's own "Upload" action fires — so the admin can
+      // confirm it's the right scan (and isn't upside-down, cropped, etc.)
+      // instead of finding out only after it's already saved. Off by
+      // default so the plain doctor-photo dropzone (which has its own
+      // circular avatar preview elsewhere) doesn't change appearance.
+      let previewEl = null;
+      let objectUrl = null;
+      if (opts.preview) {
+        previewEl = document.createElement('div');
+        previewEl.className = 'np-dropzone__preview';
+        wrap.appendChild(previewEl);
+      }
+
+      function clearPreview() {
+        if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+        if (previewEl) previewEl.innerHTML = '';
+      }
+
+      function renderPreview(f) {
+        if (!previewEl || !f) return;
+        clearPreview();
+        if (f.type && f.type.startsWith('image/')) {
+          objectUrl = URL.createObjectURL(f);
+          const img = document.createElement('img');
+          img.src = objectUrl;
+          img.alt = 'Selected file preview';
+          img.className = 'np-dropzone__preview-img';
+          previewEl.appendChild(img);
+        } else {
+          const badge = document.createElement('div');
+          badge.className = 'np-dropzone__preview-file';
+          badge.textContent = (f.type === 'application/pdf' ? '📄 ' : '📎 ') + f.name;
+          previewEl.appendChild(badge);
+        }
+      }
+
       function updateStatus() {
         const f = input.files && input.files[0];
         status.textContent = f ? ('Selected: ' + f.name + ' (' + Math.round(f.size / 1024) + ' KB)') : '';
+        if (f) renderPreview(f); else clearPreview();
       }
       input.addEventListener('change', updateStatus);
       ;['dragenter','dragover'].forEach(ev => wrap.addEventListener(ev, (e) => { e.preventDefault(); wrap.classList.add('is-drag'); }));

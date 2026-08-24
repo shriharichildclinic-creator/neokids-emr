@@ -2102,6 +2102,12 @@ document.addEventListener('click', async (ev) => {
   }
 
   if (removeBtn) {
+    // Guard against a double-click firing this twice for the same card —
+    // the first request already deletes the file and clears the DB
+    // column, so a second in-flight request would hit "Document not
+    // found" even though nothing actually went wrong from the admin's
+    // point of view.
+    if (card.dataset.kycBusy === '1') return;
     if (!(await ensureKycUnlocked())) return;
     const ok = await NPModal.confirm({
       title: 'Remove document?',
@@ -2110,14 +2116,30 @@ document.addEventListener('click', async (ev) => {
       danger: true
     });
     if (!ok) return;
+    card.dataset.kycBusy = '1';
+    removeBtn.disabled = true;
     try {
       await api('/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc/' + encodeURIComponent(kind), {
         method: 'DELETE'
       });
       NPToast.success('Document removed.');
+    } catch (e) {
+      // A 404 here means the document is already gone server-side (a
+      // stale card from a double-click, or it was removed from another
+      // tab) — the admin's intent ("this document shouldn't be here")
+      // is already satisfied, so refresh quietly instead of alarming
+      // them with an error for something that isn't actually wrong.
+      if (e.status === 404) {
+        NPToast.success('Document already removed.');
+      } else {
+        alert(e.message);
+      }
+    } finally {
+      delete card.dataset.kycBusy;
+      removeBtn.disabled = false;
       await loadKycForDoctor(__currentKycDoctorId);
       loadDoctors();
-    } catch (e) { alert(e.message); }
+    }
   }
 });
 
@@ -2175,7 +2197,7 @@ async function loadKycForDoctor(doctorId){
     setTimeout(() => {
       ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
         const input = document.querySelector(`#doctorForm input[name="${name}"]`);
-        if (input) NPDropzone.bind(input, { label: 'Drop ' + name + ' here', hint: 'or click to browse (PDF or image)' });
+        if (input) NPDropzone.bind(input, { label: 'Drop ' + name + ' here', hint: 'or click to browse (PDF or image)', preview: true });
       });
     }, 0);
   }
