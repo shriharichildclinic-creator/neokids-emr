@@ -363,8 +363,10 @@
                   <option value="ONLINE">Online</option>
                   <option value="OFFLINE">In-person</option>
                 </select>
-                <input id="apptDateFilter" type="date" class="np-select" aria-label="Filter by date" title="Filter by date"/>
-                <button id="apptDateFilterClear" type="button" class="np-btn np-btn--ghost np-btn--sm hidden" title="Clear date filter">✕ Date</button>
+                <div class="np-date-filter">
+                  <input id="apptDateFilter" type="date" class="np-select" aria-label="Filter by date" title="Filter by date"/>
+                  <button id="apptDateFilterClear" type="button" class="np-btn np-btn--ghost np-btn--sm hidden" title="Clear date filter">✕</button>
+                </div>
                 <select id="apptSort" class="np-select" aria-label="Sort">
                   <option value="date_desc">Newest first</option>
                   <option value="date_asc">Oldest first</option>

@@ -1110,11 +1110,31 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   min-width:0;
   align-self:end;
 }
-.np-filterbar--doctor > #apptDateFilterClear{
+/* Date input + its clear button live inside one wrapper so the clear
+   button (display:none when no date is picked) never changes how many
+   grid items exist in the row — without this, showing/hiding it used
+   to shift every filter after it (Sort) sideways. */
+.np-filterbar--doctor > .np-date-filter{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+.np-date-filter{
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+  min-width:0;
+}
+.np-date-filter > input[type="date"]{
+  flex:1 1 auto;
+  min-width:0;
+  width:auto;
+}
+.np-date-filter > #apptDateFilterClear{
+  flex:0 0 auto;
   width:auto;
   min-width:0;
-  justify-self:start;
-  align-self:center;
+  padding:.35rem .6rem;
 }
 .np-filterbar--doctor > .np-select,
 .np-filterbar--doctor > input[type="date"],
@@ -1671,7 +1691,7 @@ html, body{ max-width:100%; overflow-x:hidden; }
   .np-filterbar--doctor{ grid-template-columns:1fr; gap:.6rem; }
   .np-filterbar--doctor > .np-search{ grid-column:auto; }
   .np-filterbar--doctor > .np-btn{ width:100%; }
-  .np-filterbar--doctor > #apptDateFilterClear{ width:auto; justify-self:start; }
+  .np-filterbar--doctor > .np-date-filter > #apptDateFilterClear{ width:auto; }
 
   .np-filterbar--doctor .np-filter-control > .np-btn{ width:auto; align-self:flex-start; min-width:120px; }
 }
