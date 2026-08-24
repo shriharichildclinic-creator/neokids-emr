@@ -117,11 +117,13 @@ async function deliver({ channel, to, patientName, doctorName, recordType, recor
     results.email = await sendEmail(mail);
   } else if (channel === 'whatsapp') {
     try {
-      const wa = require('./whatsapp.service');
-      const fn = wa.sendTemplate || wa.sendWhatsAppTemplate || wa.sendText || wa.sendViaMetaText;
+      const { sendWhatsAppWithFallback } = require('./whatsapp.service');
       const body = `Hello ${patientName},\n\n${doctorName} has shared a medical record for your reference.\n\nRecord Type: ${recordType}\nRecord Date: ${recordDate}\n\nAccess it securely: ${url}\n\nFor assistance, contact: ${clinicName}\nRegards, NeoKidsPro`;
-      if (fn) results.whatsapp = await fn({ to, template: 'historical_record_shared', params: [patientName, doctorName, recordType, recordDate, url, clinicName], body });
-      else results.whatsapp = { skipped: true, reason: 'whatsapp sender not available', fallbackLink: url };
+      // No approved Meta template exists for this event, same situation as
+      // the doctor-reschedule notification in automation.service.js — send
+      // plain text only, which only reaches the patient inside an active
+      // 24h WhatsApp customer-care session.
+      results.whatsapp = await sendWhatsAppWithFallback({ to, primaryTemplate: null, plainTextFallback: body });
     } catch (e) { results.whatsapp = { error: e.message, fallbackLink: url }; }
   }
   return results;
