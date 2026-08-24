@@ -6,7 +6,7 @@ const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 // never throw and blank an entire dashboard section.
 function setHtml(id, html){ const el = document.getElementById(id); if (el) el.innerHTML = html; }
 function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
-let __me=null, __items=[], __doctors=[], __bills=[];
+let __me=null, __items=[], __doctors=[], __bills=[], __rx=[];
 
 function setTopBarAvatar(photoUrl){
   ['myAvatar', 'myIdAvatar'].forEach(id => {
@@ -204,8 +204,36 @@ async function loadDash(){ try{ const s=await api('/pharmacy/stats');
   const bills=await api('/pharmacy/bills'); setHtml('recentBills', bills.slice(0,8).map(b=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(b.billNumber)}</div><div class="np-appt-row__meta">${esc(b.customerName||'Walk-in')} · ${esc(fmtDate(b.createdAt))}</div></div><div class="np-appt-row__right"><b>${inr(b.total)}</b></div></div>`).join('')||'<div class="np-empty"><div class="np-empty__sub">No bills yet.</div></div>');
  }catch(e){ setHtml('dashAnalytics', `<div class="np-error">${esc(e.message)}</div>`); } }
 
-async function loadRx(){ const list=$('#rxList'); const f=$('#rxFilter').value; try{ const rows=await api('/pharmacy/prescriptions'+(f?('?dispensed='+f):''));
-  list.innerHTML=rows.length?rows.map(rx=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(rx.patient.name)} ${rx.dispensed?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Dispensed</span>':'<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Pending</span>'}</div><div class="np-appt-row__assign">Dr. ${esc(rx.doctor.name)} · ${esc(fmtDate(rx.visitDate))}</div><div class="np-appt-row__meta">${(rx.medications||[]).map(m=>`<div class="np-rx-med-line">${esc(m.name)} ${esc(m.dose||'')} ${esc(m.frequency||'')}</div>`).join('')}</div></div><div class="np-appt-row__right"><span class="np-badge ${rx.createdByRole==='RECEPTIONIST'?'np-badge--violet':'np-badge--mint'}">${rx.createdByRole==='RECEPTIONIST'?'by reception':'by doctor'}</span>${!rx.dispensed?` <button class="np-btn np-btn--sm np-btn--primary" onclick="openBillModal('${rx.id}')">Dispense & bill</button>`:''}</div></div>`).join(''):'<div class="np-empty"><div class="np-empty__title">No prescriptions</div></div>';
+// One prescription-queue card, restructured (mobile UX fix) into distinct,
+// visually-separated sections — patient/status, doctor+visit, medicines,
+// and actions — instead of one dense run-on block. Sections share the
+// existing dashed-divider + eyebrow-label conventions already used for
+// bill lines elsewhere in this file/theme, and the action button uses the
+// standard (not --sm) size for an easier mobile tap target. Desktop is
+// unaffected: .np-appt-row / .np-appt-row__right keep their existing
+// (unedited) responsive rules from the shared stylesheet.
+function renderRxRow(rx){
+  const statusBadge = rx.dispensed
+    ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Dispensed</span>'
+    : '<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Pending</span>';
+  const sourceBadge = `<span class="np-badge ${rx.createdByRole==='RECEPTIONIST'?'np-badge--violet':'np-badge--mint'}">${rx.createdByRole==='RECEPTIONIST'?'by reception':'by doctor'}</span>`;
+  const medLines = (rx.medications||[]).map(m=>`<div class="np-rx-med-line">${esc(m.name)} ${esc(m.dose||'')} ${esc(m.frequency||'')}</div>`).join('')
+    || '<div class="np-rx-med-line np-mut">No medicines listed</div>';
+  const action = !rx.dispensed ? `<button class="np-btn np-btn--primary" onclick="openBillModal('${rx.id}')">Dispense & bill</button>` : '';
+  return `<div class="np-appt-row">
+    <div class="np-appt-row__body">
+      <div class="np-appt-row__name" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${esc(rx.patient.name)} ${statusBadge}</div>
+      <div class="np-appt-row__assign">Dr. ${esc(rx.doctor.name)} · ${esc(fmtDate(rx.visitDate))}</div>
+      <div style="margin-top:.6rem;padding-top:.5rem;border-top:1px dashed var(--nk-border-soft)">
+        <div class="np-bill-line__kind" style="margin-bottom:.3rem">Medicines</div>
+        <div class="np-appt-row__meta">${medLines}</div>
+      </div>
+    </div>
+    <div class="np-appt-row__right">${sourceBadge}${action?' '+action:''}</div>
+  </div>`;
+}
+async function loadRx(){ const list=$('#rxList'); const f=$('#rxFilter').value; try{ const rows=await api('/pharmacy/prescriptions'+(f?('?dispensed='+f):'')); __rx=rows;
+  list.innerHTML=rows.length?rows.map(renderRxRow).join(''):'<div class="np-empty"><div class="np-empty__title">No prescriptions</div></div>';
  }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 
 async function loadInv(q){ const tb=$('#invTbody'); try{ __items=await api('/pharmacy/inventory'+(q?('?q='+encodeURIComponent(q)):''));
@@ -271,11 +299,36 @@ async function openBillModal(rxId){
   // the user into selling medicines already depleted.
   try{ __items=await api('/pharmacy/inventory'); }catch(_){__items=__items||[];}
   await loadPortalDoctors();
+  // Root-cause fix for "Dispense & Bill doesn't carry over the
+  // prescription": the rx queue (__rx, populated by loadRx) already has
+  // the full patient/doctor/medicines, but that context was never handed
+  // to the billing form — only the bare rxId was passed through (for the
+  // final prescriptionId reference), leaving the form to open blank.
+  // Build a prefill payload from the cached rx and pass it via cfg.prefill
+  // so NPBilling.open seeds patient, doctor and line items up front.
+  const rx = (__rx||[]).find(r=>r.id===rxId) || null;
+  let prefill = null;
+  if (rx){
+    const items = (rx.medications||[]).map(m=>{
+      const medName = String((m&&m.name)||'').trim();
+      if(!medName) return null;
+      const match = __items.find(it=>it.name.toLowerCase()===medName.toLowerCase());
+      return match
+        ? { itemId: match.id, name: match.name, quantity: 1, unitPrice: match.sellingPrice }
+        : { name: medName, quantity: 1, unitPrice: 0 };
+    }).filter(Boolean);
+    prefill = {
+      patientId: rx.patient ? rx.patient.id : null,
+      patient: rx.patient || null,
+      doctorId: rx.doctor ? rx.doctor.id : null,
+      items: items.length ? items : undefined
+    };
+  }
   window.NPBilling.open({
     api, esc, fmt: fmtDate, toast,
     onSaved: function () { refreshAll(); },
     inventory: __items, doctors: __doctors, billsBase: '/pharmacy/bills',
-    role: 'PHARMACY', host: '#modalHost', rxId: rxId,
+    role: 'PHARMACY', host: '#modalHost', rxId: rxId, prefill: prefill,
     patientSearch: q => api('/pharmacy/patients?q='+encodeURIComponent(q))
   });
 }

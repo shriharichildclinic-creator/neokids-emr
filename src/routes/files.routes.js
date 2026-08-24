@@ -435,7 +435,7 @@ router.get('/consultation-invoices/:idAndExt', asyncHandler(async (req, res) => 
   const allowed = await isAllowed(cred, 'consultation-invoice', id);
   if (!allowed) return res.status(401).json({ error: 'Authentication required' });
 
-  const filepath = path.join(STORAGE, 'invoices', `consultation_invoice_${id}.pdf`);
+  const filepath = path.join(STORAGE, 'consultation-invoices', `consult_invoice_${id}.pdf`);
   if (!fs.existsSync(filepath)) {
     try {
       const staffDocs = require('../services/staff-docs.service');

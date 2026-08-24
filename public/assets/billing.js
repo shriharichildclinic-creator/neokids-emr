@@ -83,6 +83,14 @@
       var role = cfg.role || 'PHARMACY';
       var editing = !!existing;
       var bill = existing || { items: [], total: 0, discount: 0, tax: 0, paymentMethod: 'CASH', billNumber: '', status: 'DRAFT', billType: cfg.defaultBillType || 'PHARMACY' };
+      // A "new bill" opened from a source document (e.g. pharmacy's
+      // Dispense & Bill from a prescription) can hand over patient/doctor/
+      // line-item context via cfg.prefill without flipping this into an
+      // "edit an existing bill" flow (editing stays false — there is no
+      // bill.id yet, so the form must still POST, not PUT).
+      if (!editing && cfg.prefill) {
+        bill = Object.assign({}, bill, cfg.prefill);
+      }
       var canSwitchType = !!cfg.canSwitchType;
 
       if (editing && bill.status !== 'DRAFT') {
@@ -116,7 +124,7 @@
         // Patient (optional) + doctor (optional)
         '<div class="np-grid-2">' +
           '<div class="np-field"><label class="np-field__label">Patient <span class="np-mut" style="font-weight:400">(optional)</span></label>' +
-            '<div class="np-combo" id="patCombo"><input id="billPatient" class="np-input" placeholder="Search name or phone" autocomplete="off" value="' + esc_(bill.customerName && bill.patientId ? '' : (bill.patient ? bill.patient.name : (bill.customerName || ''))) + '"/>' +
+            '<div class="np-combo" id="patCombo"><input id="billPatient" class="np-input" placeholder="Search name or phone" autocomplete="off" value="' + esc_(bill.patient ? bill.patient.name : (bill.customerName || '')) + '"/>' +
             '<input type="hidden" id="billPatientId" value="' + (bill.patientId || '') + '"/>' +
             '<div class="np-combo__menu" id="patMenu"></div></div>' +
             '<div class="np-mut" style="font-size:.72rem;margin-top:.25rem">Walk-in: leave unselected — a patient record is optional.</div></div>' +
@@ -176,7 +184,10 @@
 
       // Render existing lines or start with a single default line
       var linesHost = qs('#billLines');
-      var lines = (editing && bill.items && bill.items.length) ? bill.items : [];
+      // Not gated on `editing` — a non-editing prefill (see cfg.prefill
+      // above) also seeds bill.items and must render the same way an
+      // existing draft's items do.
+      var lines = (bill.items && bill.items.length) ? bill.items : [];
       var renderLine = function (item) {
         var mode = item && item.itemId ? 'inv' : (item && item.mode === 'manual' ? 'manual' : lineModeHint === 'Manual' ? 'manual' : 'inv');
         var div = mk('div', 'np-bill-line');

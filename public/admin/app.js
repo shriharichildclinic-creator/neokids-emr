@@ -818,7 +818,9 @@ function renderDoctors(){
 }
 async function toggleDoctor(id, isAvailable) {
   await api('/admin/doctors/' + id, { method: 'PUT', body: JSON.stringify({ isAvailable }) });
-  loadDoctors();
+  const d = __doctorsCache.find(x => x.id === id);
+  if (d) d.isAvailable = isAvailable;
+  renderDoctors();
 }
 async function hardDeleteDoctor(id, name) {
   const ok = await NPModal.confirm({
@@ -1045,6 +1047,14 @@ function openDoctorModal() {
   loadKycForDoctor(null);
   applyAdminModeVisibility(f.consultationModes ? f.consultationModes.value : 'BOTH');
   $('#doctorModal').classList.remove('hidden');
+  resetDoctorModalScroll();
+}
+function resetDoctorModalScroll() {
+  const dm = $('#doctorModal');
+  requestAnimationFrame(() => {
+    dm.querySelectorAll('.np-modal__panel, .np-modal__body').forEach(el => { el.scrollTop = 0; });
+    dm.scrollTop = 0;
+  });
 }
 function closeDoctorModal() {
   $('#doctorModal').classList.add('hidden');
@@ -1082,6 +1092,7 @@ function openEditDoctor(id) {
   loadKycForDoctor(id);
   applyAdminModeVisibility(d.consultationModes || 'BOTH');
   $('#doctorModal').classList.remove('hidden');
+  resetDoctorModalScroll();
 }
 
 document.addEventListener('input', (e) => {

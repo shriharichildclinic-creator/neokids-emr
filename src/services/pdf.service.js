@@ -58,18 +58,26 @@ const HEADER_BAND_HEIGHT = 88;
 // page-breaks whenever a draw crosses (page.height - bottomMargin). These
 // are fixed-layout single-page documents, so the auto-break is zeroed out
 // once and the signature block is separately clamped to stay on this page.
-// Caches the opened logo image (and whether it even exists) across calls —
-// drawHeader() runs on every single PDF, and re-checking the filesystem
-// plus re-decoding the PNG on every page/document would be wasteful.
-let _logoImage; // undefined = not checked yet, null = missing/unreadable
+// Root-cause fix for "logo shows on some PDFs but not others": this used
+// to cache the *opened* PDFImage object at module scope and hand the same
+// instance to doc.image() on every subsequent PDFDocument. PDFKit's
+// image(src, ...) only calls image.embed(this) — which binds image.obj to
+// one specific document's ref table — the first time an image object is
+// used; every later call sees image.obj already set and skips re-embedding,
+// so it wires the FIRST document's stale object reference into every
+// later document's page.xobjects. That reference doesn't resolve in the
+// later document's own object table, so the logo silently fails to render
+// on every PDF after the very first one generated in the process's
+// lifetime (each PDFDocument owns its own _imageRegistry so caching per
+// document is already free — reopening here per document is what makes
+// image.embed(this) run against the *current* document every time).
+// The fs.existsSync check itself is cheap and safe to repeat per call.
 function getLogoImage(doc) {
-  if (_logoImage !== undefined) return _logoImage;
   try {
-    _logoImage = fs.existsSync(LOGO_PATH) ? doc.openImage(LOGO_PATH) : null;
+    return fs.existsSync(LOGO_PATH) ? doc.openImage(LOGO_PATH) : null;
   } catch (_) {
-    _logoImage = null; // corrupt/unreadable file — fall back to text-only header
+    return null; // corrupt/unreadable file — fall back to text-only header
   }
-  return _logoImage;
 }
 
 function drawHeader(doc, title) {
@@ -683,6 +691,8 @@ async function generatePharmacyInvoice({ bill, medicalCentre, doctor }) {
       rowY = doc.y + 10;
     }
 
+    if (doctor) drawSignatureBlock(doc, doctor, { y: doc.page.height - 185 });
+
     doc.fontSize(9).font('Helvetica').fillColor('#888');
     doc.text('Thank you for choosing NeoKidsPro Pharmacy. This is a computer-generated bill.',
              50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100, lineBreak: false, ellipsis: true });
@@ -843,7 +853,7 @@ async function generateMedicalCertificate({ certificate, doctor, patient }) {
 
     if (durationType === 'DATE_RANGE' && (certificate.fromDate || certificate.toDate)) {
       doc.fontSize(11).font('Helvetica-Bold').fillColor(BRAND_DARK)
-         .text(`Period: ${fmtCertDate(certificate.fromDate) || '—'} → ${fmtCertDate(certificate.toDate) || '—'}`, 50, cy);
+         .text(`Period: ${fmtCertDate(certificate.fromDate) || '-'} - ${fmtCertDate(certificate.toDate) || '-'}`, 50, cy);
       cy = doc.y + 12;
     } else if (singleDate) {
       doc.fontSize(11).font('Helvetica-Bold').fillColor(BRAND_DARK)

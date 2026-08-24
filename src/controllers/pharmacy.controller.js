@@ -681,6 +681,14 @@ exports.updateBill = asyncHandler(async (req, res) => {
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
   } else if (d.customerName && d.customerPhone) {
     try { patient = await findOrCreatePatient({ patientName: d.customerName, phone: d.customerPhone }); } catch (_) { patient = null; }
+  } else if (bill.patient) {
+    // Root-cause fix for "editing a bill unlinks the patient": neither a new
+    // patientId nor a replacement walk-in name+phone was submitted, which
+    // used to fall straight through to patientId:null below and silently
+    // drop the existing link on every edit that didn't touch the patient
+    // field. Omission must never mean "unlink" — carry the current link
+    // forward instead.
+    patient = bill.patient;
   }
   if (patient && actor.role === 'PHARMACY') {
     await staffAccess.recordPatientRegistration({ patientId: patient.id, pharmacyUserId: actor.user.id, medicalCentreId: actor.centreId });

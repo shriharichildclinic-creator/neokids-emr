@@ -1751,7 +1751,14 @@ html[data-theme="dark"] .np-modal pre{
   transform: translateY(-50%);
   color: var(--np-muted); pointer-events:none;
 }
-.np-ppicker__input{ padding-left:2.2rem; width:100%; }
+/* input.np-input (neokids-theme.css, loads after this file) sets a
+   shorthand `padding: .6rem .8rem` at (0,1,1) specificity — higher than
+   the single-class `.np-ppicker__input` rule below — which was winning
+   the cascade and collapsing the left padding back to .8rem, tucking the
+   typed text directly under the search icon. Scoping to the wrapper
+   raises specificity to (0,2,0) so the icon clearance always wins
+   without touching the shared canonical input rule. */
+.np-ppicker__searchwrap .np-ppicker__input{ padding-left:2.2rem; width:100%; }
 
 .np-ppicker__results{
   position:absolute; top:calc(100% + 6px); left:0; right:0;
@@ -1818,6 +1825,24 @@ html[data-theme="dark"] .np-modal pre{
 }
 .np-ppicker__card-meta{ font-size:.8rem; color: var(--np-muted); margin-top:.15rem; }
 .np-ppicker__change{ flex-shrink:0; }
+
+/* ── Consultation-mode segmented control ──
+   The shared .np-seg track is `display:inline-flex` (shrinks to content)
+   everywhere except inside the <640px media query further below, which
+   forces `width:100%` for mobile only. That left tablet/desktop rendering
+   the two-word "In-Person" pill snug against a track barely wider than
+   its own text — the 3px track padding and 3px gap from the shared rule
+   read as "touching the edge" once the track has no extra width to give
+   them room to breathe. Forcing full width + a slightly larger gap/inset
+   here (scoped to this control, on top of the shared look, same pattern
+   as .hr-source-toggle above) keeps both pills evenly sized and clear of
+   the track edge at every breakpoint instead of only on mobile. */
+#certConsultMode{
+  width:100%;
+  gap:.4rem;
+  padding:4px;
+}
+#certConsultMode .np-seg__btn{ padding:.5rem .9rem; }
 
 /* ── Certificate actions modal (view / download / WhatsApp / email) ── */
 .np-cert-actions{

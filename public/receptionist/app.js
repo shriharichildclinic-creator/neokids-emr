@@ -444,12 +444,14 @@ async function openBookModal(_, patientId){
   <div class="np-field"><label class="np-field__label">Date *</label><input name="date" type="date" required class="np-input" value="${todayIso()}"/></div>
   <div class="np-field"><label class="np-field__label">Type</label><select name="consultationType" class="np-select"><option value="OFFLINE">In-person</option></select></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Available slot *</label><select name="startTime" required class="np-select" id="slotSel"><option value="">Pick doctor+date first</option></select></div>
+  <div class="np-divider" style="grid-column:span 2"></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Patient *</label><input id="bPatient" class="np-input" placeholder="Search existing or type new name" list="bPatients"/><datalist id="bPatients"></datalist><input type="hidden" id="bPatientId"/></div>
   <div class="np-field"><label class="np-field__label">Phone *</label><input name="phone" maxlength="10" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">Email</label><input name="email" type="email" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">Parent / guardian</label><input name="parentName" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">DOB</label><input name="dateOfBirth" type="date" class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">Gender</label><select name="gender" class="np-select"><option value="">—</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option></select></div>
+  <div class="np-divider" style="grid-column:span 2"></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Reason / problem *</label><input name="primaryProblem" required class="np-input"/></div>
   <div class="np-field"><label class="np-field__label">Source</label><select name="source" class="np-select"><option value="WALK_IN">Walk-in / Reception</option><option value="PHONE">Phone</option><option value="OTHER">Other</option></select></div></div>
   </form></div>
@@ -503,7 +505,7 @@ async function openCertModal(appointmentId){
   let tpls=[]; try{ tpls=await api('/receptionist/certificates/templates'); }catch(_){}
   const docOpts=__doctors.map(d=>`<option value="${d.id}">Dr. ${esc(d.name)}</option>`).join('');
   $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Issue medical certificate</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="cForm"><div class="np-grid-2">
-  ${appointmentId?'':'<div class="np-field"><label class="np-field__label">Doctor *</label><select name="doctorId" class="np-select">'+docOpts+'</select></div><div class="np-field"><label class="np-field__label">Patient *</label><input id="certPatient" class="np-input" placeholder="Search by name or phone" list="certPatients" autocomplete="off"/><datalist id="certPatients"></datalist><input type="hidden" id="certPatientId"/></div>'}
+  ${appointmentId?'':'<div class="np-field"><label class="np-field__label">Doctor *</label><select name="doctorId" class="np-select">'+docOpts+'</select></div><div class="np-field"><label class="np-field__label">Patient *</label><input id="certPatient" class="np-input" placeholder="Search by name or phone" list="certPatients" autocomplete="off"/><datalist id="certPatients"></datalist><input type="hidden" id="certPatientId"/></div><div class="np-divider" style="grid-column:span 2"></div>'}
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Template</label><select name="templateKey" class="np-select">${tpls.map(t=>`<option value="${t.key}">${esc(t.label)}</option>`).join('')}</select></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Reason *</label><textarea name="reason" required class="np-textarea"></textarea></div>
   <div class="np-field"><label class="np-field__label">Diagnosis</label><input name="diagnosis" class="np-input"/></div>

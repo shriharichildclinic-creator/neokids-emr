@@ -2,8 +2,15 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const { drawHeader } = require('./pdf.service');
-
-const STORAGE_PATH = process.env.STORAGE_PATH || path.join(process.cwd(), 'storage');
+// Reuse the one canonical STORAGE_PATH from historical-record.service.js
+// instead of redefining it here. files.routes.js reads generated PDFs back
+// out via that module's STORAGE_PATH (`histSvc.STORAGE_PATH + '/historical-pdf/...'`)
+// — this used to independently recompute its own copy as
+// `path.join(process.cwd(), 'storage')`, a cwd-relative fallback that
+// silently drifts out of sync with the writer/reader in
+// historical-record.service.js whenever the process isn't launched from
+// the repo root, leaving generated PDFs unreachable at download time.
+const { STORAGE_PATH } = require('./historical-record.service');
 const OUT_DIR = path.join(STORAGE_PATH, 'historical-pdf');
 function ensureDir(p){ if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 

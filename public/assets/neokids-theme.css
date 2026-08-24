@@ -684,7 +684,7 @@ input[type="file"].np-input::file-selector-button:hover{
   border-color: var(--nk-teal-200);
   color: var(--nk-teal-700);
 }
-.np-field__label{ color: var(--nk-ink); font-weight: 600; font-size: .82rem; }
+.np-field__label{ color: var(--nk-ink); font-weight: 600; font-size: .82rem; overflow-wrap: normal; word-break: normal; white-space: normal; }
 .np-field__hint { color: var(--nk-muted); font-size: .76rem; }
 .np-error{
   background:#FFF1F3; border:1px solid #FCC7D2; color:#9F1E36;
@@ -2850,6 +2850,18 @@ td .np-error, .np-table .np-error, b.np-error, span.np-error{
   background: var(--nk-teal-50);
   color: var(--nk-teal-700);
   border: 1px solid var(--nk-teal-100);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Same "stretched pill" root cause .np-badge already guards against
+     (see that rule's comment): sitting inside a flex/grid ancestor (the
+     mobile bill-line card layout) let the default cross-axis stretch pull
+     this into a tall/wide smear instead of a compact pill on narrow
+     screens. Size to content in every context, like every other badge. */
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: fit-content;
 }
 /* Before a medicine is picked the hint has no text — collapse it entirely so
    an empty padded pill doesn't render as a stray artifact under the search. */
