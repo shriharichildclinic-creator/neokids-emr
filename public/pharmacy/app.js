@@ -236,9 +236,16 @@ async function loadRx(){ const list=$('#rxList'); const f=$('#rxFilter').value; 
   list.innerHTML=rows.length?rows.map(renderRxRow).join(''):'<div class="np-empty"><div class="np-empty__title">No prescriptions</div></div>';
  }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 
-async function loadInv(q){ const tb=$('#invTbody'); try{ __items=await api('/pharmacy/inventory'+(q?('?q='+encodeURIComponent(q)):''));
+let __invReqSeq=0;
+async function loadInv(q){ const tb=$('#invTbody'); const seq=++__invReqSeq; try{ const rows=await api('/pharmacy/inventory'+(q?('?q='+encodeURIComponent(q)):''));
+  // Debounced search can have two requests in flight at once (a slow early
+  // keystroke's request outliving a later one); only the most recently
+  // *issued* request may render, so a slow stale response can never clobber
+  // a newer result set that already arrived.
+  if(seq!==__invReqSeq) return;
+  __items=rows;
   tb.innerHTML=__items.length?__items.map(i=>`<tr><td data-label="Medicine"><b>${esc(i.name)}</b><div class="np-mut" style="font-size:.75rem">${esc(i.manufacturer||'')}</div></td><td data-label="Batch">${esc(i.batchNumber||'—')}</td><td data-label="Price" style="text-align:right">${inr(i.sellingPrice)}</td><td data-label="Stock" style="text-align:right"><b class="${i.stock<=10?'np-error':''}">${i.stock}</b></td><td data-label="Expiry">${i.expiryDate?esc(fmtDate(i.expiryDate)):'—'}</td><td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openItemModal('${i.id}')">Edit</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="adjustStock('${i.id}')">Stock</button> <button class="np-btn np-btn--sm np-btn--ghost np-btn--danger" onclick="delItem('${i.id}')">Remove</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="np-empty"><div class="np-empty__title">No medicines</div></div></td></tr>';
- }catch(e){ tb.innerHTML=`<tr><td colspan="6"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+ }catch(e){ if(seq!==__invReqSeq) return; tb.innerHTML=`<tr><td colspan="6"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 $('#invSearch').addEventListener('input',e=>{clearTimeout(window.__is); window.__is=setTimeout(()=>loadInv(e.target.value.trim()),300);});
 
 function openItemModal(id){ const it=id?__items.find(x=>x.id===id):null;
@@ -246,9 +253,9 @@ function openItemModal(id){ const it=id?__items.find(x=>x.id===id):null;
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Name *</label><input name="name" required class="np-input" value="${it?esc(it.name):''}"/></div>
   <div class="np-field"><label class="np-field__label">Batch #</label><input name="batchNumber" class="np-input" value="${it?esc(it.batchNumber||''):''}"/></div>
   <div class="np-field"><label class="np-field__label">Unit</label><input name="unit" class="np-input" value="${it?esc(it.unit||'strip'):'strip'}"/></div>
-  <div class="np-field"><label class="np-field__label">Selling price (₹)</label><input name="sellingPrice" type="number" step="0.01" class="np-input" value="${it?it.sellingPrice:''}"/></div>
-  <div class="np-field"><label class="np-field__label">MRP (₹)</label><input name="mrp" type="number" step="0.01" class="np-input" value="${it?it.mrp:''}"/></div>
-  <div class="np-field"><label class="np-field__label">Stock</label><input name="stock" type="number" class="np-input" value="${it?it.stock:'0'}"/></div>
+  <div class="np-field"><label class="np-field__label">Selling price (₹)</label><input name="sellingPrice" type="number" step="0.01" min="0" class="np-input" value="${it?it.sellingPrice:''}"/></div>
+  <div class="np-field"><label class="np-field__label">MRP (₹)</label><input name="mrp" type="number" step="0.01" min="0" class="np-input" value="${it?it.mrp:''}"/></div>
+  <div class="np-field"><label class="np-field__label">Stock</label><input name="stock" type="number" min="0" class="np-input" value="${it?it.stock:'0'}"/></div>
   <div class="np-field"><label class="np-field__label">Expiry</label><input name="expiryDate" type="date" class="np-input" value="${it&&it.expiryDate?String(it.expiryDate).slice(0,10):''}"/></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Manufacturer</label><input name="manufacturer" class="np-input" value="${it?esc(it.manufacturer||''):''}"/></div></div>
   </form></div>
@@ -257,7 +264,20 @@ function openItemModal(id){ const it=id?__items.find(x=>x.id===id):null;
   $('#iForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries()); try{ if(it){ await api('/pharmacy/inventory/'+it.id,{method:'PUT',body:JSON.stringify(raw)});} else { await api('/pharmacy/inventory',{method:'POST',body:JSON.stringify(raw)});} toast('Saved'); closeModal(); loadInv(); }catch(err){toast(err.message,'error');} });
 }
 function closeModal(){ $('#modalHost').innerHTML=''; }
-async function adjustStock(id){ const d=prompt('Stock adjustment (+/- quantity):'); if(!d)return; const n=parseInt(d,10); if(!n)return; try{ await api('/pharmacy/inventory/'+id+'/stock',{method:'POST',body:JSON.stringify({delta:n,reason:'Manual adjustment'})}); toast('Stock updated'); loadInv(); }catch(e){toast(e.message,'error');} }
+async function adjustStock(id){
+  const it=__items.find(x=>x.id===id);
+  const d=await NPModal.prompt({
+    title:'Adjust stock',
+    message:(it?`Current stock: ${it.stock}. `:'')+'Enter a positive number to add stock, or a negative number to remove stock.',
+    placeholder:'e.g. 10 or -5',
+    inputType:'number',
+    okText:'Adjust',
+  });
+  if(!d)return;
+  const n=parseInt(d,10);
+  if(!n||Number.isNaN(n)){ toast('Enter a non-zero whole number','error'); return; }
+  try{ await api('/pharmacy/inventory/'+id+'/stock',{method:'POST',body:JSON.stringify({delta:n,reason:'Manual adjustment'})}); toast('Stock updated'); loadInv(); }catch(e){toast(e.message,'error');}
+}
 async function delItem(id){ if(!confirm('Remove this medicine from active inventory?'))return; try{ await api('/pharmacy/inventory/'+id,{method:'DELETE'}); toast('Removed'); loadInv(); }catch(e){toast(e.message,'error');} }
 
 function billTypeBadge(t){ const m={PHARMACY:['np-badge--mint','Pharmacy'],CONSULT:['np-badge--blue','Consult'],SERVICE:['np-badge--violet','Service']}; const x=m[t]||['np-badge--slate',t||'Pharmacy']; return `<span class="np-badge ${x[0]}"><span class="np-badge__dot"></span>${x[1]}</span>`; }

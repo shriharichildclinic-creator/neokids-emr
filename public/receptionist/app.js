@@ -6,7 +6,7 @@ const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 // never throw and blank an entire dashboard section.
 function setHtml(id, html){ const el = document.getElementById(id); if (el) el.innerHTML = html; }
 function setText(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
-let __me = null, __doctors = [], __assignments = [], __appts = [], __bills = [], __pharmBills = [], __inv = [];
+let __me = null, __doctors = [], __assignments = [], __appts = [], __todayAppts = [], __bills = [], __pharmBills = [], __inv = [];
 
 function setTopBarAvatar(photoUrl){
   ['myAvatar', 'myIdAvatar'].forEach(id => {
@@ -348,7 +348,11 @@ async function loadDashboard(){
       (s.pendingCollectionToday > 0 ? `<span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${inr(s.pendingCollectionToday)} pending</span>` : ''));
 
     const rows = await api('/receptionist/appointments?date='+todayIso());
-    __appts = rows;
+    // Own cache, separate from __appts (the full Appointments-view list) — the
+    // two views load independently and must not clobber each other's data
+    // out from under an in-flight action (same bug class as __bills vs
+    // __pharmBills for the billing tables).
+    __todayAppts = rows;
     $('#todayList').innerHTML = rows.length ? rows.map(a=>`
       <div class="np-appt-row"><div class="np-appt-row__time"><div class="np-appt-row__time-h">${esc(fmtTime(a.startTime))}</div><div class="np-appt-row__time-d">${esc(fmtDate(a.date))}</div></div>
       <div class="np-appt-row__body"><div class="np-appt-row__name">${esc(a.patient.name)} ${a.arrivedAt?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Arrived</span>':''}</div><div class="np-appt-row__assign">Dr. ${esc(a.doctor.name)}</div><div class="np-appt-row__meta">${esc(a.primaryProblem||'')}</div></div>
@@ -374,18 +378,23 @@ $('#apptFilters').addEventListener('submit',e=>{e.preventDefault();loadAppointme
 
 async function markArrived(id){ try{ await api('/receptionist/appointments/'+id+'/arrive',{method:'POST',body:'{}'}); toast('Patient marked arrived'); loadDashboard(); }catch(e){toast(e.message,'error');} }
 function resched(id){
-  const appt=__appts.find(a=>a.id===id);
+  const appt=__appts.find(a=>a.id===id) || __todayAppts.find(a=>a.id===id);
   const docId=appt&&appt.doctor?appt.doctor.id:'';
   const curDate=appt?String(appt.date).slice(0,10):todayIso();
   $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Reschedule appointment</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="reschedForm">
-  <div class="np-field"><label class="np-field__label">New date *</label><input name="date" type="date" required class="np-input" value="${curDate}"/></div>
+  <div class="np-field"><label class="np-field__label">New date *</label><input name="date" type="date" required class="np-input" value="${curDate}" min="${todayIso()}"/></div>
   <div class="np-field"><label class="np-field__label">Available slot *</label><select name="startTime" required class="np-select" id="reschedSlotSel"><option value="">Loading…</option></select></div>
   <div class="np-field"><label class="np-field__label">Reason *</label><textarea name="reason" required minlength="3" class="np-textarea" placeholder="Min 3 characters"></textarea></div>
   </form></div>
   <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit" form="reschedForm">Reschedule</button></div>
   </div></div>`;
   const f=$('#reschedForm');
-  async function refreshReschedSlots(){ const date=f.date.value; if(!date||!docId){ $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; return; } try{ const r=await api(`/receptionist/slots?doctorId=${docId}&date=${date}&type=OFFLINE`); $('#reschedSlotSel').innerHTML=(r.slots||[]).filter(s=>s.available).map(s=>`<option value="${s.startTime}">${fmtTime(s.startTime)}</option>`).join('')||'<option value="">No slots available</option>'; }catch(e){ $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; } }
+  // Guarded against out-of-order responses: changing the date fires a new
+  // fetch before the previous one resolves, and network timing gives no
+  // guarantee the earlier request's response won't land last and overwrite
+  // the slot list with stale data for a date that's no longer selected.
+  let __reschedSlotReq=0;
+  async function refreshReschedSlots(){ const date=f.date.value; const myReq=++__reschedSlotReq; if(!date||!docId){ $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; return; } try{ const r=await api(`/receptionist/slots?doctorId=${docId}&date=${date}&type=OFFLINE`); if(myReq!==__reschedSlotReq)return; $('#reschedSlotSel').innerHTML=(r.slots||[]).filter(s=>s.available).map(s=>`<option value="${s.startTime}">${fmtTime(s.startTime)}</option>`).join('')||'<option value="">No slots available</option>'; }catch(e){ if(myReq!==__reschedSlotReq)return; $('#reschedSlotSel').innerHTML='<option value="">No slots</option>'; } }
   f.date.addEventListener('change',refreshReschedSlots); refreshReschedSlots();
   f.addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(f).entries()); if(!raw.reason||raw.reason.trim().length<3){toast('Reason required (min 3 chars)','error');return;} try{ await api('/receptionist/appointments/'+id+'/reschedule',{method:'POST',body:JSON.stringify({date:raw.date,startTime:raw.startTime,reason:raw.reason})}); toast('Rescheduled'); closeModal(); loadAppointments(); loadDashboard(); }catch(err){toast(err.message,'error');} });
 }
@@ -401,7 +410,11 @@ async function genInvoice(id){ try{ const r=await api('/receptionist/appointment
 
 // Patients
 let __patientQuery='';
-async function loadPatients(q){ __patientQuery=q||''; const list=$('#patientsList'); try{ const rows=await api('/receptionist/patients'+(q?('?q='+encodeURIComponent(q)):'')); list.innerHTML=rows.length?rows.map(p=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(p.name)}</div><div class="np-appt-row__meta">+91 ${esc(p.phone||'')}${p.parentName?' · Guardian: '+esc(p.parentName):''}</div></div><div class="np-appt-row__right"><button class="np-btn np-btn--sm" onclick="openBookModal(null,'${p.id}')">Book</button></div></div>`).join(''):'<div class="np-empty"><div class="np-empty__sub">Type a name or phone to search, or register a new patient.</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+// Request token: a slower in-flight search can otherwise resolve after a
+// newer one and repaint the list with results for a query the user has
+// since changed or cleared — stale/duplicate-looking results in the list.
+let __patientReq=0;
+async function loadPatients(q){ __patientQuery=q||''; const myReq=++__patientReq; const list=$('#patientsList'); try{ const rows=await api('/receptionist/patients'+(q?('?q='+encodeURIComponent(q)):'')); if(myReq!==__patientReq)return; list.innerHTML=rows.length?rows.map(p=>`<div class="np-appt-row"><div class="np-appt-row__body"><div class="np-appt-row__name">${esc(p.name)}</div><div class="np-appt-row__meta">+91 ${esc(p.phone||'')}${p.parentName?' · Guardian: '+esc(p.parentName):''}</div></div><div class="np-appt-row__right"><button class="np-btn np-btn--sm" onclick="openBookModal(null,'${p.id}')">Book</button></div></div>`).join(''):'<div class="np-empty"><div class="np-empty__sub">Type a name or phone to search, or register a new patient.</div></div>'; }catch(e){ if(myReq!==__patientReq)return; list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 $('#patientSearch').addEventListener('input',e=>{clearTimeout(window.__ps); window.__ps=setTimeout(()=>loadPatients(e.target.value.trim()),300);});
 
 function openPatientModal(){
@@ -441,7 +454,7 @@ async function openBookModal(_, patientId){
   const docOpts=__assignments.map(a=>`<option value="${a.doctor.id}|${a.medicalCentre.id}">Dr. ${esc(a.doctor.name)} — ${esc(a.medicalCentre.name)}</option>`).join('');
   $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Book appointment / walk-in</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="bForm"><div class="np-grid-2">
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Doctor & clinic *</label><select name="docCentre" required class="np-select">${docOpts}</select></div>
-  <div class="np-field"><label class="np-field__label">Date *</label><input name="date" type="date" required class="np-input" value="${todayIso()}"/></div>
+  <div class="np-field"><label class="np-field__label">Date *</label><input name="date" type="date" required class="np-input" value="${todayIso()}" min="${todayIso()}"/></div>
   <div class="np-field"><label class="np-field__label">Type</label><select name="consultationType" class="np-select"><option value="OFFLINE">In-person</option></select></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Available slot *</label><select name="startTime" required class="np-select" id="slotSel"><option value="">Pick doctor+date first</option></select></div>
   <div class="np-divider" style="grid-column:span 2"></div>
@@ -460,9 +473,16 @@ async function openBookModal(_, patientId){
   const f=$('#bForm');
   async function bPrefillPatient(pid){ try{ const data=await api('/receptionist/patients/'+pid+'/history'); const p=data&&data.patient; if(!p)return; $('#bPatientId').value=p.id; $('#bPatient').value=`${p.name} — ${p.phone||''}`; if(f.phone) f.phone.value=p.phone||''; if(f.email) f.email.value=p.email||''; if(f.parentName) f.parentName.value=p.parentName||''; if(f.dateOfBirth) f.dateOfBirth.value=p.dateOfBirth?String(p.dateOfBirth).slice(0,10):''; if(f.gender) f.gender.value=p.gender||''; }catch(_){} }
   if (patientId) bPrefillPatient(patientId);
-  async function refreshSlots(){ const v=f.docCentre.value; if(!v)return; const [docId]=v.split('|'); const date=f.date.value; if(!date)return; try{ const r=await api(`/receptionist/slots?doctorId=${docId}&date=${date}&type=OFFLINE`); $('#slotSel').innerHTML=(r.slots||[]).filter(s=>s.available).map(s=>`<option value="${s.startTime}">${fmtTime(s.startTime)}</option>`).join('')||'<option value="">No slots available</option>'; }catch(e){ $('#slotSel').innerHTML='<option value="">No slots</option>'; } }
+  // Guarded against out-of-order responses: switching doctor/clinic or date
+  // fires a fresh fetch before the previous one resolves. Without tracking
+  // which request is current, a slower response for a doctor/date the user
+  // has already moved on from can land last and repopulate the picker with
+  // slots that don't belong to the currently-selected doctor+date — i.e. a
+  // walk-in could be booked against availability that isn't actually current.
+  let __bookSlotReq=0;
+  async function refreshSlots(){ const v=f.docCentre.value; if(!v)return; const [docId]=v.split('|'); const date=f.date.value; if(!date)return; const myReq=++__bookSlotReq; try{ const r=await api(`/receptionist/slots?doctorId=${docId}&date=${date}&type=OFFLINE`); if(myReq!==__bookSlotReq)return; $('#slotSel').innerHTML=(r.slots||[]).filter(s=>s.available).map(s=>`<option value="${s.startTime}">${fmtTime(s.startTime)}</option>`).join('')||'<option value="">No slots available</option>'; }catch(e){ if(myReq!==__bookSlotReq)return; $('#slotSel').innerHTML='<option value="">No slots</option>'; } }
   f.docCentre.addEventListener('change',refreshSlots); f.date.addEventListener('change',refreshSlots); refreshSlots();
-  const bP=$('#bPatient'); bP.addEventListener('input',async e=>{ $('#bPatientId').value=''; clearTimeout(window.__bp); const q=e.target.value.trim(); if(q.length<2)return; window.__bp=setTimeout(async()=>{ try{ const rows=await api('/receptionist/patients?q='+encodeURIComponent(q)); $('#bPatients').innerHTML=rows.map(p=>`<option value="${esc(p.name)} — ${esc(p.phone)}" data-id="${p.id}"></option>`).join(''); window.__bplist=rows; }catch(_){}} ,250); });
+  const bP=$('#bPatient'); let __bookPatientReq=0; bP.addEventListener('input',async e=>{ $('#bPatientId').value=''; clearTimeout(window.__bp); const q=e.target.value.trim(); if(q.length<2)return; window.__bp=setTimeout(async()=>{ const myReq=++__bookPatientReq; try{ const rows=await api('/receptionist/patients?q='+encodeURIComponent(q)); if(myReq!==__bookPatientReq)return; $('#bPatients').innerHTML=rows.map(p=>`<option value="${esc(p.name)} — ${esc(p.phone)}" data-id="${p.id}"></option>`).join(''); window.__bplist=rows; }catch(_){}} ,250); });
   f.addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(f).entries()); const [docId,centreId]=raw.docCentre.split('|');
     let pid=$('#bPatientId').value||null; const typed=bP.value.trim();
     if(!pid && window.__bplist){ const match=window.__bplist.find(p=>`${p.name} — ${p.phone}`===typed); if(match) pid=match.id; }

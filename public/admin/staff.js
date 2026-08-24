@@ -72,29 +72,52 @@ try {
   VIEW_META.auditView         = { title:'Staff Audit',       sub:'Staff activity trail' };
 } catch(_) {}
 
+// Always refetches both lists rather than caching after the first call —
+// the Receptionist/Pharmacy User assignment editors read __centres and
+// __offlineDoctors straight from these module-level arrays, and a doctor's
+// consultation mode (or a brand-new offline doctor) can change on the
+// Doctor Management screen at any point in the session. Caching "once
+// populated, never again" left those dropdowns silently stuck on
+// whatever was true the first time a modal was opened, until a full page
+// reload. The extra GET on modal-open is cheap; a wrong assignment list
+// is not.
 async function ensureRefData(){
-  const jobs = [];
-  if (!__centres.length)        jobs.push(api('/admin/medical-centres').then(r => { __centres = r; }));
-  if (!__offlineDoctors.length) jobs.push(api('/admin/available-offline-doctors').then(r => { __offlineDoctors = r; }));
-  await Promise.all(jobs);
+  const [centres, offlineDoctors] = await Promise.all([
+    api('/admin/medical-centres'),
+    api('/admin/available-offline-doctors')
+  ]);
+  __centres = centres;
+  __offlineDoctors = offlineDoctors;
 }
 
 // ─────────── Medical Centres ───────────
+// No .np-table--scroll-x here: .np-table--fixed already gives every column
+// a fluid % width via the colgroup below (fits any desktop width without
+// horizontal scroll) and .np-table--cards takes over below 720px, so
+// there's never a scrollable state to indicate. The scroll-x rule's only
+// live effect left was making the last column (Actions) position:sticky
+// with a permanent box-shadow cast onto it — rendering as an unwanted
+// shadow/glow right next to the Edit/Deactivate buttons even when the
+// table was never actually scrolled.
+function renderCentresTable(){
+  const host = $('#centresList'); if (!host) return;
+  host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table np-table--fixed np-table--cards"><colgroup><col style="width:16%"><col style="width:30%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    __centres.map(c => `<tr>
+      <td data-label="Name"><b>${esc(c.name)}</b></td>
+      <td data-label="Address" class="np-mut" style="font-size:.82rem">${esc([c.address, c.city, c.state, c.pincode].filter(Boolean).join(', ') || '—')}</td>
+      <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc([c.phone, c.email].filter(Boolean).join(' · ') || '—')}</td>
+      <td data-label="Staff / Appts" class="np-mut" style="font-size:.82rem">${(c._count && c._count.receptionistAssignments) || 0} reception · ${(c._count && c._count.appointments) || 0} appts</td>
+      <td data-label="Status">${c.isActive ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Inactive</span>'}</td>
+      <td data-label="Actions" style="text-align:right"><div style="display:flex;flex-wrap:wrap;gap:.4rem;justify-content:flex-end"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : ''}</div></td>
+    </tr>`).join('') + '</tbody></table></div>'
+    : '<div class="np-empty"><div class="np-empty__title">No medical centres yet</div><div class="np-empty__sub">Create your first clinic to assign receptionists.</div></div>';
+}
 async function loadCentres(){
   const host = $('#centresList'); if (!host) return;
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __centres = await api('/admin/medical-centres');
-    host.innerHTML = __centres.length ? '<div class="np-table-wrap"><table class="np-table np-table--fixed np-table--scroll-x np-table--cards"><colgroup><col style="width:16%"><col style="width:30%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Staff / Appts</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
-      __centres.map(c => `<tr>
-        <td data-label="Name"><b>${esc(c.name)}</b></td>
-        <td data-label="Address" class="np-mut" style="font-size:.82rem">${esc([c.address, c.city, c.state, c.pincode].filter(Boolean).join(', ') || '—')}</td>
-        <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc([c.phone, c.email].filter(Boolean).join(' · ') || '—')}</td>
-        <td data-label="Staff / Appts" class="np-mut" style="font-size:.82rem">${(c._count && c._count.receptionistAssignments) || 0} reception · ${(c._count && c._count.appointments) || 0} appts</td>
-        <td data-label="Status">${c.isActive ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Inactive</span>'}</td>
-        <td data-label="Actions" style="text-align:right"><div style="display:flex;flex-wrap:wrap;gap:.4rem;justify-content:flex-end"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : ''}</div></td>
-      </tr>`).join('') + '</tbody></table></div>'
-      : '<div class="np-empty"><div class="np-empty__title">No medical centres yet</div><div class="np-empty__sub">Create your first clinic to assign receptionists.</div></div>';
+    renderCentresTable();
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
 }
 window.loadCentres = loadCentres;
@@ -131,32 +154,47 @@ function openCentreModal(id){
 window.openCentreModal = openCentreModal;
 
 async function deactivateCentre(id){
-  if (!confirm('Deactivate this centre? Assignments are kept for history.')) return;
-  try { await api('/admin/medical-centres/' + id, { method:'DELETE' }); toast('Centre deactivated'); loadCentres(); }
-  catch(e){ toast(e.message, 'error'); }
+  const c = __centres.find(x => x.id === id);
+  const ok = await NPModal.confirm({
+    title: 'Deactivate this centre?',
+    message: `Assignments for ${c ? esc(c.name) : 'this centre'} are kept for history.`,
+    okText: 'Deactivate',
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    await api('/admin/medical-centres/' + id, { method:'DELETE' });
+    if (c) c.isActive = false;
+    renderCentresTable();
+    toast('Centre deactivated');
+  } catch(e){ toast(e.message, 'error'); }
 }
 window.deactivateCentre = deactivateCentre;
 
 // ─────────── Receptionists ───────────
+function renderReceptionistsTable(){
+  const host = $('#receptionistsList'); if (!host) return;
+  host.innerHTML = __receptionists.length ? '<div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Name</th><th>Contact</th><th>Assignments (Doctor @ Clinic)</th><th>Permissions</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    __receptionists.map(r => `<tr>
+      <td data-label="Name"><b>${esc(r.name)}</b></td>
+      <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(r.email)}<br/>+91 ${esc(r.phone)}</td>
+      <td data-label="Assignments (Doctor @ Clinic)" style="font-size:.8rem">${(r.assignments || []).map(a => `<div>Dr. ${esc(a.doctor.name)} <span class="np-mut">@ ${esc(a.medicalCentre.name)}</span></div>`).join('') || '—'}</td>
+      <td data-label="Permissions" style="font-size:.78rem">
+        ${r.canManageConsultations ? '<span class="np-badge np-badge--blue">Consultations</span>' : ''}
+        ${r.canManagePharmacy ? '<span class="np-badge np-badge--mint">Pharmacy</span>' : ''}
+        ${r.canIssueCertificates ? '<span class="np-badge np-badge--violet">Certificates</span>' : ''}
+      </td>
+      <td data-label="Status">${r.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
+      <td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openReceptionistModal('${r.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deleteReceptionist('${r.id}')">Deactivate</button></td>
+    </tr>`).join('') + '</tbody></table></div>'
+    : '<div class="np-empty"><div class="np-empty__title">No receptionists yet</div><div class="np-empty__sub">Receptionists cannot self-register — create their accounts here.</div></div>';
+}
 async function loadReceptionists(){
   const host = $('#receptionistsList'); if (!host) return;
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __receptionists = await api('/admin/receptionists');
-    host.innerHTML = __receptionists.length ? '<div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Name</th><th>Contact</th><th>Assignments (Doctor @ Clinic)</th><th>Permissions</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
-      __receptionists.map(r => `<tr>
-        <td data-label="Name"><b>${esc(r.name)}</b></td>
-        <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(r.email)}<br/>+91 ${esc(r.phone)}</td>
-        <td data-label="Assignments (Doctor @ Clinic)" style="font-size:.8rem">${(r.assignments || []).map(a => `<div>Dr. ${esc(a.doctor.name)} <span class="np-mut">@ ${esc(a.medicalCentre.name)}</span></div>`).join('') || '—'}</td>
-        <td data-label="Permissions" style="font-size:.78rem">
-          ${r.canManageConsultations ? '<span class="np-badge np-badge--blue">Consultations</span>' : ''}
-          ${r.canManagePharmacy ? '<span class="np-badge np-badge--mint">Pharmacy</span>' : ''}
-          ${r.canIssueCertificates ? '<span class="np-badge np-badge--violet">Certificates</span>' : ''}
-        </td>
-        <td data-label="Status">${r.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
-        <td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openReceptionistModal('${r.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deleteReceptionist('${r.id}')">Deactivate</button></td>
-      </tr>`).join('') + '</tbody></table></div>'
-      : '<div class="np-empty"><div class="np-empty__title">No receptionists yet</div><div class="np-empty__sub">Receptionists cannot self-register — create their accounts here.</div></div>';
+    renderReceptionistsTable();
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
 }
 window.loadReceptionists = loadReceptionists;
@@ -172,7 +210,7 @@ async function openReceptionistModal(id){
     <header class="np-modal__head"><div class="np-modal__title">${r ? 'Edit' : 'Add'} Receptionist</div><button class="np-modal__close" onclick="closeStaffModal()">×</button></header>
     <div class="np-modal__body">${staffPhotoBlockHtml(r, 'RECEPTIONIST')}<form id="recForm"><div class="np-grid-2">
       <div class="np-field"><label class="np-field__label">Full name *</label><input name="name" required class="np-input" value="${r ? esc(r.name) : ''}"/></div>
-      <div class="np-field"><label class="np-field__label">Mobile (10 digits) *</label><input name="phone" required maxlength="10" class="np-input" value="${r ? esc(r.phone) : ''}"/></div>
+      <div class="np-field"><label class="np-field__label">Mobile (10 digits, 6-9) *</label><input name="phone" required pattern="[6-9][0-9]{9}" maxlength="10" inputmode="numeric" class="np-input" value="${r ? esc(r.phone) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">Email / username *</label><input name="email" type="email" required ${r ? 'readonly' : ''} class="np-input" value="${r ? esc(r.email) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">${r ? 'Reset password (blank = keep)' : 'Temporary password (blank = email invite)'}</label><input name="password" type="password" minlength="8" class="np-input"/></div>
       <div class="np-field"><label class="np-field__label">Status</label><select name="status" class="np-select"><option value="ACTIVE" ${r && r.status !== 'ACTIVE' ? '' : 'selected'}>Active</option><option value="SUSPENDED" ${r && r.status === 'SUSPENDED' ? 'selected' : ''}>Suspended</option></select></div>
@@ -264,28 +302,43 @@ function addAssignmentRow(){
 window.addAssignmentRow = addAssignmentRow;
 
 async function deleteReceptionist(id){
-  if (!confirm('Deactivate this receptionist? They will no longer be able to sign in.')) return;
-  try { await api('/admin/receptionists/' + id, { method:'DELETE' }); toast('Receptionist deactivated'); loadReceptionists(); }
-  catch(e){ toast(e.message, 'error'); }
+  const r = __receptionists.find(x => x.id === id);
+  const ok = await NPModal.confirm({
+    title: 'Deactivate this receptionist?',
+    message: `${r ? esc(r.name) : 'This receptionist'} will no longer be able to sign in.`,
+    okText: 'Deactivate',
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    await api('/admin/receptionists/' + id, { method:'DELETE' });
+    __receptionists = __receptionists.filter(x => x.id !== id);
+    renderReceptionistsTable();
+    toast('Receptionist deactivated');
+  } catch(e){ toast(e.message, 'error'); }
 }
 window.deleteReceptionist = deleteReceptionist;
 
 // ─────────── Pharmacy Users ───────────
+function renderPharmUsersTable(){
+  const host = $('#pharmUsersList'); if (!host) return;
+  host.innerHTML = __pharmUsers.length ? '<div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Name</th><th>Contact</th><th>Centre</th><th>Responsible doctors</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+    __pharmUsers.map(u => `<tr>
+      <td data-label="Name"><b>${esc(u.name)}</b></td>
+      <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(u.email)}<br/>+91 ${esc(u.phone)}</td>
+      <td data-label="Centre">${esc(u.medicalCentre ? u.medicalCentre.name : '—')}</td>
+      <td data-label="Responsible doctors" style="font-size:.8rem">${(u.doctors || []).map(d => `<div>Dr. ${esc(d.doctor.name)}</div>`).join('') || '—'}</td>
+      <td data-label="Status">${u.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
+      <td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openPharmUserModal('${u.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deletePharmUser('${u.id}')">Deactivate</button></td>
+    </tr>`).join('') + '</tbody></table></div>'
+    : '<div class="np-empty"><div class="np-empty__title">No pharmacy users yet</div></div>';
+}
 async function loadPharmUsers(){
   const host = $('#pharmUsersList'); if (!host) return;
   host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Loading…</div></div>';
   try {
     __pharmUsers = await api('/admin/pharmacy-users');
-    host.innerHTML = __pharmUsers.length ? '<div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Name</th><th>Contact</th><th>Centre</th><th>Responsible doctors</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
-      __pharmUsers.map(u => `<tr>
-        <td data-label="Name"><b>${esc(u.name)}</b></td>
-        <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(u.email)}<br/>+91 ${esc(u.phone)}</td>
-        <td data-label="Centre">${esc(u.medicalCentre ? u.medicalCentre.name : '—')}</td>
-        <td data-label="Responsible doctors" style="font-size:.8rem">${(u.doctors || []).map(d => `<div>Dr. ${esc(d.doctor.name)}</div>`).join('') || '—'}</td>
-        <td data-label="Status">${u.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
-        <td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openPharmUserModal('${u.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deletePharmUser('${u.id}')">Deactivate</button></td>
-      </tr>`).join('') + '</tbody></table></div>'
-      : '<div class="np-empty"><div class="np-empty__title">No pharmacy users yet</div></div>';
+    renderPharmUsersTable();
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
 }
 window.loadPharmUsers = loadPharmUsers;
@@ -305,7 +358,7 @@ async function openPharmUserModal(id){
     <header class="np-modal__head"><div class="np-modal__title">${u ? 'Edit' : 'Add'} Pharmacy User</div><button class="np-modal__close" onclick="closeStaffModal()">×</button></header>
     <div class="np-modal__body">${staffPhotoBlockHtml(u, 'PHARMACY')}<form id="puForm"><div class="np-grid-2">
       <div class="np-field"><label class="np-field__label">Full name *</label><input name="name" required class="np-input" value="${u ? esc(u.name) : ''}"/></div>
-      <div class="np-field"><label class="np-field__label">Mobile (10 digits) *</label><input name="phone" required maxlength="10" class="np-input" value="${u ? esc(u.phone) : ''}"/></div>
+      <div class="np-field"><label class="np-field__label">Mobile (10 digits, 6-9) *</label><input name="phone" required pattern="[6-9][0-9]{9}" maxlength="10" inputmode="numeric" class="np-input" value="${u ? esc(u.phone) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">Email / username *</label><input name="email" type="email" required ${u ? 'readonly' : ''} class="np-input" value="${u ? esc(u.email) : ''}"/></div>
       <div class="np-field"><label class="np-field__label">${u ? 'Reset password (blank = keep)' : 'Temporary password (blank = email invite)'}</label><input name="password" type="password" minlength="8" class="np-input"/></div>
       <div class="np-field"><label class="np-field__label">Medical centre</label><select name="medicalCentreId" class="np-select">${centreOpts}</select></div>
@@ -363,9 +416,20 @@ async function sendPharmUserInvite(id){
 window.sendPharmUserInvite = sendPharmUserInvite;
 
 async function deletePharmUser(id){
-  if (!confirm('Deactivate this pharmacy user?')) return;
-  try { await api('/admin/pharmacy-users/' + id, { method:'DELETE' }); toast('Pharmacy user deactivated'); loadPharmUsers(); }
-  catch(e){ toast(e.message, 'error'); }
+  const u = __pharmUsers.find(x => x.id === id);
+  const ok = await NPModal.confirm({
+    title: 'Deactivate this pharmacy user?',
+    message: `${u ? esc(u.name) : 'This pharmacy user'} will no longer be able to sign in.`,
+    okText: 'Deactivate',
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    await api('/admin/pharmacy-users/' + id, { method:'DELETE' });
+    __pharmUsers = __pharmUsers.filter(x => x.id !== id);
+    renderPharmUsersTable();
+    toast('Pharmacy user deactivated');
+  } catch(e){ toast(e.message, 'error'); }
 }
 window.deletePharmUser = deletePharmUser;
 

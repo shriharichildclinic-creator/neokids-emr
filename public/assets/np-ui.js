@@ -1480,21 +1480,37 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
   var closingViaPopstate = false;
 
   function isModalLike(el) {
-    return !!(el && el.classList && (el.classList.contains('np-modal') || el.classList.contains('np-drawer')));
+    return !!(el && el.nodeType === 1 && el.classList && (el.classList.contains('np-modal') || el.classList.contains('np-drawer')));
+  }
+  function isOpen(el) { return !el.classList.contains('hidden'); }
+
+  function noteOpened(el) {
+    if (openStack.indexOf(el) !== -1) return;
+    openStack.push(el);
+    try { history.pushState({ npModalDepth: openStack.length }, ''); } catch (_) {}
+  }
+  function noteClosed(el) {
+    var idx = openStack.indexOf(el);
+    if (idx === -1) return;
+    openStack.splice(idx, 1);
+    if (!closingViaPopstate) {
+      try { history.back(); } catch (_) {}
+    }
   }
 
-  function onToggle(el) {
-    if (!isModalLike(el)) return;
-    var isHidden = el.classList.contains('hidden');
-    var idx = openStack.indexOf(el);
-    if (!isHidden && idx === -1) {
-      openStack.push(el);
-      try { history.pushState({ npModalDepth: openStack.length }, ''); } catch (_) {}
-    } else if (isHidden && idx !== -1) {
-      openStack.splice(idx, 1);
-      if (!closingViaPopstate) {
-        try { history.back(); } catch (_) {}
-      }
+  // Two open/close conventions exist side by side in this codebase: admin
+  // and doctor mostly toggle a `hidden` class on a persistent modal node;
+  // receptionist and pharmacy instead build most modals by replacing a
+  // shared host div's innerHTML wholesale, so the modal element is born
+  // already visible (no class change to observe) and destroyed by being
+  // removed outright. Both need watching, or the majority of receptionist/
+  // pharmacy modals never register as "open" at all.
+  function scanSubtree(node, cb) {
+    if (!node || node.nodeType !== 1) return;
+    if (isModalLike(node)) cb(node);
+    if (node.querySelectorAll) {
+      var list = node.querySelectorAll('.np-modal, .np-drawer');
+      for (var i = 0; i < list.length; i++) cb(list[i]);
     }
   }
 
@@ -1502,6 +1518,11 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
     if (!openStack.length) return;
     closingViaPopstate = true;
     var el = openStack[openStack.length - 1];
+    // .hidden is a global display:none!important utility, so adding it
+    // correctly hides either kind of modal even though only the
+    // class-toggle convention ever removes it again by itself — an
+    // innerHTML-replacement modal gets torn down for real the next time
+    // its own close()/open() runs, same as clicking its Close button would.
     el.classList.add('hidden');
     Promise.resolve().then(function () { closingViaPopstate = false; });
   });
@@ -1511,10 +1532,21 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       var mo = new MutationObserver(function (muts) {
         for (var i = 0; i < muts.length; i++) {
           var m = muts[i];
-          if (m.type === 'attributes' && m.attributeName === 'class') onToggle(m.target);
+          if (m.type === 'attributes' && m.attributeName === 'class') {
+            var el = m.target;
+            if (!isModalLike(el)) continue;
+            if (isOpen(el)) noteOpened(el); else noteClosed(el);
+          } else if (m.type === 'childList') {
+            for (var a = 0; a < m.addedNodes.length; a++) {
+              scanSubtree(m.addedNodes[a], function (el) { if (isOpen(el)) noteOpened(el); });
+            }
+            for (var r = 0; r < m.removedNodes.length; r++) {
+              scanSubtree(m.removedNodes[r], noteClosed);
+            }
+          }
         }
       });
-      mo.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true });
+      mo.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
     } catch (_) {}
   }
 

@@ -12,8 +12,15 @@ function toast(m, kind){ if (window.NPToast && NPToast[kind||'success']) NPToast
 try { VIEW_META.dataManagementView = { title: 'Data Management', sub: 'Permanent deletion — irreversible' }; } catch(_) {}
 
 let __dmTimer = null;
+let __dmReqSeq = 0;
 
 async function dmSearch(){
+  // Switching the Patient/Doctor type dropdown fires immediately while a
+  // debounced keystroke search for the previous type may still be in
+  // flight — without a guard, whichever response lands last wins and can
+  // repaint the table with results for a type/query the admin already
+  // moved away from.
+  const __seq = ++__dmReqSeq;
   const type = $('#dmType').value;
   const q = $('#dmSearch').value.trim();
   const host = $('#dmResults');
@@ -25,6 +32,7 @@ async function dmSearch(){
   host.innerHTML = `<div class="np-empty"><div class="np-empty__sub">Searching…</div></div>`;
   try {
     const rows = await api('/admin/data-management/search?type=' + type + '&q=' + encodeURIComponent(q));
+    if (__seq !== __dmReqSeq) return;
     if (!rows.length){
       host.innerHTML = `<div class="np-empty"><div class="np-empty__title">No matches</div></div>`;
       return;
@@ -43,6 +51,7 @@ async function dmSearch(){
           </td>
         </tr>`).join('') + '</tbody></table></div>';
   } catch (e) {
+    if (__seq !== __dmReqSeq) return;
     host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`;
   }
 }
@@ -108,37 +117,53 @@ async function dmView(type, id){
 }
 window.dmView = dmView;
 
+// The list row and the detail-view modal both wire straight to this
+// function, and it's the one place a double-click could matter — a second
+// click while the first prompt is still up would otherwise stack a second
+// independent confirm/password flow for the same record on top of the
+// first. Both would still have to be typed out and confirmed separately
+// (nothing here can delete twice from one click), but the guard keeps it
+// to a single in-flight flow per record instead of a confusing stack of
+// modals that outlives the row it refers to.
+const __dmPurgeInFlight = new Set();
+
 async function dmPurge(type, id, name){
-  const label = type === 'DOCTOR' ? 'doctor' : 'patient';
-  const typed = await NPModal.prompt({
-    title: `Permanently delete this ${label}?`,
-    message: `This deletes ${name} AND every appointment, prescription, certificate and invoice attached to them. This cannot be undone.\n\nType the name exactly to confirm: ${name}`,
-    placeholder: name,
-    okText: 'Delete permanently'
-  });
-  if (typed == null) return;
-  if (typed.trim() !== name){
-    toast('Name did not match — nothing was deleted.', 'error');
-    return;
-  }
-  const password = await NPModal.prompt({
-    title: 'Confirm your password',
-    message: `Re-enter your admin password to permanently delete ${name}.`,
-    inputType: 'password',
-    okText: 'Delete permanently'
-  });
-  if (password == null) return;
-  if (!password){
-    toast('Password is required — nothing was deleted.', 'error');
-    return;
-  }
+  if (__dmPurgeInFlight.has(id)) return;
+  __dmPurgeInFlight.add(id);
   try {
-    const path = type === 'DOCTOR' ? '/admin/data-management/doctors/' : '/admin/data-management/patients/';
-    const res = await api(path + id, { method: 'DELETE', body: JSON.stringify({ confirmPassword: password }) });
-    toast(res.message || 'Deleted.');
-    dmSearch();
-  } catch (e) {
-    toast(e.message, 'error');
+    const label = type === 'DOCTOR' ? 'doctor' : 'patient';
+    const typed = await NPModal.prompt({
+      title: `Permanently delete this ${label}?`,
+      message: `This deletes ${name} AND every appointment, prescription, certificate and invoice attached to them. This cannot be undone.\n\nType the name exactly to confirm: ${name}`,
+      placeholder: name,
+      okText: 'Delete permanently'
+    });
+    if (typed == null) return;
+    if (typed.trim() !== name){
+      toast('Name did not match — nothing was deleted.', 'error');
+      return;
+    }
+    const password = await NPModal.prompt({
+      title: 'Confirm your password',
+      message: `Re-enter your admin password to permanently delete ${name}.`,
+      inputType: 'password',
+      okText: 'Delete permanently'
+    });
+    if (password == null) return;
+    if (!password){
+      toast('Password is required — nothing was deleted.', 'error');
+      return;
+    }
+    try {
+      const path = type === 'DOCTOR' ? '/admin/data-management/doctors/' : '/admin/data-management/patients/';
+      const res = await api(path + id, { method: 'DELETE', body: JSON.stringify({ confirmPassword: password }) });
+      toast(res.message || 'Deleted.');
+      dmSearch();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  } finally {
+    __dmPurgeInFlight.delete(id);
   }
 }
 window.dmPurge = dmPurge;

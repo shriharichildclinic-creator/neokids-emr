@@ -51,7 +51,7 @@ If the template isn't approved yet, or Meta rejects it, the send automatically f
 
 ## Vaccination reminder template (already live)
 
-### `neokids_vacc_reminder_v1`
+### `neokids_vacc_reminder_v2`
 
 This is a system-generated, age-based reminder from NeoKidsPro — not a personal message from a doctor — so no doctor name is interpolated anywhere in this template.
 
@@ -61,19 +61,16 @@ This is a system-generated, age-based reminder from NeoKidsPro — not a persona
 - **Body (4 variables):**
 
 ```
-Hi {{1}}'s parent, this is a system-generated reminder that {{1}}'s vaccination {{2}} falls due on {{3}} as per the standard vaccination schedule for your child's age.
+Hi {{1}}'s parent, this is a reminder that {{1}}'s {{2}} vaccination is due on {{3}}.
 
 {{4}}
 
-What you can do:
-- If the vaccination is due, or you're unsure whether your child has already received it, please consult your nearest healthcare provider.
-- Book an online pediatric consultation through NeoKidsPro at https://neokidspro.in for questions on schedule, eligibility, missed doses, catch-up vaccinations, or vaccine safety.
-- In Mumbai? VaxiClinics at https://vaxiclinics.com administers vaccinations for children and also offers home-vaccination visits where available.
-
-This is an automated reminder and does not replace professional medical advice.
+Have questions about the vaccination schedule, eligibility, or missed doses? Visit NeoKidsPro to book an online consultation. If you're a Mumbai parent, VaxiClinics also offers in-person and home vaccination visits.
 
 — NeoKidsPro
 ```
+
+> Rewritten from `v1`: the previous body was rejected by Meta for ending its content too close to a variable-driven line with no closing static sentence. This version keeps the same 4 variables but always closes on plain static text ("— NeoKidsPro"), never a variable.
 
 - **Footer:**
   ```
@@ -89,14 +86,14 @@ This is an automated reminder and does not replace professional medical advice.
   - `{{3}}` = Due date (`DD MMM YYYY`)
   - `{{4}}` = Mandatory disclaimer, sent verbatim from the code:
     ```
-    This is an automated reminder generated from your child's recorded date of birth and standard vaccination schedules. We do not maintain records of vaccinations administered outside NeoKidsPro and cannot confirm whether this vaccine is pending, overdue, or already completed. Please consult a qualified pediatrician.
+    This is an automated reminder generated from your child's recorded date of birth and standard vaccination schedules. NeoKidsPro does not administer vaccines and has no record of vaccinations your child may have already received elsewhere, so we cannot confirm whether this vaccine is pending, overdue, or already completed. Please consult a qualified pediatrician.
     ```
 - **Sample values for Meta approval:**
   - `{{1}}` = `Aarav`
   - `{{2}}` = `DTwP/DTaP - 2`
   - `{{3}}` = `27 Aug 2026`
   - `{{4}}` = the disclaimer text above (verbatim)
-- **Env:** `WA_TPL_VACCINATION=neokids_vacc_reminder_v1`
+- **Env:** `WA_TPL_VACCINATION=neokids_vacc_reminder_v2`
 
 ---
 
@@ -114,7 +111,7 @@ Content-Type: application/json
   "to": "919XXXXXXXXX",
   "type": "template",
   "template": {
-    "name": "neokids_vacc_reminder_v1",
+    "name": "neokids_vacc_reminder_v2",
     "language": { "code": "en" },
     "components": [
       {
@@ -123,7 +120,7 @@ Content-Type: application/json
           { "type": "text", "text": "Aarav" },
           { "type": "text", "text": "DTwP/DTaP - 2" },
           { "type": "text", "text": "27 Aug 2026" },
-          { "type": "text", "text": "This is an automated reminder generated from your child's recorded date of birth and standard vaccination schedules. We do not maintain records of vaccinations administered outside NeoKidsPro and cannot confirm whether this vaccine is pending, overdue, or already completed. Please consult a qualified pediatrician." }
+          { "type": "text", "text": "This is an automated reminder generated from your child's recorded date of birth and standard vaccination schedules. NeoKidsPro does not administer vaccines and has no record of vaccinations your child may have already received elsewhere, so we cannot confirm whether this vaccine is pending, overdue, or already completed. Please consult a qualified pediatrician." }
         ]
       }
     ]
@@ -156,7 +153,7 @@ These templates already exist in Meta and continue to be used exactly as before.
 | 13 | `neokids_invoice_pdf` | 3 | — (DOCUMENT header) |
 | 14 | `medical_certificate_ready` | 3 | — (DOCUMENT header) |
 | 15 | `neokids_staff_invite_v1` | 3 | Dynamic (token suffix) |
-| 16 | `neokids_vacc_reminder_v1` | 4 | Static |
+| 16 | `neokids_vacc_reminder_v2` | 4 | Static |
 
 > **Note (this fix):** `{{2}}` for `medical_certificate_ready` is now always the **issuing doctor's name** (e.g. `Dr. Vishal Parmar`) — never the clinic/hospital name. The template shell itself (variable count/type) is unchanged, so **no Meta resubmission is required** — only the value the code sends into `{{2}}` changed.
 
@@ -186,13 +183,13 @@ These templates already exist in Meta and continue to be used exactly as before.
    ```
    No code change is required.
 
-### `neokids_vacc_reminder_v1`
+### `neokids_vacc_reminder_v2`
 
 1. Log in to **[business.facebook.com](https://business.facebook.com/)** with the WABA owner account.
 2. Left sidebar → **WhatsApp Manager** → open your WABA → **Message templates** → **Create template**.
 3. Fill:
    - **Category:** `Utility`
-   - **Name:** `neokids_vacc_reminder_v1`
+   - **Name:** `neokids_vacc_reminder_v2`
    - **Language:** `English`
 4. **Header:** *None*.
 5. **Body:** paste the body block from the section above **exactly**, including the placeholders `{{1}}..{{4}}` and the blank lines.
@@ -205,6 +202,6 @@ These templates already exist in Meta and continue to be used exactly as before.
 9. **Submit**. Approval usually takes 1–60 minutes.
 10. Once **Approved**, set (or confirm) in `.env`:
     ```
-    WA_TPL_VACCINATION=neokids_vacc_reminder_v1
+    WA_TPL_VACCINATION=neokids_vacc_reminder_v2
     ```
     No code change is required.

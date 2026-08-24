@@ -547,6 +547,22 @@ h1,h2,h3{
 .np-btn--ghost.np-btn--icon.np-btn--danger:hover{
   background:#FEF2F2; border-color:#DC2626;
 }
+/* Plain (non-icon) ghost+danger combo — e.g. the "Deactivate" buttons on
+   Medical Centres/Receptionists/Pharmacy Users. .np-btn--ghost and
+   .np-btn--danger are equal-specificity single-class rules, so which one
+   wins for background/color/border when both are applied together came
+   down to source order alone (.np-btn--ghost is declared later above and
+   was winning, leaving Deactivate looking like a plain neutral button).
+   This compound selector outranks both and makes the result deterministic,
+   reusing the same red palette as the icon-only variant. */
+.np-btn--ghost.np-btn--danger{
+  color:#DC2626;
+  border-color:rgba(220,38,38,.25);
+  background:transparent;
+}
+.np-btn--ghost.np-btn--danger:hover{
+  background:#FEF2F2; border-color:#DC2626;
+}
 .np-btn--add-doctor{
   box-shadow: 0 8px 22px -6px rgba(90,148,149,.55);
   background: linear-gradient(135deg, var(--nk-teal-400), var(--nk-teal-600));
@@ -1349,6 +1365,15 @@ html[data-theme="dark"] .np-btn--ghost.np-btn--icon.np-btn--danger{
   border-color: rgba(252,165,165,.35);
 }
 html[data-theme="dark"] .np-btn--ghost.np-btn--icon.np-btn--danger:hover{
+  background: rgba(252,165,165,.12);
+  border-color:#FCA5A5;
+}
+html[data-theme="dark"] .np-btn--ghost.np-btn--danger{
+  background: transparent;
+  color:#FCA5A5;
+  border-color: rgba(252,165,165,.35);
+}
+html[data-theme="dark"] .np-btn--ghost.np-btn--danger:hover{
   background: rgba(252,165,165,.12);
   border-color:#FCA5A5;
 }
@@ -2829,8 +2854,13 @@ html[data-theme="dark"] input[type="datetime-local"]{
    .np-error is a block-level error CARD style; it was being applied to an
    inline <b> inside the inventory table's Stock cell, where the card padding
    and 12px radius made it clip against the cell and header edges. Compact
-   pill treatment for inline use; the card treatment stays for real errors. */
-td .np-error, .np-table .np-error, b.np-error, span.np-error{
+   pill treatment for inline use; the card treatment stays for real errors.
+   Scoped to the <b>/<span> tags themselves (not `td .np-error`/`.np-table
+   .np-error`): those ancestor-based selectors also matched the full-message
+   `<div class="np-error">` error rows used for failed table loads (colspan
+   cells across admin/pharmacy/receptionist), forcing a long API error
+   message onto one `white-space:nowrap` line and overflowing the table. */
+b.np-error, span.np-error{
   display: inline-block;
   padding: .1rem .5rem;
   border-radius: 999px;

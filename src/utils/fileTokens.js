@@ -20,8 +20,30 @@
    any other file, and it expires within minutes.
    ===================================================================== */
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
-const SECRET = process.env.JWT_SECRET || 'change-me-in-production';
+// Deliberately NOT the same secret as session/login JWTs (JWT_SECRET,
+// signed in middleware/auth.js). Both are plain HS256 JWTs verified with
+// jsonwebtoken, and middleware/auth.js's authenticate() accepts ANY
+// token that verifies against JWT_SECRET as a Bearer session — it has no
+// way to know a token was actually minted here for one file, not as a
+// login session. A download-token payload has no `id` claim (only
+// `userId`), so if it were accepted as a Bearer token, req.user.id would
+// be `undefined` in every controller — and Prisma silently drops an
+// `undefined` value from a `where` filter, turning every
+// "scope to my own records" query (e.g. `where: { doctorId: req.user.id }`)
+// into "every doctor's records", plus letting the token's `role` claim
+// satisfy requireRole() checks it was never meant to pass. Using a
+// distinct secret means a signed download token's signature never
+// validates against JWT_SECRET (and a login token's never validates
+// against this one), so each kind of token only works the one way it
+// was minted for. FILE_TOKEN_SECRET can be set explicitly; otherwise we
+// derive one deterministically from JWT_SECRET so no extra deployment
+// step is required.
+const SECRET = process.env.FILE_TOKEN_SECRET
+  || (process.env.JWT_SECRET
+        ? crypto.createHash('sha256').update(`${process.env.JWT_SECRET}:file-download-token`).digest('hex')
+        : 'change-me-in-production');
 // Keep download links short-lived. 15 min is plenty for a "click the
 // link" UX while limiting blast radius if the URL leaks (e.g. into
 // browser history or shared screenshots).

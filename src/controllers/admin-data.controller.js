@@ -124,8 +124,9 @@ exports.doctorDetail = asyncHandler(async (req, res) => {
     })
   ]);
 
+  const { passwordHash, ...safeDoctor } = doctor;
   res.json({
-    doctor: { ...doctor, status: doctor.deletedAt ? 'Deactivated' : 'Active' },
+    doctor: { ...safeDoctor, status: doctor.deletedAt ? 'Deactivated' : 'Active' },
     counts: { appointments: appointmentCount, invoices: invoiceCount, certificates: certificateCount, settlements: settlementCount, previousRecords: previousRecordCount },
     recentAppointments
   });
@@ -136,6 +137,30 @@ exports.purgePatient = asyncHandler(async (req, res) => {
   const patient = await prisma.patient.findUnique({ where: { id: req.params.id } });
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
+  // Resolve appointmentIds and run every delete inside the SAME
+  // transaction so a concurrently-created appointment can't slip in
+  // between the lookup and the deletes (which would otherwise abort the
+  // transaction on a foreign-key violation with no useful error).
+  await prisma.$transaction(async (tx) => {
+    const appointmentIds = (await tx.appointment.findMany({
+      where: { patientId: patient.id }, select: { id: true }
+    })).map(a => a.id);
+
+    await tx.prescription.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+    await tx.notificationLog.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+    await tx.consultationInvoice.deleteMany({ where: { patientId: patient.id } });
+    await tx.medicalCertificate.deleteMany({ where: { patientId: patient.id } });
+    await tx.appointment.deleteMany({ where: { patientId: patient.id } });
+    // PreviousRecord.patientId and PharmacyBill.patientId are onDelete:SetNull
+    // in the schema — those rows survive with the link cleared, which is
+    // correct (a historical record / an old bill isn't "the patient's data"
+    // in the same sense once the account it's linked to is gone).
+    await tx.patient.delete({ where: { id: patient.id } });
+  });
+
+  // Logged only after the deletion has actually committed — logging
+  // beforehand would leave a permanent audit entry claiming the purge
+  // succeeded even if the transaction above had failed and rolled back.
   await audit.log({
     actor: adminActor(req),
     action: 'PATIENT_PERMANENTLY_DELETED',
@@ -145,23 +170,6 @@ exports.purgePatient = asyncHandler(async (req, res) => {
     meta: { name: patient.name, phone: patient.phone, email: patient.email, reason: req.body && req.body.reason }
   });
 
-  const appointmentIds = (await prisma.appointment.findMany({
-    where: { patientId: patient.id }, select: { id: true }
-  })).map(a => a.id);
-
-  await prisma.$transaction([
-    prisma.prescription.deleteMany({ where: { appointmentId: { in: appointmentIds } } }),
-    prisma.notificationLog.deleteMany({ where: { appointmentId: { in: appointmentIds } } }),
-    prisma.consultationInvoice.deleteMany({ where: { patientId: patient.id } }),
-    prisma.medicalCertificate.deleteMany({ where: { patientId: patient.id } }),
-    prisma.appointment.deleteMany({ where: { patientId: patient.id } }),
-    // PreviousRecord.patientId and PharmacyBill.patientId are onDelete:SetNull
-    // in the schema — those rows survive with the link cleared, which is
-    // correct (a historical record / an old bill isn't "the patient's data"
-    // in the same sense once the account it's linked to is gone).
-    prisma.patient.delete({ where: { id: patient.id } })
-  ]);
-
   res.json({ success: true, message: `${patient.name} and all related records were permanently deleted.` });
 });
 
@@ -170,6 +178,34 @@ exports.purgeDoctor = asyncHandler(async (req, res) => {
   const doctor = await prisma.doctor.findUnique({ where: { id: req.params.id } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
 
+  // Resolve appointmentIds and run every delete inside the SAME
+  // transaction so a concurrently-created appointment can't slip in
+  // between the lookup and the deletes (which would otherwise abort the
+  // transaction on a foreign-key violation with no useful error).
+  await prisma.$transaction(async (tx) => {
+    const appointmentIds = (await tx.appointment.findMany({
+      where: { doctorId: doctor.id }, select: { id: true }
+    })).map(a => a.id);
+
+    await tx.prescription.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+    await tx.notificationLog.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+    await tx.consultationInvoice.deleteMany({ where: { doctorId: doctor.id } });
+    await tx.medicalCertificate.deleteMany({ where: { doctorId: doctor.id } });
+    await tx.doctorSettlement.deleteMany({ where: { doctorId: doctor.id } });
+    // PreviousRecord.doctorId is required with no cascade — must go before
+    // the doctor row or the delete fails on a foreign-key constraint.
+    // Its attachments cascade automatically (onDelete:Cascade on recordId).
+    await tx.previousRecord.deleteMany({ where: { doctorId: doctor.id } });
+    await tx.appointment.deleteMany({ where: { doctorId: doctor.id } });
+    // ReceptionistAssignment, PharmacyUserDoctor and DoctorKyc are all
+    // onDelete:Cascade on doctorId in the schema — deleted automatically
+    // when the doctor row goes.
+    await tx.doctor.delete({ where: { id: doctor.id } });
+  });
+
+  // Logged only after the deletion has actually committed — logging
+  // beforehand would leave a permanent audit entry claiming the purge
+  // succeeded even if the transaction above had failed and rolled back.
   await audit.log({
     actor: adminActor(req),
     action: 'DOCTOR_PERMANENTLY_DELETED',
@@ -178,27 +214,6 @@ exports.purgeDoctor = asyncHandler(async (req, res) => {
     summary: `Permanently deleted doctor ${doctor.name} (${doctor.email})`,
     meta: { name: doctor.name, email: doctor.email, phone: doctor.phone, reason: req.body && req.body.reason }
   });
-
-  const appointmentIds = (await prisma.appointment.findMany({
-    where: { doctorId: doctor.id }, select: { id: true }
-  })).map(a => a.id);
-
-  await prisma.$transaction([
-    prisma.prescription.deleteMany({ where: { appointmentId: { in: appointmentIds } } }),
-    prisma.notificationLog.deleteMany({ where: { appointmentId: { in: appointmentIds } } }),
-    prisma.consultationInvoice.deleteMany({ where: { doctorId: doctor.id } }),
-    prisma.medicalCertificate.deleteMany({ where: { doctorId: doctor.id } }),
-    prisma.doctorSettlement.deleteMany({ where: { doctorId: doctor.id } }),
-    // PreviousRecord.doctorId is required with no cascade — must go before
-    // the doctor row or the delete fails on a foreign-key constraint.
-    // Its attachments cascade automatically (onDelete:Cascade on recordId).
-    prisma.previousRecord.deleteMany({ where: { doctorId: doctor.id } }),
-    prisma.appointment.deleteMany({ where: { doctorId: doctor.id } }),
-    // ReceptionistAssignment, PharmacyUserDoctor and DoctorKyc are all
-    // onDelete:Cascade on doctorId in the schema — deleted automatically
-    // when the doctor row goes.
-    prisma.doctor.delete({ where: { id: doctor.id } })
-  ]);
 
   res.json({ success: true, message: `Dr. ${doctor.name} and all related records were permanently deleted.` });
 });

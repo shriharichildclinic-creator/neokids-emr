@@ -71,7 +71,7 @@ const NEOKIDSPRO_URL =
 // Meta template name — v1 is the first submission of the doctor-free
 // template (no {{4}} doctor variable; 4 body vars total).
 const WA_TPL_VACCINATION =
-  process.env.WA_TPL_VACCINATION || 'neokids_vacc_reminder_v1';
+  process.env.WA_TPL_VACCINATION || 'neokids_vacc_reminder_v2';
 
 const APPROACH_DAYS = parseInt(process.env.VACC_APPROACH_DAYS || '7', 10);
 
@@ -85,10 +85,11 @@ const IST_TZ = 'Asia/Kolkata';
 // length; the fuller advice appears in email + WhatsApp trailing text).
 const DISCLAIMER_SHORT =
   "This is an automated reminder generated from your child's recorded " +
-  'date of birth and standard vaccination schedules. We do not maintain ' +
-  'records of vaccinations administered outside NeoKidsPro and cannot ' +
-  'confirm whether this vaccine is pending, overdue, or already ' +
-  'completed. Please consult a qualified pediatrician.';
+  'date of birth and standard vaccination schedules. NeoKidsPro does not ' +
+  'administer vaccines and has no record of vaccinations your child may ' +
+  'have already received elsewhere, so we cannot confirm whether this ' +
+  'vaccine is pending, overdue, or already completed. Please consult a ' +
+  'qualified pediatrician.';
 
 // Longer version for email + WhatsApp plain-text follow-up.
 const ACTION_GUIDANCE_LINES = [
@@ -363,8 +364,10 @@ function buildEmailHtml({ patient, vaccine }) {
 async function sendReminderForVaccine(patient, vaccine) {
   const dueStr = formatDateOnly(vaccine.dueDate);
 
-  // Meta template neokids_vacc_reminder_v1 (doctor-free — system reminder):
+  // Meta template neokids_vacc_reminder_v2 (doctor-free — system reminder):
   //   Body: {{1}} Child  {{2}} Vaccine  {{3}} Due Date  {{4}} Disclaimer
+  //   Body always closes on static text after {{4}} — Meta rejects a
+  //   template whose rendered body ends on a variable.
   //   Button: static "Vaccination Portal" URL — no dynamic suffix.
   if (patient.phone) {
     try {

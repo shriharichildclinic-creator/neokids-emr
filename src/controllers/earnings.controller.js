@@ -56,7 +56,17 @@ exports.myDashboard = asyncHandler(async (req, res) => {
 exports.breakdown = asyncHandler(async (req, res) => {
   const doctorId = req.user.id;
   const { year, month } = parsePeriod(req);
-  const data = await revenueSvc.getDoctorBreakdown({ doctorId, year, month });
+
+  // If this period has already been settled, pin the breakdown to the
+  // frozen appointment set + split percentages recorded on that settlement
+  // (see revenueSvc.getDoctorBreakdown) so this list always matches what
+  // the doctor was actually paid, even if a later refund/status change or
+  // a doctor revenue-share edit would otherwise change the live numbers.
+  const settlement = await prisma.doctorSettlement.findUnique({
+    where: { unique_doctor_period: { doctorId, periodYear: year, periodMonth: month } }
+  });
+
+  const data = await revenueSvc.getDoctorBreakdown({ doctorId, year, month, settlement });
   res.json(data);
 });
 

@@ -26,6 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 const prisma = require('../config/prisma');
+const logger = require('../utils/logger');
 
 /* ---------- Number helpers (₹ has 2 dp, never use float arithmetic) ---------- */
 
@@ -363,10 +364,42 @@ async function generateSettlement({ doctorId, year, month }) {
 
   // Eligible appointments → recompute totals
   const where = buildEligibleApptWhere({ doctorId, start, end });
-  const appts = await prisma.appointment.findMany({
+  const candidateAppts = await prisma.appointment.findMany({
     where,
-    select: { id: true, feeAtBooking: true }
+    select: { id: true, feeAtBooking: true, settlementId: true }
   });
+
+  // Guard against double-counting: an appointment can drift into this
+  // month's eligible set after being rescheduled (its `date` moved) while
+  // still pointing at a DIFFERENT settlement it was originally linked to.
+  // If that other settlement is still DRAFT/GENERATED it will self-correct
+  // next time it's (re)generated — the date filter will simply stop
+  // matching it there. But a PAID settlement is immutable and can never be
+  // regenerated, so silently relinking here would let the same fee count
+  // toward two settlements' frozen totals at once. Exclude those rows
+  // instead of stealing them.
+  const foreignIds = [...new Set(
+    candidateAppts
+      .map(a => a.settlementId)
+      .filter(sid => sid && sid !== (existing && existing.id))
+  )];
+  let appts = candidateAppts;
+  if (foreignIds.length) {
+    const foreignPaid = await prisma.doctorSettlement.findMany({
+      where: { id: { in: foreignIds }, status: 'PAID' },
+      select: { id: true }
+    });
+    if (foreignPaid.length) {
+      const paidIds = new Set(foreignPaid.map(s => s.id));
+      appts = candidateAppts.filter(a => !(a.settlementId && paidIds.has(a.settlementId)));
+      logger.warn(
+        `generateSettlement(${doctorId}, ${year}-${month}): excluded ` +
+        `${candidateAppts.length - appts.length} appointment(s) already ` +
+        `linked to a different PAID settlement (likely rescheduled across ` +
+        `period boundaries) to avoid double-counting revenue.`
+      );
+    }
+  }
 
   const cfg = {
     clinicSharePercent: doctor.clinicSharePercent,
@@ -439,8 +472,24 @@ async function generateSettlement({ doctorId, year, month }) {
  * Return the list of appointments contributing to a doctor's revenue for
  * a given period, with the split applied row-by-row. Used by the doctor
  * panel and by the settlement invoice PDF.
+ *
+ * @param {object} args
+ * @param {string} args.doctorId
+ * @param {number} args.year
+ * @param {number} args.month
+ * @param {object} [args.settlement] Optional — a DoctorSettlement row already
+ *        materialised for this (doctor, period). When given (and not still
+ *        DRAFT), the breakdown is pinned to EXACTLY the appointments frozen
+ *        onto that settlement (via Appointment.settlementId) and uses the
+ *        split percentages frozen on the settlement itself, instead of
+ *        re-deriving "currently eligible" appointments and the doctor's
+ *        CURRENT percentages live. Without this, a refund/status change or
+ *        a later edit to the doctor's revenue-share config after the
+ *        settlement was generated would make the itemised rows (shown in
+ *        the admin settlement modal and baked into the settlement invoice
+ *        PDF) silently disagree with the settlement's own frozen totals.
  */
-async function getDoctorBreakdown({ doctorId, year, month }) {
+async function getDoctorBreakdown({ doctorId, year, month, settlement }) {
   const { start, end } = monthRange(year, month);
   const doctor = await prisma.doctor.findFirst({
     where: { id: doctorId, deletedAt: null },
@@ -453,8 +502,13 @@ async function getDoctorBreakdown({ doctorId, year, month }) {
     throw Object.assign(new Error('Doctor not found'), { statusCode: 404 });
   }
 
+  const useFrozen = settlement && settlement.doctorId === doctorId && settlement.status !== 'DRAFT';
+  const where = useFrozen
+    ? { settlementId: settlement.id }
+    : buildEligibleApptWhere({ doctorId, start, end });
+
   const appts = await prisma.appointment.findMany({
-    where: buildEligibleApptWhere({ doctorId, start, end }),
+    where,
     select: {
       id: true, date: true, startTime: true, endTime: true,
       consultationType: true, feeAtBooking: true,
@@ -464,11 +518,17 @@ async function getDoctorBreakdown({ doctorId, year, month }) {
     orderBy: [{ date: 'asc' }, { startTime: 'asc' }]
   });
 
-  const cfg = {
-    clinicSharePercent: doctor.clinicSharePercent,
-    doctorSharePercent: doctor.doctorSharePercent,
-    tdsPercent:         doctor.tdsPercent
-  };
+  const cfg = useFrozen
+    ? {
+        clinicSharePercent: settlement.clinicSharePercent,
+        doctorSharePercent: settlement.doctorSharePercent,
+        tdsPercent:         settlement.tdsPercent
+      }
+    : {
+        clinicSharePercent: doctor.clinicSharePercent,
+        doctorSharePercent: doctor.doctorSharePercent,
+        tdsPercent:         doctor.tdsPercent
+      };
 
   const rows = appts.map(a => {
     const s = splitOne(a.feeAtBooking, cfg);
@@ -503,7 +563,8 @@ async function ensureSettlementInvoicePdf(settlement) {
     const { rows } = await getDoctorBreakdown({
       doctorId: settlement.doctorId,
       year: settlement.periodYear,
-      month: settlement.periodMonth
+      month: settlement.periodMonth,
+      settlement
     });
     await pdfSvc.generateSettlementInvoice({
       settlement, doctor: settlement.doctor, rows, invoiceNumber: settlement.invoiceNumber

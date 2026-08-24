@@ -223,13 +223,22 @@ async function loadRevenue() {
     `;
   }
 
+  // Guards against a fast double-click firing two POST /generate requests
+  // for the same (doctor, period) before the first has come back — one
+  // would otherwise hit the unique settlement constraint and surface a raw
+  // server error to the admin.
+  const _pendingGenerate = new Set();
+
   async function generateSettlement(doctorId, year, month) {
+    const key = doctorId + ':' + year + ':' + month;
+    if (_pendingGenerate.has(key)) return;
     const ok = await NPModal.confirm({
       title: `Freeze ${MONTH_NAMES[month-1]} ${year} totals?`,
       message: 'This snapshots the numbers and links all eligible appointments. You can still re-generate before marking it PAID.',
       okText: 'Generate settlement',
     });
     if (!ok) return;
+    _pendingGenerate.add(key);
     try {
       await api('/admin/finance/settlements/generate', {
         method: 'POST',
@@ -238,6 +247,7 @@ async function loadRevenue() {
       NPToast.success('Settlement generated.');
       loadRevenue();
     } catch (err) { NPToast.error('Failed: ' + err.message); }
+    finally { _pendingGenerate.delete(key); }
   }
 
 function renderSettlementAnalytics(list){
@@ -357,14 +367,14 @@ async function openSettlement(id) {
 
     const tableRows = rows.length ? rows.map(r => `
       <tr>
-        <td>${escapeHtml(fmtDate(r.date))}</td>
-        <td>${escapeHtml(r.startTime || '')}</td>
-        <td>${escapeHtml(r.patient?.name || '—')}</td>
-        <td>${escapeHtml(r.consultationType)}</td>
-        <td style="text-align:right;">${inr(r.patientPayment)}</td>
-        <td style="text-align:right;">${inr(r.doctorGross)}</td>
-        <td style="text-align:right; color:#B45309;">${inr(r.tds)}</td>
-        <td style="text-align:right; font-weight:600;">${inr(r.doctorNet)}</td>
+        <td data-label="Date">${escapeHtml(fmtDate(r.date))}</td>
+        <td data-label="Time">${escapeHtml(r.startTime || '')}</td>
+        <td data-label="Patient">${escapeHtml(r.patient?.name || '—')}</td>
+        <td data-label="Type">${escapeHtml(r.consultationType)}</td>
+        <td data-label="Fee" style="text-align:right;">${inr(r.patientPayment)}</td>
+        <td data-label="Gross" style="text-align:right;">${inr(r.doctorGross)}</td>
+        <td data-label="TDS" style="text-align:right; color:#B45309;">${inr(r.tds)}</td>
+        <td data-label="Net" style="text-align:right; font-weight:600;">${inr(r.doctorNet)}</td>
       </tr>
     `).join('') : `<tr><td colspan="8" class="np-empty"><div>No appointments.</div></td></tr>`;
 
@@ -380,7 +390,7 @@ async function openSettlement(id) {
     body.innerHTML = `
       ${summary}
       <div class="np-table-wrap" style="max-height:340px; overflow:auto;">
-        <table class="np-table">
+        <table class="np-table np-table--cards">
           <thead>
             <tr>
               <th>Date</th><th>Time</th><th>Patient</th><th>Type</th>
@@ -435,8 +445,16 @@ function bindMarkPaidForm() {
     const form = $('#markPaidForm');
     if (!form || form.__bound) return;
     form.__bound = true;
+    // The submit button lives in the modal footer (form="markPaidForm"),
+    // not inside <form>, so it has to be found separately.
+    const submitBtn = $('button[type="submit"][form="markPaidForm"]');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      // PDF generation on the server can take a moment — without this guard
+      // a fast double-click (or double Enter) fires a second POST for the
+      // same settlement before the first response lands. The backend now
+      // rejects the second one atomically, but this avoids even sending it.
+      if (submitBtn && submitBtn.disabled) return;
       const errEl = $('#markPaidError'); errEl.textContent = ''; errEl.classList.add('hidden');
       const fd = new FormData(form);
       const id   = fd.get('settlementId');
@@ -445,6 +463,7 @@ function bindMarkPaidForm() {
         paymentReference: (fd.get('paymentReference') || '').toString().trim(),
         paymentNotes:     (fd.get('paymentNotes') || '').toString().trim() || undefined
       };
+      if (submitBtn) submitBtn.disabled = true;
       try {
         await api(`/admin/finance/settlements/${id}/mark-paid`, {
           method: 'POST', body: JSON.stringify(body)
@@ -455,6 +474,8 @@ function bindMarkPaidForm() {
         loadRevenue();
       } catch (err) {
         errEl.textContent = err.message; errEl.classList.remove('hidden');
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
       }
     });
   }

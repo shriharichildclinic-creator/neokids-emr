@@ -30,6 +30,19 @@ const UP_DIR = path.join(svc.STORAGE_PATH, 'historical-rx');
 if (!fs.existsSync(UP_DIR)) fs.mkdirSync(UP_DIR, { recursive: true });
 
 const ALLOWED_MIME = new Set(['application/pdf','image/jpeg','image/png','image/webp','image/gif']);
+// Extension is derived from the (fileFilter-validated) MIME type, never
+// from the client-supplied originalname — otherwise a request whose
+// multipart Content-Type claims "image/png" but whose originalname is
+// "shell.php" would pass the filter yet still be written to disk as
+// "<uuid>.php", i.e. an attacker picks the on-disk extension of an
+// arbitrary uploaded payload.
+const MIME_EXT = {
+  'application/pdf': '.pdf',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif'
+};
 function kindOf(mime, name){
   if (mime === 'application/pdf') return /\.pdf$/i.test(name) && /rx|presc/i.test(name) ? 'PRESCRIPTION' : 'PDF';
   if (mime.startsWith('image/')) return 'IMAGE';
@@ -37,7 +50,7 @@ function kindOf(mime, name){
 }
 const storage = multer.diskStorage({
   destination: (_req, _f, cb) => cb(null, UP_DIR),
-  filename: (_req, f, cb) => cb(null, crypto.randomUUID() + (path.extname(f.originalname) || '').toLowerCase())
+  filename: (_req, f, cb) => cb(null, crypto.randomUUID() + (MIME_EXT[f.mimetype] || ''))
 });
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024, files: 20 },
   fileFilter: (_req, f, cb) => ALLOWED_MIME.has(f.mimetype) ? cb(null, true) : cb(new Error('Only PDF or image files are allowed')) });

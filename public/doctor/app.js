@@ -378,11 +378,14 @@ function setupProfileMenu(){
 }
 
 /* ---------- v3.4.10: My Profile modal ---------- */
-let _myProfileCache = null;
 async function openMyProfile(){
   try {
-    const me = _myProfileCache || await api('/doctor/me');
-    _myProfileCache = me;
+    // Always fetch fresh — this used to cache the first `/doctor/me`
+    // response for the rest of the session, so editing the profile photo,
+    // registration number, or clinic details in Settings and then
+    // reopening My Profile kept showing the pre-edit snapshot.
+    const me = await api('/doctor/me');
+    doctorCache = me;
     const clean = String(me.name || '').replace(/^\s*(dr\.?\s+)+/i, '').trim();
     const displayName = clean ? ('Dr. ' + clean) : 'Doctor';
     const initials = (clean || 'D').split(/\s+/).map(s => s[0]).slice(0,2).join('').toUpperCase();
@@ -2530,7 +2533,14 @@ async function loadSignature(){
       const res = await fetch(API + '/doctor/signature/file', { headers: { Authorization: 'Bearer ' + TOKEN } });
       if (res.ok) {
         const blob = await res.blob();
-        img.src = URL.createObjectURL(blob);
+        // Revoke the previous blob URL before replacing it — loadSignature()
+        // re-runs every time the Settings tab is opened and after every
+        // upload/remove/draw, and without this each call leaked the prior
+        // object URL for the lifetime of the page.
+        if (img.dataset.blobUrl) URL.revokeObjectURL(img.dataset.blobUrl);
+        const blobUrl = URL.createObjectURL(blob);
+        img.dataset.blobUrl = blobUrl;
+        img.src = blobUrl;
         img.style.display = 'block'; empty.style.display = 'none';
       } else {
         img.style.display = 'none'; empty.style.display = 'block';
@@ -2594,9 +2604,13 @@ function setupFeatureUI(){
   const certForm = $('#certForm');
   if (certForm && !certForm.__wired){ certForm.__wired = true; certForm.addEventListener('submit', submitCert); }
   // Refresh signature preview when entering settings.
+  // Shares the __sigReloadWired guard flag with the drawn-signature IIFE's
+  // own settings-tab listener (bottom of this file) — both used to bind
+  // their own listener under different flag names, so every click on the
+  // Settings nav item re-fetched the signature file twice.
   const settingsBtn = document.querySelector('[data-tab="settingsTab"]');
-  if (settingsBtn && !settingsBtn.__sigWired){
-    settingsBtn.__sigWired = true;
+  if (settingsBtn && !settingsBtn.__sigReloadWired){
+    settingsBtn.__sigReloadWired = true;
     settingsBtn.addEventListener('click', loadSignature);
   }
 }

@@ -402,6 +402,13 @@ exports.createItem = asyncHandler(async (req, res) => {
   const sellingPrice = (d.sellingPrice !== undefined && d.sellingPrice !== null && num(d.sellingPrice) > 0)
     ? num(d.sellingPrice)
     : num(d.mrp);
+  // Same scoping guard createBill already applies to its medicalCentreId:
+  // an explicit id is only honoured when it's one of the actor's own
+  // centres, otherwise a receptionist assigned to multiple clinics could
+  // create inventory in a clinic they don't actually belong to.
+  const centreId = d.medicalCentreId && actor.centreIds.includes(d.medicalCentreId)
+    ? d.medicalCentreId
+    : actor.centreId;
   const item = await prisma.pharmacyItem.create({
     data: {
       name: d.name,
@@ -413,7 +420,7 @@ exports.createItem = asyncHandler(async (req, res) => {
       stock: d.stock ?? 0,
       expiryDate: parseDateOnlyOrNull(d.expiryDate),
       manufacturer: d.manufacturer || null,
-      medicalCentreId: d.medicalCentreId || actor.centreId || null
+      medicalCentreId: centreId || null
     }
   });
   await audit.log({
@@ -474,16 +481,24 @@ exports.adjustStock = asyncHandler(async (req, res) => {
   if (existing.medicalCentreId && !actor.centreIds.includes(existing.medicalCentreId)) {
     return res.status(404).json({ error: 'Item not found' });
   }
-  const next = existing.stock + parsed.data.delta;
-  if (next < 0) return res.status(400).json({ error: 'Stock cannot go below zero' });
-  const updated = await prisma.pharmacyItem.update({
-    where: { id: existing.id },
-    data: { stock: next }
+  const delta = parsed.data.delta;
+  // Atomic guarded increment — same pattern as markPaid's stock decrement.
+  // Reading existing.stock and writing existing.stock + delta back (the old
+  // approach) is a classic lost-update race: two adjustments issued close
+  // together both read the same starting value and the second write clobbers
+  // the first instead of stacking on top of it. Folding the floor-at-zero
+  // check into the WHERE clause makes the whole read-check-write a single
+  // atomic operation at the database level.
+  const result = await prisma.pharmacyItem.updateMany({
+    where: { id: existing.id, stock: { gte: -delta } },
+    data: { stock: { increment: delta } }
   });
+  if (result.count === 0) return res.status(400).json({ error: 'Stock cannot go below zero' });
+  const updated = await prisma.pharmacyItem.findUnique({ where: { id: existing.id } });
   await audit.log({
     actor: { id: actor.user.id, role: actor.role, name: actor.name },
     action: 'PHARMACY_STOCK_ADJUSTED', entityType: 'PHARMACY_ITEM', entityId: updated.id,
-    summary: `Adjusted ${updated.name} stock by ${parsed.data.delta} → ${next}${parsed.data.reason ? ` (${parsed.data.reason})` : ''}`,
+    summary: `Adjusted ${updated.name} stock by ${delta} → ${updated.stock}${parsed.data.reason ? ` (${parsed.data.reason})` : ''}`,
     medicalCentreId: updated.medicalCentreId
   });
   if (parsed.data.delta < 0) await notifyIfLowStock([updated.id], actor);

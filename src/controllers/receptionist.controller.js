@@ -466,15 +466,28 @@ exports.reschedule = asyncHandler(async (req, res) => {
   if (!slot || !slot.available) return res.status(409).json({ error: 'Selected slot is not available for reschedule' });
 
   const endTime = slotService.minutesToTime(slotService.timeToMinutes(startTime) + (existing.doctor.slotDuration || 15));
-  const updated = await prisma.appointment.update({
-    where: { id: existing.id },
-    data: {
-      date: parseDateOnly(date), startTime, endTime,
-      rescheduleReason: reason, rescheduledAt: new Date(),
-      status: (existing.paymentStatus === 'PAID' || existing.consultationType === 'OFFLINE') ? 'CONFIRMED' : 'PENDING'
-    },
-    include: { doctor: true, patient: true }
-  });
+  // The availability check above and this write aren't atomic — a second
+  // booking/reschedule for the same doctor+date+startTime can slip in
+  // between them. The @@unique([doctorId, date, startTime]) constraint is
+  // the real guard; catch its violation here the same way createAppointment
+  // does, so the loser gets a friendly 409 instead of an unhandled 500.
+  let updated;
+  try {
+    updated = await prisma.appointment.update({
+      where: { id: existing.id },
+      data: {
+        date: parseDateOnly(date), startTime, endTime,
+        rescheduleReason: reason, rescheduledAt: new Date(),
+        status: (existing.paymentStatus === 'PAID' || existing.consultationType === 'OFFLINE') ? 'CONFIRMED' : 'PENDING'
+      },
+      include: { doctor: true, patient: true }
+    });
+  } catch (e) {
+    if (e && e.code === 'P2002') {
+      return res.status(409).json({ error: 'Slot already booked. Please pick another time.', code: 'SLOT_TAKEN' });
+    }
+    throw e;
+  }
   await audit.log({
     actor: actorOf(req, me), action: 'APPOINTMENT_RESCHEDULED', entityType: 'APPOINTMENT', entityId: existing.id,
     summary: `Rescheduled ${existing.patient.name} to ${date} ${startTime} (${reason})`,

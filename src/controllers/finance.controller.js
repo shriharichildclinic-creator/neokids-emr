@@ -233,7 +233,7 @@ exports.settlementDetail = asyncHandler(async (req, res) => {
   if (!s) return res.status(404).json({ error: 'Settlement not found' });
 
   const breakdown = await revenueSvc.getDoctorBreakdown({
-    doctorId: s.doctorId, year: s.periodYear, month: s.periodMonth
+    doctorId: s.doctorId, year: s.periodYear, month: s.periodMonth, settlement: s
   });
 
   res.json({ settlement: s, rows: breakdown.rows });
@@ -263,17 +263,42 @@ exports.markSettlementPaid = asyncHandler(async (req, res) => {
   }
 
   const invoiceNumber = buildInvoiceNumber(existing);
+  const paidAt = new Date();
+
+  // Claim the settlement atomically BEFORE doing any of the slow work below
+  // (PDF generation is I/O-bound and can take long enough for a second
+  // "mark paid" request — a double click, or two admins racing on the same
+  // settlement — to reach this handler while the first is still in flight).
+  // A conditional UPDATE ... WHERE status != 'PAID' is a single row-locked
+  // statement: whichever request's UPDATE the DB serializes first wins and
+  // flips the status, so the second one's WHERE no longer matches and it
+  // gets count: 0 instead of silently re-processing the same payout.
+  const claim = await prisma.doctorSettlement.updateMany({
+    where: { id, status: { not: 'PAID' } },
+    data: {
+      status:        'PAID',
+      paidAt,
+      paymentMode,
+      paymentReference,
+      paymentNotes:  paymentNotes || null,
+      processedById: req.user?.id || null
+    }
+  });
+  if (claim.count === 0) {
+    return res.status(409).json({ error: 'Settlement is already marked PAID' });
+  }
 
   const { rows } = await revenueSvc.getDoctorBreakdown({
-    doctorId: existing.doctorId,
-    year:     existing.periodYear,
-    month:    existing.periodMonth
+    doctorId:   existing.doctorId,
+    year:       existing.periodYear,
+    month:      existing.periodMonth,
+    settlement: existing
   });
 
   const stamped = {
     ...existing,
     status: 'PAID',
-    paidAt: new Date(),
+    paidAt,
     paymentMode, paymentReference, paymentNotes: paymentNotes || null
   };
 
@@ -287,18 +312,23 @@ exports.markSettlementPaid = asyncHandler(async (req, res) => {
     });
   } catch (e) {
     logger.error('Settlement PDF generation failed:', e);
+    // Release the claim so the payment can be retried instead of leaving
+    // the settlement stuck PAID with no invoice (which would also make it
+    // permanently un-regeneratable, since PAID settlements are immutable).
+    await prisma.doctorSettlement.update({
+      where: { id },
+      data: {
+        status: 'GENERATED', paidAt: null,
+        paymentMode: null, paymentReference: null, paymentNotes: null,
+        processedById: null
+      }
+    }).catch(rollbackErr => logger.error('Failed to roll back settlement after PDF failure:', rollbackErr));
     return res.status(500).json({ error: 'Failed to generate settlement invoice PDF' });
   }
 
   const updated = await prisma.doctorSettlement.update({
     where: { id },
     data: {
-      status:             'PAID',
-      paidAt:             stamped.paidAt,
-      paymentMode,
-      paymentReference,
-      paymentNotes:       paymentNotes || null,
-      processedById:      req.user?.id || null,
       invoiceNumber,
       invoiceUrl:         pdf.url,
       invoiceGeneratedAt: new Date()

@@ -13,6 +13,7 @@ function setText(id, text){ const el = document.getElementById(id); if (el) el.t
 
 let __doctorsCache = [];
 let __apptsCache = [];
+let __apptsReqSeq = 0;
 
 async function api(path, opts = {}) {
   const tokenAtCallTime = TOKEN; // snapshot — used to detect "session expired"
@@ -138,9 +139,9 @@ function notifStatusBadge(s){
   return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>${escapeHtml(s||'—')}</span>`;
 }
 function channelBadge(c){
-  if (c === 'WHATSAPP') return `<span class="np-badge np-badge--mint">WhatsApp</span>`;
-  if (c === 'EMAIL')    return `<span class="np-badge np-badge--blue">Email</span>`;
-  return `<span class="np-badge np-badge--slate">${escapeHtml(c||'—')}</span>`;
+  if (c === 'WHATSAPP') return `<span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>WhatsApp</span>`;
+  if (c === 'EMAIL')    return `<span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>Email</span>`;
+  return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>${escapeHtml(c||'—')}</span>`;
 }
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -234,7 +235,22 @@ const VIEW_META = {
 // full, unfiltered Appointments list — technically "somewhere", but not
 // the appointment they clicked. Pre-fill the search with that patient's
 // name so landing on Appointments actually shows their booking(s).
+// Jumping in from outside the Appointments screen (a dashboard row, the
+// chart drill-down below) should always surface the target record —
+// any status/type/payment/doctor filter left over from a previous visit
+// to this screen would otherwise silently hide it with no indication why.
+function _clearApptDropdownFilters(){
+  ['filterStatus','filterType','filterPayment','filterDoctor'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+}
+
 function viewAppointmentInList(patientName){
+  _clearApptDropdownFilters();
+  const from = document.getElementById('filterFrom');
+  const to   = document.getElementById('filterTo');
+  if (from) from.value = '';
+  if (to)   to.value   = '';
   const search = document.getElementById('apptSearch');
   if (search) search.value = patientName || '';
   setView('apptsView');
@@ -244,19 +260,18 @@ function viewAppointmentInList(patientName){
 // filtered to exactly the day that was clicked, instead of leaving the
 // bar as a dead end that only ever shows a hover tooltip.
 function goToAppointmentsForDate(dateStr){
+  _clearApptDropdownFilters();
   const from = document.getElementById('filterFrom');
   const to   = document.getElementById('filterTo');
   const search = document.getElementById('apptSearch');
   if (from) from.value = dateStr;
   if (to)   to.value   = dateStr;
   if (search) search.value = '';
+  // setView('apptsView') itself triggers loadAppointments() for this view
+  // (see the apptsView branch below) — calling it again here used to fire
+  // a second, redundant request in parallel with the first, racing it for
+  // no reason.
   setView('apptsView');
-  // Setting .value on the filter inputs directly does not fire a change/
-  // submit event, and loadAppointments() only ever runs from the filter
-  // form's submit handler — without this call the tab switches but the
-  // table keeps showing whatever was last loaded, silently ignoring the
-  // date that was just clicked.
-  loadAppointments();
 }
 
 function setView(view, opts) {
@@ -1348,6 +1363,14 @@ function __ensureAutoCancelledFilter(){
   label.querySelector('input').addEventListener('change', function(){ loadAppointments(); });
 }
 async function loadAppointments() {
+  // Filter changes, the search debounce, and the "hide auto-cancelled"
+  // checkbox can all fire loadAppointments() while an earlier call for a
+  // different filter combination is still in flight. Without this guard,
+  // whichever request happened to resolve last wins the render — even if
+  // it was answering a filter state the user had already changed away
+  // from — so a slower stale response could silently clobber the table
+  // with results that don't match what's currently selected on screen.
+  const __seq = ++__apptsReqSeq;
   const tbody = $('#apptsTbody');
   tbody.innerHTML = `<tr><td colspan="8" class="np-mut" style="padding:1.5rem; text-align:center;">Loading…</td></tr>`;
   const qs = new URLSearchParams();
@@ -1371,6 +1394,7 @@ async function loadAppointments() {
   if (__hideAutoCancelled) qs.set('excludeAutoCancelled', '1');
   try {
     const appts = await api('/admin/appointments' + (qs.toString() ? '?' + qs.toString() : ''));
+    if (__seq !== __apptsReqSeq) return; // a newer request superseded this one
     __apptsCache = appts;
     if (!appts.length){
       tbody.innerHTML = `<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No appointments match</div><div class="np-empty__sub">Try clearing some filters.</div></div></td></tr>`;
@@ -1413,22 +1437,34 @@ async function loadAppointments() {
     }).join('');
     _renderApptFilterChips({ status, type, payment, doctorId, from, to, q });
   } catch (err) {
+    if (__seq !== __apptsReqSeq) return;
     tbody.innerHTML = `<tr><td colspan="8"><div class="np-error">${escapeHtml(err.message)}</div></td></tr>`;
   }
 }
+// A double-click on the row's Refund button before the confirm modal has
+// even appeared would otherwise stack two independent confirm flows for
+// the same appointment — this money-moving action gets the same
+// single-flow-per-record guard as the data-management purge.
+const __refundInFlight = new Set();
 async function refundAppointment(id, patientName){
-  const ok = await NPModal.confirm({
-    title: 'Refund this appointment?',
-    message: `This sends the consultation fee back to ${patientName} via Cashfree. This cannot be undone.`,
-    okText: 'Refund',
-    danger: true
-  });
-  if (!ok) return;
+  if (__refundInFlight.has(id)) return;
+  __refundInFlight.add(id);
   try {
-    await api('/admin/appointments/' + encodeURIComponent(id) + '/refund', { method: 'POST' });
-    NPToast.success('Refund issued');
-    loadAppointments();
-  } catch (e) { NPToast.error(e.message || 'Could not issue refund'); }
+    const ok = await NPModal.confirm({
+      title: 'Refund this appointment?',
+      message: `This sends the consultation fee back to ${patientName} via Cashfree. This cannot be undone.`,
+      okText: 'Refund',
+      danger: true
+    });
+    if (!ok) return;
+    try {
+      await api('/admin/appointments/' + encodeURIComponent(id) + '/refund', { method: 'POST' });
+      NPToast.success('Refund issued');
+      loadAppointments();
+    } catch (e) { NPToast.error(e.message || 'Could not issue refund'); }
+  } finally {
+    __refundInFlight.delete(id);
+  }
 }
 window.refundAppointment = refundAppointment;
 $('#apptFilters').addEventListener('submit', (event) => { event.preventDefault(); loadAppointments(); });
@@ -1670,7 +1706,13 @@ function renderNotifTemplateOptions(){
   sel.value = stillVisible ? current : '';
 }
 let __notifPage = 1;
+let __notifReqSeq = 0;
 async function loadNotifications(){
+  // Same stale-response hazard as loadAppointments(): filter changes,
+  // the search debounce, and Prev/Next pagination can all trigger this
+  // concurrently. Guard so a slower, now-superseded request can't overwrite
+  // the table with results for a filter/page the user has moved on from.
+  const __seq = ++__notifReqSeq;
   const tbody = $('#notifTbody');
   tbody.innerHTML = `<tr><td colspan="6" class="np-mut" style="padding:1.5rem; text-align:center;">Loading…</td></tr>`;
   const qs = new URLSearchParams();
@@ -1690,12 +1732,13 @@ async function loadNotifications(){
   qs.set('limit', '50');
   try {
     const data = await api('/admin/notifications' + (qs.toString() ? '?' + qs.toString() : ''));
+    if (__seq !== __notifReqSeq) return; // a newer request superseded this one
     const rows = data.rows || [];
     const counts = data.counts || {};
     $('#notifCounts').innerHTML = [
-      `<span class="np-badge np-badge--green">${counts.SENT || 0} Sent</span>`,
-      `<span class="np-badge np-badge--red">${counts.FAILED || 0} Failed</span>`,
-      counts.QUEUED ? `<span class="np-badge np-badge--amber">${counts.QUEUED} Queued</span>` : ''
+      `<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>${counts.SENT || 0} Sent</span>`,
+      `<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>${counts.FAILED || 0} Failed</span>`,
+      counts.QUEUED ? `<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>${counts.QUEUED} Queued</span>` : ''
     ].join('');
     renderNotifPagination(data);
     if (!rows.length){
@@ -1719,6 +1762,7 @@ async function loadNotifications(){
       if (n) openNotifModal(n);
     }));
   } catch (err) {
+    if (__seq !== __notifReqSeq) return;
     tbody.innerHTML = `<tr><td colspan="6"><div class="np-error">${escapeHtml(err.message)}</div></td></tr>`;
   }
 }

@@ -459,9 +459,20 @@
       const list = Array.isArray(resp)          ? resp
                  : Array.isArray(resp?.records) ? resp.records
                  : [];
-      state.records    = list;
       state.total      = Number(resp?.total ?? list.length);
       state.totalPages = Number(resp?.totalPages ?? 1);
+      // Deleting the last record on the last page (or narrowing a filter)
+      // can leave state.page pointing past the new totalPages. Without
+      // this the pager (which only renders when totalPages > 1) hides
+      // itself while the list shows an empty "No records" state, and
+      // there is no control left to get back to the page that actually
+      // has the doctor's records. Snap back one page and re-fetch once.
+      if (state.page > state.totalPages && state.totalPages >= 1) {
+        state.page = state.totalPages;
+        state.loading = false;
+        return loadRecords();
+      }
+      state.records = list;
       renderList();
     } catch (ex) {
       renderError(ex && ex.message || 'Could not load previous records');

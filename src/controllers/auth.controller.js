@@ -358,7 +358,13 @@ exports.changePassword = asyncHandler(async (req, res) => {
     PHARMACY: prisma.pharmacyUser
   }[req.user.role];
   if (!repo) return res.status(403).json({ error: 'Forbidden: insufficient permissions' });
-  const user = await repo.findUnique({ where: { id: req.user.id } });
+  // Admin has no deletedAt column (accounts aren't deactivatable); the
+  // other three roles are, and a still-valid JWT issued before
+  // deactivation must not be able to keep the account usable — same
+  // deletedAt gate me() already applies for these roles.
+  const user = req.user.role === 'ADMIN'
+    ? await repo.findUnique({ where: { id: req.user.id } })
+    : await repo.findFirst({ where: { id: req.user.id, deletedAt: null } });
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const matches = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);

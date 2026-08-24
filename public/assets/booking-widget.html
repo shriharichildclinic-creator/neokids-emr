@@ -1472,12 +1472,25 @@ async function loadDoctors(){
     <div class="bw-skeleton" style="height:80px;margin-bottom:12px;"></div>
     <div class="bw-skeleton" style="height:80px;margin-bottom:12px;"></div>
     <div class="bw-skeleton" style="height:80px;"></div>`;
-  const docs = await api('/public/doctors?mode=' + state.mode);
-  list.setAttribute('aria-busy','false');
-  state.doctorsRaw = docs;
-  const searchEl = $('#doctorSearch');
-  if (searchEl) searchEl.value = '';
-  renderDoctorsList(docs);
+  try {
+    const docs = await api('/public/doctors?mode=' + state.mode);
+    state.doctorsRaw = docs;
+    const searchEl = $('#doctorSearch');
+    if (searchEl) searchEl.value = '';
+    renderDoctorsList(docs);
+  } catch (e) {
+    // Previously unhandled: a failed fetch here (network blip, 5xx) left
+    // the three loading skeletons on screen forever with no error and no
+    // way to retry — the user was stuck at Step 1 with nothing to click.
+    state.doctorsRaw = [];
+    list.innerHTML = `<div class="bw-empty">
+      <div class="bw-empty-icon">⚠️</div>
+      <div class="bw-empty-text">${escapeHtml(e.message || 'Could not load doctors. Please check your connection.')}</div>
+      <button type="button" data-action="loadDoctors" class="bw-btn bw-btn-secondary bw-btn-sm" style="margin-top:14px;">Retry</button>
+    </div>`;
+  } finally {
+    list.setAttribute('aria-busy','false');
+  }
 }
 
 function renderDoctorsList(docs){
@@ -1601,7 +1614,18 @@ async function preselectDoctor(id) {
   goTo(2);
 }
 
-async function selectDoctor(id){ await preselectDoctor(id); }
+async function selectDoctor(id){
+  try {
+    await preselectDoctor(id);
+  } catch (e) {
+    // Same fallback as the deep-link path in startBooking() — without
+    // this, a doctor card click that fails (network blip, doctor removed
+    // between list load and click) left the user stuck on Step 1 with no
+    // feedback and an unhandled promise rejection in the console.
+    alert('This doctor is no longer available. Please pick another.');
+    goTo(1);
+  }
+}
 
 // v3.4.14 — multi-specialty: the platform is pediatric-first but no longer
 // pediatric-only. DOB has no minimum-age bound anymore; only the future-date
@@ -2034,7 +2058,33 @@ function handleSlotNoLongerAvailable(){
     `<p class="bw-field-error" role="alert">That time was just booked by someone else — please pick another slot below.</p>`);
 }
 
+// Tracks the single in-flight background poller (see below for why there
+// must only ever be one).
+let activePaymentPoll = null;
+
+function stopPaymentPolling(){
+  if (activePaymentPoll) {
+    clearInterval(activePaymentPoll.timer);
+    activePaymentPoll = null;
+  }
+  const bar = document.getElementById('payStatusBar');
+  if (bar) bar.style.display = 'none';
+}
+
 function startPaymentPolling(appt, orderId){
+  // BUG FIX: a poller is deliberately left running in the background after
+  // a "modal closed" failure screen (see submitBooking) so a genuinely slow
+  // webhook can still flip the UI to success. But with no cap on how many
+  // pollers could be alive at once, a user who saw that failure screen and
+  // clicked "Try Again" would start a SECOND booking (and a second poller)
+  // while the FIRST one kept ticking in the background. If the old order
+  // resolved later, its poller would call nukeCashfreeOverlay() — tearing
+  // down whatever the user is doing right now, including a live SECOND
+  // Cashfree modal mid-payment — and show a success/failure screen built
+  // from the OLD appt.id mixed with whatever the (now different) `state`
+  // happens to hold. A fresh attempt must supersede any previous one.
+  stopPaymentPolling();
+
   let bar = document.getElementById('payStatusBar');
   if (!bar) {
     bar = document.createElement('div');
@@ -2048,17 +2098,22 @@ function startPaymentPolling(appt, orderId){
 
   const maxAttempts = 30, interval = 2000;
   let attempts = 0;
+  const isCurrent = () => activePaymentPoll && activePaymentPoll.timer === timer;
   const timer = setInterval(async () => {
+    if (!isCurrent()) return;
     attempts++;
     let status;
     try {
       status = await fetch('/api/public/verify-payment?order_id=' + encodeURIComponent(orderId), { cache: 'no-store' }).then(r => r.json());
     } catch (e) { status = null; }
+    if (!isCurrent()) return; // superseded by a newer attempt while awaiting
 
     if (status && status.paymentStatus === 'PAID') {
       const reconfirmed = await confirmPaymentWithServer(appt.id);
+      if (!isCurrent()) return;
       if (reconfirmed) {
         clearInterval(timer);
+        activePaymentPoll = null;
         bar.style.display = 'none';
         nukeCashfreeOverlay();
         showSuccess(appt, true, '✅ Payment confirmed! Consultation booked. Details sent via WhatsApp & email.');
@@ -2071,6 +2126,7 @@ function startPaymentPolling(appt, orderId){
         ['EXPIRED','FAILED','TERMINATED','CANCELLED'].includes(status.cashfreeStatus)
       )) {
       clearInterval(timer);
+      activePaymentPoll = null;
       bar.style.display = 'none';
       nukeCashfreeOverlay();
       showFailure(appt, status.cashfreeStatus || 'FAILED', 'Your transaction was not completed by Cashfree. No amount has been charged. Please try booking again.');
@@ -2079,12 +2135,14 @@ function startPaymentPolling(appt, orderId){
 
     if (attempts >= maxAttempts) {
       clearInterval(timer);
+      activePaymentPoll = null;
       bar.style.display = 'none';
       nukeCashfreeOverlay();
       showFailure(appt, (status && status.cashfreeStatus) || 'TIMED_OUT',
         'We did not receive a payment confirmation from Cashfree within the expected time. If you completed the payment, you will receive a WhatsApp confirmation within a few minutes. If you did not complete the payment, please try booking again.');
     }
   }, interval);
+  activePaymentPoll = { timer, orderId };
 }
 
 function showSuccess(appt, isOnline, customMessage=''){
@@ -2135,6 +2193,14 @@ function showFailure(appt, cashfreeStatus, message){
 }
 
 function resetWidget(){
+  // Explicitly abandon the previous attempt's background poller — the
+  // appointment it was tracking still gets confirmed server-side via the
+  // Cashfree webhook (and the patient still gets WhatsApp/email
+  // confirmation) regardless, so nothing is lost by not tracking it from
+  // the client anymore. Leaving it running risked it firing later with a
+  // mismatched ref (old order, whatever doctor/date/slot the user has
+  // since picked in a new attempt).
+  stopPaymentPolling();
   state.slot = null;
   $('#failureScreen').classList.add('hidden');
   $('#successScreen').classList.add('hidden');
@@ -2223,6 +2289,7 @@ document.addEventListener('click', (ev) => {
     case 'showLanding':      showLanding(); break;
     case 'setMode':          setMode(t.getAttribute('data-mode')); break;
     case 'selectDoctor':     selectDoctor(t.getAttribute('data-id')); break;
+    case 'loadDoctors':      loadDoctors(); break;
     case 'quickBookDoctor':  startBooking({ mode: t.getAttribute('data-mode'), doctorId: t.getAttribute('data-id') }); break;
     case 'goTo':             goTo(parseInt(t.getAttribute('data-step'), 10)); break;
     case 'validateStep2':    validateStep2(); break;
