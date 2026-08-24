@@ -154,7 +154,7 @@ async function loadReceptionists(){
           ${r.canIssueCertificates ? '<span class="np-badge np-badge--violet">Certificates</span>' : ''}
         </td>
         <td data-label="Status">${r.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
-        <td data-label="Actions" style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openReceptionistModal('${r.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deleteReceptionist('${r.id}')">Deactivate</button></td>
+        <td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openReceptionistModal('${r.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deleteReceptionist('${r.id}')">Deactivate</button></td>
       </tr>`).join('') + '</tbody></table></div>'
       : '<div class="np-empty"><div class="np-empty__title">No receptionists yet</div><div class="np-empty__sub">Receptionists cannot self-register — create their accounts here.</div></div>';
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
@@ -283,7 +283,7 @@ async function loadPharmUsers(){
         <td data-label="Centre">${esc(u.medicalCentre ? u.medicalCentre.name : '—')}</td>
         <td data-label="Responsible doctors" style="font-size:.8rem">${(u.doctors || []).map(d => `<div>Dr. ${esc(d.doctor.name)}</div>`).join('') || '—'}</td>
         <td data-label="Status">${u.status === 'ACTIVE' ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--red"><span class="np-badge__dot"></span>Suspended</span>'}</td>
-        <td data-label="Actions" style="text-align:right;white-space:nowrap"><button class="np-btn np-btn--sm" onclick="openPharmUserModal('${u.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deletePharmUser('${u.id}')">Deactivate</button></td>
+        <td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openPharmUserModal('${u.id}')">Edit</button> <button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deletePharmUser('${u.id}')">Deactivate</button></td>
       </tr>`).join('') + '</tbody></table></div>'
       : '<div class="np-empty"><div class="np-empty__title">No pharmacy users yet</div></div>';
   } catch(e){ host.innerHTML = `<div class="np-error">${esc(e.message)}</div>`; }
@@ -418,7 +418,7 @@ async function loadRecInvoices(){
       <td data-label="Clinic">${esc(i.medicalCentre ? i.medicalCentre.name : '—')}</td>
       <td data-label="Receptionist">${esc(i.receptionist ? i.receptionist.name : '—')}</td>
       <td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td>
-      <td data-label="Date">${esc(fmtDateTime(i.createdAt))}</td>
+      <td data-label="Date" class="np-col-datetime">${esc(fmtDateTime(i.createdAt))}</td>
       <td data-label="PDF" style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
     </tr>`).join('') : '<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No reception invoices match</div></div></td></tr>';
   } catch(e){ tb.innerHTML = `<tr><td colspan="8"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
@@ -449,7 +449,7 @@ async function loadOnlineInvoices(){
       <td data-label="Doctor">Dr. ${esc(i.doctor.name)}</td>
       <td data-label="Payment">${payBadge(i.paymentStatus)}</td>
       <td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td>
-      <td data-label="Date">${esc(fmtDateTime(i.createdAt))}</td>
+      <td data-label="Date" class="np-col-datetime">${esc(fmtDateTime(i.createdAt))}</td>
       <td data-label="PDF" style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
     </tr>`).join('') : '<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No online booking invoices match</div></div></td></tr>';
   } catch(e){ tb.innerHTML = `<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
@@ -471,7 +471,7 @@ async function loadAudit(){
     const rows = data.rows || [];
     const roleBadge = r => r === 'RECEPTIONIST' ? 'np-badge--violet' : r === 'PHARMACY' ? 'np-badge--mint' : 'np-badge--slate';
     tb.innerHTML = rows.length ? rows.map(a => `<tr>
-      <td data-label="Time" class="np-mut" style="font-size:.8rem">${esc(fmtDateTime(a.createdAt))}</td>
+      <td data-label="Time" class="np-mut np-col-datetime" style="font-size:.8rem">${esc(fmtDateTime(a.createdAt))}</td>
       <td data-label="Staff"><b>${esc(a.actorName || a.actorId)}</b></td>
       <td data-label="Role"><span class="np-badge ${roleBadge(a.actorRole)}">${esc(a.actorRole)}</span></td>
       <td data-label="Action" style="font-size:.8rem">${esc(a.action.replace(/_/g, ' '))}</td>

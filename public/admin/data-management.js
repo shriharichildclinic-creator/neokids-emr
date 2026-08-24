@@ -37,7 +37,7 @@ async function dmSearch(){
           <td data-label="Name"><b>${esc(r.name)}</b></td>
           <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc(r.email || '—')}${r.phone ? '<br/>+91 ' + esc(r.phone) : ''}</td>
           <td data-label="${type === 'DOCTOR' ? 'Status' : 'Parent/Guardian'}">${type === 'DOCTOR' ? esc(r.status) : esc(r.parentName || '—')}</td>
-          <td data-label="Action" style="text-align:right; white-space:nowrap;">
+          <td data-label="Action" style="text-align:right;">
             <button class="np-btn np-btn--ghost np-btn--sm" onclick="dmView('${type}','${esc(r.id)}')">View</button>
             <button class="np-btn np-btn--danger np-btn--sm" onclick="dmPurge('${type}','${esc(r.id)}','${esc(r.name).replace(/'/g, "\\'")}')">Delete permanently</button>
           </td>

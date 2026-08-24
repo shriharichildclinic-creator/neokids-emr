@@ -199,6 +199,12 @@ img.np-profile__avatar{ width:100%; height:100%; object-fit:cover; }
 .np-panel__title{ font-weight:700; color:var(--np-ink); font-size:1rem; }
 .np-panel__subtitle{ font-size:.82rem; color:var(--np-muted); margin-top:.1rem; }
 .np-panel__body{ padding:.5rem 1.25rem 1.25rem; }
+/* Pharmacy Prescriptions/Bills tabs read as merged with their header since
+   .np-panel__head carries no divider anywhere in the app — scoped here
+   rather than on the shared class so every other panel is unaffected. */
+#rxView .np-panel__head, #billsView .np-panel__head{
+  border-bottom: 1px solid var(--np-border); margin-bottom: .5rem;
+}
 /* A select/input sitting directly in the panel head (e.g. the Pharmacy
    Prescriptions filter) inherits width:100% from the shared control
    box model, which makes it claim the whole flex row and crush the
@@ -896,6 +902,13 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 html[data-theme="dark"] .np-kyc-card__link{ color: var(--nk-teal-300, #B4D7D7); }
 .np-grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
 @media (max-width: 599px){ .np-grid-2{ grid-template-columns: 1fr; } }
+/* Notification Logs detail modal is a plain key/value readout, not a form —
+   a 2-column grid here has no alignment benefit and, depending on how
+   asymmetric each row's label/value content is, a shared 1fr/1fr track can
+   size unevenly and squeeze one column to an unreadable width. Single
+   column at every breakpoint removes that failure mode entirely instead of
+   patching around it per-field. */
+#notifModal .np-grid-2{ grid-template-columns: 1fr; }
 .np-mut{ color: var(--np-muted); }
 .np-ink{ color: var(--np-ink); }
 

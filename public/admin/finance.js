@@ -176,7 +176,7 @@ async function loadRevenue() {
           <td data-label="TDS" style="text-align:right; color:#B45309;">${inr(r.totals.tds)}</td>
           <td data-label="Doctor Net" style="text-align:right; font-weight:600;">${inr(r.totals.doctorNet)}</td>
           <td data-label="Status">${statusPill(ss)}</td>
-          <td data-label="Actions" style="text-align:right; white-space:nowrap;">${actions || '—'}</td>
+          <td data-label="Actions" style="text-align:right;">${actions || '—'}</td>
         </tr>
       `;
     }).join('');
@@ -316,7 +316,7 @@ async function loadSettlements() {
           <td data-label="Net Paid" style="text-align:right; font-weight:600;">${inr(s.doctorNetAmount)}</td>
           <td data-label="Status">${statusPill(s.status)}</td>
           <td data-label="Paid On">${s.paidAt ? fmtDate(s.paidAt) : '—'}</td>
-          <td data-label="Actions" style="text-align:right; white-space:nowrap;">${actions}</td>
+          <td data-label="Actions" style="text-align:right;">${actions}</td>
         </tr>
       `;
     }).join('');
@@ -496,7 +496,7 @@ async function loadInvoices() {
             <div style="font-size:.7rem; color:var(--np-muted); font-family:'Courier New', monospace;">${escapeHtml(s.paymentReference || '')}</div>
           </td>
           <td data-label="Paid On">${s.paidAt ? fmtDateTime(s.paidAt) : '—'}</td>
-          <td data-label="Actions" style="text-align:right; white-space:nowrap;">
+          <td data-label="Actions" style="text-align:right;">
             <button class="np-btn np-btn--primary np-btn--sm" onclick="Finance.downloadInvoice('${s.id}')">Download PDF</button>
           </td>
         </tr>

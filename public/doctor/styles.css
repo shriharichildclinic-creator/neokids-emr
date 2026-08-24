@@ -1797,6 +1797,14 @@ html[data-theme="dark"] .np-modal pre{
 }
 .np-ppicker__item-meta{ font-size:.78rem; color: var(--np-muted); margin-top:.1rem; }
 .np-ppicker__item-phone{ font-size:.78rem; color: var(--np-muted); flex-shrink:0; }
+/* On narrow phones the fixed-width avatar + never-shrinking phone number
+   leave the name/meta column too little room, so "Female • 1 Years 2
+   Months" wraps mid-phrase. The phone is already shown again once a
+   patient is picked (the chosen-patient card), so dropping it from this
+   compact search row gives the meta line the width it needs. */
+@media (max-width:480px){
+  .np-ppicker__item-phone{ display:none; }
+}
 .np-ppicker__empty{
   padding:.8rem; text-align:center;
   font-size:.84rem; color: var(--np-muted);

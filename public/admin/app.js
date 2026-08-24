@@ -387,9 +387,13 @@ function drawDailyChart(){
   if (peakVal > 0 && avg > 0.15) {
     const yAvg = marginTop + plotH - (avg / niceMax) * plotH;
     const avgText = avg % 1 === 0 ? String(avg) : avg.toFixed(1);
+    // When the average sits near the chart's peak, "yAvg - 5" pushes the
+    // label above the plot's own top margin — outside the SVG's intended
+    // drawing area, overlapping whatever sits above the chart in the DOM.
+    const avgLabelY = Math.max(marginTop + 8, yAvg - 5);
     avgLine = `
       <line class="np-chart__avgline" x1="${marginLeft}" x2="${(W - marginRight).toFixed(1)}" y1="${yAvg.toFixed(1)}" y2="${yAvg.toFixed(1)}"></line>
-      <text class="np-chart__avglabel" x="${(W - marginRight).toFixed(1)}" y="${(yAvg - 5).toFixed(1)}" text-anchor="end">avg ${avgText}</text>`;
+      <text class="np-chart__avglabel" x="${(W - marginRight).toFixed(1)}" y="${avgLabelY.toFixed(1)}" text-anchor="end">avg ${avgText}</text>`;
   }
 
   // Fixed 14-day range means labels can overlap on narrower screens —

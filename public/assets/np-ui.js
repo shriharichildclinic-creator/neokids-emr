@@ -1298,8 +1298,9 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       if (peakVal > 0 && avg > 0.15) {
         const yAvg = marginTop + plotH - (avg / niceMax) * plotH;
         const avgText = avg % 1 === 0 ? String(avg) : avg.toFixed(1);
+        const avgLabelY = Math.max(marginTop + 8, yAvg - 5);
         avgLine = '<line class="np-chart__avgline" x1="' + marginLeft + '" x2="' + (W - marginRight).toFixed(1) + '" y1="' + yAvg.toFixed(1) + '" y2="' + yAvg.toFixed(1) + '"></line>' +
-          '<text class="np-chart__avglabel" x="' + (W - marginRight).toFixed(1) + '" y="' + (yAvg - 5).toFixed(1) + '" text-anchor="end">avg ' + avgText + '</text>';
+          '<text class="np-chart__avglabel" x="' + (W - marginRight).toFixed(1) + '" y="' + avgLabelY.toFixed(1) + '" text-anchor="end">avg ' + avgText + '</text>';
       }
 
       const minLabelBand = 34;
