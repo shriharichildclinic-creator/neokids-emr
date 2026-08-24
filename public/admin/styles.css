@@ -785,6 +785,42 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 }
 
 .np-row{ display:flex; align-items:center; gap:.5rem; }
+
+/* Doctor form tabs (Details / KYC & Documents) — keeps the KYC block from
+   being buried at the bottom of one long scroll behind ~10 unrelated
+   fields, and makes it visually obvious that "Upload selected files" /
+   "Verify KYC" are a separate action from the form's own Save button. */
+.np-dform-tabs{
+  display:flex; gap:.25rem;
+  border-bottom:1px solid var(--np-border);
+  margin:0 0 1rem;
+}
+.np-dform-tab{
+  appearance:none; background:transparent; border:0;
+  padding:.6rem .9rem; font:inherit; font-weight:600; font-size:.85rem;
+  color: var(--np-muted);
+  border-bottom:2px solid transparent;
+  border-radius:8px 8px 0 0;
+  cursor:pointer;
+  display:inline-flex; align-items:center; gap:.4rem;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.np-dform-tab:hover{ color: var(--np-ink); background: var(--nk-teal-50); }
+.np-dform-tab.active{
+  color: var(--nk-teal-700, #5A9495);
+  border-bottom-color: var(--nk-teal-700, #5A9495);
+}
+.np-dform-tab:focus-visible{ outline:2px solid var(--nk-teal-700, #5A9495); outline-offset:2px; }
+.np-dform-tab__dot{
+  width:7px; height:7px; border-radius:50%; flex-shrink:0;
+  background: var(--np-muted);
+}
+.np-dform-tab__dot--slate{ background:#94A3B8; }
+.np-dform-tab__dot--amber{ background:#D9A441; }
+.np-dform-tab__dot--green{ background:#2FA97E; }
+.np-dform-tab__dot--red{ background:#D65B5B; }
+.np-dform-pane.hidden{ display:none; }
+
 .np-kyc-grid{
   display:grid;
   grid-template-columns: repeat(2, minmax(0,1fr));
@@ -836,15 +872,27 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
   flex-shrink:0;
 }
 .np-kyc-card__input{ margin:0; }
+.np-kyc-card__actions{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.4rem;
+  margin-top:auto;
+  padding-top:.15rem;
+}
+.np-kyc-card__actions .np-btn{ min-height:26px; padding:.25rem .55rem; font-size:.7rem; }
 .np-kyc-card__link{
   font-size:.72rem;
   font-weight:600;
-  margin-top:auto;
-  padding-top:.15rem;
   color: var(--nk-teal-700, #5A9495);
   text-decoration:none;
 }
 .np-kyc-card__link:hover{ text-decoration:underline; }
+/* Locked (VERIFIED) cards: View/Download stay usable, but Replace/Remove
+   route through the same "unlock to replace" confirmation as the banner
+   button — never a silent destructive action on verified documents. */
+#kycGrid.is-locked .js-kyc-replace,
+#kycGrid.is-locked .js-kyc-remove{ opacity:.6; }
 html[data-theme="dark"] .np-kyc-card__link{ color: var(--nk-teal-300, #B4D7D7); }
 .np-grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
 @media (max-width: 599px){ .np-grid-2{ grid-template-columns: 1fr; } }

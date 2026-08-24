@@ -275,7 +275,7 @@
           <div class="np-panel">
             <div class="np-panel__head">
               <div style="flex:1">
-                <div class="np-panel__title">Doctors</div>
+                <div class="np-panel__title">Doctors <span id="docCountBadge" class="np-badge np-badge--blue" style="margin-left:.4rem; vertical-align:middle;"></span></div>
                 <div class="np-panel__subtitle">Manage platform doctors, fees, and availability</div>
               </div>
               <button class="np-btn np-btn--primary np-btn--add-doctor" type="button" onclick="openDoctorModal()">
@@ -841,6 +841,16 @@
             <div class="np-field__hint" style="margin-top:.3rem;">Optional. JPG/PNG/WebP, shown across the platform wherever this doctor appears.</div>
           </div>
         </div>
+
+        <div class="np-dform-tabs" role="tablist" aria-label="Doctor form sections">
+          <button type="button" class="np-dform-tab active" id="docTabBtnDetails" role="tab" aria-selected="true" aria-controls="docTabDetails" onclick="switchDoctorFormTab('details')">Details</button>
+          <button type="button" class="np-dform-tab" id="docTabBtnKyc" role="tab" aria-selected="false" aria-controls="docTabKyc" onclick="switchDoctorFormTab('kyc')">
+            KYC &amp; Documents
+            <span id="kycTabDot" class="np-dform-tab__dot np-dform-tab__dot--slate hidden" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div id="docTabDetails" class="np-dform-pane" role="tabpanel" aria-labelledby="docTabBtnDetails">
         <div class="np-grid-2">
           <div class="np-field">
             <label class="np-field__label">Full name *</label>
@@ -920,8 +930,10 @@
           <label class="np-field__label">Bio</label>
           <textarea name="bio" class="np-textarea" placeholder="Short biography"></textarea>
         </div>
+        </div>
 
-<div id="doctorKycPanel" class="np-inline-panel" style="margin-top:1rem; padding:.85rem; border-radius:8px;">
+        <div id="docTabKyc" class="np-dform-pane hidden" role="tabpanel" aria-labelledby="docTabBtnKyc">
+<div id="doctorKycPanel" class="np-inline-panel" style="padding:.85rem; border-radius:8px;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.5rem;">
             <div>
               <div class="np-ink" style="font-weight:600; font-size:.9rem;">KYC Documents</div>
@@ -931,7 +943,7 @@
           </div>
 
           <div id="kycCreateHint" class="np-callout np-callout--warning hidden" style="font-size:.78rem; margin-bottom:.5rem;">
-            Save the doctor first, then re-open this form to upload KYC documents.
+            Fill in the Details tab and save the doctor first — this tab unlocks right after, no need to reopen the form.
           </div>
 
           <div id="kycRejectionBox" class="np-callout np-callout--danger hidden" style="font-size:.78rem; margin-bottom:.5rem;">
@@ -944,37 +956,57 @@
               <button type="button" class="np-btn np-btn--ghost np-btn--sm" onclick="unlockKycUpload()">Replace documents</button>
             </div>
             <div id="kycGrid" class="np-kyc-grid">
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="aadhaar">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Aadhaar Card</span>
-                  <span id="kycAadhaarStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="aadhaar" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycAadhaarView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="pan">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">PAN Card</span>
-                  <span id="kycPanStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="pan" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycPanView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="cancelledCheque">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Cancelled Cheque</span>
-                  <span id="kycChequeStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="cancelledCheque" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycChequeView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
-              <div class="np-kyc-card">
+              <div class="np-kyc-card" data-kyc-kind="medicalRegCert">
                 <div class="np-kyc-card__head">
                   <span class="np-kyc-card__title">Medical Registration Cert.</span>
-                  <span id="kycMedCertStatus" class="np-kyc-card__status">Not uploaded</span>
+                  <span class="np-kyc-card__status js-kyc-status">Not uploaded</span>
                 </div>
                 <input type="file" name="medicalRegCert" accept="image/*,application/pdf" class="np-input np-kyc-card__input"/>
-                <a id="kycMedCertView" class="np-kyc-card__link hidden" target="_blank">View current file ↗</a>
+                <div class="np-kyc-card__actions hidden">
+                  <a class="np-kyc-card__link js-kyc-view" target="_blank">View</a>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-download">Download</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm js-kyc-replace">Replace</button>
+                  <button type="button" class="np-btn np-btn--ghost np-btn--sm np-btn--danger js-kyc-remove">Remove</button>
+                </div>
               </div>
             </div>
 
@@ -993,6 +1025,7 @@
             </div>
           </div>
         </div>
+        </div>
 
 <div id="doctorFormError" class="np-error hidden"></div>
         <div class="np-callout np-callout--warning" style="font-size:.78rem; margin-top:1.25rem; margin-bottom:.5rem;">
@@ -1002,6 +1035,7 @@
     </div>
     <div class="np-modal__foot">
       <button type="button" id="sendDoctorInviteBtn" class="np-btn hidden" onclick="sendDoctorInvite()">Send Invite</button>
+      <button type="button" id="sendDoctorInviteWhatsappBtn" class="np-btn hidden" onclick="sendDoctorInviteWhatsapp()">Send Invite (WhatsApp)</button>
       <button type="button" class="np-btn" onclick="closeDoctorModal()">Cancel</button>
       <button type="submit" form="doctorForm" class="np-btn np-btn--primary">Save</button>
     </div>

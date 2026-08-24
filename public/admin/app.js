@@ -36,7 +36,12 @@ async function api(path, opts = {}) {
     err.status = 401; throw err;
   }
 
-  if (!r.ok) throw new Error((data && (data.error || data.message)) || ('HTTP ' + r.status));
+  if (!r.ok) {
+    const err = new Error((data && (data.error || data.message)) || ('HTTP ' + r.status));
+    err.status = r.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -650,6 +655,8 @@ async function loadDoctors() {
     );
     docs.forEach((d, i) => { d.kycStatus = (kycs[i] && kycs[i].kycStatus) || 'PENDING'; });
     __doctorsCache = docs;
+    const countBadge = $('#docCountBadge');
+    if (countBadge) countBadge.textContent = `${docs.length} doctor${docs.length === 1 ? '' : 's'}`;
     renderDoctors();
   } catch (err) {
     $('#doctorsGrid').innerHTML = `<div class="np-error">${escapeHtml(err.message)}</div>`;
@@ -686,6 +693,23 @@ function _docContactStrip(d){
   if (!items.length) return '';
   return `<div class="np-doc-card__contact">${items.join('')}</div>`;
 }
+// Only show the fee(s) for modes the doctor actually offers — a doctor
+// set to ONLINE-only (or OFFLINE-only) was showing both fees, including
+// one that doesn't apply and can't be booked.
+function _docFeeStats(d){
+  const mode = String(d.consultationModes || 'BOTH').toUpperCase();
+  const online   = `<div class="np-doc-card__stat">
+    <div class="np-doc-card__stat-label">Online</div>
+    <div class="np-doc-card__stat-value">${fmtCurrency(d.onlineConsultFee)}</div>
+  </div>`;
+  const inPerson = `<div class="np-doc-card__stat">
+    <div class="np-doc-card__stat-label">In-person</div>
+    <div class="np-doc-card__stat-value">${fmtCurrency(d.physicalConsultFee)}</div>
+  </div>`;
+  if (mode === 'ONLINE')  return online;
+  if (mode === 'OFFLINE') return inPerson;
+  return online + inPerson;
+}
 function _docCard(d){
   const safeId = escapeHtml(d.id);
   const safeName = (d.name || '').replace(/'/g, "\\'");
@@ -713,14 +737,7 @@ function _docCard(d){
       ${_docContactStrip(d)}
 
       <div class="np-doc-card__stats" role="group" aria-label="Doctor statistics">
-        <div class="np-doc-card__stat">
-          <div class="np-doc-card__stat-label">Online</div>
-          <div class="np-doc-card__stat-value">${fmtCurrency(d.onlineConsultFee)}</div>
-        </div>
-        <div class="np-doc-card__stat">
-          <div class="np-doc-card__stat-label">In-person</div>
-          <div class="np-doc-card__stat-value">${fmtCurrency(d.physicalConsultFee)}</div>
-        </div>
+        ${_docFeeStats(d)}
         <div class="np-doc-card__stat">
           <div class="np-doc-card__stat-label">Consults</div>
           <div class="np-doc-card__stat-value">${d.consults || 0}</div>
@@ -752,6 +769,23 @@ function _docCard(d){
 
     </article>`;
 }
+// Category order for the doctor grid, applied after the Vishal Parmar pin.
+// "MD physician" vs "General physician" is decided by qualification text
+// (e.g. "MBBS, MD") rather than specialization, since that's where doctors
+// actually record their MD — specialization is often just "Physician".
+function _doctorCategoryRank(d){
+  const spec = String(d.specialization || '').toLowerCase();
+  const qual = String(d.qualification || '');
+  if (/pediatric|paediatric/.test(spec)) return 0;
+  if (/gynec|gynaec|obstetric/.test(spec)) return 1;
+  const isPhysician = /physician|general medicine|internal medicine/.test(spec);
+  const hasMD = /\bMD\b/i.test(qual);
+  if (isPhysician && hasMD)  return 2; // MD physicians
+  if (isPhysician)           return 3; // general physicians (no MD on record)
+  if (/dietician|dietitian|nutrition/.test(spec)) return 4;
+  if (/derma|skin/.test(spec)) return 5;
+  return 6; // others
+}
 function renderDoctors(){
   const q = ($('#docSearch').value || '').trim().toLowerCase();
   const av = $('#docFilterAvail').value;
@@ -762,8 +796,14 @@ function renderDoctors(){
     docs = docs.filter(d => [d.name, d.email, d.phone, d.clinicName, d.specialization, d.qualification]
       .some(v => v && String(v).toLowerCase().includes(q)));
   }
+  // Category first, then most-experienced doctor first within a category.
+  docs.sort((a, b) => {
+    const ra = _doctorCategoryRank(a), rb = _doctorCategoryRank(b);
+    if (ra !== rb) return ra - rb;
+    return (Number(b.experience) || 0) - (Number(a.experience) || 0);
+  });
   // Pinned: Dr. Vishal Parmar's card always leads the grid, regardless of
-  // search/filter/sort — the rest keep their normal relative order.
+  // search/filter/sort/category — the rest keep the order set above.
   const pinnedIdx = docs.findIndex(d => stripDrPrefix(d.name || '').trim().toLowerCase() === 'vishal parmar');
   if (pinnedIdx > 0) docs.unshift(docs.splice(pinnedIdx, 1)[0]);
   const grid = $('#doctorsGrid');
@@ -870,6 +910,38 @@ async function sendDoctorInvite() {
   }
 }
 
+async function sendDoctorInviteWhatsapp() {
+  const f = $('#doctorForm');
+  const id = f.dataset.id;
+  if (!id) return;
+  const name = (f.name && f.name.value) ? f.name.value.trim() : 'this doctor';
+  const ok = await NPModal.confirm({
+    title: 'Send onboarding invite over WhatsApp?',
+    message: `This sends ${name} a WhatsApp message with a one-time link to set their password and activate their account.`,
+    okText: 'Send invite'
+  });
+  if (!ok) return;
+  const btn = $('#sendDoctorInviteWhatsappBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('/admin/doctors/' + id + '/invite/whatsapp', { method: 'POST' });
+    showInviteResult(res, 'doctor');
+  } catch (err) {
+    // A fresh invite link is generated before delivery is attempted, so
+    // even a failed send still has a link the admin can copy manually.
+    const link = err.data && err.data.invitePreviewUrl;
+    if (link) {
+      showInviteResult({ inviteSent: false, invitePreviewUrl: link, inviteExpiresInMinutes: err.data.inviteExpiresInMinutes }, 'doctor');
+    } else if (typeof NPToast !== 'undefined') {
+      NPToast.error(err.message);
+    } else {
+      alert(err.message);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function setDoctorPhotoPreview(url){
   const img = $('#doctorPhotoPreview');
   const placeholder = $('#doctorPhotoPlaceholder');
@@ -929,6 +1001,35 @@ async function removeDoctorPhoto(){
   }
 }
 
+// Details / KYC & Documents tabs inside the Add/Edit Doctor modal. Kept as
+// a tiny show/hide toggle (no router, no framework) consistent with the
+// rest of this file — the only extra care is switchDoctorFormTab('details')
+// gets called before native form validation runs, so a required field
+// never ends up invalid-but-hidden (see the 'invalid' capture listener
+// below), and 'kyc' is not selectable via keyboard/click until a doctor id
+// exists, matching kycCreateHint.
+function switchDoctorFormTab(tab) {
+  const isKyc = tab === 'kyc';
+  const detailsBtn = $('#docTabBtnDetails');
+  const kycBtn = $('#docTabBtnKyc');
+  const detailsPane = $('#docTabDetails');
+  const kycPane = $('#docTabKyc');
+  if (!detailsBtn || !kycBtn || !detailsPane || !kycPane) return;
+  detailsBtn.classList.toggle('active', !isKyc);
+  detailsBtn.setAttribute('aria-selected', String(!isKyc));
+  kycBtn.classList.toggle('active', isKyc);
+  kycBtn.setAttribute('aria-selected', String(isKyc));
+  detailsPane.classList.toggle('hidden', isKyc);
+  kycPane.classList.toggle('hidden', !isKyc);
+}
+
+// Every required field lives in the Details pane. If the browser tries to
+// report/focus one while the KYC tab is showing, a hidden required field
+// is not focusable and submission fails silently with no visible error —
+// so jump back to Details the moment native validation finds a problem,
+// before it tries to focus anything.
+$('#doctorForm').addEventListener('invalid', () => { switchDoctorFormTab('details'); }, true);
+
 function openDoctorModal() {
   $('#doctorModalTitle').textContent = 'Add Doctor';
   const f = $('#doctorForm');
@@ -938,7 +1039,9 @@ function openDoctorModal() {
   f.email.readOnly = false;
   f.password.placeholder = '(invite link is preferred)';
   $('#sendDoctorInviteBtn').classList.add('hidden');
+  $('#sendDoctorInviteWhatsappBtn').classList.add('hidden');
   $('#doctorPhotoBlock').classList.add('hidden');
+  switchDoctorFormTab('details');
   loadKycForDoctor(null);
   applyAdminModeVisibility(f.consultationModes ? f.consultationModes.value : 'BOTH');
   $('#doctorModal').classList.remove('hidden');
@@ -956,6 +1059,7 @@ function openEditDoctor(id) {
   const f = $('#doctorForm');
   f.dataset.mode = 'edit'; f.dataset.id = id;
   $('#sendDoctorInviteBtn').classList.remove('hidden');
+  $('#sendDoctorInviteWhatsappBtn').classList.remove('hidden');
   $('#doctorPhotoBlock').classList.remove('hidden');
   setDoctorPhotoPreview(d.photoUrl || null);
   f.name.value  = d.name || '';
@@ -974,6 +1078,7 @@ function openEditDoctor(id) {
   if (f.doctorSharePercent) f.doctorSharePercent.value = d.doctorSharePercent ?? 75;
   if (f.tdsPercent)         f.tdsPercent.value         = d.tdsPercent ?? 10;
   if (f.canAddPreviousRecords) f.canAddPreviousRecords.checked = !!d.canAddPreviousRecords;
+  switchDoctorFormTab('details');
   loadKycForDoctor(id);
   applyAdminModeVisibility(d.consultationModes || 'BOTH');
   $('#doctorModal').classList.remove('hidden');
@@ -1039,6 +1144,10 @@ $('#doctorForm').addEventListener('submit', async (e) => {
       $('#doctorModalTitle').textContent = 'Edit Doctor';
       $('#sendDoctorInviteBtn').classList.remove('hidden');
       await loadKycForDoctor(res.id);
+      // The doctor now exists, so the KYC tab just unlocked — take the
+      // admin straight there instead of leaving them on Details staring
+      // at a form that looks like nothing happened.
+      switchDoctorFormTab('kyc');
       loadDoctors();
       return;
     }
@@ -1851,6 +1960,31 @@ function kycBadge(status){
   return `<span class="np-badge ${m[0]}"><span class="np-badge__dot"></span>${m[1]}</span>`;
 }
 
+// Small colored dot on the "KYC & Documents" tab button itself, so status
+// is visible at a glance from the Details tab without switching over —
+// same status→color mapping as kycBadge, just condensed to a dot since
+// the tab label has no room for a full badge. Hidden entirely for a
+// not-yet-created doctor (status is meaningless before loadKycForDoctor
+// has anything to report).
+function setKycTabDot(status){
+  const dot = $('#kycTabDot');
+  if (!dot) return;
+  if (!status){
+    dot.classList.add('hidden');
+    return;
+  }
+  const colorMap = {
+    PENDING:  'slate',
+    UPLOADED: 'amber',
+    VERIFIED: 'green',
+    REJECTED: 'red'
+  };
+  const color = colorMap[status] || 'slate';
+  dot.className = 'np-dform-tab__dot np-dform-tab__dot--' + color;
+  dot.classList.remove('hidden');
+  dot.title = 'KYC status: ' + status;
+}
+
 function setKycLocked(locked){
   const grid = $('#kycGrid');
   const banner = $('#kycLockedBanner');
@@ -1859,42 +1993,66 @@ function setKycLocked(locked){
   if (banner) banner.classList.toggle('hidden', !locked);
   if (uploadBtn) uploadBtn.classList.toggle('hidden', locked);
 }
-async function unlockKycUpload(){
+
+// Verified KYC is locked against casual edits. Replace/Remove on an
+// individual document (and the banner's own "Replace documents" button)
+// all route through this same confirmation before anything unlocks.
+async function ensureKycUnlocked(){
+  const grid = $('#kycGrid');
+  if (!grid || !grid.classList.contains('is-locked')) return true;
   const ok = await NPModal.confirm({
     title: 'Replace verified documents?',
-    message: 'This doctor’s KYC is currently verified. Uploading a new document will drop the status back to Uploaded, and it will need to be re-verified.',
+    message: 'This doctor’s KYC is currently verified. Changing a document will drop the status back to Uploaded, and it will need to be re-verified.',
     okText: 'Unlock to replace',
     danger: true
   });
   if (ok) setKycLocked(false);
+  return ok;
 }
-function setKycFieldStatus(elId, viewElId, url){
-  // SECURITY FIX (audit finding #2): KYC documents are no longer served
-  // by a public static mount. Rewrite the stored /files/kyc-documents/...
-  // URL to the authenticated admin route (Bearer header attached by the
-  // panel's fetch; for <a> navigation we fall back to the fetch+blob
-  // helper below when the browser cannot attach headers).
+async function unlockKycUpload(){
+  await ensureKycUnlocked();
+}
 
-  const statusEl = $('#' + elId);
-  const viewEl   = $('#' + viewElId);
-  if (!statusEl || !viewEl) return;
+function kycCard(kind){
+  return document.querySelector(`.np-kyc-card[data-kyc-kind="${kind}"]`);
+}
+
+// SECURITY FIX (audit finding #2): KYC documents are no longer served by a
+// public static mount — every read goes through the authenticated admin
+// route below, with the Bearer token attached by the panel's own fetch
+// helpers (a plain <a href> navigation cannot send an Authorization header).
+function setKycFieldStatus(kind, url){
+  const card = kycCard(kind);
+  if (!card) return;
+  const statusEl  = card.querySelector('.js-kyc-status');
+  const actionsEl = card.querySelector('.np-kyc-card__actions');
+  const inputEl   = card.querySelector('.np-kyc-card__input');
+  const viewEl    = card.querySelector('.js-kyc-view');
+  if (!statusEl || !actionsEl || !inputEl || !viewEl) return;
+
   if (url) {
     statusEl.innerHTML = '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Uploaded</span>';
-    const KIND_BY_VIEW = {
-      kycAadhaarView: 'aadhaar',
-      kycPanView: 'pan',
-      kycChequeView: 'cancelledCheque',
-      kycMedCertView: 'medicalRegCert'
-    };
-    const kind = KIND_BY_VIEW[viewElId] || '';
-    viewEl.href = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) +
-                  '/' + encodeURIComponent(kind);
-    viewEl.classList.remove('hidden');
+    viewEl.href = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) + '/' + encodeURIComponent(kind);
+    actionsEl.classList.remove('hidden');
+    inputEl.classList.add('hidden');
   } else {
     statusEl.innerHTML = '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Not uploaded</span>';
-    viewEl.classList.add('hidden');
     viewEl.removeAttribute('href');
+    actionsEl.classList.add('hidden');
+    inputEl.classList.remove('hidden');
   }
+}
+
+function kycAuthHeader(){
+  return 'Bearer ' + (typeof _admToken === 'function' ? (_admToken() || '') : (localStorage.getItem('np_admin_token') || ''));
+}
+
+async function fetchKycBlob(kind, { download } = {}){
+  const url = '/api/admin/kyc/' + encodeURIComponent(__currentKycDoctorId) + '/' + encodeURIComponent(kind) +
+              (download ? '?download=1' : '');
+  const res = await fetch(url, { headers: { Authorization: kycAuthHeader() } });
+  if (!res.ok) throw new Error('Could not open document (HTTP ' + res.status + ')');
+  return res.blob();
 }
 
 // KYC document links need the admin Bearer token, which a plain <a href>
@@ -1905,14 +2063,77 @@ document.addEventListener('click', async (ev) => {
   if (!a) return;
   ev.preventDefault();
   try {
-    const res = await fetch(a.href, {
-      headers: { Authorization: 'Bearer ' + (typeof _admToken === 'function' ? (_admToken() || '') : (localStorage.getItem('np_admin_token') || '')) }
+    const blob = await fetchKycBlob(a.closest('.np-kyc-card').dataset.kycKind);
+    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+  } catch (e) { alert(e.message); }
+});
+
+document.addEventListener('click', async (ev) => {
+  const downloadBtn = ev.target.closest('.js-kyc-download');
+  const replaceBtn  = ev.target.closest('.js-kyc-replace');
+  const removeBtn   = ev.target.closest('.js-kyc-remove');
+  const btn = downloadBtn || replaceBtn || removeBtn;
+  if (!btn) return;
+
+  const card = btn.closest('.np-kyc-card');
+  const kind = card && card.dataset.kycKind;
+  if (!kind) return;
+
+  if (downloadBtn) {
+    try {
+      const blob = await fetchKycBlob(kind, { download: true });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = kind;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) { alert(e.message); }
+    return;
+  }
+
+  if (replaceBtn) {
+    if (!(await ensureKycUnlocked())) return;
+    const input = card.querySelector('.np-kyc-card__input');
+    if (!input) return;
+    input.dataset.autoUpload = '1';
+    input.click();
+    return;
+  }
+
+  if (removeBtn) {
+    if (!(await ensureKycUnlocked())) return;
+    const ok = await NPModal.confirm({
+      title: 'Remove document?',
+      message: 'This will permanently delete the uploaded file. The doctor will need to re-submit it.',
+      okText: 'Remove file',
+      danger: true
     });
-    if (!res.ok) { alert('Could not open document (HTTP ' + res.status + ')'); return; }
-    const blob = await res.blob();
-    const obj = URL.createObjectURL(blob);
-    window.open(obj, '_blank', 'noopener');
-  } catch (e) { alert('Could not open document: ' + e.message); }
+    if (!ok) return;
+    try {
+      await api('/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc/' + encodeURIComponent(kind), {
+        method: 'DELETE'
+      });
+      NPToast.success('Document removed.');
+      await loadKycForDoctor(__currentKycDoctorId);
+      loadDoctors();
+    } catch (e) { alert(e.message); }
+  }
+});
+
+// A file picked via the "Replace" button uploads immediately as a single
+// field (no need to also press "Upload selected files"). A file picked
+// directly in the input — the normal first-time upload path — is left
+// alone for the batch "Upload selected files" button below.
+document.addEventListener('change', async (ev) => {
+  const input = ev.target.closest('.np-kyc-card__input');
+  if (!input || input.dataset.autoUpload !== '1') return;
+  delete input.dataset.autoUpload;
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const card = input.closest('.np-kyc-card');
+  await uploadKycField(card.dataset.kycKind, file);
 });
 
 async function loadKycForDoctor(doctorId){
@@ -1925,10 +2146,10 @@ async function loadKycForDoctor(doctorId){
   const badge  = $('#kycStatusBadge');
   const verifiedAt = $('#kycVerifiedAt');
 
-  setKycFieldStatus('kycAadhaarStatus', 'kycAadhaarView', null);
-  setKycFieldStatus('kycPanStatus',     'kycPanView',     null);
-  setKycFieldStatus('kycChequeStatus',  'kycChequeView',  null);
-  setKycFieldStatus('kycMedCertStatus', 'kycMedCertView', null);
+  setKycFieldStatus('aadhaar',         null);
+  setKycFieldStatus('pan',             null);
+  setKycFieldStatus('cancelledCheque', null);
+  setKycFieldStatus('medicalRegCert',  null);
   rejBox.classList.add('hidden');
   $('#kycRejectionText').textContent = '';
   verifiedAt.textContent = '';
@@ -1939,6 +2160,7 @@ async function loadKycForDoctor(doctorId){
     verify.classList.add('hidden');
     const bEl = $('#kycStatusBadge');
     if (bEl) bEl.outerHTML = kycBadge('PENDING').replace('<span ', '<span id="kycStatusBadge" ');
+    setKycTabDot(null);
     return;
   }
 
@@ -1970,11 +2192,12 @@ async function loadKycForDoctor(doctorId){
 
   const bEl = $('#kycStatusBadge');
   if (bEl) bEl.outerHTML = kycBadge(kyc.kycStatus).replace('<span ', '<span id="kycStatusBadge" ');
+  setKycTabDot(kyc.kycStatus);
 
-  setKycFieldStatus('kycAadhaarStatus', 'kycAadhaarView', kyc.aadhaarUrl);
-  setKycFieldStatus('kycPanStatus',     'kycPanView',     kyc.panUrl);
-  setKycFieldStatus('kycChequeStatus',  'kycChequeView',  kyc.cancelledChequeUrl);
-  setKycFieldStatus('kycMedCertStatus', 'kycMedCertView', kyc.medicalRegCertUrl);
+  setKycFieldStatus('aadhaar',         kyc.aadhaarUrl);
+  setKycFieldStatus('pan',             kyc.panUrl);
+  setKycFieldStatus('cancelledCheque', kyc.cancelledChequeUrl);
+  setKycFieldStatus('medicalRegCert',  kyc.medicalRegCertUrl);
 
   if (kyc.kycStatus === 'REJECTED' && kyc.rejectionReason){
     rejBox.classList.remove('hidden');
@@ -1989,6 +2212,17 @@ async function loadKycForDoctor(doctorId){
   if (kyc.kycStatus === 'VERIFIED' && kyc.verifiedAt){
     verifiedAt.textContent = '✓ Verified ' + fmtDateTime(kyc.verifiedAt);
   }
+}
+
+async function postKycFormData(fd){
+  const r = await fetch(API + '/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + TOKEN },  // NO Content-Type — browser sets multipart boundary
+    body: fd
+  });
+  let data = null; try { data = await r.json(); } catch(_) {}
+  if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+  return data;
 }
 
 async function uploadKycDocs(){
@@ -2019,20 +2253,34 @@ async function uploadKycDocs(){
   }
 
   try {
-    const r = await fetch(API + '/admin/doctors/' + encodeURIComponent(__currentKycDoctorId) + '/kyc', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + TOKEN },  // NO Content-Type — browser sets multipart boundary
-      body: fd
-    });
-    let data = null; try { data = await r.json(); } catch(_) {}
-    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    await postKycFormData(fd);
 
     ['aadhaar','pan','cancelledCheque','medicalRegCert'].forEach(name => {
       const input = f.querySelector(`input[type="file"][name="${name}"]`);
       if (input) input.value = '';
     });
 
-    alert('KYC documents uploaded.');
+    NPToast.success('KYC documents uploaded.');
+    await loadKycForDoctor(__currentKycDoctorId);
+    loadDoctors();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  }
+}
+
+// Single-field upload used by each card's "Replace" button — uploads just
+// the one document instead of requiring the batch "Upload selected files".
+async function uploadKycField(kind, file){
+  const errEl = $('#kycUploadError');
+  errEl.textContent = ''; errEl.classList.add('hidden');
+  if (!__currentKycDoctorId) return;
+
+  const fd = new FormData();
+  fd.append(kind, file);
+  try {
+    await postKycFormData(fd);
+    NPToast.success('Document replaced.');
     await loadKycForDoctor(__currentKycDoctorId);
     loadDoctors();
   } catch (err) {

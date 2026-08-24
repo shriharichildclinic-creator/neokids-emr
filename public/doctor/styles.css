@@ -543,18 +543,21 @@ html,body{
   padding: 1rem 1.25rem;
   border-bottom:1px solid var(--np-border);
 }
-/* Mobile header-clipping fix — the title/subtitle live in an unnamed
-   wrapper <div> that is itself the flex item here (not .np-modal__title
-   directly, since some modals nest an extra <div>). Flex items default
-   to min-width:auto (their content size), so on narrow viewports that
-   wrapper refused to shrink below its intrinsic text width. Combined
-   with `.np-modal__panel{ overflow:hidden }`, the overflowing part of
-   the header — often the close button, or the tail of a longer title
-   like "Edit Historical Record" — was silently clipped instead of
-   wrapping. min-width:0 lets the wrapper shrink to the available space
-   so long titles wrap onto a second line instead of being cut off, and
-   flex-shrink:0 on the close button keeps it pinned and always visible. */
-.np-modal__head > div:first-child{ min-width:0; flex:1 1 auto; }
+/* Mobile header-clipping fix — the title/subtitle live in the header's
+   first child (either an unnamed wrapper <div>, or the .np-modal__title
+   element itself when a modal has no subtitle — e.g. <h3 class="np-modal__title">
+   directly under .np-modal__head). Flex items default to min-width:auto
+   (their content size), so on narrow viewports — or with the h3 case, at
+   any width — that first child refused to shrink/grow, leaving the close
+   button sitting right next to the title instead of pinned to the far
+   right. Targeting .np-modal__title:first-child as well as div:first-child
+   (rather than only div:first-child) fixes both header shapes: wrapper-div
+   headers get their title anchored, wrap onto a second line instead of
+   being clipped, and h3-only headers get flex:1 1 auto too, correctly
+   pushing the × to the right edge instead of leaving it flush against the
+   text. */
+.np-modal__head > div:first-child,
+.np-modal__head > .np-modal__title:first-child{ min-width:0; flex:1 1 auto; }
 .np-modal__title{ font-size:1.05rem; font-weight:700; color: var(--np-ink); line-height:1.3; overflow-wrap:anywhere; word-break:break-word; }
 .np-modal__close{
   width:36px; height:36px; border-radius:10px;

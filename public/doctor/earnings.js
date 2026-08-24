@@ -13,13 +13,6 @@
   function inr(n) {
     return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
-  function compactInr(n) {
-    const v = Number(n || 0);
-    if (v >= 100000) return '₹' + (v/100000).toFixed(v % 100000 === 0 ? 0 : 2) + 'L';
-    if (v >= 1000)   return '₹' + (v/1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k';
-    return '₹' + v.toLocaleString('en-IN');
-  }
-
   function statusPill(status) {
     const map = {
       DRAFT:         { cls:'np-badge--slate', label:'Awaiting month-end' },
@@ -56,12 +49,56 @@
     }
   }
 
-  function kpi(label, big, sub, kind='blue') {
-    return `
-      <div class="np-kpi np-kpi--${kind}">
-        <div class="np-kpi__label">${escapeHtml(label)}</div>
-        <div class="np-kpi__value">${escapeHtml(big)}</div>
-        ${sub ? `<div class="np-kpi__sub">${escapeHtml(sub)}</div>` : ''}
+  // Shared with Admin/Doctor/Receptionist/Pharmacy dashboards — see
+  // NPFmt.trendChip in /assets/np-ui.js (single source of truth).
+  const trendChip = NPFmt.trendChip;
+
+  function pctDelta(curr, prev) {
+    if (!prev) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / prev) * 100);
+  }
+
+  function renderEarningsAnalytics(dash, prevDash, periodLabel) {
+    const t = dash.totals;
+    const d = dash.doctor;
+    const cash = dash.cash || { consultations: 0, totalCash: 0 };
+    const pt = prevDash && prevDash.totals;
+
+    const revDelta = pt ? pctDelta(t.totalRevenue, pt.totalRevenue) : 0;
+    const netDelta = pt ? pctDelta(t.doctorNet, pt.doctorNet) : 0;
+
+    $('#earnAnalytics').innerHTML = `
+      <div class="np-analytics-card np-analytics-card--revenue">
+        <div class="np-analytics-card__head">
+          <div class="np-analytics-card__eyebrow">${escapeHtml(periodLabel)}</div>
+          <div class="np-analytics-card__trend">${pt ? trendChip(revDelta, 'vs last month', true) : ''}</div>
+        </div>
+        <div class="np-analytics-card__value">${inr(t.totalRevenue)}</div>
+        <div class="np-analytics-card__breakdown">
+          <span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${t.consultations} online consult${t.consultations === 1 ? '' : 's'}</span>
+          <span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${inr(t.doctorGross)} my gross (${d.doctorSharePercent}%)</span>
+          <span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${inr(t.tds)} TDS (${d.tdsPercent}%)</span>
+        </div>
+      </div>
+      <div class="np-analytics-card np-analytics-card--today">
+        <div class="np-analytics-card__head">
+          <div class="np-analytics-card__eyebrow">Net Payout (Online)</div>
+          <div class="np-analytics-card__trend">${pt ? trendChip(netDelta, 'vs last month', true) : ''}</div>
+        </div>
+        <div class="np-analytics-card__value">${inr(t.doctorNet)}</div>
+        <div class="np-analytics-card__breakdown">
+          <span class="np-dot-item"><span class="np-dot np-dot--mint"></span>${inr(t.doctorGross)} gross before TDS</span>
+        </div>
+      </div>
+      <div class="np-analytics-card np-analytics-card--warn">
+        <div class="np-analytics-card__head">
+          <div class="np-analytics-card__eyebrow">Cash Collected (Clinic)</div>
+        </div>
+        <div class="np-analytics-card__value">${inr(cash.totalCash)}</div>
+        <div class="np-analytics-card__breakdown">
+          <span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${cash.consultations} in-clinic visit${cash.consultations === 1 ? '' : 's'}</span>
+          <span class="np-dot-item">Not part of settlement</span>
+        </div>
       </div>
     `;
   }
@@ -73,13 +110,20 @@
     const month = Number($('#earnMonth').value);
     const q = new URLSearchParams({ year, month });
 
+    // Same endpoint, previous calendar month — gives a real period-over-
+    // period trend for free, no backend change needed.
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear  = month === 1 ? year - 1 : year;
+    const prevQ = new URLSearchParams({ year: prevYear, month: prevMonth });
+
     const tbody = $('#earnTbody');
     tbody.innerHTML = `<tr><td colspan="7" class="np-empty"><div>Loading…</div></td></tr>`;
 
-    let dash, breakdown, settlements;
+    let dash, prevDash, breakdown, settlements;
     try {
-      [dash, breakdown, settlements] = await Promise.all([
+      [dash, prevDash, breakdown, settlements] = await Promise.all([
         api('/doctor/earnings/my-dashboard?' + q.toString()),
+        api('/doctor/earnings/my-dashboard?' + prevQ.toString()).catch(() => null),
         api('/doctor/earnings/breakdown?' + q.toString()),
         api('/doctor/earnings/settlements')
       ]);
@@ -89,20 +133,7 @@
     }
 
 const t = dash.totals;
-    const d = dash.doctor;
-    const cash = dash.cash || { consultations: 0, totalCash: 0 };
-    $('#earnKpiGrid').innerHTML = [
-      kpi('Online Patients',    String(t.consultations), 'Paid via Cashfree', 'blue'),
-      kpi('Online Revenue',     compactInr(t.totalRevenue), inr(t.totalRevenue), 'mint'),
-      kpi('My Gross Share',     compactInr(t.doctorGross), `${d.doctorSharePercent}% of online revenue`, 'cream'),
-      kpi('TDS Deducted',       compactInr(t.tds), `${d.tdsPercent}% of gross`, 'coral'),
-      kpi('Net Payout (Online)', compactInr(t.doctorNet), inr(t.doctorNet), 'blue'),
-      // Cash never passes through the platform, so it's never part of the
-      // clinic-share/TDS split above — it's shown here purely so a doctor
-      // doing both online and in-clinic work can see their real total,
-      // not just the online half.
-      kpi('Cash Collected (Clinic)', compactInr(cash.totalCash), `${cash.consultations} in-clinic visit${cash.consultations === 1 ? '' : 's'} — not part of settlement`, 'mint')
-    ].join('');
+    renderEarningsAnalytics(dash, prevDash, `${MONTH_NAMES[month-1]} ${year}`);
 
 const sCard = $('#earnSettlementCard');
     const s = dash.settlement || { status: 'NOT_GENERATED' };

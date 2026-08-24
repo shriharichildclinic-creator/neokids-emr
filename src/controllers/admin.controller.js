@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { createDoctorSchema, updateDoctorByAdminSchema, flattenZod, randomPassword } = require('../utils/validators');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { sendStaffInvite } = require('../services/invite.service');
+const { sendStaffInvite, sendStaffInviteWhatsApp } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
 const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
@@ -72,6 +72,29 @@ exports.sendDoctorInvite = asyncHandler(async (req, res) => {
   });
 });
 
+exports.sendDoctorInviteWhatsapp = asyncHandler(async (req, res) => {
+  const doctor = await prisma.doctor.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+
+  try {
+    const { inviteLink, expiresInMinutes } = await sendStaffInviteWhatsApp({
+      user: doctor, userType: 'DOCTOR', roleLabel: 'Doctor'
+    });
+    res.json({ inviteSent: true, invitePreviewUrl: inviteLink, inviteExpiresInMinutes: expiresInMinutes });
+  } catch (e) {
+    if (e.code === 'NO_PHONE') return res.status(400).json({ error: e.message });
+    // A new invite link was still generated (it replaces any previous
+    // link the moment this endpoint is called), so hand it back even
+    // though delivery failed — the admin can share it manually.
+    res.status(502).json({
+      error: 'Could not deliver the WhatsApp invite. Use the link below to share it manually.',
+      detail: e.message,
+      invitePreviewUrl: e.inviteLink,
+      inviteExpiresInMinutes: e.expiresInMinutes
+    });
+  }
+});
+
 // Admin-set profile photo — optional; a doctor can still set their own via
 // PUT /api/doctor/profile-image. Mirrors that handler exactly, just scoped
 // to req.params.id instead of the doctor's own session.
@@ -134,7 +157,7 @@ exports.listDoctors = asyncHandler(async (req, res) => {
       consultationModes: true, onlineConsultFee: true, physicalConsultFee: true,
       clinicName: true, clinicAddress: true, clinicMapUrl: true,
       registrationNumber: true, availableFromOffline: true, availableToOffline: true,
-     isAvailable: true, mustChangePassword: true, consults: true, revenue: true,
+     isAvailable: true, mustChangePassword: true,
 
 // Revenue Management
 clinicSharePercent: true,
@@ -146,7 +169,27 @@ photoUrl: true,
 createdAt: true
     }
   });
-  res.json(doctors);
+
+  // consults/revenue used to come from Doctor.consults / Doctor.revenue —
+  // counters bumped manually on complete/un-complete. Any write path that
+  // forgot to call that (or a status transition it didn't anticipate) let
+  // the counter drift from the appointments actually on record. Computing
+  // both live from Appointment rows here removes that whole class of bug —
+  // this is the same "completed + actually collected" definition the admin
+  // dashboard and doctor's own earnings view use elsewhere.
+  const agg = await prisma.appointment.groupBy({
+    by: ['doctorId'],
+    where: { status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } },
+    _sum: { feeAtBooking: true },
+    _count: { _all: true }
+  });
+  const byDoctor = new Map(agg.map(r => [r.doctorId, { consults: r._count._all, revenue: Number(r._sum.feeAtBooking || 0) }]));
+
+  res.json(doctors.map(d => ({
+    ...d,
+    consults: byDoctor.get(d.id)?.consults || 0,
+    revenue:  byDoctor.get(d.id)?.revenue  || 0
+  })));
 });
 
 exports.updateDoctor = asyncHandler(async (req, res) => {
@@ -314,7 +357,13 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
 
   const today = getTodayDateOnly();
-  const last30 = new Date(today); last30.setDate(last30.getDate() - 30);
+  // `today` is a UTC-midnight instant representing the current IST calendar
+  // date (see getTodayDateOnly). All derived cutoffs must stay in UTC too —
+  // .setDate()/.getDate() read/write the *server's local* timezone, which
+  // silently shifts these boundaries by a day on any host not running in
+  // UTC. Use the UTC-safe variants throughout, matching doctor/receptionist/
+  // pharmacy stats and utils/date.js.
+  const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 30);
 
   const [
     total, completed, cancelled, pending, confirmed,
@@ -329,13 +378,16 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { doctorId: id, status: 'CONFIRMED' } }),
     prisma.appointment.count({ where: { doctorId: id, consultationType: 'ONLINE'  } }),
     prisma.appointment.count({ where: { doctorId: id, consultationType: 'OFFLINE' } }),
+    // "Revenue" = actually collected (PAID / CASH_COLLECTED) — matches the
+    // definition used on the admin dashboard and the doctor's own earnings
+    // view. Cash still owed (CASH_PENDING) is not counted as revenue.
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { doctorId: id, status: 'COMPLETED', paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+      where: { doctorId: id, status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { doctorId: id, status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: ['PAID','CASH_COLLECTED','CASH_PENDING'] } }
+      where: { doctorId: id, status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.count({ where: { doctorId: id, date: { gte: last30 } } }),
     prisma.appointment.findMany({
@@ -347,14 +399,14 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
   ]);
 
   // 14-day daily series
-  const last14 = new Date(today); last14.setDate(last14.getDate() - 13);
+  const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
   const raw = await prisma.appointment.findMany({
     where: { doctorId: id, date: { gte: last14 } },
     select: { date: true, status: true }
   });
   const daily = {};
   for (let i = 0; i < 14; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - (13 - i));
+    const d = new Date(today); d.setUTCDate(d.getUTCDate() - (13 - i));
     daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0 };
   }
   raw.forEach(r => {
@@ -372,7 +424,7 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
       isAvailable: doctor.isAvailable,
       onlineConsultFee: doctor.onlineConsultFee, physicalConsultFee: doctor.physicalConsultFee,
       photoUrl: doctor.photoUrl, workingDays: doctor.workingDays, slotDuration: doctor.slotDuration,
-      consults: doctor.consults
+      consults: completed
     },
     summary: {
       total, completed, cancelled, pending, confirmed,
@@ -506,9 +558,12 @@ exports._classifyTemplateAudience = classifyTemplateAudience;
 exports.analytics = asyncHandler(async (req, res) => {
   // FIX 4 — richer analytics for the modernized admin dashboard
   const today = getTodayDateOnly();
-  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-  const last7  = new Date(today); last7.setDate(last7.getDate()  - 7);
-  const last30 = new Date(today); last30.setDate(last30.getDate() - 30);
+  // UTC-safe cutoffs — see doctorInsights() above for why .setDate()/
+  // .getDate() (server-local timezone) must never be mixed with a
+  // UTC-midnight `today` from getTodayDateOnly().
+  const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate()  - 7);
+  const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 30);
 
   const [
     totalDoctors, totalPatients, totalAppointments,
@@ -547,14 +602,14 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.notificationLog.count({ where: { status: 'FAILED' } }).catch(() => 0)
   ]);
 
-  const last14 = new Date(today); last14.setDate(last14.getDate() - 13);
+  const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
   const raw = await prisma.appointment.findMany({
     where: { date: { gte: last14 } },
     select: { date: true, status: true, feeAtBooking: true, paymentStatus: true }
   });
   const daily = {};
   for (let i = 0; i < 14; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - (13 - i));
+    const d = new Date(today); d.setUTCDate(d.getUTCDate() - (13 - i));
     daily[d.toISOString().slice(0,10)] = { date: d.toISOString().slice(0,10), total: 0, completed: 0, revenue: 0, pending: 0 };
   }
   // "revenue" here must mean the same thing it means in revenueBySource
