@@ -902,22 +902,40 @@ html[data-theme="dark"] .np-sticky-head thead th{background:#0E1A22}
       }
 
       function renderPreview(f) {
-        if (!previewEl || !f) return;
+        if (!f) return;
         clearPreview();
-        if (f.type && f.type.startsWith('image/')) {
-          objectUrl = URL.createObjectURL(f);
-          const img = document.createElement('img');
-          img.src = objectUrl;
-          img.alt = 'Selected file preview';
-          img.className = 'np-dropzone__preview-img';
-          previewEl.appendChild(img);
-        } else {
+        // Show the Remove control immediately, before attempting the
+        // thumbnail — a JPG's image decode/thumbnail is a "nice to have"
+        // and shouldn't be a precondition for the control existing. This
+        // was the bug: for images the control was only added *after* the
+        // thumbnail block ran, so any hiccup there (slow decode, a odd
+        // file, etc.) silently left the Remove button missing. PDFs have
+        // no such step, which is why only images were affected.
+        if (clearWrap) clearWrap.classList.add('is-visible');
+        if (!previewEl) return;
+        try {
+          if (f.type && f.type.startsWith('image/')) {
+            objectUrl = URL.createObjectURL(f);
+            const img = document.createElement('img');
+            img.src = objectUrl;
+            img.alt = 'Selected file preview';
+            img.className = 'np-dropzone__preview-img';
+            previewEl.appendChild(img);
+          } else {
+            const badge = document.createElement('div');
+            badge.className = 'np-dropzone__preview-file';
+            badge.textContent = (f.type === 'application/pdf' ? '📄 ' : '📎 ') + f.name;
+            previewEl.appendChild(badge);
+          }
+        } catch (_) {
+          // Thumbnail failed to render — fall back to a plain filename
+          // badge rather than leaving the preview area empty.
+          previewEl.innerHTML = '';
           const badge = document.createElement('div');
           badge.className = 'np-dropzone__preview-file';
-          badge.textContent = (f.type === 'application/pdf' ? '📄 ' : '📎 ') + f.name;
+          badge.textContent = '📎 ' + f.name;
           previewEl.appendChild(badge);
         }
-        if (clearWrap) clearWrap.classList.add('is-visible');
       }
 
       function updateStatus() {
