@@ -905,10 +905,18 @@ html[data-theme="dark"] .np-kyc-card__link{ color: var(--nk-teal-300, #B4D7D7); 
 /* Notification Logs detail modal is a plain key/value readout, not a form —
    a 2-column grid here has no alignment benefit and, depending on how
    asymmetric each row's label/value content is, a shared 1fr/1fr track can
-   size unevenly and squeeze one column to an unreadable width. Single
-   column at every breakpoint removes that failure mode entirely instead of
-   patching around it per-field. */
-#notifModal .np-grid-2{ grid-template-columns: 1fr; }
+   size unevenly and squeeze one column to an unreadable width (seen live:
+   a vaccination-reminder log's long unbroken template constant plus its
+   "email [patientId]" recipient forced a track down to a sliver, so every
+   value after it rendered one character per line and rows visually
+   collided). Dropping the grid track algorithm entirely — not just
+   collapsing it to one column — removes that whole failure class: each
+   .np-field is already a block-level flex column, so a plain block
+   container stacks them at full width with no track-sizing math at all.
+   The Appointment field's leftover `grid-column: span 2` inline style is
+   inert once this is a block container. */
+#notifModal .np-grid-2{ display:block; }
+#notifModal .np-grid-2 .np-field{ width:100%; }
 .np-mut{ color: var(--np-muted); }
 .np-ink{ color: var(--np-ink); }
 
