@@ -601,18 +601,33 @@ async function loadDashboard() {
     // longer 7-vs-7 comparison — the chart itself only needs the latest week.
     try { renderDailyChart(daily.slice(7)); } catch (_) {}
 
-    // Revenue by source — online / in-clinic / pharmacy, each showing money
-    // actually collected with pending noted separately so nothing is inflated.
-    // These are lifetime totals (the API doesn't split by source per-week).
+    // Revenue by source — THIS WEEK — online / in-clinic / pharmacy, money
+    // actually collected in the same trailing-7-day window as the headline
+    // above it. (Previously this rendered `revenueBySource`, which is a
+    // LIFETIME total — the split didn't relate to the "this week" headline
+    // at all and summed to the all-time footer figure instead, which is
+    // why the card looked broken. Lifetime totals now live in their own
+    // clearly-labeled block below instead of being silently mixed in here.)
+    const rbsWeek = a.revenueBySourceThisWeek;
+    if (rbsWeek) {
+      setHtml('statSplit', `
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${fmtCurrency(rbsWeek.online.collected)} collected</div>
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>In-Clinic</span> ${fmtCurrency(rbsWeek.offline.collected)} collected</div>
+        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Pharmacy</span> ${fmtCurrency(rbsWeek.pharmacy.collected)} collected</div>`);
+    }
     const rbs = a.revenueBySource;
     if (rbs) {
       const pend = (p) => Number(p) > 0 ? ` · ${fmtCurrency(p)} pending` : '';
-      setHtml('statSplit', `
-        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${fmtCurrency(rbs.online.collected)} collected${pend(rbs.online.pending)}</div>
-        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>In-Clinic</span> ${fmtCurrency(rbs.offline.collected)} collected${pend(rbs.offline.pending)}</div>
-        <div class="np-analytics-card__split-row"><span class="np-badge np-badge--violet"><span class="np-badge__dot"></span>Pharmacy</span> ${fmtCurrency(rbs.pharmacy.collected)} collected${pend(rbs.pharmacy.pending)}</div>`);
-      setText('statFoot',
-        `${fmtCurrency(rbs.totalCollected)} collected all-time · ${rbs.outstandingInvoices || 0} unpaid invoice(s)`);
+      // Explicitly labeled "All-time" on every row now — this block is
+      // lifetime cumulative revenue, a different number from the "Revenue
+      // this week" headline/split above it, and must never look like an
+      // extension of that week's figures again.
+      setHtml('statFoot',
+        `<div class="np-analytics-card__split-row" style="margin-top:.35rem;"><strong>All-time:</strong> ` +
+        `Online ${fmtCurrency(rbs.online.collected)}${pend(rbs.online.pending)} · ` +
+        `In-Clinic ${fmtCurrency(rbs.offline.collected)}${pend(rbs.offline.pending)} · ` +
+        `Pharmacy ${fmtCurrency(rbs.pharmacy.collected)}${pend(rbs.pharmacy.pending)} · ` +
+        `${fmtCurrency(rbs.totalCollected)} total · ${rbs.outstandingInvoices || 0} unpaid invoice(s)</div>`);
     }
 
     // Booking source — who actually made the booking (patient via the
@@ -716,13 +731,20 @@ function _docContactStrip(d){
 // set to ONLINE-only (or OFFLINE-only) was showing both fees, including
 // one that doesn't apply and can't be booked.
 function _docFeeStats(d){
+  // UX FIX (Doctor Analytics Audit): these two stats are the doctor's
+  // configured PER-VISIT FEE (Doctor.onlineConsultFee / .physicalConsultFee),
+  // not a revenue total — but sitting directly next to the real "Consults"
+  // and "Revenue" totals below, with no distinguishing label, they read as
+  // an online-vs-in-person revenue split and were reported as such. Label
+  // them explicitly as a fee so the two different kinds of number (price
+  // charged vs. money actually earned) can't be confused at a glance.
   const mode = String(d.consultationModes || 'BOTH').toUpperCase();
   const online   = `<div class="np-doc-card__stat">
-    <div class="np-doc-card__stat-label">Online</div>
+    <div class="np-doc-card__stat-label">Online fee</div>
     <div class="np-doc-card__stat-value">${fmtCurrency(d.onlineConsultFee)}</div>
   </div>`;
   const inPerson = `<div class="np-doc-card__stat">
-    <div class="np-doc-card__stat-label">In-person</div>
+    <div class="np-doc-card__stat-label">In-person fee</div>
     <div class="np-doc-card__stat-value">${fmtCurrency(d.physicalConsultFee)}</div>
   </div>`;
   if (mode === 'ONLINE')  return online;

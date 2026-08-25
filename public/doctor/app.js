@@ -483,6 +483,8 @@ async function loadStats(){
     const total     = Number(s.totalConsults || 0);
     const on  = s.online  || { consults: 0, collected: 0, pending: 0 };
     const off = s.offline || { consults: 0, collected: 0, pending: 0 };
+    const onWeek  = s.onlineThisWeek  || { consults: 0, collected: 0 };
+    const offWeek = s.offlineThisWeek || { consults: 0, collected: 0 };
     const trend    = s.trend || {};
     const thisWeek = trend.thisWeek || { appointments: 0, revenue: 0 };
     const prevWeek = trend.prevWeek || { appointments: 0, revenue: 0 };
@@ -546,11 +548,19 @@ async function loadStats(){
     }
 
     const pendNote = (p) => Number(p) > 0 ? ` · ${fmtCurrencyFull(p)} pending` : '';
+    // UI FIX (Doctor Analytics Audit): this split sits directly under the
+    // "Revenue this week" headline, so it must describe this week — it
+    // used to show `on`/`off` (LIFETIME collected), which had no
+    // relationship to the weekly headline above it. Lifetime totals are
+    // still shown, explicitly labeled, in the footer below.
     setHtml('statSplit', `
-      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${Number(on.consults || 0)} consults · ${fmtCurrencyFull(on.collected)}${pendNote(on.pending)}</div>
-      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>In-Clinic</span> ${Number(off.consults || 0)} consults · ${fmtCurrencyFull(off.collected)}${pendNote(off.pending)}</div>`);
+      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span> ${Number(onWeek.consults || 0)} consults · ${fmtCurrencyFull(onWeek.collected)}</div>
+      <div class="np-analytics-card__split-row"><span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>In-Clinic</span> ${Number(offWeek.consults || 0)} consults · ${fmtCurrencyFull(offWeek.collected)}</div>`);
 
-    setText('statFoot', `${total} total consults all-time` + (s.completionRate != null ? ` · ${s.completionRate}% completion rate` : ''));
+    setHtml('statFoot',
+      `<div><strong>All-time:</strong> ${total} total consults` +
+      (s.completionRate != null ? ` · ${s.completionRate}% completion rate` : '') +
+      ` · Online ${fmtCurrencyFull(on.collected)}${pendNote(on.pending)} · In-Clinic ${fmtCurrencyFull(off.collected)}${pendNote(off.pending)}</div>`);
   } catch (ex){
     console.warn('stats failed', ex);
     if (host) host.innerHTML = '<div class="np-empty"><div class="np-empty__title">Could not load analytics</div><div class="np-empty__sub">Try refreshing.</div></div>';

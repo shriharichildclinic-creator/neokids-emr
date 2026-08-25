@@ -26,7 +26,7 @@ const automation = require('../services/automation.service');
 const slotService = require('../services/slot.service');
 const { timeToMinutes, minutesToTime } = require('../services/slot.service');
 const { parseDateOnly, parseDateOnlyOrNull, getTodayDateOnly, getTodayDateString, buildDailyTrend } = require('../utils/date');
-const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
+const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES, PHANTOM_APPOINTMENT_WHERE } = require('../utils/payment');
 const { incrementDoctorRevenue, decrementDoctorRevenue } = require('../services/lifecycle.service');
 const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
@@ -867,7 +867,7 @@ exports.stats = asyncHandler(async (req, res) => {
     // their revenue.
     prisma.appointment.findMany({
       where: { doctorId, date: { gte: last14 } },
-      select: { date: true, status: true, paymentStatus: true, feeAtBooking: true }
+      select: { date: true, status: true, paymentStatus: true, feeAtBooking: true, consultationType: true }
     }),
     prisma.appointment.count({ where: { doctorId, date: { gte: last30 }, status: { not: 'CANCELLED' } } }),
     prisma.appointment.count({ where: { doctorId, date: { gte: prev30, lt: last30 }, status: { not: 'CANCELLED' } } })
@@ -882,7 +882,7 @@ exports.stats = asyncHandler(async (req, res) => {
   // Bucket the trailing 14 days into a per-day series (for the dashboard's
   // trend sparkline) and split it into this-week vs the prior week so the
   // UI can show a real week-over-week delta instead of a bare number.
-  const { daily, thisWeek, prevWeek } = buildDailyTrend({
+  const { daily, thisWeek, prevWeek, last7Key } = buildDailyTrend({
     start: last14,
     emptyBucket: () => ({ appointments: 0, completed: 0, revenue: 0 }),
     sources: [{
@@ -910,15 +910,39 @@ exports.stats = asyncHandler(async (req, res) => {
   const thisWeekCount = thisWeek.appointments, prevWeekCount = prevWeek.appointments;
   const thisWeekRevenue = thisWeek.revenue, prevWeekRevenue = prevWeek.revenue;
 
+  // UI FIX (Doctor Analytics Audit): the dashboard's "Revenue this week"
+  // card showed `thisWeekRevenue` (a real trailing-7-day figure) as its
+  // headline, then rendered `online`/`offline` (below, `collected` =
+  // LIFETIME collected, see the comment on those aggregates above)
+  // directly underneath as if it were that week's split. The two numbers
+  // had no relationship to each other, which is exactly why that card
+  // looked broken. Derive a real this-week online/offline split from the
+  // same fortnightRows used for the chart above, using the identical
+  // `last7Key` boundary buildDailyTrend used for `thisWeek` itself, so the
+  // split always matches the headline it sits under.
+  const onlineThisWeek  = { consults: 0, collected: 0 };
+  const offlineThisWeek = { consults: 0, collected: 0 };
+  for (const row of fortnightRows) {
+    const key = new Date(row.date).toISOString().slice(0, 10);
+    if (key < last7Key) continue; // prior-week half of the 14-day window
+    const bucket = row.consultationType === 'ONLINE' ? onlineThisWeek : offlineThisWeek;
+    if (row.status === 'COMPLETED') bucket.consults += 1;
+    if (COLLECTED.includes(row.paymentStatus)) bucket.collected += Number(row.feeAtBooking || 0);
+  }
+
   res.json({
     todayAppointments: todayCount,
     completedToday,
     totalConsults,
     // Headline revenue = collected only (online + offline).
     totalRevenue: onlineCollectedAmt + offlineCollectedAmt,
-    // Online vs offline split — the doctor's two work streams tracked apart.
+    // Online vs offline split — LIFETIME totals (the doctor's two work
+    // streams tracked apart). Kept for the earnings/all-time views.
     online:  { consults: onlineConsults,  collected: onlineCollectedAmt,  pending: onlinePendingAmt  },
     offline: { consults: offlineConsults, collected: offlineCollectedAmt, pending: offlinePendingAmt },
+    // Same split, scoped to the trailing 7 days — this is what belongs
+    // directly under the "Revenue this week" headline.
+    onlineThisWeek, offlineThisWeek,
     pendingTotal: onlinePendingAmt + offlinePendingAmt,
     completionRate: totalAll > 0 ? Math.round((completedAll / totalAll) * 100) : 0,
     cancelledAll,

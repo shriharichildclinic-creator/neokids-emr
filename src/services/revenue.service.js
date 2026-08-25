@@ -334,6 +334,21 @@ async function getCashCollectedTotal({ doctorId, year, month }) {
     where: {
       doctorId,
       paymentStatus: { in: COLLECTED_PAYMENT_STATUSES },
+      // BUG FIX (Doctor Analytics Audit): this function is documented above
+      // as "the mirror image of buildEligibleApptWhere" — i.e. every
+      // collected appointment that is NOT already counted in the
+      // Cashfree-only settlement totals. buildEligibleApptWhere requires
+      // `cashfreeOrderId: { not: null }`; this had no cashfreeOrderId
+      // condition at all, so it silently included every Cashfree-paid
+      // appointment (online AND any in-clinic visit a receptionist charged
+      // through Cashfree) a SECOND time, on top of the same money already
+      // reported in `row.totals` on the doctor's earnings dashboard and in
+      // the settlement/payout figures. The UI text for every consumer of
+      // this function calls it "cash collected at the clinic" / "in-person
+      // cash collected" — money that never touched the payment gateway —
+      // so it must actually be restricted to that, or it silently
+      // double-counts gateway revenue as if it were separate clinic cash.
+      cashfreeOrderId: null,
       date: { gte: start, lt: end }
     }
   });

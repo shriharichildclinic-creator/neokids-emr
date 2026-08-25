@@ -5,7 +5,7 @@ const { createDoctorSchema, updateDoctorByAdminSchema, flattenZod, randomPasswor
 const { asyncHandler } = require('../middleware/errorHandler');
 const { sendStaffInvite, sendStaffInviteWhatsApp } = require('../services/invite.service');
 const { parseDateOnly, getTodayDateOnly } = require('../utils/date');
-const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES } = require('../utils/payment');
+const { COLLECTED_PAYMENT_STATUSES, PENDING_PAYMENT_STATUSES, PHANTOM_APPOINTMENT_WHERE } = require('../utils/payment');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 const audit = require('../services/audit.service');
 const notifications = require('../services/notification.service');
@@ -174,21 +174,45 @@ createdAt: true
   // counters bumped manually on complete/un-complete. Any write path that
   // forgot to call that (or a status transition it didn't anticipate) let
   // the counter drift from the appointments actually on record. Computing
-  // both live from Appointment rows here removes that whole class of bug —
-  // this is the same "completed + actually collected" definition the admin
-  // dashboard and doctor's own earnings view use elsewhere.
-  const agg = await prisma.appointment.groupBy({
-    by: ['doctorId'],
-    where: { status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } },
-    _sum: { feeAtBooking: true },
-    _count: { _all: true }
-  });
-  const byDoctor = new Map(agg.map(r => [r.doctorId, { consults: r._count._all, revenue: Number(r._sum.feeAtBooking || 0) }]));
+  // both live from Appointment rows here removes that whole class of bug.
+  //
+  // SYNC FIX (Doctor Analytics Audit): this used to require BOTH
+  // status:'COMPLETED' AND paymentStatus collected for a row to count at
+  // all, for both numbers. That is a third, stricter definition than the
+  // one used everywhere else a doctor's consult/revenue totals are shown:
+  //   - Doctor's own dashboard   (doctor.controller.js stats())
+  //   - Admin → Doctor Insights  (doctorInsights() below)
+  // both of those define "consults" as visit volume (status COMPLETED,
+  // regardless of payment) and "revenue" as money actually collected
+  // (paymentStatus PAID/CASH_COLLECTED, regardless of appointment status —
+  // a paid-but-still-CONFIRMED online booking or a cancelled-but-not-yet-
+  // refunded visit already took real money and must still count). Gating
+  // this card's numbers on the intersection of both silently under-counted
+  // both figures here relative to Insights/the doctor's own panel for any
+  // doctor with a completed-but-unpaid visit, a paid-but-not-yet-completed
+  // booking, or a cancelled-but-unrefunded payment — exactly the "Admin
+  // Doctor Card disagrees with Doctor Insights for the same doctor"
+  // symptom. Two separate, independently-filtered queries below so each
+  // number matches its counterpart everywhere else in the app.
+  const [consultAgg, revenueAgg] = await Promise.all([
+    prisma.appointment.groupBy({
+      by: ['doctorId'],
+      where: { status: 'COMPLETED' },
+      _count: { _all: true }
+    }),
+    prisma.appointment.groupBy({
+      by: ['doctorId'],
+      where: { paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } },
+      _sum: { feeAtBooking: true }
+    })
+  ]);
+  const consultsByDoctor = new Map(consultAgg.map(r => [r.doctorId, r._count._all]));
+  const revenueByDoctor  = new Map(revenueAgg.map(r => [r.doctorId, Number(r._sum.feeAtBooking || 0)]));
 
   res.json(doctors.map(d => ({
     ...d,
-    consults: byDoctor.get(d.id)?.consults || 0,
-    revenue:  byDoctor.get(d.id)?.revenue  || 0
+    consults: consultsByDoctor.get(d.id) || 0,
+    revenue:  revenueByDoctor.get(d.id)  || 0
   })));
 });
 
@@ -370,19 +394,34 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
   // pharmacy stats and utils/date.js.
   const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 30);
 
+  // SYNC FIX (Doctor Analytics Audit): every count below used to be
+  // unfiltered, so an unpaid-expired online booking or a Cashfree
+  // payment-failure row (status CANCELLED, paymentStatus FAILED — never a
+  // real booking, see PHANTOM_APPOINTMENT_WHERE) inflated `total` and
+  // `cancelled`, and a failed ONLINE checkout attempt inflated `online`
+  // even though the doctor never actually had that appointment. This is
+  // the same phantom-row exclusion already applied to every appointment
+  // *list* (listAppointments, myAppointments, todayWaitingRoom) — insights
+  // is a count/aggregate view of the same data and must exclude the same
+  // rows, or its numbers (and the cancellation-rate % derived from them)
+  // disagree with what the doctor and admin appointment lists show.
+  const NOT_PHANTOM = { NOT: PHANTOM_APPOINTMENT_WHERE };
   const [
     total, completed, cancelled, pending, confirmed,
     online, offline,
     revAll, rev30, today30,
     upcoming
   ] = await Promise.all([
-    prisma.appointment.count({ where: { doctorId: id } }),
+    prisma.appointment.count({ where: { doctorId: id, ...NOT_PHANTOM } }),
     prisma.appointment.count({ where: { doctorId: id, status: 'COMPLETED' } }),
-    prisma.appointment.count({ where: { doctorId: id, status: 'CANCELLED' } }),
+    // Genuine cancellations only — a failed/expired checkout attempt was
+    // never a real booking a patient could have kept, so it shouldn't
+    // count as a "cancellation" any more than it counts as a booking.
+    prisma.appointment.count({ where: { doctorId: id, status: 'CANCELLED', paymentStatus: { not: 'FAILED' } } }),
     prisma.appointment.count({ where: { doctorId: id, status: 'PENDING'   } }),
     prisma.appointment.count({ where: { doctorId: id, status: 'CONFIRMED' } }),
-    prisma.appointment.count({ where: { doctorId: id, consultationType: 'ONLINE'  } }),
-    prisma.appointment.count({ where: { doctorId: id, consultationType: 'OFFLINE' } }),
+    prisma.appointment.count({ where: { doctorId: id, consultationType: 'ONLINE',  ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { doctorId: id, consultationType: 'OFFLINE', ...NOT_PHANTOM } }),
     // "Revenue" = actually collected (PAID / CASH_COLLECTED) — matches the
     // definition used on the admin dashboard and the doctor's own earnings
     // view. Cash still owed (CASH_PENDING) is not counted as revenue. Not
@@ -395,7 +434,7 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
       _sum: { feeAtBooking: true },
       where: { doctorId: id, date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
-    prisma.appointment.count({ where: { doctorId: id, date: { gte: last30 } } }),
+    prisma.appointment.count({ where: { doctorId: id, date: { gte: last30 }, ...NOT_PHANTOM } }),
     prisma.appointment.findMany({
       where: { doctorId: id, date: { gte: today }, status: { in: ['CONFIRMED','PENDING'] } },
       include: { patient: { select: { name: true, phone: true } } },
@@ -407,7 +446,7 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
   // 14-day daily series
   const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
   const raw = await prisma.appointment.findMany({
-    where: { doctorId: id, date: { gte: last14 } },
+    where: { doctorId: id, date: { gte: last14 }, ...NOT_PHANTOM },
     select: { date: true, status: true }
   });
   const daily = {};
@@ -571,6 +610,12 @@ exports.analytics = asyncHandler(async (req, res) => {
   const last7  = new Date(today); last7.setUTCDate(last7.getUTCDate()  - 7);
   const last30 = new Date(today); last30.setUTCDate(last30.getUTCDate() - 30);
 
+  // SYNC FIX (Doctor Analytics Audit): see the identical NOT_PHANTOM note
+  // in doctorInsights() below — an unpaid-expired / payment-failed booking
+  // attempt was never a real appointment and must not inflate the
+  // clinic-wide total, cancellation rate, or the online/offline split,
+  // the same way it's already excluded from every appointment list.
+  const NOT_PHANTOM = { NOT: PHANTOM_APPOINTMENT_WHERE };
   const [
     totalDoctors, totalPatients, totalAppointments,
     completed, cancelled, pending, confirmed,
@@ -582,9 +627,10 @@ exports.analytics = asyncHandler(async (req, res) => {
   ] = await Promise.all([
     prisma.doctor.count({ where: { deletedAt: null } }),
     prisma.patient.count(),
-    prisma.appointment.count(),
+    prisma.appointment.count({ where: { ...NOT_PHANTOM } }),
     prisma.appointment.count({ where: { status: 'COMPLETED' } }),
-    prisma.appointment.count({ where: { status: 'CANCELLED' } }),
+    // Genuine cancellations only — see NOT_PHANTOM note above.
+    prisma.appointment.count({ where: { status: 'CANCELLED', paymentStatus: { not: 'FAILED' } } }),
     prisma.appointment.count({ where: { status: 'PENDING'   } }),
     prisma.appointment.count({ where: { status: 'CONFIRMED' } }),
     // "Revenue" = collected only, matching revenueBySource.totalCollected
@@ -600,12 +646,12 @@ exports.analytics = asyncHandler(async (req, res) => {
       _sum: { feeAtBooking: true },
       where: { paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
-    prisma.appointment.count({ where: { date: today } }),
-    prisma.appointment.count({ where: { date: yesterday } }),
-    prisma.appointment.count({ where: { date: { gte: last7 } } }),
-    prisma.appointment.count({ where: { date: { gte: last30 } } }),
-    prisma.appointment.count({ where: { consultationType: 'ONLINE'  } }),
-    prisma.appointment.count({ where: { consultationType: 'OFFLINE' } }),
+    prisma.appointment.count({ where: { date: today, ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { date: yesterday, ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { date: { gte: last7 }, ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { date: { gte: last30 }, ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { consultationType: 'ONLINE',  ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { consultationType: 'OFFLINE', ...NOT_PHANTOM } }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
       where: { date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
@@ -616,7 +662,7 @@ exports.analytics = asyncHandler(async (req, res) => {
 
   const last14 = new Date(today); last14.setUTCDate(last14.getUTCDate() - 13);
   const raw = await prisma.appointment.findMany({
-    where: { date: { gte: last14 } },
+    where: { date: { gte: last14 }, ...NOT_PHANTOM },
     select: { date: true, status: true, feeAtBooking: true, paymentStatus: true }
   });
   const daily = {};
@@ -673,6 +719,32 @@ exports.analytics = asyncHandler(async (req, res) => {
     outstandingInvoices
   };
 
+  // UI FIX (Doctor Analytics Audit): the dashboard's "Revenue this week"
+  // card headline was a genuine trailing-7-day figure (summed from
+  // `daily` below), but the Online/In-Clinic/Pharmacy split rendered
+  // directly under it was `revenueBySource` above — LIFETIME totals, not
+  // this week's. The two numbers had no relationship (the split summed to
+  // the "all-time" footer figure, not the headline), which is exactly why
+  // that card looked broken/inconsistent. This is the same split,
+  // computed over the same last-7-days window as the headline, so the
+  // rows under "Revenue this week" actually describe that week.
+  const [
+    onlineCollectedWeekAgg, offlineCollectedWeekAgg, pharmacyPaidWeekAgg
+  ] = await Promise.all([
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { consultationType: 'ONLINE',  date: { gte: last7 }, paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { consultationType: 'OFFLINE', date: { gte: last7 }, paymentStatus: { in: COLLECTED } } }),
+    prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { status: 'PAID', paidAt: { gte: last7 } } }).catch(() => ({ _sum: { total: 0 } }))
+  ]);
+  const onlineRevWeek   = Number(onlineCollectedWeekAgg._sum.feeAtBooking || 0);
+  const offlineRevWeek  = Number(offlineCollectedWeekAgg._sum.feeAtBooking || 0);
+  const pharmacyRevWeek = Number(pharmacyPaidWeekAgg._sum.total || 0);
+  const revenueBySourceThisWeek = {
+    online:   { collected: onlineRevWeek },
+    offline:  { collected: offlineRevWeek },
+    pharmacy: { collected: pharmacyRevWeek },
+    totalCollected: onlineRevWeek + offlineRevWeek + pharmacyRevWeek
+  };
+
   // Booking channel split — "online" consultationType above means video vs
   // in-person visit; this is a different axis entirely: who actually made
   // the booking. `source` defaults to NEOKIDSPRO for a patient booking
@@ -687,9 +759,9 @@ exports.analytics = asyncHandler(async (req, res) => {
     websiteCount, receptionCount, manualCount,
     websiteRevenueAgg, receptionRevenueAgg
   ] = await Promise.all([
-    prisma.appointment.count({ where: { source: 'NEOKIDSPRO' } }),
-    prisma.appointment.count({ where: { source: { in: RECEPTION_SOURCES } } }),
-    prisma.appointment.count({ where: { source: 'MANUAL' } }),
+    prisma.appointment.count({ where: { source: 'NEOKIDSPRO', ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { source: { in: RECEPTION_SOURCES }, ...NOT_PHANTOM } }),
+    prisma.appointment.count({ where: { source: 'MANUAL', ...NOT_PHANTOM } }),
     prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: 'NEOKIDSPRO', paymentStatus: { in: COLLECTED } } }),
     prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: { in: RECEPTION_SOURCES }, paymentStatus: { in: COLLECTED } } })
   ]);
@@ -701,6 +773,7 @@ exports.analytics = asyncHandler(async (req, res) => {
 
   res.json({
     revenueBySource,
+    revenueBySourceThisWeek,
     bookingSource,
     totalDoctors, totalPatients, totalAppointments,
     completedAppointments: completed,
