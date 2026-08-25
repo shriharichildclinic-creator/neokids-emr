@@ -902,6 +902,18 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 html[data-theme="dark"] .np-kyc-card__link{ color: var(--nk-teal-300, #B4D7D7); }
 .np-grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
 @media (max-width: 599px){ .np-grid-2{ grid-template-columns: 1fr; } }
+/* Belt-and-braces mobile stack for modal forms (Book appointment / walk-in,
+   certificates, etc). Raised to 680px and scoped + !important so a two-column
+   .np-grid-2 inside a modal body can never survive on a phone-width screen —
+   on narrow viewports a shared 1fr/1fr track squeezes fields like Phone,
+   Parent/guardian, and DOB down to an unreadably narrow column where typed
+   values get visually clipped ("8454930…") even though nothing is actually
+   wrong with the data. Full-width single-column fields are always legible,
+   so below this width every modal grid just stacks. */
+@media (max-width: 680px){
+  .np-modal__body .np-grid-2{ grid-template-columns: 1fr !important; }
+  .np-modal__body .np-grid-2 > .np-field{ grid-column: 1 !important; }
+}
 /* Notification Logs detail modal is a plain key/value readout, not a form —
    a 2-column grid here has no alignment benefit and, depending on how
    asymmetric each row's label/value content is, a shared 1fr/1fr track can

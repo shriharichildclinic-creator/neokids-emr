@@ -20,6 +20,7 @@ const { buildSignedFileUrl } = require('../utils/fileTokens');
 const logger = require('../utils/logger');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 const consultInvoiceSvc = require('../services/consultation-invoice.service');
+const revenueSvc = require('../services/revenue.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -194,6 +195,56 @@ exports.stats = asyncHandler(async (req, res) => {
       thisWeek: { appointments: thisWeekAppts, collected: thisWeekCollected },
       prevWeek: { appointments: prevWeekAppts, collected: prevWeekCollected }
     }
+  });
+});
+
+// ─── Overall clinic revenue (matches doctor's own "Cash Collected" figure) ───
+//
+// `stats` above only ever answers "today". Reception previously had no
+// month/overall view, so the only cash figures a receptionist could see
+// were computed from ConsultationInvoice rows created *today* — a
+// different table, different status filter, and a different date field
+// than the one powering a doctor's own "My Earnings → Cash Collected
+// (Clinic)" card (which sums Appointment.feeAtBooking by appointment
+// date, not invoice-creation date). Two different queries over two
+// different tables inevitably drift apart, which is exactly the "all
+// different figures everywhere" symptom.
+//
+// This endpoint calls the SAME revenue.service.getCashCollectedTotal
+// function the doctor dashboard calls, just widened to every doctor this
+// receptionist is assigned to (doctorId: { in: doctorIds }). Summing the
+// per-doctor breakdown below always equals what each doctor individually
+// sees for that same month — because it's the identical query.
+exports.revenue = asyncHandler(async (req, res) => {
+  const doctorIds = await staffAccess.getDoctorIds(req.user.id);
+  const now = new Date();
+  const year = parseInt(req.query.year, 10) || now.getUTCFullYear();
+  const month = parseInt(req.query.month, 10) || (now.getUTCMonth() + 1);
+  if (month < 1 || month > 12) return res.status(400).json({ error: 'Invalid month (1-12)' });
+
+  if (!doctorIds.length) {
+    return res.json({ period: { year, month }, totalCash: 0, consultations: 0, byDoctor: [] });
+  }
+
+  const overall = await revenueSvc.getCashCollectedTotal({ doctorId: { in: doctorIds }, year, month });
+
+  // Per-doctor breakdown, each computed with the exact same function a
+  // doctor would call for themselves — so any one row here is guaranteed
+  // identical to what that doctor sees on their own earnings dashboard.
+  const doctors = await prisma.doctor.findMany({
+    where: { id: { in: doctorIds } },
+    select: { id: true, name: true }
+  });
+  const byDoctor = await Promise.all(doctors.map(async d => {
+    const row = await revenueSvc.getCashCollectedTotal({ doctorId: d.id, year, month });
+    return { doctorId: d.id, doctorName: d.name, ...row };
+  }));
+
+  res.json({
+    period: { year, month },
+    totalCash: overall.totalCash,
+    consultations: overall.consultations,
+    byDoctor
   });
 });
 

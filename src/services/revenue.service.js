@@ -27,6 +27,11 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('../config/prisma');
 const logger = require('../utils/logger');
+// Canonical "what counts as collected" vocabulary — see utils/payment.js.
+// Every controller that reports revenue must use these same two lists,
+// so a receptionist and a doctor never see two different numbers for
+// what "collected" means for the same appointments.
+const { COLLECTED_PAYMENT_STATUSES } = require('../utils/payment');
 
 /* ---------- Number helpers (₹ has 2 dp, never use float arithmetic) ---------- */
 
@@ -299,6 +304,19 @@ async function getMonthlyRevenueReport({ year, month, doctorId, paymentType, sou
  * online and in-clinic work, that made their real total income look
  * like only their online half. This is purely informational: it is
  * never linked to a settlement and never affects doctorNet/TDS.
+ *
+ * This is also the exact query the Receptionist "overall clinic revenue"
+ * figure is built on (see receptionist.controller.js `revenue`) — same
+ * function, same filters, just widened to `doctorId: { in: [...] }` for
+ * every doctor the receptionist is assigned to. Using one shared function
+ * for both is what guarantees a receptionist's total for a doctor always
+ * matches that doctor's own "Cash Collected (Clinic)" figure.
+ *
+ * IMPORTANT: only COLLECTED_PAYMENT_STATUSES (PAID, CASH_COLLECTED) count
+ * as collected. CASH_PENDING is money that's been billed but not actually
+ * handed over yet — counting it here previously made both dashboards show
+ * uncollected cash as if it were already in hand, and inflated whichever
+ * side happened to have more pending invoices at the moment of viewing.
  */
 async function getCashCollectedTotal({ doctorId, year, month }) {
   const { start, end } = monthRange(year, month);
@@ -308,7 +326,7 @@ async function getCashCollectedTotal({ doctorId, year, month }) {
     where: {
       doctorId,
       status: { in: ['CONFIRMED', 'COMPLETED'] },
-      paymentStatus: { in: ['CASH_PENDING', 'CASH_COLLECTED'] },
+      paymentStatus: { in: COLLECTED_PAYMENT_STATUSES },
       date: { gte: start, lt: end }
     }
   });

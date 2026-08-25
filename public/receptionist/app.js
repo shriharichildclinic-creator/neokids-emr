@@ -372,7 +372,7 @@ function setView(v, opts){ $$('.tab-pane').forEach(x=>x.classList.add('hidden'))
   // Keep the URL hash in sync so the view is deep-linkable and survives a
   // refresh — the same strategy the admin panel uses (#dash, #appts, …).
   try{ if(!(opts&&opts.skipHash)){ const slug=v.replace(/View$/,''); if(location.hash!=='#'+slug) history.replaceState(null,'','#'+slug); } }catch(_){}
-  if(v==='dashView')loadDashboard(); if(v==='onboardingView'&&typeof NPOnboarding!=='undefined')NPOnboarding.mount($('#onboardingMount'),'RECEPTIONIST',__me); if(v==='apptsView')loadAppointments(); if(v==='patientsView')loadPatients(); if(v==='invoicesView')loadInvoices(); if(v==='billingView')loadBilling(); if(v==='certsView')loadCerts(); if(v==='rxView')loadRx(); if(v==='pharmBillsView')loadPharmBills(); }
+  if(v==='dashView'){loadDashboard();loadClinicRevenue();} if(v==='onboardingView'&&typeof NPOnboarding!=='undefined')NPOnboarding.mount($('#onboardingMount'),'RECEPTIONIST',__me); if(v==='apptsView')loadAppointments(); if(v==='patientsView')loadPatients(); if(v==='invoicesView')loadInvoices(); if(v==='billingView')loadBilling(); if(v==='certsView')loadCerts(); if(v==='rxView')loadRx(); if(v==='pharmBillsView')loadPharmBills(); }
 function viewFromHash(){ const h=(location.hash||'').replace(/^#/,'').trim(); if(!h) return null; const v=h.endsWith('View')?h:h+'View'; return VIEWS[v]?v:null; }
 window.addEventListener('hashchange', ()=>{ const v=viewFromHash(); if(v) setView(v,{skipHash:true}); });
 $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
@@ -496,6 +496,59 @@ async function showDashboard(){
 // Shared with Admin (app.js + finance.js), Doctor and Pharmacy — see
 // NPFmt.trendChip in /assets/np-ui.js (single source of truth).
 const trendChip = NPFmt.trendChip;
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function populateRevenuePeriodSelects(){
+  const mSel = $('#revMonth'), ySel = $('#revYear');
+  if (!mSel || !ySel) return;
+  const now = new Date();
+  if (!mSel.options.length){
+    MONTH_NAMES.forEach((nm, idx) => {
+      const o = document.createElement('option');
+      o.value = String(idx + 1); o.textContent = nm;
+      if (idx + 1 === now.getUTCMonth() + 1) o.selected = true;
+      mSel.appendChild(o);
+    });
+    mSel.addEventListener('change', loadClinicRevenue);
+  }
+  if (!ySel.options.length){
+    const curYear = now.getUTCFullYear();
+    for (let y = curYear; y >= curYear - 4; y--){
+      const o = document.createElement('option');
+      o.value = String(y); o.textContent = String(y);
+      if (y === curYear) o.selected = true;
+      ySel.appendChild(o);
+    }
+    ySel.addEventListener('change', loadClinicRevenue);
+  }
+}
+
+// Overall clinic revenue for the selected month — pulled from
+// /receptionist/revenue, which calls the exact same
+// revenue.service.getCashCollectedTotal() function a doctor's own
+// Earnings page calls for themselves (just widened across every doctor
+// assigned to this receptionist). Same function + same filters means
+// this can never drift from what each doctor individually sees.
+async function loadClinicRevenue(){
+  populateRevenuePeriodSelects();
+  const year = $('#revYear') ? $('#revYear').value : undefined;
+  const month = $('#revMonth') ? $('#revMonth').value : undefined;
+  const q = new URLSearchParams();
+  if (year) q.set('year', year);
+  if (month) q.set('month', month);
+  try{
+    const r = await api('/receptionist/revenue?' + q.toString());
+    setText('revTotalCash', inr(r.totalCash || 0));
+    setText('revConsultations', r.consultations || 0);
+    const rows = Array.isArray(r.byDoctor) ? r.byDoctor : [];
+    $('#revByDoctorTbody').innerHTML = rows.length ? rows.map(d => `
+      <tr>
+        <td data-label="Doctor">Dr. ${esc(d.doctorName)}</td>
+        <td data-label="In-person consultations">${d.consultations || 0}</td>
+        <td data-label="Cash collected" style="text-align:right">${inr(d.totalCash || 0)}</td>
+      </tr>`).join('') : `<tr><td colspan="3" class="np-empty"><div>No in-person cash collected this period</div></td></tr>`;
+  }catch(e){ toast(e.message,'error'); }
+}
 
 async function loadDashboard(){
   try{
@@ -630,7 +683,7 @@ function closeModal(){ $('#modalHost').innerHTML=''; }
 // passed in are reloaded, and the patients list keeps its active search term.
 function refreshAfterMutation(views){
   const set = new Set(views || []);
-  if (set.has('dashView')) loadDashboard();
+  if (set.has('dashView')) { loadDashboard(); loadClinicRevenue(); }
   if (set.has('apptsView')) loadAppointments();
   if (set.has('patientsView')) loadPatients(__patientQuery);
   if (set.has('invoicesView')) loadInvoices();

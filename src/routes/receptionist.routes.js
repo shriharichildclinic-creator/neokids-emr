@@ -17,6 +17,7 @@ router.get('/me',           c.me);
 router.post('/profile-image',   uploadProfileImage.single('photo'), c.uploadProfileImage);
 router.delete('/profile-image', c.removeProfileImage);
 router.get('/stats',        c.stats);
+router.get('/revenue',      c.revenue);
 router.get('/assignments',  c.assignments);
 router.get('/slots',        c.slots);
 
