@@ -80,6 +80,27 @@ async function api(path, opts = {}) {
   return data;
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// BUG FIX ("Send does nothing — no popup, no error"): esc() alone is not
+// safe for a string dropped inside onclick="fn('${value}')". The browser
+// decodes HTML entities in an attribute value BEFORE parsing that value as
+// JS, so esc()'s `'` -> `&#39;` round-trips right back into a literal `'`
+// by the time the click handler runs — which prematurely closes the JS
+// string argument and makes the whole onclick a syntax error. Any patient
+// or doctor name with an apostrophe (D'Souza, D'Silva, O'Brien — all
+// common) silently broke every onclick handler built this way; the click
+// simply did nothing because the attribute was never valid JS to begin
+// with. jsAttr() escapes for the JS-string context FIRST (so the
+// apostrophe can never re-form after HTML-decoding), then HTML-escapes
+// the result so it also can't break out of the surrounding double-quoted
+// attribute.
+function jsAttr(s){
+  const str = String(s==null?'':s)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 function toast(m, kind){ if (window.NPToast && NPToast[kind||'success']) NPToast[kind||'success'](m); else alert(m); }
 function fmtDate(d){ if(!d) return ''; return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
 function fmtTime(t){ if(!t) return ''; const m=String(t).match(/^(\d{1,2}):(\d{2})/); if(!m) return t; let h=parseInt(m[1],10); const s=h>=12?'PM':'AM'; h=h%12||12; return h+':'+m[2]+' '+s; }
@@ -215,7 +236,7 @@ function apptActionsHtml(a){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="cancelAppt('${a.id}')">Cancel</button>`);
   }
   if(a.consultationInvoice){
-    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceActions('${a.consultationInvoice.id}','${esc(a.consultationInvoice.pdfUrl||'')}','${a.patient.phone||''}','${esc(a.patient.email||'')}')">Invoice</button>`);
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceActions('${a.consultationInvoice.id}','${jsAttr(a.consultationInvoice.pdfUrl||'')}','${jsAttr(a.patient.phone||'')}','${jsAttr(a.patient.email||'')}')">Invoice</button>`);
   } else if(a.invoiceUrl){
     // Booked & paid online — already invoiced automatically at booking, no
     // reception invoice needed. View-only, no Send (it was already sent).
@@ -231,7 +252,7 @@ function apptActionsHtml(a){
     // Send here; only a disabled state until the PDF actually exists.
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
   } else if(a.status!=='CANCELLED'){
-    btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}','${a.patient.phone||''}','${esc(a.patient.email||'')}')">Invoice</button>`);
+    btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}','${jsAttr(a.patient.phone||'')}','${jsAttr(a.patient.email||'')}')">Invoice</button>`);
   }
   if(__me.canIssueCertificates && a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertModal('${a.id}')">Certificate</button>`);
@@ -280,14 +301,14 @@ function apptCard(a){
   const primary = [];
   if(!a.arrivedAt && open) primary.push(`<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="markArrived('${a.id}')">Mark arrived</button>`);
   if(a.consultationInvoice){
-    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openInvoiceActions('${a.consultationInvoice.id}','${esc(a.consultationInvoice.pdfUrl||'')}','${p.phone||''}','${esc(p.email||'')}')">Invoice</button>`);
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openInvoiceActions('${a.consultationInvoice.id}','${jsAttr(a.consultationInvoice.pdfUrl||'')}','${jsAttr(p.phone||'')}','${jsAttr(p.email||'')}')">Invoice</button>`);
   } else if(a.invoiceUrl){
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="window.open('${esc(a.invoiceUrl)}','_blank')" title="Paid and invoiced online at booking — already sent to the patient">Invoiced online</button>`);
   } else if(a.cashfreeOrderId){
     // See apptActionsHtml above for why this branch exists.
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
   } else if(a.status!=='CANCELLED'){
-    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="genInvoice('${a.id}','${p.phone||''}','${esc(p.email||'')}')">Invoice</button>`);
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="genInvoice('${a.id}','${jsAttr(p.phone||'')}','${jsAttr(p.email||'')}')">Invoice</button>`);
   }
   if(a.paymentStatus==='CASH_PENDING' && a.status!=='CANCELLED'){
     primary.push(`<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="markAppointmentPaid('${a.id}')">Mark as paid</button>`);
@@ -354,8 +375,8 @@ function openInvoiceActions(invoiceId, pdfUrl, phone, email){
     <div class="np-action-list">
       <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="window.open('${esc(pdfUrl)}','_blank')">View</button>
       <a class="np-btn np-btn--block ${hasPdf?'':'np-btn--disabled'}" ${hasPdf?`href="${esc(pdfUrl)}" download`:'aria-disabled="true"'}>Download</a>
-      <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="printPdf('${esc(pdfUrl)}')">Print</button>
-      <button type="button" class="np-btn np-btn--block np-btn--primary" ${hasContact?'':'disabled'} title="${hasContact?'':'Patient has no phone or email on file — add one before sending'}" onclick="closeModal();openInvoiceSendModal('${invoiceId}','${esc(phone)}','${esc(email)}')">Send</button>
+      <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="printPdf('${jsAttr(pdfUrl)}')">Print</button>
+      <button type="button" class="np-btn np-btn--block np-btn--primary" ${hasContact?'':'disabled'} title="${hasContact?'':'Patient has no phone or email on file — add one before sending'}" onclick="closeModal();openInvoiceSendModal('${invoiceId}','${jsAttr(phone)}','${jsAttr(email)}')">Send</button>
     </div>
     ${hasPdf?'':'<p style="margin:.75rem 0 0;font-size:.8rem;color:var(--np-muted)">PDF isn\'t ready yet — View, Download and Print will be available once it\'s generated.</p>'}
     ${hasContact?'':'<p style="margin:.5rem 0 0;font-size:.8rem;color:var(--np-warn,#B45309)">This patient has no phone or email on file, so there\'s nothing to send to — add contact details on their patient record first.</p>'}
@@ -660,11 +681,21 @@ async function loadDashboard(){
     // out from under an in-flight action (same bug class as __bills vs
     // __pharmBills for the billing tables).
     __todayAppts = rows;
+    // BUG FIX ("buttons jump when a status pill disappears"): pills and
+    // action buttons used to share one free-flowing `.np-appt-row__right`
+    // container, so losing a pill (e.g. Confirmed -> Completed drops a
+    // badge) let the buttons that followed it in source order slide up
+    // into the freed space and the row's height change under them.
+    // Splitting them into their own dedicated containers — one for pills,
+    // one for actions — means each keeps its own box regardless of how
+    // many pills are present; see .np-appt-row__pills / __actions in
+    // appt-card.css for the layout rules that keep this stable.
     $('#todayList').innerHTML = rows.length ? rows.map(a=>`
       <div class="np-appt-row"><div class="np-appt-row__time"><div class="np-appt-row__time-h">${esc(fmtTime(a.startTime))}</div><div class="np-appt-row__time-d">${esc(fmtDate(a.date))}</div></div>
       <div class="np-appt-row__body"><div class="np-appt-row__name">${esc(a.patient.name)} ${a.arrivedAt?'<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Arrived</span>':''}</div><div class="np-appt-row__assign">Dr. ${esc(a.doctor.name)}</div><div class="np-appt-row__meta">${esc(a.primaryProblem||'')}</div></div>
-      <div class="np-appt-row__right">${statusBadge(a.status)} ${sourceBadge(a.source)}
-        ${apptActionsHtml(a)}
+      <div class="np-appt-row__right">
+        <div class="np-appt-row__pills">${statusBadge(a.status)} ${sourceBadge(a.source)}</div>
+        <div class="np-appt-row__actions">${apptActionsHtml(a)}</div>
       </div></div>`).join('') : '<div class="np-empty"><div class="np-empty__title">No appointments today</div></div>';
   }catch(e){ setHtml('dashAnalytics', `<div class="np-error">${esc(e.message)}</div>`); }
 }
@@ -819,11 +850,11 @@ async function openBookModal(_, patientId){
 }
 
 // Invoices
-async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td><td data-label="Patient">${esc(i.appointment.patient.name)}</td><td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td><td data-label="Clinic">${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td><td data-label="Date">${esc(fmtDate(i.createdAt))}</td><td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openInvoiceActions('${i.id}','${esc(i.pdfUrl||'')}','${i.appointment.patient.phone||''}','${esc(i.appointment.patient.email||'')}')">Actions</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td><td data-label="Patient">${esc(i.appointment.patient.name)}</td><td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td><td data-label="Clinic">${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td><td data-label="Date">${esc(fmtDate(i.createdAt))}</td><td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openInvoiceActions('${i.id}','${jsAttr(i.pdfUrl||'')}','${jsAttr(i.appointment.patient.phone||'')}','${jsAttr(i.appointment.patient.email||'')}')">Actions</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
 function printPdf(url){ if(!url){toast('Generate the invoice first','warn');return;} const w=window.open(url,'_blank'); if(w){w.addEventListener('load',()=>{try{w.print();}catch(_){}});} }
 
 // Certificates
-async function loadCerts(){ const list=$('#certsList'); try{ const rows=await api('/receptionist/certificates'); list.innerHTML=rows.length?'<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Cert ID</th><th>Patient</th><th>Doctor</th><th>Template</th><th>Issued</th><th>Actions</th></tr></thead><tbody>'+rows.map(c=>`<tr><td data-label="Cert ID">${esc(c.certificateNumber)}</td><td data-label="Patient">${esc(c.patientNameSnapshot||(c.patient&&c.patient.name)||'')}</td><td data-label="Doctor">Dr. ${esc((c.doctor&&c.doctor.name)||'')}</td><td data-label="Template">${esc((c.templateKey||'').replace(/_/g,' '))}</td><td data-label="Issued">${esc(fmtDate(c.issuedAt))}</td><td data-label="Actions">${c.pdfUrl?`<a class="np-btn np-btn--sm" href="${c.pdfUrl}" target="_blank">PDF</a>`:''} <button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertSendModal('${c.id}','${esc((c.patient&&c.patient.phone)||'')}','${esc((c.patient&&c.patient.email)||'')}')">Send</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="np-empty"><div class="np-empty__title">No certificates yet</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+async function loadCerts(){ const list=$('#certsList'); try{ const rows=await api('/receptionist/certificates'); list.innerHTML=rows.length?'<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Cert ID</th><th>Patient</th><th>Doctor</th><th>Template</th><th>Issued</th><th>Actions</th></tr></thead><tbody>'+rows.map(c=>`<tr><td data-label="Cert ID">${esc(c.certificateNumber)}</td><td data-label="Patient">${esc(c.patientNameSnapshot||(c.patient&&c.patient.name)||'')}</td><td data-label="Doctor">Dr. ${esc((c.doctor&&c.doctor.name)||'')}</td><td data-label="Template">${esc((c.templateKey||'').replace(/_/g,' '))}</td><td data-label="Issued">${esc(fmtDate(c.issuedAt))}</td><td data-label="Actions">${c.pdfUrl?`<a class="np-btn np-btn--sm" href="${c.pdfUrl}" target="_blank">PDF</a>`:''} <button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertSendModal('${c.id}','${jsAttr((c.patient&&c.patient.phone)||'')}','${jsAttr((c.patient&&c.patient.email)||'')}')">Send</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="np-empty"><div class="np-empty__title">No certificates yet</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 function openCertSendModal(certId, phone, email){
   const hasPhone=!!phone; const hasEmail=!!email;
   if(!hasPhone && !hasEmail){ toast('Patient has no phone or email on file — cannot send','error'); return; }

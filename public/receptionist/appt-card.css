@@ -113,6 +113,66 @@
   .np-appt__actions{ grid-column: 1 / -1; justify-content:flex-start; }
 }
 
+/* ─── Today's Queue rows (dashboard) ──────────────────────────────────
+   BUG FIX ("buttons jump into the pill row on mobile"): these rows had
+   no structural CSS at all beyond a hover/border-bottom color rule in
+   neokids-theme.css — status pills and action buttons were both just
+   dumped into one free-flowing container, so removing a pill (e.g. a
+   status change from Confirmed to Completed) let the buttons after it
+   slide upward into the space the pill used to occupy and the row's
+   height jump under them. Each row now uses a fixed three-part grid
+   (time | patient info | pills+actions) and the pills/actions are each
+   their own flex container so one never encroaches on the other,
+   regardless of how many pills a given status combination produces. */
+.np-appt-row{
+  display:grid;
+  grid-template-columns: auto 1fr auto;
+  align-items:start;
+  gap: .85rem;
+  padding: .85rem 0;
+  min-width:0;
+}
+.np-appt-row__time{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-width: 64px;
+  white-space: nowrap;
+}
+.np-appt-row__time-h{ font-size:.92rem; font-weight:700; line-height:1.15; }
+.np-appt-row__time-d{ font-size:.66rem; letter-spacing:.04em; text-transform:uppercase; margin-top:.15rem; color: var(--np-muted); }
+.np-appt-row__body{ min-width:0; }
+.np-appt-row__name{ font-weight:600; font-size:.92rem; color: var(--np-ink); display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+.np-appt-row__assign{ font-size:.8rem; color: var(--np-muted); margin-top:.15rem; }
+.np-appt-row__meta{ font-size:.78rem; color: var(--np-muted); margin-top:.15rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.np-appt-row__right{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:.4rem;
+  min-width:0;
+}
+/* Fixed, self-contained pill row — never shared with action buttons, so
+   a changing pill count only ever affects this box's own content. */
+.np-appt-row__pills{
+  display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center;
+  gap:.3rem; min-height:1.5rem;
+}
+/* Dedicated action-button row — always its own box below the pills,
+   never sharing flex flow with them. */
+.np-appt-row__actions{
+  display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center;
+  gap:.35rem;
+}
+
+@media (max-width:760px){
+  .np-appt-row{ grid-template-columns: auto 1fr; row-gap:.5rem; }
+  .np-appt-row__right{
+    grid-column: 1 / -1;
+    align-items:flex-start;
+  }
+  .np-appt-row__pills{ justify-content:flex-start; }
+  .np-appt-row__actions{ justify-content:flex-start; width:100%; }
+}
+
 /* Overflow ("…") menu for secondary actions */
 .np-overflow{ position:relative; display:inline-flex; align-self:start; }
 .np-overflow-trigger{

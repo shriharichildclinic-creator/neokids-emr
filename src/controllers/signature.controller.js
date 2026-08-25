@@ -136,8 +136,9 @@ exports.uploadDrawn = asyncHandler(async (req, res) => {
     // SVG is an active content type (can carry <script>) — removed from
     // the whitelist. PNG remains the only accepted drawn format.
     const match = parsed.data.dataUrl.match(/^data:image\/png;base64,(.+)$/i);
-  const ext = 'png';
-  const buf = Buffer.from(match[2], 'base64');
+    if (!match) return res.status(400).json({ error: 'Invalid signature payload' });
+    const ext = 'png';
+    const buf = Buffer.from(match[1], 'base64');
   if (!buf.length) return res.status(400).json({ error: 'Empty signature image' });
   if (buf.length > 1024 * 1024) return res.status(400).json({ error: 'Signature image must be under 1 MB' });
 
