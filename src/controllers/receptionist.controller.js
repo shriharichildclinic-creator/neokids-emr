@@ -21,6 +21,7 @@ const logger = require('../utils/logger');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
 const consultInvoiceSvc = require('../services/consultation-invoice.service');
 const revenueSvc = require('../services/revenue.service');
+const { COLLECTED_PAYMENT_STATUSES } = require('../utils/payment');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -112,7 +113,7 @@ exports.stats = asyncHandler(async (req, res) => {
   const [
     todayCount, arrived, pending, invToday, patients,
     walkinToday, todayInvoices,
-    yesterdayCount, fortnightAppts, fortnightInvoices
+    yesterdayCount, fortnightAppts, fortnightCollected
   ] = await Promise.all([
     // OFFLINE-only throughout this block: teleconsultations are booked,
     // paid and invoiced end-to-end by the online flow with no reception
@@ -134,9 +135,11 @@ exports.stats = asyncHandler(async (req, res) => {
     // matching how the Invoices tab and Appointments list are already
     // scoped. Includes VOID rows too (cancelled after payment) — the loop
     // below explicitly skips them so a cancelled visit never counts as
-    // collected or pending.
+    // collected or pending. Restricted to OFFLINE, mirroring every other
+    // count in this block — a teleconsultation is never reception-facing
+    // "clinic cash", even if a doctor later marks it paid in cash.
     prisma.consultationInvoice.findMany({
-      where: { doctorId: { in: doctorIds }, createdAt: { gte: dayStart } },
+      where: { doctorId: { in: doctorIds }, createdAt: { gte: dayStart }, appointment: { is: { consultationType: 'OFFLINE' } } },
       select: { amount: true, status: true, paymentMethod: true }
     }),
     prisma.appointment.count({ where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: yesterday, status: { not: 'CANCELLED' } } }),
@@ -144,9 +147,31 @@ exports.stats = asyncHandler(async (req, res) => {
       where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: { gte: last14 }, status: { not: 'CANCELLED' } },
       select: { date: true }
     }),
-    prisma.consultationInvoice.findMany({
-      where: { doctorId: { in: doctorIds }, createdAt: { gte: last14 }, status: 'PAID' },
-      select: { createdAt: true, amount: true }
+    // BUG FIX (Doctor Analytics Audit): this used to sum ConsultationInvoice
+    // rows keyed by invoice.createdAt — a different table and a different
+    // date field than "Overall clinic revenue" (getCashCollectedTotal, which
+    // sums Appointment.feeAtBooking keyed by the appointment's own date, and
+    // requires cashfreeOrderId: null so gateway revenue is never counted
+    // twice). Two queries over two different tables inevitably drift apart —
+    // that's exactly why "Collected this week" could show a bigger number
+    // than the whole month's "Overall clinic revenue" total. This now reads
+    // from the identical Appointment-based source (same fields, same
+    // cashfreeOrderId/paymentStatus filters, same OFFLINE scope) as every
+    // other clinic-cash figure, keyed by the appointment's date instead of
+    // an invoice's creation timestamp — so a week's total can never exceed
+    // its containing month's total again, and the two panels always agree.
+    prisma.appointment.findMany({
+      where: {
+        doctorId: { in: doctorIds }, consultationType: 'OFFLINE',
+        date: { gte: last14 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES },
+        cashfreeOrderId: null,
+        // Mirrors the same fix in revenue.service.js getCashCollectedTotal —
+        // cancelling a paid visit voids its invoice but never reverts
+        // paymentStatus, so this must be excluded explicitly or a
+        // cancelled-after-payment visit keeps counting as collected forever.
+        status: { not: 'CANCELLED' }
+      },
+      select: { date: true, feeAtBooking: true }
     })
   ]);
 
@@ -171,7 +196,7 @@ exports.stats = asyncHandler(async (req, res) => {
     emptyBucket: () => ({ appointments: 0, collected: 0 }),
     sources: [
       { rows: fortnightAppts, dateOf: (a) => a.date, accumulate: (bucket) => { bucket.appointments += 1; } },
-      { rows: fortnightInvoices, dateOf: (inv) => inv.createdAt, accumulate: (bucket, inv) => { bucket.collected += Number(inv.amount || 0); } }
+      { rows: fortnightCollected, dateOf: (a) => a.date, accumulate: (bucket, a) => { bucket.collected += Number(a.feeAtBooking || 0); } }
     ],
     weekFields: ['appointments', 'collected']
   });

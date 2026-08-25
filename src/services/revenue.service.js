@@ -349,6 +349,24 @@ async function getCashCollectedTotal({ doctorId, year, month }) {
       // so it must actually be restricted to that, or it silently
       // double-counts gateway revenue as if it were separate clinic cash.
       cashfreeOrderId: null,
+      // BUG FIX (Doctor Analytics Audit, cont.): also had no consultationType
+      // filter, despite every caller labeling this "in-person cash
+      // collected" / "In-person consultations" (see receptionist.controller
+      // and the doctor Earnings page). A teleconsultation the doctor later
+      // marked paid outside the gateway (cash/UPI, no cashfreeOrderId) was
+      // being counted here as if the patient had walked into the clinic.
+      consultationType: 'OFFLINE',
+      // BUG FIX (Doctor Analytics Audit, cont.): also had no exclusion for
+      // cancelled appointments. buildEligibleApptWhere above already learned
+      // this lesson for the Cashfree settlement path ("a cancelled
+      // appointment must NEVER contribute ... even if it was previously
+      // PAID") — but that fix was never mirrored here. Cancelling a
+      // previously cash-collected offline visit (receptionist.controller.js
+      // / doctor.controller.js cancel) voids its ConsultationInvoice but
+      // never reverts paymentStatus off CASH_COLLECTED, so without this
+      // filter a cancelled-after-payment visit kept inflating this total
+      // (and the doctor's payout figure) indefinitely.
+      status: { not: 'CANCELLED' },
       date: { gte: start, lt: end }
     }
   });
