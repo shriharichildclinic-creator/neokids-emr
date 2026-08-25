@@ -3046,10 +3046,22 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
   .np-table--cards td[data-label="Doctor"],
   .np-table--cards td[data-label="Patient"],
   .np-table--cards td[data-label="Medicine"]{ grid-template-columns:1fr; gap:.2rem; }
+  /* Actions cell: was a single-column grid with every button forced to
+     width:100%. With more than one action (e.g. Invoice + Certificate) that
+     produced one full-width stretched button followed by others that,
+     depending on button count/order, ended up cramped in a corner instead
+     of lining up as a matching row. Switched to a wrapping flex row so
+     every action button keeps its natural size and they sit evenly spaced,
+     right-aligned, wrapping to a new line only when they don't fit. */
   .np-table--cards td[data-label="Action"],
-  .np-table--cards td[data-label="Actions"]{ grid-template-columns:1fr; gap:.4rem; text-align:right !important; }
+  .np-table--cards td[data-label="Actions"]{
+    display:flex; flex-wrap:wrap; gap:.4rem; justify-content:flex-end; align-items:center;
+    text-align:right !important;
+  }
+  .np-table--cards td[data-label="Action"]::before,
+  .np-table--cards td[data-label="Actions"]::before{ flex:1 0 100%; }
   .np-table--cards td[data-label="Action"] .np-btn,
-  .np-table--cards td[data-label="Actions"] .np-btn{ width:100%; margin:0; }
+  .np-table--cards td[data-label="Actions"] .np-btn{ width:auto; flex:0 0 auto; margin:0; }
   .np-table--cards td[colspan]{ display:block; padding:.5rem 0; text-align:center; border:0; }
   .np-table--cards tr:hover td{ background:transparent; }
   html[data-theme="dark"] .np-table--cards tr{ background:var(--nk-card) !important; border-color:var(--nk-border) !important; }

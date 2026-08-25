@@ -32,6 +32,7 @@ const pdf = require('../services/pdf.service');
 const logger = require('../utils/logger');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
 const { myPatientIdSet, doctorOwnsPatient } = require('../utils/patientAccess');
+const consultInvoiceSvc = require('../services/consultation-invoice.service');
 
 /* ────────────────────────────────────────────────────────────────────
    Helper: rewrite a stored `prescriptionUrl` / `invoiceUrl` into a
@@ -688,6 +689,12 @@ exports.cancelAppointment = asyncHandler(async (req, res) => {
     data: { status: 'CANCELLED', notes: reason || null, cancelledAt: new Date() },
     include: { doctor: true, patient: true }
   });
+  // Same reasoning as the receptionist cancel path: void any invoice tied
+  // to this appointment so it drops out of collected-today/trend totals.
+  await prisma.consultationInvoice.updateMany({
+    where: { appointmentId: id, status: { in: ['PAID', 'PENDING'] } },
+    data: { status: 'VOID' }
+  });
 
   await audit.log({
     actor: doctorActor(req, 'Dr. ' + updated.doctor.name), action: 'APPOINTMENT_CANCELLED',
@@ -764,19 +771,45 @@ exports.toggleComplete = asyncHandler(async (req, res) => {
 // Explicit, doctor-initiated cash collection — mirrors receptionist's
 // exports.markPaid. Completing a consultation no longer implies cash was
 // collected; this is the only way a CASH_PENDING appointment becomes
-// CASH_COLLECTED from the doctor portal.
+// CASH_COLLECTED from the doctor portal. Also issues the ConsultationInvoice
+// in the same action (see consultation-invoice.service.js), attributed to
+// no specific receptionist since the doctor collected it directly — but it
+// still counts toward this doctor's clinic-wide revenue, which reception
+// sees identically (both panels now read from the same invoice records).
 exports.markPaid = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const appt = await prisma.appointment.findFirst({ where: { id, doctorId: req.user.id } });
+  const appt = await prisma.appointment.findFirst({
+    where: { id, doctorId: req.user.id },
+    include: { patient: true, doctor: true, consultationInvoice: true }
+  });
   if (!appt) return res.status(404).json({ error: 'Not found' });
   if (appt.paymentStatus !== 'CASH_PENDING') {
     return res.status(400).json({ error: 'Only a cash-pending appointment can be marked as paid' });
   }
-  const updated = await prisma.appointment.update({
-    where: { id },
+  // Race-safe: only the caller that actually flips CASH_PENDING → 
+  // CASH_COLLECTED goes on to create the invoice, mirroring the same
+  // conditional-update pattern used for online payment confirmation
+  // (booking.service.js confirmOnlineBooking) — if a receptionist and this
+  // doctor both tap "mark paid" on the same appointment at once, exactly
+  // one invoice gets created, not two.
+  const flipped = await prisma.appointment.updateMany({
+    where: { id, paymentStatus: 'CASH_PENDING' },
     data: { paymentStatus: 'CASH_COLLECTED' }
   });
-  res.json(updated);
+  if (flipped.count === 0) {
+    // Someone else already marked it paid a moment ago.
+    const updated = await prisma.appointment.findUnique({ where: { id } });
+    return res.json({ ...updated, invoice: null });
+  }
+  await audit.log({
+    actor: doctorActor(req, 'Dr. ' + appt.doctor.name), action: 'APPOINTMENT_MARKED_PAID',
+    entityType: 'APPOINTMENT', entityId: appt.id,
+    summary: `Marked cash collected for ${appt.patient.name}`,
+    medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
+  });
+  const invoiceResult = await consultInvoiceSvc.issueInvoiceForAppointment(appt, doctorActor(req, 'Dr. ' + appt.doctor.name));
+  const updated = await prisma.appointment.findUnique({ where: { id } });
+  res.json({ ...updated, invoice: invoiceResult.skipped ? null : invoiceResult.invoice });
 });
 
 // ────────────────────────────────────────────────────────────────────

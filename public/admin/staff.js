@@ -465,7 +465,7 @@ async function loadRecInvoices(){
   if (!__centres.length) { try { __centres = await api('/admin/medical-centres'); } catch(_) {} }
   __fillDoctorSelect($('#recInvDoctor'));
   __fillCentreSelect($('#recInvCentre'));
-  tb.innerHTML = '<tr><td colspan="8" class="np-mut" style="text-align:center;padding:1.4rem">Loading…</td></tr>';
+  tb.innerHTML = '<tr><td colspan="9" class="np-mut" style="text-align:center;padding:1.4rem">Loading…</td></tr>';
   const qs = new URLSearchParams();
   const q = ($('#recInvSearch') && $('#recInvSearch').value || '').trim();
   if (q.length >= 2) qs.set('q', q);
@@ -475,17 +475,29 @@ async function loadRecInvoices(){
   if ($('#recInvTo') && $('#recInvTo').value) qs.set('to', $('#recInvTo').value);
   try {
     const rows = await api('/admin/consultation-invoices' + (qs.toString() ? '?' + qs.toString() : ''));
-    tb.innerHTML = rows.length ? rows.map(i => `<tr>
+    tb.innerHTML = rows.length ? rows.map(i => {
+      // An invoice keeps its own PAID/PENDING status forever for the audit
+      // trail, but VOID (set automatically when the linked appointment is
+      // cancelled after the fact) means the money/due no longer counts —
+      // flag it clearly so it isn't mistaken for a live invoice.
+      const isVoid = i.status === 'VOID';
+      const apptCancelled = i.appointment && i.appointment.status === 'CANCELLED';
+      const statusBadge = isVoid
+        ? `<span class="np-badge np-badge--red" title="${apptCancelled ? 'Appointment was cancelled after this invoice was generated' : ''}">Voided</span>`
+        : `<span class="np-badge ${i.status === 'PAID' ? 'np-badge--green' : 'np-badge--amber'}">${esc(i.status)}</span>`;
+      return `<tr${isVoid ? ' style="opacity:.6"' : ''}>
       <td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td>
       <td data-label="Patient">${esc(i.appointment.patient.name)}</td>
       <td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td>
       <td data-label="Clinic">${esc(i.medicalCentre ? i.medicalCentre.name : '—')}</td>
       <td data-label="Receptionist">${esc(i.receptionist ? i.receptionist.name : '—')}</td>
       <td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td>
+      <td data-label="Status">${statusBadge}</td>
       <td data-label="Date" class="np-col-datetime">${esc(fmtDateTime(i.createdAt))}</td>
-      <td data-label="PDF" style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
-    </tr>`).join('') : '<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No reception invoices match</div></div></td></tr>';
-  } catch(e){ tb.innerHTML = `<tr><td colspan="8"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
+      <td data-label="PDF" style="text-align:right">${i.pdfUrl && !isVoid ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
+    </tr>`;
+    }).join('') : '<tr><td colspan="9"><div class="np-empty"><div class="np-empty__title">No reception invoices match</div></div></td></tr>';
+  } catch(e){ tb.innerHTML = `<tr><td colspan="9"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
 }
 window.loadRecInvoices = loadRecInvoices;
 
@@ -507,15 +519,22 @@ async function loadOnlineInvoices(){
       const paid = p === 'PAID' || p === 'CASH_COLLECTED';
       return `<span class="np-badge ${paid ? 'np-badge--green' : 'np-badge--amber'}"><span class="np-badge__dot"></span>${esc(p || '—')}</span>`;
     };
-    tb.innerHTML = rows.length ? rows.map(i => `<tr>
+    tb.innerHTML = rows.length ? rows.map(i => {
+      // These online bookings are pulled straight from Appointment, so a
+      // cancellation after payment shows up as appointmentStatus === 'CANCELLED'
+      // even though paymentStatus still says PAID — flag it so admin doesn't
+      // read a cancelled visit as a live paid invoice.
+      const cancelled = i.appointmentStatus === 'CANCELLED';
+      return `<tr${cancelled ? ' style="opacity:.6"' : ''}>
       <td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td>
       <td data-label="Patient">${esc(i.patient.name)}<div class="np-mut" style="font-size:.72rem">+91 ${esc(i.patient.phone || '')}</div></td>
       <td data-label="Doctor">Dr. ${esc(i.doctor.name)}</td>
-      <td data-label="Payment">${payBadge(i.paymentStatus)}</td>
+      <td data-label="Payment">${payBadge(i.paymentStatus)}${cancelled ? ' <span class="np-badge np-badge--red">Cancelled</span>' : ''}</td>
       <td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td>
       <td data-label="Date" class="np-col-datetime">${esc(fmtDateTime(i.createdAt))}</td>
-      <td data-label="PDF" style="text-align:right">${i.pdfUrl ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
-    </tr>`).join('') : '<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No online booking invoices match</div></div></td></tr>';
+      <td data-label="PDF" style="text-align:right">${i.pdfUrl && !cancelled ? `<a class="np-btn np-btn--sm" href="${i.pdfUrl}" target="_blank">PDF</a>` : '—'}</td>
+    </tr>`;
+    }).join('') : '<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No online booking invoices match</div></div></td></tr>';
   } catch(e){ tb.innerHTML = `<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
 }
 window.loadOnlineInvoices = loadOnlineInvoices;

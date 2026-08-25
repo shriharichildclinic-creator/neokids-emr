@@ -135,15 +135,15 @@ function paymentBadge(p){
 // Feature 1 — visual distinction for manually added (historical) records.
 function sourceBadge(source){
   if (source === 'WALK_IN' || source === 'CLINIC_RECEPTION')
-    return `<span class="np-badge np-badge--amber" title="In-person patient handled at the clinic front desk"><span class="np-badge__dot"></span>Walk-in / Reception</span>`;
+    return `<span class="np-badge np-badge--amber" title="Booked in person at the clinic front desk"><span class="np-badge__dot"></span>Reception · Walk-in</span>`;
   if (source === 'PHONE')
-    return `<span class="np-badge np-badge--blue" title="Booked over a phone call to reception"><span class="np-badge__dot"></span>Phone</span>`;
+    return `<span class="np-badge np-badge--blue" title="Booked over a phone call to reception"><span class="np-badge__dot"></span>Reception · Phone</span>`;
   if (source === 'OTHER')
     return `<span class="np-badge np-badge--slate" title="Booked via another channel"><span class="np-badge__dot"></span>Other</span>`;
   if (source === 'NEOKIDSPRO')
-    return `<span class="np-badge np-badge--mint" title="Booked online by the patient"><span class="np-badge__dot"></span>NeoKidsPro online</span>`;
+    return `<span class="np-badge np-badge--mint" title="Booked online by the patient on the NeoKidsPro website"><span class="np-badge__dot"></span>NeoKidsPro Website</span>`;
   if (source === 'MANUAL')
-    return `<span class="np-badge np-badge--purple" title="Added manually by clinic staff"><span class="np-badge__dot"></span>Manual Record</span>`;
+    return `<span class="np-badge np-badge--violet" title="Added manually by clinic staff (historical record)"><span class="np-badge__dot"></span>Manual Record</span>`;
   return '';
 }
 function rxSourceBadge(source){

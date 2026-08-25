@@ -1,0 +1,195 @@
+/* Ported from /doctor/styles.css so reception's Appointments tab matches
+   the doctor portal's card design (same classes, so any future doctor-side
+   tweak here needs to be mirrored, or better, factored into a shared file).
+   Uses only CSS variables already defined by admin/styles.css and
+   neokids-theme.css (both loaded before this file in receptionist's
+   index.html), including their dark-mode overrides — no new variables
+   introduced, so light/dark both work without extra rules here. */
+
+.np-appt-list{ display:flex; flex-direction:column; gap:.65rem; }
+.np-appt{
+  background: var(--nk-card);
+  border:1px solid var(--np-border);
+  border-radius: 14px;
+  padding: 1rem 1.15rem;
+  display:grid;
+  grid-template-columns: auto 1fr auto;
+  align-items:start;
+  gap: 1rem;
+  min-width:0;
+  transition: border-color .15s, box-shadow .15s, transform .05s;
+}
+.np-appt:hover{ border-color: rgba(137,188,189,.30); box-shadow: var(--np-card-shadow-hover); }
+.np-appt__time{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-width: 76px;
+  padding: .55rem .75rem;
+  margin: 0 .1rem 0 .1rem;
+  border-radius: 12px;
+  background: rgba(137,188,189,.14);
+  color: var(--np-primary-600);
+  white-space: nowrap;
+}
+.np-appt__time-h{
+  font-size: 1rem; font-weight: 700; line-height: 1.15;
+  white-space: nowrap;
+  color: var(--np-primary-600);
+}
+.np-appt__time-d{
+  font-size: .68rem; letter-spacing: .05em; text-transform: uppercase;
+  margin-top: .2rem; color: var(--np-muted);
+  white-space: nowrap;
+}
+.np-appt__body{ min-width:0; }
+.np-appt__namerow {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.np-appt__namerow .np-appt__name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--np-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.np-appt__age{
+  display:inline-block;
+  margin-left:.5rem;
+  padding:2px 8px;
+  font-size:.72rem;
+  font-weight:600;
+  color:#1e40af;
+  background:#dbeafe;
+  border-radius:999px;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+.np-appt__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem .5rem;
+  margin-top: .35rem;
+  max-width: 100%;
+}
+.np-appt__badges .np-badge{
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  align-self: flex-start;
+}
+.np-appt__meta{
+  display:flex; flex-wrap:wrap; gap:.5rem .9rem;
+  margin-top:.35rem; font-size:.8rem; color: var(--np-muted);
+}
+.np-appt__problem{
+  font-size:.85rem; color: var(--np-text);
+  margin-top:.35rem;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.np-appt__cancel-reason{
+  margin-top:.4rem;
+  font-size:.82rem;
+  color:#991B1B;
+  background:#FEF2F2;
+  border:1px solid #FECACA;
+  border-radius:8px;
+  padding:.4rem .55rem;
+}
+.np-appt__invoiced-note{
+  margin-top:.4rem;
+  font-size:.78rem;
+  color: var(--np-primary-600);
+  display:flex; align-items:center; gap:.3rem; flex-wrap:wrap;
+}
+.np-appt__actions{ display:flex; gap:.4rem; flex-wrap:wrap; justify-content:flex-end; align-items:center; }
+
+@media (max-width:760px){
+  .np-appt{ grid-template-columns: auto 1fr; }
+  .np-appt__actions{ grid-column: 1 / -1; justify-content:flex-start; }
+}
+
+/* Overflow ("…") menu for secondary actions */
+.np-overflow{ position:relative; display:inline-flex; align-self:start; }
+.np-overflow-trigger{
+  width:32px; height:32px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:transparent;
+  border:1px solid var(--np-border);
+  border-radius:8px;
+  color: var(--np-muted);
+  cursor:pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.np-overflow-trigger:hover{
+  background: var(--nk-teal-50);
+  color: var(--np-primary);
+  border-color: rgba(137,188,189,.2);
+}
+.np-overflow-menu{
+  position:absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--nk-card);
+  border:1px solid var(--np-border);
+  border-radius:12px;
+  box-shadow: 0 14px 32px -8px rgba(15,42,71,.18), 0 2px 6px rgba(15,42,71,.05);
+  min-width: 200px;
+  padding:.35rem;
+  z-index: 50;
+  display:none;
+  flex-direction:column;
+}
+.np-overflow-menu.is-open{ display:flex; }
+.np-overflow-item{
+  display:flex; align-items:center; gap:.55rem;
+  padding:.5rem .65rem;
+  border:0; background:transparent;
+  border-radius:8px;
+  font-size:.86rem;
+  color: var(--np-text);
+  text-decoration:none;
+  cursor:pointer;
+  text-align:left;
+}
+.np-overflow-item:hover{ background:#F1F6FB; color: var(--np-primary-600); }
+.np-overflow-item.is-danger{ color:#B91C1C; }
+.np-overflow-item.is-danger:hover{ background:#FEF2F2; color:#991B1B; }
+.np-overflow-item:disabled{ opacity:.5; cursor:not-allowed; }
+.np-overflow-item:disabled:hover{ background:transparent; color: var(--np-text); }
+.np-overflow-icon{ width:16px; height:16px; flex-shrink:0; }
+
+/* Mobile: fixed-position dropdown so it never gets clipped by a scrolling
+   card list, matching the doctor portal's mobile behaviour exactly. */
+@media (max-width:640px){
+  .np-appt__actions{
+    display:grid;
+    grid-auto-flow:column;
+    grid-auto-columns:max-content;
+    justify-content:end;
+    align-items:start;
+    gap:.5rem;
+    min-width:0;
+  }
+  .np-appt__actions .np-btn{ justify-content:center; min-width:0; }
+  .np-overflow-trigger{ width:36px; height:36px; border-radius:10px; }
+  .np-overflow-menu{
+    min-width:200px;
+    max-width:min(260px, calc(100vw - 24px));
+    max-height:min(60vh, 320px);
+    overflow:auto;
+    overscroll-behavior:contain;
+  }
+  .np-overflow-menu.is-open{
+    display:flex;
+    position:fixed;
+    right:auto;
+    bottom:auto;
+    z-index: 1000;
+  }
+  .np-overflow-item{ white-space:normal; }
+}

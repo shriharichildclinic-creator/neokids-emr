@@ -600,7 +600,7 @@ model ConsultationInvoice {
   receptionistId  String?
   medicalCentreId String?
   amount          Decimal  @db.Decimal(10, 2)
-  status          String   @default("PAID") // PAID | PENDING
+  status          String   @default("PAID") // PAID | PENDING | VOID
   paymentMethod   String   @default("CASH")
   notes           String?  @db.Text
   pdfUrl          String?

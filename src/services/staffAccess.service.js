@@ -78,9 +78,18 @@ async function isAssignedDoctor(receptionistId, doctorId) {
 async function canAccessAppointment(receptionistId, appointmentId) {
   const appt = await prisma.appointment.findFirst({
     where: { id: appointmentId },
-    select: { doctorId: true }
+    // Reception has no operational role in teleconsultations — those are
+    // booked, paid (Cashfree), and invoiced end-to-end by the online flow
+    // with no reception step in between. Excluding ONLINE here (rather than
+    // only hiding them in list queries) means every receptionist action
+    // gated by this check — mark arrived, reschedule, cancel, generate
+    // invoice, mark paid, issue certificate/prescription — is blocked on a
+    // teleconsultation even if its ID is reached directly, not just absent
+    // from the list view.
+    select: { doctorId: true, consultationType: true }
   });
   if (!appt) return false;
+  if (appt.consultationType === 'ONLINE') return false;
   return isAssignedDoctor(receptionistId, appt.doctorId);
 }
 

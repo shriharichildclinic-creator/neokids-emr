@@ -809,6 +809,7 @@ exports.onlineInvoices = asyncHandler(async (req, res) => {
     select: {
       id: true, date: true, startTime: true, createdAt: true,
       feeAtBooking: true, paymentStatus: true, cashfreePaymentId: true, invoiceUrl: true,
+      status: true,
       patient: { select: { id: true, name: true, phone: true, email: true } },
       doctor:  { select: { id: true, name: true, specialization: true } }
     },
@@ -824,6 +825,7 @@ exports.onlineInvoices = asyncHandler(async (req, res) => {
     createdAt: r.createdAt,
     amount: r.feeAtBooking,
     paymentStatus: r.paymentStatus,
+    appointmentStatus: r.status,
     paymentId: r.cashfreePaymentId || null,
     patient: r.patient,
     doctor: r.doctor,

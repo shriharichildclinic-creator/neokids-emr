@@ -19,6 +19,7 @@ const notifications = require('../services/notification.service');
 const { buildSignedFileUrl } = require('../utils/fileTokens');
 const logger = require('../utils/logger');
 const { photoUrlFor, deleteOldPhoto } = require('../services/profile-photo.service');
+const consultInvoiceSvc = require('../services/consultation-invoice.service');
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10);
 
@@ -112,31 +113,45 @@ exports.stats = asyncHandler(async (req, res) => {
     walkinToday, todayInvoices,
     yesterdayCount, fortnightAppts, fortnightInvoices
   ] = await Promise.all([
-    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, status: { not: 'CANCELLED' } } }),
-    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, arrivedAt: { not: null } } }),
-    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, status: { in: ['PENDING', 'CONFIRMED'] }, arrivedAt: null } }),
-    prisma.consultationInvoice.count({ where: { receptionistId: req.user.id, createdAt: { gte: dayStart } } }),
+    // OFFLINE-only throughout this block: teleconsultations are booked,
+    // paid and invoiced end-to-end by the online flow with no reception
+    // step involved, so they're excluded from every reception-facing count
+    // and revenue figure rather than just hidden from the appointments list.
+    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: today, status: { not: 'CANCELLED' } } }),
+    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: today, arrivedAt: { not: null } } }),
+    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: today, status: { in: ['PENDING', 'CONFIRMED'] }, arrivedAt: null } }),
+    prisma.consultationInvoice.count({ where: { doctorId: { in: doctorIds }, createdAt: { gte: dayStart } } }),
     staffAccess.getPatientScope(req.user.id).then(ids => ids.length),
     // Walk-in / reception in-person bookings today (WALK_IN + legacy CLINIC_RECEPTION).
-    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: today, source: { in: ['WALK_IN', 'CLINIC_RECEPTION'] } } }),
-    // This receptionist's invoices today, to split collected cash vs online.
+    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: today, source: { in: ['WALK_IN', 'CLINIC_RECEPTION'] } } }),
+    // Collections figures represent the clinic's overall collections for this
+    // receptionist's assigned doctors — not just invoices this receptionist
+    // personally generated. A payment collected by another receptionist, or
+    // by the doctor directly (see doctor.controller.js markPaid / this
+    // file's markPaid, both of which now create the invoice record too),
+    // is scoped by doctorId here so it still counts toward these totals —
+    // matching how the Invoices tab and Appointments list are already
+    // scoped. Includes VOID rows too (cancelled after payment) — the loop
+    // below explicitly skips them so a cancelled visit never counts as
+    // collected or pending.
     prisma.consultationInvoice.findMany({
-      where: { receptionistId: req.user.id, createdAt: { gte: dayStart } },
+      where: { doctorId: { in: doctorIds }, createdAt: { gte: dayStart } },
       select: { amount: true, status: true, paymentMethod: true }
     }),
-    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, date: yesterday, status: { not: 'CANCELLED' } } }),
+    prisma.appointment.count({ where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: yesterday, status: { not: 'CANCELLED' } } }),
     prisma.appointment.findMany({
-      where: { doctorId: { in: doctorIds }, date: { gte: last14 }, status: { not: 'CANCELLED' } },
+      where: { doctorId: { in: doctorIds }, consultationType: 'OFFLINE', date: { gte: last14 }, status: { not: 'CANCELLED' } },
       select: { date: true }
     }),
     prisma.consultationInvoice.findMany({
-      where: { receptionistId: req.user.id, createdAt: { gte: last14 }, status: 'PAID' },
+      where: { doctorId: { in: doctorIds }, createdAt: { gte: last14 }, status: 'PAID' },
       select: { createdAt: true, amount: true }
     })
   ]);
 
   let cashCollectedToday = 0, onlineCollectedToday = 0, pendingCollectionToday = 0;
   for (const inv of todayInvoices) {
+    if (inv.status === 'VOID') continue; // cancelled after payment — no longer real revenue or a real pending due
     const amt = Number(inv.amount || 0);
     if (inv.status === 'PAID') {
       if (CASH_METHODS.includes(inv.paymentMethod)) cashCollectedToday += amt;
@@ -271,8 +286,8 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   if (!me) return;
   const doctorIds = await staffAccess.getDoctorIds(me.id);
   if (!doctorIds.length) return res.json([]);
-  const { status, date, from, to, doctorId, q } = req.query;
-  const where = { doctorId: { in: doctorIds } };
+  const { status, date, from, to, doctorId, q, billedDate } = req.query;
+  const where = { doctorId: { in: doctorIds }, consultationType: 'OFFLINE' };
   if (doctorId && doctorIds.includes(doctorId)) where.doctorId = doctorId;
   if (status) where.status = status;
   // Unpaid-and-expired online bookings, Cashfree order-creation failures,
@@ -287,11 +302,30 @@ exports.listAppointments = asyncHandler(async (req, res) => {
   if (status !== 'CANCELLED') {
     where.NOT = { status: 'CANCELLED', paymentStatus: 'FAILED' };
   }
-  if (date) where.date = parseDateOnly(date);
-  if (from || to) {
-    where.date = {};
-    if (from) where.date.gte = parseDateOnly(from);
-    if (to)   where.date.lte = parseDateOnly(to);
+  if (billedDate) {
+    // The dashboard's "Collected this week" sparkline buckets a day's
+    // total by when the invoice was generated (consultationInvoice.createdAt),
+    // not by the appointment's own scheduled date. Reception could tap a
+    // bar showing real money collected on, say, Monday and land on an
+    // Appointments list filtered by appointment date=Monday that comes back
+    // empty — because the appointment behind that invoice had since been
+    // rescheduled to a different day (the invoice's createdAt never moves
+    // with it). Filtering by the invoice's own created date instead makes
+    // "View appointments" always show the visits that actually produced
+    // that day's collected figure. Scoped to assigned doctors (not just
+    // this receptionist's own invoices), matching the clinic-wide sparkline
+    // total it's answering for — a doctor- or colleague-collected payment
+    // shows up here too, same as it does in the dashboard figure.
+    const start = parseDateOnly(billedDate);
+    const end = new Date(start); end.setUTCDate(end.getUTCDate() + 1);
+    where.consultationInvoice = { is: { createdAt: { gte: start, lt: end }, status: 'PAID' } };
+  } else {
+    if (date) where.date = parseDateOnly(date);
+    if (from || to) {
+      where.date = {};
+      if (from) where.date.gte = parseDateOnly(from);
+      if (to)   where.date.lte = parseDateOnly(to);
+    }
   }
   if (q && String(q).trim().length >= 2) {
     const term = String(q).trim();
@@ -521,6 +555,15 @@ exports.cancel = asyncHandler(async (req, res) => {
     data: { status: 'CANCELLED', notes: reason, cancelledAt: new Date() },
     include: { doctor: true, patient: true }
   });
+  // An invoice already generated for this appointment (cash/card collected
+  // at the desk) is no longer valid once the visit itself is cancelled —
+  // void it so it stops counting toward "collected today" and the trend.
+  // The original PAID/PENDING record is preserved (not deleted) for the
+  // audit trail; VOID just excludes it from every revenue calculation.
+  await prisma.consultationInvoice.updateMany({
+    where: { appointmentId: appt.id, status: { in: ['PAID', 'PENDING'] } },
+    data: { status: 'VOID' }
+  });
   await audit.log({
     actor: actorOf(req, me), action: 'APPOINTMENT_CANCELLED', entityType: 'APPOINTMENT', entityId: appt.id,
     summary: `Cancelled ${appt.patient.name} with Dr. ${appt.doctor.name} (${reason})`,
@@ -568,26 +611,38 @@ exports.markArrived = asyncHandler(async (req, res) => {
 // Explicit, staff-initiated cash collection — the only way a CASH_PENDING
 // appointment becomes CASH_COLLECTED. Neither completing a consultation nor
 // the auto-complete cron flips this on its own; someone actually collecting
-// the money has to say so.
+// the money has to say so. Also issues the ConsultationInvoice in the same
+// action (see consultation-invoice.service.js) so a payment marked collected
+// here is never disconnected from the revenue figures reception sees.
 exports.markPaid = asyncHandler(async (req, res) => {
   const me = await requireConsultations(req, res);
   if (!me) return;
   const ok = await staffAccess.canAccessAppointment(me.id, req.params.id);
   if (!ok) return res.status(404).json({ error: 'Appointment not found' });
-  const appt = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { doctor: true, patient: true } });
+  const appt = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { doctor: true, patient: true, consultationInvoice: true } });
   if (appt.paymentStatus !== 'CASH_PENDING') {
     return res.status(400).json({ error: 'Only a cash-pending appointment can be marked as paid' });
   }
-  const updated = await prisma.appointment.update({
-    where: { id: appt.id },
+  // Race-safe: only the caller that actually flips CASH_PENDING →
+  // CASH_COLLECTED goes on to create the invoice — if a doctor and this
+  // receptionist (or two reception tabs) both tap "mark paid" on the same
+  // appointment at once, exactly one invoice gets created, not two.
+  const flipped = await prisma.appointment.updateMany({
+    where: { id: appt.id, paymentStatus: 'CASH_PENDING' },
     data: { paymentStatus: 'CASH_COLLECTED' }
   });
+  if (flipped.count === 0) {
+    const already = await prisma.appointment.findUnique({ where: { id: appt.id } });
+    return res.json({ ...already, invoice: null });
+  }
   await audit.log({
     actor: actorOf(req, me), action: 'APPOINTMENT_MARKED_PAID', entityType: 'APPOINTMENT', entityId: appt.id,
     summary: `Marked cash collected for ${appt.patient.name} with Dr. ${appt.doctor.name}`,
     medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
   });
-  res.json(updated);
+  const invoiceResult = await consultInvoiceSvc.issueInvoiceForAppointment(appt, actorOf(req, me));
+  const updated = await prisma.appointment.findUnique({ where: { id: appt.id } });
+  res.json({ ...updated, invoice: invoiceResult.skipped ? null : invoiceResult.invoice });
 });
 
 // ─── Consultation invoices ───
@@ -605,10 +660,22 @@ exports.generateInvoice = asyncHandler(async (req, res) => {
     where: { id: req.params.id },
     include: { patient: true, doctor: true, consultationInvoice: true }
   });
+  if (appt.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Cannot generate an invoice for a cancelled appointment' });
+  }
   if (appt.consultationInvoice) {
     return res.json({
       invoice: { ...appt.consultationInvoice, pdfUrl: signConsultInvoiceUrl(appt.consultationInvoice.id, me) },
       existing: true
+    });
+  }
+  // This appointment was booked and paid online (Cashfree) and already has
+  // a real invoice PDF from the automated confirmation flow — generating a
+  // second one here would double-count the same payment in clinic revenue.
+  if (appt.invoiceUrl) {
+    return res.status(400).json({
+      error: 'This visit was already paid and invoiced online when it was booked — no reception invoice is needed.',
+      invoiceUrl: appt.invoiceUrl
     });
   }
 
@@ -622,43 +689,19 @@ exports.generateInvoice = asyncHandler(async (req, res) => {
       return res.status(400).json({ error: 'A note is required when the invoice amount differs from the consultation fee' });
     }
   }
-  const invoiceNumber = await staffDocs.nextInvoiceNumber();
-  let invoice;
-  try {
-    invoice = await prisma.consultationInvoice.create({
-      data: {
-        invoiceNumber,
-        appointmentId: appt.id,
-        doctorId: appt.doctorId,
-        patientId: appt.patientId,
-        receptionistId: me.id,
-        medicalCentreId: appt.medicalCentreId,
-        amount,
-        status: 'PAID',
-        paymentMethod: d.paymentMethod || 'CASH',
-        notes: d.notes || null
-      }
-    });
-  } catch (e) {
-    if (e && e.code === 'P2002') {
-      const existing = await prisma.consultationInvoice.findUnique({ where: { appointmentId: appt.id } });
-      return res.json({ invoice: { ...existing, pdfUrl: signConsultInvoiceUrl(existing.id, me) }, existing: true });
-    }
-    throw e;
-  }
 
-  await prisma.appointment.update({
-    where: { id: appt.id },
-    data: { paymentStatus: appt.paymentStatus === 'CASH_PENDING' ? 'CASH_COLLECTED' : appt.paymentStatus }
-  }).catch(() => null);
-
-  const stored = await staffDocs.generateAndStoreInvoicePdf(invoice.id, me);
-  await audit.log({
-    actor: actorOf(req, me), action: 'INVOICE_GENERATED', entityType: 'CONSULTATION_INVOICE', entityId: invoice.id,
-    summary: `Generated invoice ${invoiceNumber} (₹${Number(amount).toFixed(2)}) for ${appt.patient.name}`,
-    medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
+  const result = await consultInvoiceSvc.issueInvoiceForAppointment(appt, actorOf(req, me), {
+    amount, paymentMethod: d.paymentMethod, notes: d.notes
   });
-  res.status(201).json({ invoice: stored.invoice, pdfUrl: stored.signedUrl });
+  if (result.skipped) {
+    // Someone else (another reception tab, or the doctor tapping "mark
+    // paid" at the same moment) won the race and already created it.
+    return res.json({
+      invoice: { ...result.invoice, pdfUrl: signConsultInvoiceUrl(result.invoice.id, me) },
+      existing: true
+    });
+  }
+  res.status(201).json({ invoice: result.invoice, pdfUrl: result.pdfUrl });
 });
 
 exports.listInvoices = asyncHandler(async (req, res) => {

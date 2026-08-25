@@ -85,6 +85,88 @@ function fmtDate(d){ if(!d) return ''; return new Date(d).toLocaleDateString('en
 function fmtTime(t){ if(!t) return ''; const m=String(t).match(/^(\d{1,2}):(\d{2})/); if(!m) return t; let h=parseInt(m[1],10); const s=h>=12?'PM':'AM'; h=h%12||12; return h+':'+m[2]+' '+s; }
 function inr(n){ return '₹' + Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2}); }
 function todayIso(){ return new Date().toISOString().slice(0,10); }
+function calcAge(dob){
+  if(!dob) return '';
+  const d=new Date(dob), now=new Date();
+  let years=now.getFullYear()-d.getFullYear();
+  const m=now.getMonth()-d.getMonth();
+  if(m<0 || (m===0 && now.getDate()<d.getDate())) years--;
+  if(years<1){
+    let months=(now.getFullYear()-d.getFullYear())*12+(now.getMonth()-d.getMonth());
+    if(now.getDate()<d.getDate()) months--;
+    return Math.max(months,0)+'mo';
+  }
+  return years+'y';
+}
+
+// ─── Overflow ("…") menu — ported from /doctor/app.js so secondary
+// appointment-card actions behave identically (fixed-position on mobile so
+// they never clip inside a scrolling card list, closes on outside
+// click/scroll/resize/Escape). ───
+function closeOverflowMenus(except){
+  document.querySelectorAll('.np-overflow-menu.is-open').forEach(menu => {
+    if (menu === except) return;
+    menu.classList.remove('is-open');
+    menu.style.left = ''; menu.style.top = ''; menu.style.right = ''; menu.style.bottom = '';
+    menu.style.position = ''; menu.style.maxHeight = ''; menu.style.zIndex = '';
+    menu.style.width = ''; menu.style.maxWidth = '';
+    const origParent = menu.__npOrigParent;
+    const origNext   = menu.__npOrigNext;
+    if (origParent && menu.parentNode !== origParent) {
+      try {
+        if (origNext && origNext.parentNode === origParent) origParent.insertBefore(menu, origNext);
+        else origParent.appendChild(menu);
+      } catch(_) {}
+    }
+    menu.__npOrigParent = null; menu.__npOrigNext = null;
+  });
+}
+function positionOverflowMenu(trigger, menu){
+  const margin = 12, gap = 6;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  menu.style.position = 'fixed';
+  menu.style.left = '0px'; menu.style.top = '0px'; menu.style.right = 'auto'; menu.style.bottom = 'auto';
+  menu.style.width = ''; menu.style.zIndex = '1000';
+  const availableW = vw - margin * 2;
+  const desiredW = Math.min(menu.offsetWidth || 220, 260);
+  const width = Math.min(desiredW, availableW);
+  menu.style.maxWidth = availableW + 'px'; menu.style.width = width + 'px';
+  void menu.offsetWidth;
+  const triggerRect = trigger.getBoundingClientRect();
+  const height = Math.min(menu.offsetHeight || 200, vh - margin * 2);
+  let left = triggerRect.right - width;
+  if (left < margin) left = Math.min(triggerRect.left, vw - margin - width);
+  left = Math.max(margin, Math.min(left, vw - margin - width));
+  const spaceBelow = vh - triggerRect.bottom - margin;
+  const spaceAbove = triggerRect.top - margin;
+  const openUp = height > spaceBelow && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(160, openUp ? spaceAbove : spaceBelow);
+  let top = openUp
+    ? Math.max(margin, triggerRect.top - Math.min(height, maxHeight) - gap)
+    : (triggerRect.bottom + gap);
+  top = Math.max(margin, Math.min(top, vh - margin - Math.min(height, maxHeight)));
+  menu.style.left = left + 'px'; menu.style.top = top + 'px'; menu.style.maxHeight = maxHeight + 'px';
+}
+function toggleOverflow(btn){
+  const menu = btn && btn.nextElementSibling;
+  if (!menu || !menu.classList.contains('np-overflow-menu')) return;
+  const isOpen = menu.classList.contains('is-open');
+  closeOverflowMenus();
+  if (isOpen) return;
+  if (menu.parentNode && menu.parentNode !== document.body) {
+    menu.__npOrigParent = menu.parentNode; menu.__npOrigNext = menu.nextSibling;
+    document.body.appendChild(menu);
+  }
+  menu.classList.add('is-open');
+  positionOverflowMenu(btn, menu);
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.np-overflow') || e.target.closest('.np-overflow-menu')) return;
+  closeOverflowMenus();
+});
+window.addEventListener('resize', () => closeOverflowMenus());
+window.addEventListener('scroll', () => closeOverflowMenus(), true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverflowMenus(); });
 // Dashboard welcome header: time-of-day greeting + live date/clock. Purely
 // presentational; never throws.
 let __dashClockTimer = null;
@@ -107,11 +189,16 @@ function startDashClock(){
 }
 function statusBadge(s){ const m={CONFIRMED:'np-badge--green',PENDING:'np-badge--amber',COMPLETED:'np-badge--blue',CANCELLED:'np-badge--red'}; return `<span class="np-badge ${m[s]||'np-badge--slate'}"><span class="np-badge__dot"></span>${esc(s||'—')}</span>`; }
 function sourceBadge(s){
-  if (s==='WALK_IN' || s==='CLINIC_RECEPTION') return `<span class="np-badge np-badge--amber"><span class="np-badge__dot"></span>Walk-in / Reception</span>`;
-  if (s==='PHONE') return `<span class="np-badge np-badge--blue"><span class="np-badge__dot"></span>Phone</span>`;
-  if (s==='OTHER') return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Other</span>`;
-  if (s==='NEOKIDSPRO') return `<span class="np-badge np-badge--mint"><span class="np-badge__dot"></span>Online</span>`;
-  if (s==='MANUAL') return `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Manual</span>`;
+  // Distinguishes how the appointment was booked — NeoKidsPro's own website
+  // vs. reception handling it directly (by phone call or in person at the
+  // desk) — since those are operationally different (a reception-made
+  // booking may still need confirmation/desk handling; a website booking
+  // came in on its own, and if paid online, is already invoiced too).
+  if (s==='WALK_IN' || s==='CLINIC_RECEPTION') return `<span class="np-badge np-badge--amber" title="Booked in person at the clinic front desk"><span class="np-badge__dot"></span>Reception · Walk-in</span>`;
+  if (s==='PHONE') return `<span class="np-badge np-badge--blue" title="Booked over a phone call to reception"><span class="np-badge__dot"></span>Reception · Phone</span>`;
+  if (s==='OTHER') return `<span class="np-badge np-badge--slate" title="Booked via another channel"><span class="np-badge__dot"></span>Other</span>`;
+  if (s==='NEOKIDSPRO') return `<span class="np-badge np-badge--mint" title="Booked online by the patient on the NeoKidsPro website"><span class="np-badge__dot"></span>NeoKidsPro Website</span>`;
+  if (s==='MANUAL') return `<span class="np-badge np-badge--violet" title="Added manually by clinic staff (historical record)"><span class="np-badge__dot"></span>Manual Record</span>`;
   return '';
 }
 function payBadge(p){ const m={PAID:['np-badge--green','Paid'],CASH_COLLECTED:['np-badge--green','Cash collected'],CASH_PENDING:['np-badge--amber','Cash pending'],UNPAID:['np-badge--amber','Unpaid']}; const x=m[p]; return x?`<span class="np-badge ${x[0]}"><span class="np-badge__dot"></span>${x[1]}</span>`:`<span class="np-badge np-badge--slate">${esc(p||'—')}</span>`; }
@@ -127,10 +214,14 @@ function apptActionsHtml(a){
     btns.push(`<button class="np-btn np-btn--sm" onclick="resched('${a.id}')">Reschedule</button>`);
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="cancelAppt('${a.id}')">Cancel</button>`);
   }
-  if(!a.consultationInvoice && a.status!=='CANCELLED'){
-    btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`);
-  } else if(a.consultationInvoice){
+  if(a.consultationInvoice){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceActions('${a.consultationInvoice.id}','${esc(a.consultationInvoice.pdfUrl||'')}','${a.patient.phone||''}','${esc(a.patient.email||'')}')">Invoice</button>`);
+  } else if(a.invoiceUrl){
+    // Booked & paid online — already invoiced automatically at booking, no
+    // reception invoice needed. View-only, no Send (it was already sent).
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="window.open('${esc(a.invoiceUrl)}','_blank')" title="Paid and invoiced online at booking">Invoiced online</button>`);
+  } else if(a.status!=='CANCELLED'){
+    btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`);
   }
   if(__me.canIssueCertificates && a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertModal('${a.id}')">Certificate</button>`);
@@ -139,6 +230,86 @@ function apptActionsHtml(a){
     btns.push(`<button class="np-btn np-btn--sm np-btn--primary" onclick="markAppointmentPaid('${a.id}')">Mark as paid</button>`);
   }
   return btns.join(' ');
+}
+
+// Card layout for the full Appointments tab — matches the doctor portal's
+// .np-appt card (see appt-card.css): time block + name/badges/meta on the
+// left, a couple of primary buttons plus an overflow ("…") menu for
+// secondary actions on the right, instead of a dense table row.
+function apptCard(a){
+  const p = a.patient || {};
+  const open = a.status!=='CANCELLED' && a.status!=='COMPLETED';
+
+  const overflowItems = [];
+  if(open){
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation();resched('${a.id}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Reschedule
+    </button>`);
+    overflowItems.push(`<button class="np-overflow-item is-danger" type="button" onclick="event.stopPropagation();cancelAppt('${a.id}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      Cancel
+    </button>`);
+  }
+  if(__me.canIssueCertificates && a.status!=='CANCELLED'){
+    overflowItems.push(`<button class="np-overflow-item" type="button" onclick="event.stopPropagation();closeOverflowMenus();openCertModal('${a.id}')">
+      <svg class="np-overflow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6M9 14h6"/></svg>
+      Medical certificate
+    </button>`);
+  }
+  const overflow = overflowItems.length ? `
+    <div class="np-overflow">
+      <button type="button" class="np-overflow-trigger" aria-label="More actions" onclick="event.stopPropagation();toggleOverflow(this)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </button>
+      <div class="np-overflow-menu">${overflowItems.join('')}</div>
+    </div>` : '';
+
+  // Primary, always-visible buttons — the ones reception reaches for most:
+  // arriving a patient, collecting/viewing payment, marking paid.
+  const primary = [];
+  if(!a.arrivedAt && open) primary.push(`<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="markArrived('${a.id}')">Mark arrived</button>`);
+  if(a.consultationInvoice){
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openInvoiceActions('${a.consultationInvoice.id}','${esc(a.consultationInvoice.pdfUrl||'')}','${p.phone||''}','${esc(p.email||'')}')">Invoice</button>`);
+  } else if(a.invoiceUrl){
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="window.open('${esc(a.invoiceUrl)}','_blank')" title="Paid and invoiced online at booking — already sent to the patient">Invoiced online</button>`);
+  } else if(a.status!=='CANCELLED'){
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="genInvoice('${a.id}')">Invoice</button>`);
+  }
+  if(a.paymentStatus==='CASH_PENDING' && a.status!=='CANCELLED'){
+    primary.push(`<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="markAppointmentPaid('${a.id}')">Mark as paid</button>`);
+  }
+
+  return `
+  <article class="np-appt" data-id="${esc(a.id)}">
+    <div class="np-appt__time">
+      <div class="np-appt__time-h">${esc(fmtTime(a.startTime))}</div>
+      <div class="np-appt__time-d">${esc(fmtDate(a.date))}</div>
+    </div>
+    <div class="np-appt__body">
+      <div class="np-appt__namerow">
+        <span class="np-appt__name">${esc(p.name||'Patient')}</span>
+        ${p.dateOfBirth ? `<span class="np-appt__age" title="DOB: ${esc(fmtDate(p.dateOfBirth))}">${esc(calcAge(p.dateOfBirth))}</span>` : ''}
+        ${a.arrivedAt ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Arrived</span>' : ''}
+      </div>
+      <div class="np-appt__badges">
+        ${statusBadge(a.status)}
+        ${payBadge(a.paymentStatus)}
+        ${sourceBadge(a.source)}
+      </div>
+      <div class="np-appt__meta">
+        <span>Dr. ${esc(a.doctor.name)}</span>
+        ${p.phone ? `<span>📞 ${esc(p.phone)}</span>` : ''}
+        ${a.feeAtBooking!=null ? `<span>${inr(a.feeAtBooking)}</span>` : ''}
+      </div>
+      ${a.primaryProblem ? `<div class="np-appt__problem">${esc(a.primaryProblem)}</div>` : ''}
+      ${a.status==='CANCELLED' && a.notes ? `<div class="np-appt__cancel-reason"><b>Cancelled:</b> ${esc(a.notes)}</div>` : ''}
+    </div>
+    <div class="np-appt__actions">
+      ${primary.join('')}
+      ${overflow}
+    </div>
+  </article>`;
 }
 
 async function markAppointmentPaid(id){
@@ -209,8 +380,12 @@ $$('.np-nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.v
 // Drill-down from the revenue sparkline — jump to Appointments filtered to
 // exactly the day that was clicked, instead of a dead-end hover tooltip.
 function goToAppointmentsForDate(dateStr){
+  // Filter by when the money was actually collected (billedDate), not by
+  // appointment date — see loadAppointments(). The date input still shows
+  // the tapped day for context, but is ignored while __billedDateFilter is set.
   const d = $('#fDate'); if (d) d.value = dateStr;
   const q = $('#fQ'); if (q) q.value = '';
+  __billedDateFilter = dateStr;
   setView('apptsView');
   loadAppointments();
 }
@@ -301,6 +476,18 @@ async function showDashboard(){
     if(__me.canManagePharmacy){ $('#pharmSection').style.display=''; $('#navRx').style.display=''; $('#navPharmBills').style.display=''; }
     const asn = await api('/receptionist/assignments'); __assignments = asn; __doctors = asn.map(a=>a.doctor);
     const sel=$('#fDoctor'); if(sel) sel.innerHTML='<option value="">All doctors</option>'+__doctors.map(d=>`<option value="${d.id}">Dr. ${esc(d.name)}</option>`).join('');
+    // Surface which clinic(s) the revenue/appointment figures below belong
+    // to — the dashboard numbers are clinic-wide for these assignments,
+    // not just this receptionist's own till, so naming the clinic here
+    // avoids ambiguity about whose numbers are being shown.
+    const clinicNames = [...new Set(asn.map(a=>a.medicalCentre && a.medicalCentre.name).filter(Boolean))];
+    const clinicEl = $('#dashClinicName');
+    if (clinicEl && clinicNames.length) {
+      clinicEl.style.display = '';
+      clinicEl.textContent = clinicNames.length === 1
+        ? clinicNames[0] + ' — clinic-wide figures below'
+        : clinicNames.join(' · ') + ' — clinic-wide figures below';
+    }
   }catch(e){ if(e.message!=='Session expired') toast(e.message,'error'); }
   const __restore = viewFromHash();
   setView(__restore || 'dashView', __restore ? { skipHash: true } : undefined);
@@ -362,19 +549,23 @@ async function loadDashboard(){
   }catch(e){ setHtml('dashAnalytics', `<div class="np-error">${esc(e.message)}</div>`); }
 }
 
+let __billedDateFilter = null;
 async function loadAppointments(){
-  const tb=$('#apptsTbody'); tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:1.4rem" class="np-mut">Loading…</td></tr>';
-  const qs=new URLSearchParams(); if($('#fDate').value)qs.set('date',$('#fDate').value); if($('#fDoctor').value)qs.set('doctorId',$('#fDoctor').value); if($('#fStatus').value)qs.set('status',$('#fStatus').value); if($('#fQ').value.trim().length>=2)qs.set('q',$('#fQ').value.trim());
+  const list=$('#apptsList'); list.innerHTML='<div style="text-align:center;padding:1.4rem" class="np-mut">Loading…</div>';
+  const qs=new URLSearchParams();
+  if(__billedDateFilter){ qs.set('billedDate',__billedDateFilter); }
+  else if($('#fDate').value){ qs.set('date',$('#fDate').value); }
+  if($('#fDoctor').value)qs.set('doctorId',$('#fDoctor').value); if($('#fStatus').value)qs.set('status',$('#fStatus').value); if($('#fQ').value.trim().length>=2)qs.set('q',$('#fQ').value.trim());
+  setHtml('apptsBilledNote', __billedDateFilter ? `<div style="margin-bottom:.6rem;padding:.6rem .8rem;border-radius:10px;background:var(--nk-teal-50,#EFF8F8);border:1px solid var(--nk-teal-200,#BFE3E3);font-size:.82rem;color:var(--nk-text);display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+    <span>Showing visits billed on <b>${esc(fmtDate(__billedDateFilter))}</b> — matches the amount on the dashboard, not the appointment's scheduled date.</span>
+    <button type="button" class="np-btn np-btn--sm np-btn--ghost" onclick="clearBilledDateFilter()">Clear</button>
+  </div>` : '');
   try{ const rows=await api('/receptionist/appointments?'+(qs.toString()||'')); __appts=rows;
-    tb.innerHTML = rows.length ? rows.map(a=>`<tr><td data-label="Date/Time"><b>${esc(fmtDate(a.date))}</b><div class="np-mut" style="font-size:.78rem">${esc(fmtTime(a.startTime))}</div></td>
-      <td data-label="Patient"><b>${esc(a.patient.name)}</b><div class="np-mut" style="font-size:.78rem">+91 ${esc(a.patient.phone||'')}</div></td>
-      <td data-label="Doctor">Dr. ${esc(a.doctor.name)}</td><td data-label="Source">${sourceBadge(a.source)}</td><td data-label="Status">${statusBadge(a.status)}</td><td data-label="Payment">${payBadge(a.paymentStatus)}</td>
-      <td data-label="Actions" style="text-align:right">
-        ${apptActionsHtml(a)}
-      </td></tr>`).join('') : '<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No appointments match</div></div></td></tr>';
-  }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; }
+    list.innerHTML = rows.length ? '<div class="np-appt-list">'+rows.map(apptCard).join('')+'</div>' : '<div class="np-empty"><div class="np-empty__title">No appointments match</div></div>';
+  }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; }
 }
-$('#apptFilters').addEventListener('submit',e=>{e.preventDefault();loadAppointments();});
+function clearBilledDateFilter(){ __billedDateFilter = null; loadAppointments(); }
+$('#apptFilters').addEventListener('submit',e=>{e.preventDefault();__billedDateFilter=null;loadAppointments();});
 
 async function markArrived(id){ try{ await api('/receptionist/appointments/'+id+'/arrive',{method:'POST',body:'{}'}); toast('Patient marked arrived'); loadDashboard(); }catch(e){toast(e.message,'error');} }
 function resched(id){
@@ -454,8 +645,7 @@ async function openBookModal(_, patientId){
   const docOpts=__assignments.map(a=>`<option value="${a.doctor.id}|${a.medicalCentre.id}">Dr. ${esc(a.doctor.name)} — ${esc(a.medicalCentre.name)}</option>`).join('');
   $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Book appointment / walk-in</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><form id="bForm"><div class="np-grid-2">
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Doctor & clinic *</label><select name="docCentre" required class="np-select">${docOpts}</select></div>
-  <div class="np-field"><label class="np-field__label">Date *</label><input name="date" type="date" required class="np-input" value="${todayIso()}" min="${todayIso()}"/></div>
-  <div class="np-field"><label class="np-field__label">Type</label><select name="consultationType" class="np-select"><option value="OFFLINE">In-person</option></select></div>
+  <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Date *</label><input name="date" type="date" required class="np-input" value="${todayIso()}" min="${todayIso()}"/></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Available slot *</label><select name="startTime" required class="np-select" id="slotSel"><option value="">Pick doctor+date first</option></select></div>
   <div class="np-divider" style="grid-column:span 2"></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Patient *</label><input id="bPatient" class="np-input" placeholder="Search existing or type new name" list="bPatients"/><datalist id="bPatients"></datalist><input type="hidden" id="bPatientId"/></div>
@@ -466,7 +656,7 @@ async function openBookModal(_, patientId){
   <div class="np-field"><label class="np-field__label">Gender</label><select name="gender" class="np-select"><option value="">—</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option></select></div>
   <div class="np-divider" style="grid-column:span 2"></div>
   <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Reason / problem *</label><input name="primaryProblem" required class="np-input"/></div>
-  <div class="np-field"><label class="np-field__label">Source</label><select name="source" class="np-select"><option value="WALK_IN">Walk-in / Reception</option><option value="PHONE">Phone</option><option value="OTHER">Other</option></select></div></div>
+  <div class="np-field" style="grid-column:span 2"><label class="np-field__label">Source</label><select name="source" class="np-select"><option value="WALK_IN">Walk-in / Reception</option><option value="PHONE">Phone</option><option value="OTHER">Other</option></select></div></div>
   </form></div>
   <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button class="np-btn np-btn--primary" type="submit" form="bForm">Book</button></div>
   </div></div>`;
