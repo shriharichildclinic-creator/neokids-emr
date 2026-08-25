@@ -555,6 +555,18 @@ function populateRevenuePeriodSelects(){
   }
 }
 
+// Single KPI card markup, matching the same .np-kpi component the Admin
+// Finance tab uses (see admin/finance.js `kpi()`) — one shared visual
+// language for "a number in a card" across every EMR dashboard instead of
+// bespoke inline-styled rows per portal.
+function revKpiCard(label, big, sub, kind){
+  return `<div class="np-kpi np-kpi--${kind||'blue'}">
+    <div class="np-kpi__label">${esc(label)}</div>
+    <div class="np-kpi__value">${esc(big)}</div>
+    ${sub ? `<div class="np-kpi__sub">${esc(sub)}</div>` : ''}
+  </div>`;
+}
+
 // In-person clinic revenue for the selected month — pulled from
 // /receptionist/revenue, which calls the exact same
 // revenue.service.getCashCollectedTotal() function a doctor's own
@@ -568,8 +580,19 @@ function populateRevenuePeriodSelects(){
 // the backend. Reception only manages in-person appointments and clinic
 // cash — a teleconsultation and its payment are never a reception
 // workflow step — so online revenue has no place in this panel. The
-// endpoint now returns in-person cash only; there is no online split to
-// render any more.
+// endpoint now returns in-person cash only, and for the same reason
+// "Total Revenue" / "In-Person Revenue" / "Cash Collected" are literally
+// the same figure in this scope — shown as ONE headline card below,
+// rather than three cards repeating the same number.
+//
+// UI FIX (Reception Analytics Audit): the old table-based "by doctor"
+// breakdown (plus two bare inline-styled numbers above it) was the
+// source of the reported overlapping/colliding text, especially on
+// narrow screens. Replaced with the same .np-kpi-grid / .np-kpi card
+// components the Admin, Doctor and Finance dashboards already use —
+// those already carry the correct spacing, typography and responsive
+// (auto-fit, stacks to 1-column) behavior, so this panel now matches the
+// rest of the EMR and can't independently regress into a broken layout.
 async function loadClinicRevenue(){
   populateRevenuePeriodSelects();
   const year = $('#revYear') ? $('#revYear').value : undefined;
@@ -579,15 +602,18 @@ async function loadClinicRevenue(){
   if (month) q.set('month', month);
   try{
     const r = await api('/receptionist/revenue?' + q.toString());
-    setText('revTotalCash', inr(r.totalRevenue || 0));
-    setText('revConsultations', r.consultations || 0);
+    const consultations = r.consultations || 0;
+    const pending = r.pendingCollection || { amount: 0, count: 0 };
+    $('#revKpiGrid').innerHTML = [
+      revKpiCard('Total Revenue', inr(r.totalRevenue || 0), `${consultations} consultation${consultations===1?'':'s'} · in-person cash`, 'blue'),
+      revKpiCard('Total Consultations', String(consultations), 'In-person visits this period', 'mint'),
+      revKpiCard('Pending Collections', inr(pending.amount || 0), pending.count ? `${pending.count} invoice${pending.count===1?'':'s'} awaiting payment` : 'Nothing outstanding', pending.count ? 'amber' : 'green')
+    ].join('');
     const rows = Array.isArray(r.byDoctor) ? r.byDoctor : [];
-    $('#revByDoctorTbody').innerHTML = rows.length ? rows.map(d => `
-      <tr>
-        <td data-label="Doctor">Dr. ${esc(d.doctorName)}</td>
-        <td data-label="Consultations">${d.consultations || 0}</td>
-        <td data-label="Total" style="text-align:right;font-weight:600;">${inr(d.totalRevenue || 0)}</td>
-      </tr>`).join('') : `<tr><td colspan="3" class="np-empty"><div>No in-person revenue collected this period</div></td></tr>`;
+    $('#revByDoctorLabel').style.display = rows.length ? '' : 'none';
+    $('#revByDoctorGrid').innerHTML = rows.length ? rows.map(d =>
+      revKpiCard('Dr. ' + (d.doctorName||''), inr(d.totalRevenue || 0), `${d.consultations || 0} consultation${(d.consultations||0)===1?'':'s'}`, 'cream')
+    ).join('') : `<div class="np-empty"><div class="np-empty__title">No in-person revenue collected this period</div></div>`;
   }catch(e){ toast(e.message,'error'); }
 }
 

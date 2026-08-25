@@ -138,11 +138,9 @@
   </div>
 </div>
 <div class="np-panel" style="margin-bottom:1rem;"><div class="np-panel__head"><div><div class="np-panel__title">In-person clinic revenue</div><div class="np-panel__subtitle">Cash collected at the clinic for your assigned doctors' in-person visits</div></div><select id="revMonth" class="np-select"></select><select id="revYear" class="np-select"></select></div><div class="np-panel__body">
-  <div class="np-row" style="gap:1.5rem;flex-wrap:wrap;margin-bottom:.85rem;">
-    <div><div class="np-mut" style="font-size:.8rem;">Total collected (in-person cash)</div><div style="font-size:1.6rem;font-weight:700;" id="revTotalCash">—</div></div>
-    <div><div class="np-mut" style="font-size:.8rem;">Consultations</div><div style="font-size:1.6rem;font-weight:700;" id="revConsultations">—</div></div>
-  </div>
-  <div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Doctor</th><th>Consultations</th><th style="text-align:right">Total</th></tr></thead><tbody id="revByDoctorTbody"></tbody></table></div>
+  <div class="np-kpi-grid" id="revKpiGrid" style="margin-bottom:1.25rem;"></div>
+  <div class="np-panel__subtitle" id="revByDoctorLabel" style="margin:0 0 .75rem;font-weight:600;color:var(--nk-ink);display:none;">By doctor</div>
+  <div class="np-kpi-grid" id="revByDoctorGrid"></div>
 </div></div>
 <div class="np-panel" style="margin-bottom:1rem;"><div class="np-panel__head"><div><div class="np-panel__title">Appointments — last 7 days</div><div class="np-panel__subtitle">Daily volume (all statuses)</div></div></div><div class="np-panel__body"><div id="dailyChart" class="np-chart"></div></div></div>
 <div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Today's queue</div><div class="np-panel__subtitle">Mark arrivals and manage the day</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBookModal()">+ New appointment</button></div><div id="todayList" class="np-panel__body np-scroll-list" style="padding:0;"></div></div></section>

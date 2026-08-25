@@ -262,10 +262,21 @@ exports.revenue = asyncHandler(async (req, res) => {
   if (month < 1 || month > 12) return res.status(400).json({ error: 'Invalid month (1-12)' });
 
   if (!doctorIds.length) {
-    return res.json({ period: { year, month }, totalRevenue: 0, consultations: 0, byDoctor: [] });
+    return res.json({
+      period: { year, month }, totalRevenue: 0, consultations: 0,
+      pendingCollection: { amount: 0, count: 0 }, byDoctor: []
+    });
   }
 
-  const overall = await revenueSvc.getCashCollectedTotal({ doctorId: { in: doctorIds }, year, month });
+  const [overall, pending] = await Promise.all([
+    revenueSvc.getCashCollectedTotal({ doctorId: { in: doctorIds }, year, month }),
+    // Same scope (OFFLINE, this receptionist's assigned doctors) and same
+    // Appointment.date period as `overall` above — see doc-comment on
+    // getPendingCollectionsTotal for why it deliberately mirrors
+    // getCashCollectedTotal's table/date source instead of reading off
+    // ConsultationInvoice.createdAt.
+    revenueSvc.getPendingCollectionsTotal({ doctorId: { in: doctorIds }, year, month })
+  ]);
 
   // Per-doctor breakdown, each computed with the exact same function a
   // doctor would call for themselves — so any one row here is guaranteed
@@ -286,9 +297,16 @@ exports.revenue = asyncHandler(async (req, res) => {
 
   res.json({
     period: { year, month },
-    // In-person cash collected only — see scope note above.
+    // In-person cash collected only — see scope note above. Reception has
+    // no online/teleconsultation revenue in its scope, so "Total Revenue",
+    // "In-Person Revenue" and "Cash Collected" are the same figure here by
+    // design — the UI presents this as one headline card rather than three
+    // duplicate ones. "Online Revenue" is intentionally never returned by
+    // this endpoint for the same reason.
     totalRevenue: overall.offlineCash,
     consultations: overall.offlineConsultations,
+    // Billed but not yet collected at the desk this period.
+    pendingCollection: pending,
     byDoctor
   });
 });

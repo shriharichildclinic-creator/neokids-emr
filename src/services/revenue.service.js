@@ -453,6 +453,36 @@ async function getCashCollectedTotal({ doctorId, year, month }) {
 }
 
 /**
+ * In-person money that has been BILLED but not yet handed over —
+ * `paymentStatus: 'CASH_PENDING'` appointments for the month, restricted to
+ * OFFLINE the same way `getCashCollectedTotal` is, and keyed by the exact
+ * same table + date field (Appointment.date), not ConsultationInvoice.
+ * createdAt — see the drift warning in getCashCollectedTotal's doc-comment
+ * above for why mixing those two date sources is exactly the bug this
+ * avoids. This is the receptionist "Pending Collections" figure: real
+ * consultations that already happened and were invoiced, where the patient
+ * hasn't yet paid at the desk (as opposed to `getCashCollectedTotal`, which
+ * is deliberately restricted to money already in hand).
+ */
+async function getPendingCollectionsTotal({ doctorId, year, month }) {
+  const { start, end } = monthRange(year, month);
+  const agg = await prisma.appointment.aggregate({
+    _sum: { feeAtBooking: true },
+    _count: { _all: true },
+    where: {
+      doctorId,
+      consultationType: 'OFFLINE',
+      paymentStatus: 'CASH_PENDING',
+      date: { gte: start, lt: end }
+    }
+  });
+  return {
+    amount: round2(toNum(agg._sum.feeAtBooking)),
+    count: agg._count._all
+  };
+}
+
+/**
  * TRUE total money collected at the clinic for a doctor (or set of doctors)
  * in a month — online (Cashfree) + offline cash, added together.
  *
@@ -764,6 +794,7 @@ module.exports = {
   getMonthlyRevenueReport,
   getDoctorBreakdown,
   getCashCollectedTotal,
+  getPendingCollectionsTotal,
   getOverallClinicRevenue,
   // mutations
   generateSettlement,
