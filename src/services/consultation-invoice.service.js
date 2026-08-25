@@ -32,7 +32,7 @@ async function issueInvoiceForAppointment(appt, actor, opts = {}) {
   // online flow (invoiceUrl set — Cashfree payment confirmed, PDF already
   // generated and sent, no reception step involved at all) must not get a
   // second, redundant paid record layered on top of it.
-  if (appt.invoiceUrl) {
+  if (appt.invoiceUrl || appt.cashfreeOrderId) {
     return { skipped: true, reason: 'ALREADY_INVOICED_ONLINE' };
   }
   const existing = appt.consultationInvoice !== undefined

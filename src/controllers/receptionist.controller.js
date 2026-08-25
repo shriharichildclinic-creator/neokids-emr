@@ -164,12 +164,17 @@ exports.stats = asyncHandler(async (req, res) => {
       where: {
         doctorId: { in: doctorIds }, consultationType: 'OFFLINE',
         date: { gte: last14 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES },
-        cashfreeOrderId: null,
-        // Mirrors the same fix in revenue.service.js getCashCollectedTotal —
-        // cancelling a paid visit voids its invoice but never reverts
-        // paymentStatus, so this must be excluded explicitly or a
-        // cancelled-after-payment visit keeps counting as collected forever.
-        status: { not: 'CANCELLED' }
+        cashfreeOrderId: null
+        // CONSISTENCY FIX: this used to also exclude status:'CANCELLED'.
+        // getCashCollectedTotal (revenue.service.js) — the function this
+        // block is explicitly mirroring — deliberately does NOT exclude
+        // cancelled appointments: a cancelled-but-not-yet-refunded visit
+        // is still real money sitting with the clinic until an explicit
+        // refund flips paymentStatus to REFUNDED, and the Admin doctor-
+        // card revenue figure (admin.controller.js listDoctors) never
+        // excluded it either. Excluding it only here made this week's
+        // trend total quietly disagree with both of those for any doctor
+        // with a cancelled-after-payment visit in the last 14 days.
       },
       select: { date: true, feeAtBooking: true }
     })
@@ -223,7 +228,7 @@ exports.stats = asyncHandler(async (req, res) => {
   });
 });
 
-// ─── Overall clinic revenue (matches doctor's own "Cash Collected" figure) ───
+// ─── Overall clinic revenue (online + in-person, combined) ───
 //
 // `stats` above only ever answers "today". Reception previously had no
 // month/overall view, so the only cash figures a receptionist could see
@@ -235,11 +240,16 @@ exports.stats = asyncHandler(async (req, res) => {
 // different tables inevitably drift apart, which is exactly the "all
 // different figures everywhere" symptom.
 //
-// This endpoint calls the SAME revenue.service.getCashCollectedTotal
-// function the doctor dashboard calls, just widened to every doctor this
-// receptionist is assigned to (doctorId: { in: doctorIds }). Summing the
-// per-doctor breakdown below always equals what each doctor individually
-// sees for that same month — because it's the identical query.
+// BUG FIX (panel said "Overall", data was cash-only): this endpoint used
+// to call ONLY revenue.service.getCashCollectedTotal(), which is
+// deliberately restricted to in-person cash (it deliberately excludes any
+// appointment with a cashfreeOrderId). But the panel this feeds is titled
+// "Overall clinic revenue" — a receptionist whose doctors mostly do paid
+// online consults would see that headline number sitting near zero, with
+// every online rupee silently missing. It now calls
+// getOverallClinicRevenue(), which adds the Cashfree-collected total to
+// the cash total, so "Overall" actually means overall. The online/cash
+// split is still returned separately so the breakdown table isn't lost.
 exports.revenue = asyncHandler(async (req, res) => {
   const doctorIds = await staffAccess.getDoctorIds(req.user.id);
   const now = new Date();
@@ -248,10 +258,10 @@ exports.revenue = asyncHandler(async (req, res) => {
   if (month < 1 || month > 12) return res.status(400).json({ error: 'Invalid month (1-12)' });
 
   if (!doctorIds.length) {
-    return res.json({ period: { year, month }, totalCash: 0, consultations: 0, byDoctor: [] });
+    return res.json({ period: { year, month }, totalRevenue: 0, totalOnline: 0, totalCash: 0, consultations: 0, byDoctor: [] });
   }
 
-  const overall = await revenueSvc.getCashCollectedTotal({ doctorId: { in: doctorIds }, year, month });
+  const overall = await revenueSvc.getOverallClinicRevenue({ doctorId: { in: doctorIds }, year, month });
 
   // Per-doctor breakdown, each computed with the exact same function a
   // doctor would call for themselves — so any one row here is guaranteed
@@ -261,12 +271,14 @@ exports.revenue = asyncHandler(async (req, res) => {
     select: { id: true, name: true }
   });
   const byDoctor = await Promise.all(doctors.map(async d => {
-    const row = await revenueSvc.getCashCollectedTotal({ doctorId: d.id, year, month });
+    const row = await revenueSvc.getOverallClinicRevenue({ doctorId: d.id, year, month });
     return { doctorId: d.id, doctorName: d.name, ...row };
   }));
 
   res.json({
     period: { year, month },
+    totalRevenue: overall.totalRevenue,
+    totalOnline: overall.totalOnline,
     totalCash: overall.totalCash,
     consultations: overall.consultations,
     byDoctor

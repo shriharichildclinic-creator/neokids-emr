@@ -137,12 +137,16 @@
     <div class="np-analytics-card__breakdown" id="statTodaySplit"></div>
   </div>
 </div>
-<div class="np-panel" style="margin-bottom:1rem;"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Overall clinic revenue</div><div class="np-panel__subtitle">In-person cash collected for your assigned doctors — same figure each doctor sees on their own Earnings page</div></div><select id="revMonth" class="np-select"></select><select id="revYear" class="np-select"></select></div><div class="np-panel__body">
+<div class="np-panel" style="margin-bottom:1rem;"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Overall clinic revenue</div><div class="np-panel__subtitle">Online + in-person cash collected for your assigned doctors</div></div><select id="revMonth" class="np-select"></select><select id="revYear" class="np-select"></select></div><div class="np-panel__body">
   <div class="np-row" style="gap:1.5rem;flex-wrap:wrap;margin-bottom:.85rem;">
-    <div><div class="np-mut" style="font-size:.8rem;">Total cash collected</div><div style="font-size:1.6rem;font-weight:700;" id="revTotalCash">—</div></div>
-    <div><div class="np-mut" style="font-size:.8rem;">In-person consultations</div><div style="font-size:1.6rem;font-weight:700;" id="revConsultations">—</div></div>
+    <div><div class="np-mut" style="font-size:.8rem;">Total collected (online + cash)</div><div style="font-size:1.6rem;font-weight:700;" id="revTotalCash">—</div></div>
+    <div><div class="np-mut" style="font-size:.8rem;">Consultations</div><div style="font-size:1.6rem;font-weight:700;" id="revConsultations">—</div></div>
   </div>
-  <div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Doctor</th><th>In-person consultations</th><th style="text-align:right">Cash collected</th></tr></thead><tbody id="revByDoctorTbody"></tbody></table></div>
+  <div class="np-analytics-card__breakdown" style="margin-bottom:.85rem;">
+    <span class="np-dot-item"><span class="np-dot np-dot--mint"></span><span id="revOnlineSplit">—</span> online</span>
+    <span class="np-dot-item"><span class="np-dot np-dot--blue"></span><span id="revCashSplit">—</span> in-person cash</span>
+  </div>
+  <div class="np-table-wrap"><table class="np-table np-table--cards"><thead><tr><th>Doctor</th><th>Consultations</th><th style="text-align:right">Online</th><th style="text-align:right">Cash</th><th style="text-align:right">Total</th></tr></thead><tbody id="revByDoctorTbody"></tbody></table></div>
 </div></div>
 <div class="np-panel" style="margin-bottom:1rem;"><div class="np-panel__head"><div style="flex:1"><div class="np-panel__title">Appointments — last 7 days</div><div class="np-panel__subtitle">Daily volume (all statuses)</div></div></div><div class="np-panel__body"><div id="dailyChart" class="np-chart"></div></div></div>
 <div class="np-panel"><div class="np-panel__head"><div><div class="np-panel__title">Today's queue</div><div class="np-panel__subtitle">Mark arrivals and manage the day</div></div><button class="np-btn np-btn--primary np-btn--sm" onclick="openBookModal()">+ New appointment</button></div><div id="todayList" class="np-panel__body np-scroll-list" style="padding:0;"></div></div></section>

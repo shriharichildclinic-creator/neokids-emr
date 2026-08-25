@@ -220,6 +220,16 @@ function apptActionsHtml(a){
     // Booked & paid online — already invoiced automatically at booking, no
     // reception invoice needed. View-only, no Send (it was already sent).
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="window.open('${esc(a.invoiceUrl)}','_blank')" title="Paid and invoiced online at booking">Invoiced online</button>`);
+  } else if(a.cashfreeOrderId){
+    // BUG FIX: payment succeeded online (cashfreeOrderId is set the moment
+    // Cashfree confirms the charge) but the automated invoice PDF/WhatsApp/
+    // email step failed silently on the backend, so invoiceUrl never got
+    // set. Without this branch that read as "unbilled", and reception saw
+    // the ordinary Invoice button — letting them generate and Send a
+    // second, redundant invoice for money the patient already paid and
+    // was already sent a receipt for (or should have been). Never offer
+    // Send here; only a disabled state until the PDF actually exists.
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
   } else if(a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`);
   }
@@ -273,6 +283,9 @@ function apptCard(a){
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openInvoiceActions('${a.consultationInvoice.id}','${esc(a.consultationInvoice.pdfUrl||'')}','${p.phone||''}','${esc(p.email||'')}')">Invoice</button>`);
   } else if(a.invoiceUrl){
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="window.open('${esc(a.invoiceUrl)}','_blank')" title="Paid and invoiced online at booking — already sent to the patient">Invoiced online</button>`);
+  } else if(a.cashfreeOrderId){
+    // See apptActionsHtml above for why this branch exists.
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
   } else if(a.status!=='CANCELLED'){
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="genInvoice('${a.id}')">Invoice</button>`);
   }
@@ -328,14 +341,24 @@ async function markAppointmentPaid(id){
 // on the mobile stacked-card layout. Send re-uses openInvoiceSendModal.
 function openInvoiceActions(invoiceId, pdfUrl, phone, email){
   const hasPdf = !!pdfUrl;
+  // BUG FIX ("nothing happens on clicking Send"): when a patient record has
+  // no phone AND no email on file, the old flow closed THIS modal first
+  // (closeModal() ran before openInvoiceSendModal) and only then discovered
+  // there was nothing to send, surfacing a single toast after the modal had
+  // already vanished — easy to read as "I clicked Send and nothing
+  // happened" on a quick glance or on mobile. Checked up front instead, so
+  // the Send button is visibly disabled with an explanatory title, same
+  // pattern as the PDF-not-ready state below.
+  const hasContact = !!(phone || email);
   $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Invoice actions</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body">
     <div class="np-action-list">
       <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="window.open('${esc(pdfUrl)}','_blank')">View</button>
       <a class="np-btn np-btn--block ${hasPdf?'':'np-btn--disabled'}" ${hasPdf?`href="${esc(pdfUrl)}" download`:'aria-disabled="true"'}>Download</a>
       <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="printPdf('${esc(pdfUrl)}')">Print</button>
-      <button type="button" class="np-btn np-btn--block np-btn--primary" onclick="closeModal();openInvoiceSendModal('${invoiceId}','${esc(phone)}','${esc(email)}')">Send</button>
+      <button type="button" class="np-btn np-btn--block np-btn--primary" ${hasContact?'':'disabled'} title="${hasContact?'':'Patient has no phone or email on file — add one before sending'}" onclick="closeModal();openInvoiceSendModal('${invoiceId}','${esc(phone)}','${esc(email)}')">Send</button>
     </div>
     ${hasPdf?'':'<p style="margin:.75rem 0 0;font-size:.8rem;color:var(--np-muted)">PDF isn\'t ready yet — View, Download and Print will be available once it\'s generated.</p>'}
+    ${hasContact?'':'<p style="margin:.5rem 0 0;font-size:.8rem;color:var(--np-warn,#B45309)">This patient has no phone or email on file, so there\'s nothing to send to — add contact details on their patient record first.</p>'}
   </div></div></div>`;
 }
 
@@ -385,6 +408,15 @@ function goToAppointmentsForDate(dateStr){
   // the tapped day for context, but is ignored while __billedDateFilter is set.
   const d = $('#fDate'); if (d) d.value = dateStr;
   const q = $('#fQ'); if (q) q.value = '';
+  // BUG FIX (Doctor Analytics Audit): a leftover doctor/status filter from
+  // earlier browsing used to stay active across this jump, so the list you
+  // landed on could silently exclude appointments the dashboard figure had
+  // included — the exact "widget says one number, the list shows a
+  // different one" symptom. The dashboard's daily figures are never
+  // scoped to a single doctor or status, so the drill-down must start
+  // from the same unfiltered view or the two will never agree.
+  const doc = $('#fDoctor'); if (doc) doc.value = '';
+  const st  = $('#fStatus'); if (st) st.value = '';
   __billedDateFilter = dateStr;
   setView('apptsView');
   loadAppointments();
@@ -538,15 +570,24 @@ async function loadClinicRevenue(){
   if (month) q.set('month', month);
   try{
     const r = await api('/receptionist/revenue?' + q.toString());
-    setText('revTotalCash', inr(r.totalCash || 0));
+    // BUG FIX: this panel is titled "Overall clinic revenue" but used to
+    // render totalCash (in-person only), silently dropping every online/
+    // Cashfree rupee from a number labeled "Overall". The endpoint now
+    // returns totalRevenue = totalOnline + totalCash; render that, and
+    // keep the split visible so online vs cash is still easy to see.
+    setText('revTotalCash', inr(r.totalRevenue || 0));
     setText('revConsultations', r.consultations || 0);
+    setText('revOnlineSplit', inr(r.totalOnline || 0));
+    setText('revCashSplit', inr(r.totalCash || 0));
     const rows = Array.isArray(r.byDoctor) ? r.byDoctor : [];
     $('#revByDoctorTbody').innerHTML = rows.length ? rows.map(d => `
       <tr>
         <td data-label="Doctor">Dr. ${esc(d.doctorName)}</td>
-        <td data-label="In-person consultations">${d.consultations || 0}</td>
-        <td data-label="Cash collected" style="text-align:right">${inr(d.totalCash || 0)}</td>
-      </tr>`).join('') : `<tr><td colspan="3" class="np-empty"><div>No in-person cash collected this period</div></td></tr>`;
+        <td data-label="Consultations">${d.consultations || 0}</td>
+        <td data-label="Online" style="text-align:right">${inr(d.totalOnline || 0)}</td>
+        <td data-label="Cash" style="text-align:right">${inr(d.totalCash || 0)}</td>
+        <td data-label="Total" style="text-align:right;font-weight:600;">${inr(d.totalRevenue || 0)}</td>
+      </tr>`).join('') : `<tr><td colspan="5" class="np-empty"><div>No revenue collected this period</div></td></tr>`;
   }catch(e){ toast(e.message,'error'); }
 }
 

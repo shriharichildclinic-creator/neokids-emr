@@ -92,11 +92,12 @@
       </div>
       <div class="np-analytics-card np-analytics-card--warn">
         <div class="np-analytics-card__head">
-          <div class="np-analytics-card__eyebrow">Cash Collected (Clinic)</div>
+          <div class="np-analytics-card__eyebrow">Collected Outside Gateway</div>
         </div>
         <div class="np-analytics-card__value">${inr(cash.totalCash)}</div>
         <div class="np-analytics-card__breakdown">
-          <span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${cash.consultations} in-clinic visit${cash.consultations === 1 ? '' : 's'}</span>
+          <span class="np-dot-item"><span class="np-dot np-dot--amber"></span>${cash.offlineConsultations || 0} in-clinic visit${cash.offlineConsultations === 1 ? '' : 's'}</span>
+          ${cash.onlineCashConsultations ? `<span class="np-dot-item"><span class="np-dot np-dot--blue"></span>${cash.onlineCashConsultations} teleconsult${cash.onlineCashConsultations === 1 ? '' : 's'} paid in cash</span>` : ''}
           <span class="np-dot-item">Not part of settlement</span>
         </div>
       </div>

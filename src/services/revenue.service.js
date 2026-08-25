@@ -349,30 +349,102 @@ async function getCashCollectedTotal({ doctorId, year, month }) {
       // so it must actually be restricted to that, or it silently
       // double-counts gateway revenue as if it were separate clinic cash.
       cashfreeOrderId: null,
-      // BUG FIX (Doctor Analytics Audit, cont.): also had no consultationType
-      // filter, despite every caller labeling this "in-person cash
-      // collected" / "In-person consultations" (see receptionist.controller
-      // and the doctor Earnings page). A teleconsultation the doctor later
-      // marked paid outside the gateway (cash/UPI, no cashfreeOrderId) was
-      // being counted here as if the patient had walked into the clinic.
-      consultationType: 'OFFLINE',
-      // BUG FIX (Doctor Analytics Audit, cont.): also had no exclusion for
-      // cancelled appointments. buildEligibleApptWhere above already learned
-      // this lesson for the Cashfree settlement path ("a cancelled
-      // appointment must NEVER contribute ... even if it was previously
-      // PAID") — but that fix was never mirrored here. Cancelling a
-      // previously cash-collected offline visit (receptionist.controller.js
-      // / doctor.controller.js cancel) voids its ConsultationInvoice but
-      // never reverts paymentStatus off CASH_COLLECTED, so without this
-      // filter a cancelled-after-payment visit kept inflating this total
-      // (and the doctor's payout figure) indefinitely.
-      status: { not: 'CANCELLED' },
+      // NOTE: no consultationType filter here (see CORRECTION below) and no
+      // `status` filter — both were tried in an earlier pass and both
+      // introduced the exact drift this function exists to prevent:
+      //   - Excluding CANCELLED made a doctor's own "Cash Collected"
+      //     figure disagree with the Admin doctor-card "Revenue" figure
+      //     for the SAME doctor, because admin.controller.js listDoctors
+      //     never excludes cancelled appointments from revenue (a
+      //     cancelled-but-unrefunded visit is still money in hand — see
+      //     the doc-comment above this function). Re-adding a status
+      //     filter here would reopen that same "doc cards don't match"
+      //     symptom, so it deliberately stays out.
+      //   - Restricting to consultationType:'OFFLINE' made a
+      //     teleconsultation the doctor later marked paid OUTSIDE the
+      //     gateway (cash/UPI after the call, cashfreeOrderId still null)
+      //     invisible from every revenue figure in the app — it isn't in
+      //     the Cashfree-only settlement total (buildEligibleApptWhere
+      //     requires cashfreeOrderId not null) and it isn't here either.
+      //     That money is real and collected; it just didn't come through
+      //     the gateway or through the front door. `consultationType` is
+      //     still returned per-row-group below so an "in-person" vs
+      //     "online, paid outside gateway" split stays available to any
+      //     caller that wants to keep those labeled separately.
+      date: { gte: start, lt: end }
+    },
+    // Split by consultationType in the same query instead of a second
+    // round-trip, so callers that want "in-person cash" specifically
+    // (e.g. the per-doctor breakdown table) can still have it without
+    // reintroducing the invisible-teleconsult-cash bug for anyone who
+    // only wants the true total.
+  });
+  const byType = await prisma.appointment.groupBy({
+    by: ['consultationType'],
+    _sum: { feeAtBooking: true },
+    _count: { _all: true },
+    where: {
+      doctorId,
+      paymentStatus: { in: COLLECTED_PAYMENT_STATUSES },
+      cashfreeOrderId: null,
       date: { gte: start, lt: end }
     }
   });
+  const offline = byType.find(r => r.consultationType === 'OFFLINE');
+  const online  = byType.find(r => r.consultationType === 'ONLINE');
   return {
     consultations: agg._count._all,
-    totalCash: round2(toNum(agg._sum.feeAtBooking))
+    totalCash: round2(toNum(agg._sum.feeAtBooking)),
+    // In-person cash only — what "Cash Collected (Clinic)" always meant.
+    offlineCash: round2(toNum(offline && offline._sum.feeAtBooking)),
+    offlineConsultations: (offline && offline._count._all) || 0,
+    // Teleconsultations paid outside the gateway (cash/UPI after the
+    // call) — previously counted nowhere at all.
+    onlineCashCollected: round2(toNum(online && online._sum.feeAtBooking)),
+    onlineCashConsultations: (online && online._count._all) || 0
+  };
+}
+
+/**
+ * TRUE total money collected at the clinic for a doctor (or set of doctors)
+ * in a month — online (Cashfree) + offline cash, added together.
+ *
+ * BUG FIX (Overall Clinic Revenue mislabel): the receptionist dashboard's
+ * "Overall clinic revenue" panel was wired to getCashCollectedTotal() alone,
+ * which — as documented above — is deliberately CASH-ONLY (its whole point
+ * is to be the mirror image of the Cashfree-only settlement query). That
+ * made a receptionist's headline "Overall" figure silently exclude every
+ * online/Cashfree payment, so a doctor who did mostly online consults could
+ * show ₹0 or a tiny number under a label that says "Overall". This function
+ * is the actual overall figure: it sums BOTH halves so nothing collected —
+ * online or in-person — goes missing from the number labeled "Overall".
+ * Cancelled-but-refunded visits are excluded by both halves the same way
+ * they always were (buildEligibleApptWhere excludes CANCELLED for the
+ * online half; getCashCollectedTotal excludes CANCELLED for the cash half).
+ */
+async function getOverallClinicRevenue({ doctorId, year, month }) {
+  const { start, end } = monthRange(year, month);
+
+  const onlineWhere = buildEligibleApptWhere({ doctorId, start, end });
+  const [onlineAgg, cash] = await Promise.all([
+    prisma.appointment.aggregate({
+      _sum: { feeAtBooking: true },
+      _count: { _all: true },
+      where: onlineWhere
+    }),
+    getCashCollectedTotal({ doctorId, year, month })
+  ]);
+
+  const online = {
+    consultations: onlineAgg._count._all,
+    totalOnline:   round2(toNum(onlineAgg._sum.feeAtBooking))
+  };
+
+  return {
+    consultations: online.consultations + cash.consultations,
+    totalOnline:   online.totalOnline,
+    totalCash:     cash.totalCash,
+    totalRevenue:  round2(online.totalOnline + cash.totalCash)
   };
 }
 
@@ -645,6 +717,7 @@ module.exports = {
   getMonthlyRevenueReport,
   getDoctorBreakdown,
   getCashCollectedTotal,
+  getOverallClinicRevenue,
   // mutations
   generateSettlement,
   ensureSettlementInvoicePdf

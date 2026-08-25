@@ -664,6 +664,20 @@ function goToAppointmentsForDate(dateStr){
   _apptDateFilter = dateStr;
   const dateEl = $('#apptDateFilter');
   if (dateEl) dateEl.value = dateStr || '';
+  // BUG FIX (Doctor Analytics Audit): a leftover Status/Type/Search filter
+  // from earlier browsing used to stay active across this jump, so the
+  // list you landed on silently excluded rows the tooltip's count had
+  // included — the exact "tooltip says one number, the list shows a
+  // different one" symptom. The tooltip/chart figure is always computed
+  // over every non-cancelled appointment for that day regardless of
+  // status/type, so the drill-down must start from the same unfiltered
+  // view or the two will never agree.
+  const statusEl = $('#apptStatusFilter');
+  const typeEl   = $('#apptTypeFilter');
+  const searchEl = $('#apptSearch');
+  if (statusEl) statusEl.value = '';
+  if (typeEl)   typeEl.value = '';
+  if (searchEl) searchEl.value = '';
   setActiveTab('allTab');
   renderAllAppointments();
 }

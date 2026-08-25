@@ -1151,7 +1151,24 @@ html[data-theme="dark"] .np-filterbar--toolbar input[type="date"]{ color-scheme:
   .np-panel__head{ padding:1rem 1rem .5rem; flex-wrap:wrap; }
   .np-panel__head > div:first-child{ min-width:0; flex:1 1 100%; }
   .np-panel__head > .np-select,
-  .np-panel__head > .np-input{ flex:0 0 auto; max-width:100%; }
+  .np-panel__head > .np-input{
+    flex:0 0 auto;
+    /* This is the actual bug: the base .np-select/.np-input rule sets
+       width:100%. The desktop rule above resets that to width:auto so the
+       control sizes to its content — this mobile rule only ever capped it
+       with max-width:100%, so width:100% kept winning and each select
+       still tried to claim the FULL row width. One select doing that is
+       invisible; two side by side (Overall Clinic Revenue's month+year
+       pickers, Revenue Reports' month+year+doctor+type filters) fight for
+       the same full-width space and overflow the panel on phones — this
+       is the drill-down/tooltip-adjacent bug that survived the earlier
+       markup-only fix. Mirror the desktop reset here, and cap each at
+       roughly half the row so a pair sits side by side instead of
+       overflowing. */
+    width:auto;
+    min-width:0;
+    max-width:calc(50% - .4rem);
+  }
   .np-panel__body{ padding:.5rem 1rem 1rem; }
   .np-filterbar--appointments,
   .np-filterbar--notifications{ grid-template-columns:1fr; gap:.65rem; }
