@@ -202,14 +202,17 @@ async function deliverPharmacyBill(billId, { channels = ['whatsapp', 'email'], u
         filepath,
         invoiceNumber: bill.billNumber
       });
+      // appointmentId doubles as the source-document key for delivery
+      // tracking: a pharmacy bill logs under its own bill id so the bill's
+      // delivery history can be looked up later.
       await logNotif({
-        appointmentId: null, channel: 'WHATSAPP', recipient: phone,
+        appointmentId: bill.id, channel: 'WHATSAPP', recipient: phone,
         template: tpl, direction: 'PATIENT', status: 'SENT', payload: r || undefined
       });
       delivery.whatsapp = 'sent';
     } catch (e) {
       await logNotif({
-        appointmentId: null, channel: 'WHATSAPP', recipient: phone,
+        appointmentId: bill.id, channel: 'WHATSAPP', recipient: phone,
         template: tpl, direction: 'PATIENT', status: 'FAILED', errorMessage: e.message
       });
       delivery.whatsapp = 'failed';
@@ -245,13 +248,13 @@ async function deliverPharmacyBill(billId, { channels = ['whatsapp', 'email'], u
           attachments: [{ filename, path: filepath }]
         });
         await logNotif({
-          appointmentId: null, channel: 'EMAIL', recipient: email,
+          appointmentId: bill.id, channel: 'EMAIL', recipient: email,
           template: 'PHARMACY_BILL', direction: 'PATIENT', status: 'SENT'
         });
         delivery.email = 'sent';
       } catch (e) {
         await logNotif({
-          appointmentId: null, channel: 'EMAIL', recipient: email,
+          appointmentId: bill.id, channel: 'EMAIL', recipient: email,
           template: 'PHARMACY_BILL', direction: 'PATIENT', status: 'FAILED', errorMessage: e.message
         });
         delivery.email = 'failed';
@@ -263,11 +266,46 @@ async function deliverPharmacyBill(billId, { channels = ['whatsapp', 'email'], u
   return delivery;
 }
 
+// Recent delivery attempts for a staff-sent document, newest first.
+// NotificationLog.appointmentId is the source-document key: a consultation
+// invoice logs under its appointment id, a pharmacy bill under its bill id,
+// a standalone certificate under its certificate id.
+async function deliveryHistoryFor(docId, { take = 10 } = {}) {
+  if (!docId) return [];
+  try {
+    return await prisma.notificationLog.findMany({
+      where: { appointmentId: docId },
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: { id: true, channel: true, recipient: true, template: true, status: true, errorMessage: true, createdAt: true }
+    });
+  } catch (e) { logger.error('deliveryHistoryFor failed', e); return []; }
+}
+
+// Map of source-document id -> most recent SENT timestamp, for stamping a
+// "delivered" badge onto a whole list with one query (no N+1 per row).
+async function deliverySentMapFor(docIds) {
+  const ids = (docIds || []).filter(Boolean);
+  if (!ids.length) return {};
+  try {
+    const logs = await prisma.notificationLog.findMany({
+      where: { appointmentId: { in: ids }, status: 'SENT' },
+      select: { appointmentId: true, createdAt: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    const map = {};
+    logs.forEach(l => { if (l.appointmentId && !map[l.appointmentId]) map[l.appointmentId] = l.createdAt; });
+    return map;
+  } catch (e) { logger.error('deliverySentMapFor failed', e); return {}; }
+}
+
 module.exports = {
   nextInvoiceNumber,
   nextBillNumber,
   generateAndStoreInvoicePdf,
   generateAndStoreBillPdf,
   deliverConsultationInvoice,
-  deliverPharmacyBill
+  deliverPharmacyBill,
+  deliveryHistoryFor,
+  deliverySentMapFor
 };

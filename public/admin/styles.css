@@ -720,7 +720,13 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
   background: linear-gradient(180deg, #E2E8F0, #CBD5E1);
 }
 
-.np-modal{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:1rem; background: rgba(15,42,71,.45); }
+/* ROOT-CAUSE FIX ("Send does nothing"): this was z-index:60. The shared UI
+   kit renders toasts at 99999, confirm/alert dialogs at 100000 and the
+   lightbox at 100002 — so a receptionist/billing modal built at 60 painted
+   UNDER those overlay layers (and under their dark backdrops), reading as
+   "the click did nothing at all" even though the modal had opened. Content
+   modals must stack above every helper overlay. */
+.np-modal{ position:fixed; inset:0; z-index:100050; display:flex; align-items:center; justify-content:center; padding:1rem; background: rgba(15,42,71,.45); }
 .np-modal.hidden{ display:none; }
 /* On desktop the fixed sidebar occupies the leftmost 264px, so a modal
    centered across the whole viewport reads as shifted left of the content
@@ -780,6 +786,20 @@ html[data-theme="dark"] .np-amount-positive{ color:#4ADE80; }
 
 .np-modal__body{ min-width:0; }
 .np-modal__body .np-field{ min-width:0; overflow-wrap:anywhere; }
+
+/* Stacked action list inside a modal (invoice actions, bill actions, send
+   pickers). These classes were referenced by the receptionist portal long
+   before they existed here, so the buttons rendered inline and unstyled. */
+.np-action-list{ display:flex; flex-direction:column; gap:.5rem; }
+.np-action-list .np-btn{ width:100%; justify-content:center; text-decoration:none; }
+.np-btn--block{ display:flex; width:100%; justify-content:center; box-sizing:border-box; text-decoration:none; }
+.np-btn--disabled, .np-btn:disabled{ opacity:.5; cursor:not-allowed; pointer-events:none; }
+.np-delivery-log{ display:flex; flex-direction:column; gap:.4rem; }
+.np-delivery-log__row{ display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .6rem; font-size:.8rem; padding:.45rem .55rem; border:1px solid var(--np-border); border-radius:8px; }
+.np-delivery-log__ch{ font-weight:600; color:var(--np-ink); }
+.np-delivery-log__to{ color:var(--np-muted); overflow-wrap:anywhere; }
+.np-delivery-log__at{ margin-left:auto; color:var(--np-muted); white-space:nowrap; }
+.np-delivery-log__err{ width:100%; font-size:.74rem; color:#991B1B; overflow-wrap:anywhere; }
 
 .np-cell-when__line{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.15rem .4rem; }
 .np-cell-when__time{ font-size:.78rem; white-space:nowrap; }

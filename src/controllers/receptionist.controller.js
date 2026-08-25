@@ -330,11 +330,26 @@ exports.searchPatients = asyncHandler(async (req, res) => {
   const or = [{ name: { contains: q } }];
   if (digits.length >= 4) or.push({ phone: { contains: digits } });
   const where = { AND: [{ OR: or }, { id: { in: scope } }] };
-  const rows = await prisma.patient.findMany({
+  let rows = await prisma.patient.findMany({
     where,
     orderBy: [{ name: 'asc' }],
     take: 20
   });
+  // Case-insensitive fallback: on databases/collations where `contains` is
+  // case-sensitive (e.g. PostgreSQL), a query typed in different casing than
+  // the stored name ("juhainah" vs "Juhainah") returns nothing even though
+  // the patient is in scope — which is exactly the "certificate search
+  // fetches no patients" symptom. When the direct match comes back empty,
+  // scan the in-scope patients' names in JS instead. Bounded by the fetch cap.
+  if (!rows.length && /[A-Za-z]/.test(q)) {
+    const lq = q.toLowerCase();
+    const candidates = await prisma.patient.findMany({
+      where: { id: { in: scope } },
+      orderBy: [{ name: 'asc' }],
+      take: 1000
+    });
+    rows = candidates.filter(p => p.name && p.name.toLowerCase().includes(lq)).slice(0, 20);
+  }
   res.json(rows);
 });
 
@@ -848,13 +863,19 @@ exports.listInvoices = asyncHandler(async (req, res) => {
   const rows = await prisma.consultationInvoice.findMany({
     where,
     include: {
-      appointment: { include: { patient: { select: { id: true, name: true, phone: true } }, doctor: { select: { id: true, name: true } } } },
+      appointment: { include: { patient: { select: { id: true, name: true, phone: true, email: true } }, doctor: { select: { id: true, name: true } } } },
       medicalCentre: true
     },
     orderBy: { createdAt: 'desc' },
     take: 300
   });
-  res.json(rows.map(r => ({ ...r, pdfUrl: signConsultInvoiceUrl(r.id, me) })));
+  const sentMap = await staffDocs.deliverySentMapFor(rows.map(r => r.appointmentId));
+  res.json(rows.map(r => ({
+    ...r,
+    delivered: !!sentMap[r.appointmentId],
+    lastSentAt: sentMap[r.appointmentId] || null,
+    pdfUrl: signConsultInvoiceUrl(r.id, me)
+  })));
 });
 
 exports.invoiceDetail = asyncHandler(async (req, res) => {
@@ -971,8 +992,11 @@ exports.listCertificates = asyncHandler(async (req, res) => {
     orderBy: { issuedAt: 'desc' },
     take: 200
   });
+  const certSentMap = await staffDocs.deliverySentMapFor(rows.map(c => c.appointmentId || c.id));
   res.json(rows.map(c => ({
     ...c,
+    delivered: !!certSentMap[c.appointmentId || c.id],
+    lastSentAt: certSentMap[c.appointmentId || c.id] || null,
     pdfUrl: buildSignedFileUrl({ kind: 'certificate', appointmentId: c.id, userId: me.id, role: 'RECEPTIONIST' })
   })));
 });
@@ -1050,9 +1074,16 @@ async function issueCertificateInternal(req, res, me, body) {
     include: { appointment: true }
   });
 
+  // Reception issues the certificate + PDF but does NOT auto-send it —
+  // delivery is a separate, explicit receptionist action (Send on the
+  // certificate). Generating and sending are deliberately distinct so a
+  // certificate is never delivered the moment it's generated, and never
+  // twice. If a caller explicitly opts into issue-time delivery
+  // (sendWhatsapp/sendEmail === true), it's claim-guarded against duplicates.
   const delivery = await certSvc.deliverCertificate({ ...cert, patient, doctor }, {
-    sendWhatsapp: req.body.sendWhatsapp !== false,
-    sendEmail: req.body.sendEmail !== false
+    sendWhatsapp: req.body.sendWhatsapp === true,
+    sendEmail: req.body.sendEmail === true,
+    auto: true
   });
 
   await audit.log({
@@ -1095,6 +1126,75 @@ exports.sendCertificate = asyncHandler(async (req, res) => {
     sendEmail: channels.includes('email')
   });
   res.json({ success: true, delivery });
+});
+
+// ─── Online-paid IN-CLINIC invoice: status, manual (re)send, history ───
+// A NeoKidsPro website booking for an in-clinic (OFFLINE) visit is paid
+// online at booking time (cashfreeOrderId set). The automated confirmation
+// flow is best-effort: when its PDF/send step fails, invoiceUrl stays null
+// and the patient has paid but never received an invoice. A website origin
+// alone must therefore never read as "already invoiced" — reception can
+// always view the live state and (re)send manually from here.
+async function loadOnlinePaidOfflineAppt(me, req, res) {
+  const ok = await staffAccess.canAccessAppointment(me.id, req.params.id);
+  if (!ok) { res.status(404).json({ error: 'Appointment not found' }); return null; }
+  const appt = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { patient: true, doctor: true } });
+  if (!appt) { res.status(404).json({ error: 'Appointment not found' }); return null; }
+  if (appt.consultationType !== 'OFFLINE' || !appt.cashfreeOrderId) {
+    res.status(400).json({ error: 'Only an online-paid in-clinic booking has an online invoice to send' });
+    return null;
+  }
+  return appt;
+}
+
+exports.onlineInvoiceDelivery = asyncHandler(async (req, res) => {
+  const me = await requireConsultations(req, res); if (!me) return;
+  const appt = await loadOnlinePaidOfflineAppt(me, req, res); if (!appt) return;
+  const history = await staffDocs.deliveryHistoryFor(appt.id);
+  res.json({
+    invoiceUrl: appt.invoiceUrl ? buildSignedFileUrl({ kind: 'invoice', appointmentId: appt.id, userId: me.id, role: 'RECEPTIONIST' }) : null,
+    delivered: history.some(h => h.status === 'SENT'),
+    history
+  });
+});
+
+exports.sendOnlineInvoice = asyncHandler(async (req, res) => {
+  const me = await requireConsultations(req, res); if (!me) return;
+  const appt = await loadOnlinePaidOfflineAppt(me, req, res); if (!appt) return;
+  const automation = require('../services/automation.service');
+  const result = await automation.deliverOfflineInvoice(appt);
+  await audit.log({
+    actor: actorOf(req, me), action: 'INVOICE_SENT', entityType: 'APPOINTMENT', entityId: appt.id,
+    summary: `Sent online-paid in-clinic invoice for ${appt.patient.name} (WhatsApp ${result.whatsapp}, Email ${result.email})`,
+    medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
+  });
+  const fresh = await prisma.appointment.findUnique({ where: { id: appt.id } });
+  res.json({
+    success: true,
+    delivery: { whatsapp: result.whatsapp, email: result.email },
+    invoiceUrl: fresh && fresh.invoiceUrl ? buildSignedFileUrl({ kind: 'invoice', appointmentId: appt.id, userId: me.id, role: 'RECEPTIONIST' }) : null
+  });
+});
+
+// Delivery history for a consultation invoice (keyed by its appointment id).
+exports.invoiceDelivery = asyncHandler(async (req, res) => {
+  const me = await requireConsultations(req, res); if (!me) return;
+  const inv = await prisma.consultationInvoice.findUnique({ where: { id: req.params.id } });
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const assigned = await staffAccess.isAssignedDoctor(me.id, inv.doctorId);
+  if (!assigned) return res.status(404).json({ error: 'Invoice not found' });
+  const history = await staffDocs.deliveryHistoryFor(inv.appointmentId);
+  res.json({ delivered: history.some(h => h.status === 'SENT'), history });
+});
+
+// Delivery history for a certificate (appointment id, or its own id when standalone).
+exports.certificateDelivery = asyncHandler(async (req, res) => {
+  const me = await requireCertificates(req, res); if (!me) return;
+  const doctorIds = await staffAccess.getDoctorIds(me.id);
+  const cert = await prisma.medicalCertificate.findFirst({ where: { id: req.params.id, doctorId: { in: doctorIds } } });
+  if (!cert) return res.status(404).json({ error: 'Certificate not found' });
+  const history = await staffDocs.deliveryHistoryFor(cert.appointmentId || cert.id);
+  res.json({ delivered: history.some(h => h.status === 'SENT'), history });
 });
 
 exports._passwordHash = (pw) => bcrypt.hash(pw, SALT);

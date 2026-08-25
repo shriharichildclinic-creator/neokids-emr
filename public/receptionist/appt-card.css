@@ -225,6 +225,26 @@
 
 /* Mobile: fixed-position dropdown so it never gets clipped by a scrolling
    card list, matching the doctor portal's mobile behaviour exactly. */
+/* Overflow hardening ("buttons go out of box in Today's queue"): a grid
+   column can never shrink below its widest child unless the child permits
+   it, so a long patient name + wide badges pushed the time/actions columns
+   — and their buttons — past the card's right edge on narrow phones. Let
+   the body column shrink and clip its own overflow, cap the time column,
+   and let action buttons wrap to a second line instead of escaping. */
+.np-appt-row{ overflow:hidden; }
+.np-appt-row__body{ overflow:hidden; }
+.np-appt{ overflow:hidden; }
+.np-appt__body{ overflow:hidden; }
+.np-appt-row__pills, .np-appt-row__actions{ max-width:100%; }
+
+@media (max-width:480px){
+  .np-appt-row{ grid-template-columns:54px minmax(0,1fr); gap:.55rem; padding:.75rem 0; }
+  .np-appt-row__time{ min-width:0; }
+  .np-appt-row__time-h{ font-size:.82rem; }
+  .np-appt-row__time-d{ font-size:.58rem; }
+  .np-appt-row__actions .np-btn{ white-space:normal; text-align:center; }
+}
+
 @media (max-width:640px){
   /* BUG FIX ("buttons go out of box on mobile"): this was a single-row
      grid (grid-auto-flow:column, grid-auto-columns:max-content), which by

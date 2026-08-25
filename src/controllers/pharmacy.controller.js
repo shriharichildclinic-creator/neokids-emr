@@ -834,3 +834,15 @@ exports.sendBill = asyncHandler(async (req, res) => {
   });
   res.json({ success: true, delivery });
 });
+
+// Delivery history for a bill (logged under its own bill id — see
+// deliverPharmacyBill). Powers the "Delivered / Not sent" status line in the
+// reception bill actions modal.
+exports.billDelivery = asyncHandler(async (req, res) => {
+  const actor = await resolveBillingActor(req, res);
+  if (!actor) return;
+  const { bill, error } = await loadBillWithAccess(actor, req.params.id);
+  if (error) return res.status(error.status).json({ error: error.message });
+  const history = await staffDocs.deliveryHistoryFor(bill.id);
+  res.json({ delivered: history.some(h => h.status === 'SENT'), history });
+});

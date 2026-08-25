@@ -223,6 +223,12 @@ function sourceBadge(s){
   return '';
 }
 function payBadge(p){ const m={PAID:['np-badge--green','Paid'],CASH_COLLECTED:['np-badge--green','Cash collected'],CASH_PENDING:['np-badge--amber','Cash pending'],UNPAID:['np-badge--amber','Unpaid']}; const x=m[p]; return x?`<span class="np-badge ${x[0]}"><span class="np-badge__dot"></span>${x[1]}</span>`:`<span class="np-badge np-badge--slate">${esc(p||'—')}</span>`; }
+function invoiceStatusBadge(s){ const m={PAID:['np-badge--green','Paid'],PENDING:['np-badge--amber','Pending'],VOID:['np-badge--red','Void']}; const x=m[s]; return x?`<span class="np-badge ${x[0]}"><span class="np-badge__dot"></span>${x[1]}</span>`:`<span class="np-badge np-badge--slate">${esc(s||'—')}</span>`; }
+function deliveryBadge(delivered, lastSentAt){
+  return delivered
+    ? `<span class="np-badge np-badge--mint" title="${lastSentAt?('Last sent '+esc(new Date(lastSentAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))):'Sent'}"><span class="np-badge__dot"></span>Sent</span>`
+    : `<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Not sent</span>`;
+}
 
 // Single source of truth for which appointment actions are visible.
 // Used by both the dashboard "today" list and the full appointments table
@@ -237,20 +243,15 @@ function apptActionsHtml(a){
   }
   if(a.consultationInvoice){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceActions('${a.consultationInvoice.id}','${jsAttr(a.consultationInvoice.pdfUrl||'')}','${jsAttr(a.patient.phone||'')}','${jsAttr(a.patient.email||'')}')">Invoice</button>`);
-  } else if(a.invoiceUrl){
-    // Booked & paid online — already invoiced automatically at booking, no
-    // reception invoice needed. View-only, no Send (it was already sent).
-    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="window.open('${esc(a.invoiceUrl)}','_blank')" title="Paid and invoiced online at booking">Invoiced online</button>`);
   } else if(a.cashfreeOrderId){
-    // BUG FIX: payment succeeded online (cashfreeOrderId is set the moment
-    // Cashfree confirms the charge) but the automated invoice PDF/WhatsApp/
-    // email step failed silently on the backend, so invoiceUrl never got
-    // set. Without this branch that read as "unbilled", and reception saw
-    // the ordinary Invoice button — letting them generate and Send a
-    // second, redundant invoice for money the patient already paid and
-    // was already sent a receipt for (or should have been). Never offer
-    // Send here; only a disabled state until the PDF actually exists.
-    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
+    // Booked & PAID on the NeoKidsPro website (cashfreeOrderId is set the
+    // moment Cashfree confirms the charge). A website origin does NOT mean
+    // the patient already received an invoice — the automated PDF/WhatsApp/
+    // email step is best-effort and can fail silently, leaving invoiceUrl
+    // null. Both states (invoiceUrl present or missing) therefore open the
+    // online-invoice actions, which check the real delivery status and let
+    // reception view, print, send or resend the online invoice manually.
+    btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openOnlineInvoiceActions('${a.id}','${jsAttr(a.patient.phone||'')}','${jsAttr(a.patient.email||'')}')" title="Paid online on the NeoKidsPro website — view, send or resend the invoice">Invoice</button>`);
   } else if(a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}','${jsAttr(a.patient.phone||'')}','${jsAttr(a.patient.email||'')}')">Invoice</button>`);
   }
@@ -302,11 +303,10 @@ function apptCard(a){
   if(!a.arrivedAt && open) primary.push(`<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="markArrived('${a.id}')">Mark arrived</button>`);
   if(a.consultationInvoice){
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openInvoiceActions('${a.consultationInvoice.id}','${jsAttr(a.consultationInvoice.pdfUrl||'')}','${jsAttr(p.phone||'')}','${jsAttr(p.email||'')}')">Invoice</button>`);
-  } else if(a.invoiceUrl){
-    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="window.open('${esc(a.invoiceUrl)}','_blank')" title="Paid and invoiced online at booking — already sent to the patient">Invoiced online</button>`);
   } else if(a.cashfreeOrderId){
-    // See apptActionsHtml above for why this branch exists.
-    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
+    // Online-paid website booking — see apptActionsHtml above for why this
+    // always opens the online-invoice actions instead of a view-only state.
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="openOnlineInvoiceActions('${a.id}','${jsAttr(p.phone||'')}','${jsAttr(p.email||'')}')" title="Paid online on the NeoKidsPro website — view, send or resend the invoice">Invoice</button>`);
   } else if(a.status!=='CANCELLED'){
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="genInvoice('${a.id}','${jsAttr(p.phone||'')}','${jsAttr(p.email||'')}')">Invoice</button>`);
   }
@@ -377,6 +377,7 @@ function openInvoiceActions(invoiceId, pdfUrl, phone, email){
       <a class="np-btn np-btn--block ${hasPdf?'':'np-btn--disabled'}" ${hasPdf?`href="${esc(pdfUrl)}" download`:'aria-disabled="true"'}>Download</a>
       <button type="button" class="np-btn np-btn--block" ${hasPdf?'':'disabled'} onclick="printPdf('${jsAttr(pdfUrl)}')">Print</button>
       <button type="button" class="np-btn np-btn--block np-btn--primary" ${hasContact?'':'disabled'} title="${hasContact?'':'Patient has no phone or email on file — add one before sending'}" onclick="closeModal();openInvoiceSendModal('${invoiceId}','${jsAttr(phone)}','${jsAttr(email)}')">Send</button>
+      <button type="button" class="np-btn np-btn--block np-btn--ghost" onclick="openInvoiceHistory('${invoiceId}','invoice')">Delivery history</button>
     </div>
     ${hasPdf?'':'<p style="margin:.75rem 0 0;font-size:.8rem;color:var(--np-muted)">PDF isn\'t ready yet — View, Download and Print will be available once it\'s generated.</p>'}
     ${hasContact?'':'<p style="margin:.5rem 0 0;font-size:.8rem;color:var(--np-warn,#B45309)">This patient has no phone or email on file, so there\'s nothing to send to — add contact details on their patient record first.</p>'}
@@ -402,12 +403,14 @@ function openInvoiceSendModal(invoiceId, phone, email){
     if(hasPhone && $('#sendChWa').checked) channels.push('whatsapp');
     if(hasEmail && $('#sendChEm') && $('#sendChEm').checked) channels.push('email');
     if(!channels.length){ toast('Choose at least one channel','error'); return; }
-    closeModal();
+    const btn=$('#sendInvoiceConfirm');
+    btn.disabled=true; btn.textContent='Sending…';
     try{
       const r=await api('/receptionist/invoices/'+invoiceId+'/send',{method:'POST',body:JSON.stringify({channels})});
+      closeModal();
       toast('Invoice sent — WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email);
       loadAppointments(); loadInvoices();
-    }catch(e){ toast(e.message,'error'); }
+    }catch(e){ btn.disabled=false; btn.textContent='Send'; toast(e.message,'error'); }
   });
 }
 
@@ -850,11 +853,142 @@ async function openBookModal(_, patientId){
 }
 
 // Invoices
-async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td><td data-label="Patient">${esc(i.appointment.patient.name)}</td><td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td><td data-label="Clinic">${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td><td data-label="Date">${esc(fmtDate(i.createdAt))}</td><td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openInvoiceActions('${i.id}','${jsAttr(i.pdfUrl||'')}','${jsAttr(i.appointment.patient.phone||'')}','${jsAttr(i.appointment.patient.email||'')}')">Actions</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
-function printPdf(url){ if(!url){toast('Generate the invoice first','warn');return;} const w=window.open(url,'_blank'); if(w){w.addEventListener('load',()=>{try{w.print();}catch(_){}});} }
+async function loadInvoices(){ const tb=$('#invTbody'); try{ const rows=await api('/receptionist/invoices'); tb.innerHTML=rows.length?rows.map(i=>`<tr><td data-label="Invoice #"><b>${esc(i.invoiceNumber)}</b></td><td data-label="Patient">${esc(i.appointment.patient.name)}</td><td data-label="Doctor">Dr. ${esc(i.appointment.doctor.name)}</td><td data-label="Clinic">${esc(i.medicalCentre?i.medicalCentre.name:'—')}</td><td data-label="Amount" style="text-align:right"><b>${inr(i.amount)}</b></td><td data-label="Status">${invoiceStatusBadge(i.status)} ${deliveryBadge(i.delivered,i.lastSentAt)}</td><td data-label="Date">${esc(fmtDate(i.createdAt))}</td><td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="openInvoiceActions('${i.id}','${jsAttr(i.pdfUrl||'')}','${jsAttr(i.appointment.patient.phone||'')}','${jsAttr(i.appointment.patient.email||'')}')">Actions</button></td></tr>`).join(''):'<tr><td colspan="8"><div class="np-empty"><div class="np-empty__title">No invoices yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="8"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
+// Print must actually print: load the PDF into a hidden iframe and invoke
+// print() on ITS document, which opens the browser's print dialog for the
+// invoice itself. (The old version just opened the PDF in a new tab —
+// visually identical to "View", so Print never printed.) Falls back to
+// opening the PDF in a tab on browsers whose viewer disallows printing.
+function printPdf(url){
+  if(!url){ toast('The PDF is not ready yet','warn'); return; }
+  const frame=document.createElement('iframe');
+  frame.style.position='fixed'; frame.style.right='0'; frame.style.bottom='0';
+  frame.style.width='0'; frame.style.height='0'; frame.style.border='0';
+  frame.setAttribute('aria-hidden','true');
+  frame.src=url;
+  frame.addEventListener('load',()=>{
+    try{
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      const cleanup=()=>{ try{ frame.remove(); }catch(_){} };
+      if(frame.contentWindow && frame.contentWindow.addEventListener) frame.contentWindow.addEventListener('afterprint',cleanup);
+      setTimeout(cleanup,60000);
+    }catch(_){
+      try{ frame.remove(); }catch(__){}
+      window.open(url,'_blank');
+    }
+  });
+  document.body.appendChild(frame);
+}
+
+// Delivery history shared by consultation invoices, certificates, reception
+// bills and online-paid bookings. kind: invoice | cert | bill | online.
+async function openInvoiceHistory(id, kind){
+  const paths={ invoice:'/receptionist/invoices/', cert:'/receptionist/certificates/', bill:'/receptionist/pharmacy/bills/', online:'/receptionist/appointments/' };
+  const suffix=kind==='online' ? '/online-invoice/delivery' : '/delivery';
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Delivery history</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body" id="deliveryHistBody"><div class="np-mut" style="text-align:center;padding:1rem 0">Loading…</div></div></div></div>`;
+  const body=$('#deliveryHistBody');
+  try{
+    const r=await api(paths[kind]+id+suffix);
+    const rows=Array.isArray(r.history)?r.history:[];
+    body.innerHTML = rows.length ? `<div class="np-delivery-log">`+rows.map(h=>`
+      <div class="np-delivery-log__row">
+        <span class="np-badge ${h.status==='SENT'?'np-badge--green':(h.status==='FAILED'?'np-badge--red':'np-badge--slate')}"><span class="np-badge__dot"></span>${esc(h.status==='SENT'?'Sent':(h.status==='FAILED'?'Failed':esc(h.status||'')))}</span>
+        <span class="np-delivery-log__ch">${esc(h.channel==='WHATSAPP'?'WhatsApp':(h.channel==='EMAIL'?'Email':h.channel||''))}</span>
+        <span class="np-delivery-log__to">${esc(h.recipient||'')}</span>
+        <span class="np-delivery-log__at">${esc(new Date(h.createdAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}</span>
+        ${h.errorMessage?`<div class="np-delivery-log__err">${esc(h.errorMessage)}</div>`:''}
+      </div>`).join('')+`</div>`
+      : '<div class="np-empty"><div class="np-empty__title">Nothing sent yet</div><div class="np-empty__sub">Send it first — every delivery attempt is recorded here.</div></div>';
+  }catch(e){ body.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; }
+}
+
+// Actions for an online-PAID in-clinic (website) booking. Checks the live
+// delivery status first, so reception can tell "already delivered" apart
+// from "paid but never invoiced" and send/resend accordingly.
+async function openOnlineInvoiceActions(appointmentId, phone, email){
+  const hasContact=!!(phone||email);
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Invoice — paid online</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body" id="onlineInvBody"><div class="np-mut" style="text-align:center;padding:1rem 0">Checking invoice status…</div></div></div></div>`;
+  const body=$('#onlineInvBody');
+  let info=null;
+  try{ info=await api('/receptionist/appointments/'+appointmentId+'/online-invoice/delivery'); }
+  catch(e){ body.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; return; }
+  const pdfUrl=info.invoiceUrl||'';
+  const delivered=!!info.delivered;
+  const lastSent=(info.history||[]).find(h=>h.status==='SENT');
+  body.innerHTML=`
+    ${delivered
+      ? `<p style="margin:0 0 .75rem;font-size:.82rem;color:var(--np-primary-600)">Invoice was delivered automatically${lastSent?` (${esc(new Date(lastSent.createdAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))})`:''}. Resend below only if the patient didn't receive it.</p>`
+      : `<p style="margin:0 0 .75rem;font-size:.82rem;color:var(--np-warn,#B45309)">This booking was paid online, but no invoice has been successfully delivered yet — use Send below to generate and deliver it now.</p>`}
+    <div class="np-action-list">
+      <button type="button" class="np-btn np-btn--block" ${pdfUrl?'':'disabled'} onclick="window.open('${esc(pdfUrl)}','_blank')">View invoice</button>
+      <a class="np-btn np-btn--block ${pdfUrl?'':'np-btn--disabled'}" ${pdfUrl?`href="${esc(pdfUrl)}" download`:'aria-disabled="true"'}>Download PDF</a>
+      <button type="button" class="np-btn np-btn--block" ${pdfUrl?'':'disabled'} onclick="printPdf('${jsAttr(pdfUrl)}')">Print</button>
+      <button type="button" class="np-btn np-btn--block np-btn--primary" ${hasContact?'':'disabled'} title="${hasContact?'':'Patient has no phone or email on file — add one before sending'}" onclick="closeModal();openOnlineInvoiceSendModal('${appointmentId}','${jsAttr(phone)}','${jsAttr(email)}')">${delivered?'Resend invoice':'Send invoice'}</button>
+      <button type="button" class="np-btn np-btn--block np-btn--ghost" onclick="openInvoiceHistory('${appointmentId}','online')">Delivery history</button>
+    </div>
+    ${hasContact?'':'<p style="margin:.5rem 0 0;font-size:.8rem;color:var(--np-warn,#B45309)">This patient has no phone or email on file, so there\'s nothing to send to — add contact details on their patient record first.</p>'}`;
+}
+
+function openOnlineInvoiceSendModal(appointmentId, phone, email){
+  const hasPhone=!!phone; const hasEmail=!!email;
+  if(!hasPhone && !hasEmail){ toast('Patient has no phone or email on file — cannot send','error'); return; }
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Send invoice (paid online)</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body">
+    <div class="np-row" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+      ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendOnlWa" checked/> Send via WhatsApp</label>`:''}
+      ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendOnlEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
+    </div>
+  </div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendOnlineInvoiceConfirm">Send</button></div>
+  </div></div>`;
+  $('#sendOnlineInvoiceConfirm').addEventListener('click', async ()=>{
+    const channels=[];
+    if(hasPhone && $('#sendOnlWa').checked) channels.push('whatsapp');
+    if(hasEmail && $('#sendOnlEm') && $('#sendOnlEm').checked) channels.push('email');
+    if(!channels.length){ toast('Choose at least one channel','error'); return; }
+    const btn=$('#sendOnlineInvoiceConfirm');
+    btn.disabled=true; btn.textContent='Sending…';
+    try{
+      const r=await api('/receptionist/appointments/'+appointmentId+'/online-invoice/send',{method:'POST',body:JSON.stringify({channels})});
+      closeModal();
+      toast('Invoice sent — WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email);
+      loadAppointments(); loadDashboard();
+    }catch(e){ btn.disabled=false; btn.textContent='Send'; toast(e.message,'error'); }
+  });
+}
+
+function openBillSendModal(billId, phone, email){
+  const hasPhone=!!phone; const hasEmail=!!email;
+  if(!hasPhone && !hasEmail){ toast('No phone or email for this customer — cannot send','error'); return; }
+  $('#modalHost').innerHTML=`<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Send bill</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body">
+    <div class="np-row" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+      ${hasPhone?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendBillWa" checked/> Send via WhatsApp</label>`:''}
+      ${hasEmail?`<label class="np-row" style="gap:.5rem"><input type="checkbox" id="sendBillEm" ${hasPhone?'':'checked'}/> Send via Email</label>`:''}
+    </div>
+  </div>
+  <div class="np-modal__foot"><button type="button" class="np-btn" onclick="closeModal()">Cancel</button><button type="button" class="np-btn np-btn--primary" id="sendBillConfirm">Send</button></div>
+  </div></div>`;
+  $('#sendBillConfirm').addEventListener('click', async ()=>{
+    const channels=[];
+    if(hasPhone && $('#sendBillWa').checked) channels.push('whatsapp');
+    if(hasEmail && $('#sendBillEm') && $('#sendBillEm').checked) channels.push('email');
+    if(!channels.length){ toast('Choose at least one channel','error'); return; }
+    const btn=$('#sendBillConfirm');
+    btn.disabled=true; btn.textContent='Sending…';
+    try{
+      const r=await api('/receptionist/pharmacy/bills/'+billId+'/send',{method:'POST',body:JSON.stringify({channels})});
+      closeModal();
+      toast('Bill sent — WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email);
+      refreshBillingViews();
+    }catch(e){ btn.disabled=false; btn.textContent='Send'; toast(e.message,'error'); }
+  });
+}
 
 // Certificates
-async function loadCerts(){ const list=$('#certsList'); try{ const rows=await api('/receptionist/certificates'); list.innerHTML=rows.length?'<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Cert ID</th><th>Patient</th><th>Doctor</th><th>Template</th><th>Issued</th><th>Actions</th></tr></thead><tbody>'+rows.map(c=>`<tr><td data-label="Cert ID">${esc(c.certificateNumber)}</td><td data-label="Patient">${esc(c.patientNameSnapshot||(c.patient&&c.patient.name)||'')}</td><td data-label="Doctor">Dr. ${esc((c.doctor&&c.doctor.name)||'')}</td><td data-label="Template">${esc((c.templateKey||'').replace(/_/g,' '))}</td><td data-label="Issued">${esc(fmtDate(c.issuedAt))}</td><td data-label="Actions">${c.pdfUrl?`<a class="np-btn np-btn--sm" href="${c.pdfUrl}" target="_blank">PDF</a>`:''} <button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertSendModal('${c.id}','${jsAttr((c.patient&&c.patient.phone)||'')}','${jsAttr((c.patient&&c.patient.email)||'')}')">Send</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="np-empty"><div class="np-empty__title">No certificates yet</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
+// Generate / View / Send are three distinct actions: issuing a certificate
+// only creates it + its PDF (never auto-delivers), View opens the PDF, and
+// Send opens the channel picker. Delivery status comes from the send log.
+async function loadCerts(){ const list=$('#certsList'); try{ const rows=await api('/receptionist/certificates'); list.innerHTML=rows.length?'<div class="np-table-wrap"><table class="np-table"><thead><tr><th>Cert ID</th><th>Patient</th><th>Doctor</th><th>Template</th><th>Issued</th><th>Delivery</th><th>Actions</th></tr></thead><tbody>'+rows.map(c=>`<tr><td data-label="Cert ID">${esc(c.certificateNumber)}</td><td data-label="Patient">${esc(c.patientNameSnapshot||(c.patient&&c.patient.name)||'')}</td><td data-label="Doctor">Dr. ${esc((c.doctor&&c.doctor.name)||'')}</td><td data-label="Template">${esc((c.templateKey||'').replace(/_/g,' '))}</td><td data-label="Issued">${esc(fmtDate(c.issuedAt))}</td><td data-label="Delivery">${deliveryBadge(c.delivered,c.lastSentAt)}</td><td data-label="Actions" style="white-space:nowrap"><a class="np-btn np-btn--sm" href="${esc(c.pdfUrl||'')}" target="_blank">View</a> <button class="np-btn np-btn--sm np-btn--ghost" onclick="printPdf('${jsAttr(c.pdfUrl||'')}')">Print</button> <button class="np-btn np-btn--sm np-btn--primary" onclick="openCertSendModal('${c.id}','${jsAttr((c.patient&&c.patient.phone)||'')}','${jsAttr((c.patient&&c.patient.email)||'')}')">Send</button> <button class="np-btn np-btn--sm np-btn--ghost" onclick="openInvoiceHistory('${c.id}','cert')">History</button></td></tr>`).join('')+'</tbody></table></div>':'<div class="np-empty"><div class="np-empty__title">No certificates yet</div></div>'; }catch(e){ list.innerHTML=`<div class="np-error">${esc(e.message)}</div>`; } }
 function openCertSendModal(certId, phone, email){
   const hasPhone=!!phone; const hasEmail=!!email;
   if(!hasPhone && !hasEmail){ toast('Patient has no phone or email on file — cannot send','error'); return; }
@@ -871,8 +1005,9 @@ function openCertSendModal(certId, phone, email){
     if(hasPhone && $('#sendCertWa').checked) channels.push('whatsapp');
     if(hasEmail && $('#sendCertEm') && $('#sendCertEm').checked) channels.push('email');
     if(!channels.length){ toast('Choose at least one channel','error'); return; }
-    closeModal();
-    try{ const r=await api('/receptionist/certificates/'+certId+'/send',{method:'POST',body:JSON.stringify({channels})}); toast('Delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); }catch(e){ toast(e.message,'error'); }
+    const btn=$('#sendCertConfirm');
+    btn.disabled=true; btn.textContent='Sending…';
+    try{ const r=await api('/receptionist/certificates/'+certId+'/send',{method:'POST',body:JSON.stringify({channels})}); closeModal(); toast('Delivery: WhatsApp '+r.delivery.whatsapp+', Email '+r.delivery.email); loadCerts(); }catch(e){ btn.disabled=false; btn.textContent='Send'; toast(e.message,'error'); }
   });
 }
 async function openCertModal(appointmentId){
@@ -901,7 +1036,7 @@ async function openCertModal(appointmentId){
       if(!pid){ toast('Select a patient from the search results','error'); return; }
       payload.doctorId=raw.doctorId; payload.patientId=pid;
     }
-    try{ const r=await api(url,{method:'POST',body:JSON.stringify(payload)}); toast('Certificate issued'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadCerts(); }catch(err){toast(err.message,'error');} });
+    try{ const r=await api(url,{method:'POST',body:JSON.stringify(payload)}); toast('Certificate issued — deliver it from the Certificates list with Send'); if(r.pdfUrl)window.open(r.pdfUrl,'_blank'); closeModal(); loadCerts(); }catch(err){toast(err.message,'error');} });
 }
 
 // Pharmacy (receptionist with permission)
@@ -911,7 +1046,33 @@ function billStatusBadge(s){ return s==='PAID'?'<span class="np-badge np-badge--
 async function loadPharmBills(){ const tb=$('#pharmBillsTbody'); if(!tb)return; try{ const rows=await api('/receptionist/pharmacy/bills?billType=PHARMACY'); __pharmBills=rows; tb.innerHTML=rows.length?rows.map(b=>`<tr><td data-label=\"Bill #\"><b>${esc(b.billNumber)}</b></td><td data-label=\"Customer\">${esc(b.customerName||'')}</td><td data-label=\"Total\" style=\"text-align:right\"><b>${inr(b.total)}</b></td><td data-label=\"Status\">${billStatusBadge(b.status)}</td><td data-label=\"Date\">${esc(fmtDate(b.createdAt))}</td><td data-label=\"Actions\" style=\"text-align:right;white-space:nowrap\"><button class=\"np-btn np-btn--sm\" onclick=\"showRecBillActions('${b.id}')\">Actions</button></td></tr>`).join(''):'<tr><td colspan=\"6\"><div class=\"np-empty\"><div class=\"np-empty__title\">No pharmacy bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan=\"6\"><div class=\"np-error\">${esc(e.message)}</div></td></tr>`; } }
 async function __ensureBillingCtx(){ if(!__doctors.length){ try{ const asn=await api('/receptionist/assignments'); __doctors=(asn||[]).map(a=>a.doctor); }catch(_){__doctors=__doctors||[];} } if(!__inv.length){ try{ __inv=await api('/receptionist/pharmacy/inventory'); }catch(e){__inv=__inv||[]; toast(e.message==='Pharmacy management is not enabled for your account' ? 'Pharmacy management is not enabled for your account — ask your admin, or add bill items manually instead of searching inventory.' : ('Could not load inventory: '+e.message), 'error'); } } }
 async function loadBilling(){ const tb=$('#billingTbody'); if(!tb)return; try{ const qs=new URLSearchParams(); const t=$('#billTypeFilter').value, st=$('#billStatusFilter').value; if(t)qs.set('billType',t); if(st)qs.set('status',st); const rows=await api('/receptionist/pharmacy/bills?'+(qs.toString()||'')); __bills=rows; tb.innerHTML=rows.length?rows.map(b=>`<tr><td data-label="Bill #"><b>${esc(b.billNumber)}</b></td><td data-label="Type">${billTypeBadge(b.billType)}</td><td data-label="Customer">${esc(b.customerName||'')}${b.patient?`<div class="np-mut" style="font-size:.72rem">${esc(b.patient.name||'')}</div>`:''}</td><td data-label="Total" style="text-align:right"><b>${inr(b.total)}</b></td><td data-label="Status">${billStatusBadge(b.status)}</td><td data-label="Date">${esc(fmtDate(b.createdAt))}</td><td data-label="Actions" style="text-align:right"><button class="np-btn np-btn--sm" onclick="showRecBillActions('${b.id}')">Actions</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="np-empty"><div class="np-empty__title">No bills yet</div></div></td></tr>'; }catch(e){ tb.innerHTML=`<tr><td colspan="7"><div class="np-error">${esc(e.message)}</div></td></tr>`; } }
-function showRecBillActions(id){ const b=__bills.find(x=>x.id===id) || __pharmBills.find(x=>x.id===id); if(!b)return; const isPaid=b.status==='PAID'; let rows=''; if(isPaid){ rows+='<button type="button" class="np-btn np-btn--block" disabled>Paid — locked</button>'; } else { rows+='<button type="button" class="np-btn np-btn--block" onclick="closeModal();editRecBill(\''+id+'\')">Edit draft</button>'; rows+='<button type="button" class="np-btn np-btn--block np-btn--primary" onclick="closeModal();__markRecPaid(\''+id+'\')">Mark paid</button>'; } if(b.pdfUrl){ rows+='<button type="button" class="np-btn np-btn--block" onclick="window.open(\''+b.pdfUrl+'\',\'_blank\')">View PDF</button><button type="button" class="np-btn np-btn--block" onclick="printPdf(\''+b.pdfUrl+'\')">Print</button>'; } $('#modalHost').innerHTML='<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Bill actions — '+esc(b.billNumber)+'</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><div class="np-action-list">'+rows+'</div></div></div></div>'; }
+function showRecBillActions(id){
+  const b=__bills.find(x=>x.id===id) || __pharmBills.find(x=>x.id===id); if(!b)return;
+  const isPaid=b.status==='PAID';
+  const phone=(b.customerPhone||(b.patient&&b.patient.phone)||'');
+  const email=(b.patient&&b.patient.email)||'';
+  const hasContact=!!(phone||email);
+  const hasPdf=!!b.pdfUrl;
+  let rows='';
+  if(isPaid){ rows+='<button type="button" class="np-btn np-btn--block" disabled>Paid — locked</button>'; }
+  else {
+    rows+='<button type="button" class="np-btn np-btn--block" onclick="closeModal();editRecBill(\''+id+'\')">Edit draft</button>';
+    rows+='<button type="button" class="np-btn np-btn--block np-btn--primary" onclick="closeModal();__markRecPaid(\''+id+'\')">Mark paid</button>';
+  }
+  rows+='<button type="button" class="np-btn np-btn--block" '+(hasPdf?'':'disabled')+' onclick="window.open(\''+esc(b.pdfUrl||'')+'\',\'_blank\')">View PDF</button>';
+  rows+='<a class="np-btn np-btn--block '+(hasPdf?'':'np-btn--disabled')+'" '+(hasPdf?('href="'+esc(b.pdfUrl)+'" download'):'aria-disabled="true"')+'>Download PDF</a>';
+  rows+='<button type="button" class="np-btn np-btn--block" '+(hasPdf?'':'disabled')+' onclick="printPdf(\''+jsAttr(b.pdfUrl||'')+'\')">Print</button>';
+  rows+='<button type="button" class="np-btn np-btn--block np-btn--primary" '+(hasContact?'':'disabled')+' title="'+(hasContact?'':'No phone or email for this customer — add one on the bill or patient record first')+'" onclick="closeModal();openBillSendModal(\''+id+'\',\''+jsAttr(phone)+'\',\''+jsAttr(email)+'\')">Send</button>';
+  rows+='<button type="button" class="np-btn np-btn--block np-btn--ghost" onclick="openInvoiceHistory(\''+id+'\',\'bill\')">Delivery history</button>';
+  $('#modalHost').innerHTML='<div class="np-modal"><div class="np-modal__panel"><header class="np-modal__head"><div class="np-modal__title">Bill actions — '+esc(b.billNumber)+'</div><button class="np-modal__close" onclick="closeModal()">×</button></header><div class="np-modal__body"><div id="billDeliveryInfo" style="margin-bottom:.6rem;font-size:.8rem;color:var(--np-muted)">Checking delivery status…</div><div class="np-action-list">'+rows+'</div></div></div></div>';
+  api('/receptionist/pharmacy/bills/'+id+'/delivery').then(r=>{
+    const el=document.getElementById('billDeliveryInfo'); if(!el) return;
+    const last=(r.history||[]).find(h=>h.status==='SENT');
+    el.innerHTML = r.delivered
+      ? '<span style="color:var(--np-primary-600)">Delivered'+(last?(' — last sent '+esc(new Date(last.createdAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))):'')+'.</span>'
+      : '<span style="color:var(--np-warn,#B45309)">Not sent to the customer yet — use Send below.</span>';
+  }).catch(()=>{ const el=document.getElementById('billDeliveryInfo'); if(el) el.textContent=''; });
+}
 // Both bill tables (Billing + Pharmacy Bills) and the Rx queue read from the
 // same bills API, so any save/mark-paid/dispense refreshes all of them.
 function refreshBillingViews(){ refreshAfterMutation(['billingView','pharmBillsView','rxView','dashView']); }

@@ -59,7 +59,7 @@ async function loadCertificateGraph(id) {
 // Fire PDF regeneration + WhatsApp + email delivery without letting a
 // channel failure fail the request. Returns a per-channel delivery summary
 // so the UI can show exactly what happened.
-async function deliverCertificate(cert, { sendWhatsapp = true, sendEmail = true } = {}) {
+async function deliverCertificate(cert, { sendWhatsapp = true, sendEmail = true, auto = false } = {}) {
   const full = cert && cert.patient ? cert : await loadCertificateGraph(cert.id);
   if (!full) return { whatsapp: 'skipped', email: 'skipped' };
 
@@ -74,7 +74,7 @@ async function deliverCertificate(cert, { sendWhatsapp = true, sendEmail = true 
     return { whatsapp: 'pdf_failed', email: 'pdf_failed' };
   }
 
-  return automation.onCertificateIssued({ certificate: full, pdfRes, sendWhatsapp, sendEmail });
+  return automation.onCertificateIssued({ certificate: full, pdfRes, sendWhatsapp, sendEmail, auto });
 }
 
 // Full certificate-type catalog. Keep keys in sync with
@@ -246,7 +246,10 @@ exports.create = asyncHandler(async (req, res) => {
   // re-send from the certificates list via /:id/send.
   const delivery = await deliverCertificate({ ...cert, patient, doctor }, {
     sendWhatsapp: req.body.sendWhatsapp !== false,
-    sendEmail: req.body.sendEmail !== false
+    sendEmail: req.body.sendEmail !== false,
+    // Issue-time delivery is the automatic path — claim-guarded so a
+    // duplicate trigger can't message the patient twice.
+    auto: true
   });
 
   const fresh = await prisma.medicalCertificate.findUnique({ where: { id: cert.id } });

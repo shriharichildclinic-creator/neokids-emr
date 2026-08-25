@@ -36,13 +36,18 @@ router.post('/appointments/:id/invoice',         c.generateInvoice);
 router.post('/appointments/:id/prescription',    c.createPrescription);
 router.get('/appointments/:id/prescription',     c.appointmentPrescription);
 
+router.get('/appointments/:id/online-invoice/delivery', c.onlineInvoiceDelivery);
+router.post('/appointments/:id/online-invoice/send',    c.sendOnlineInvoice);
+
 router.get('/invoices',          c.listInvoices);
 router.get('/invoices/:id',      c.invoiceDetail);
+router.get('/invoices/:id/delivery', c.invoiceDelivery);
 router.post('/invoices/:id/send', c.sendInvoice);
 
 router.get('/certificates/templates',            cert.listTemplates);
 router.get('/certificates',                      c.listCertificates);
 router.get('/certificates/:id',                  c.certificateDetail);
+router.get('/certificates/:id/delivery',         c.certificateDelivery);
 router.post('/certificates',                     c.issueCertificate);
 router.post('/certificates/:id/send',            c.sendCertificate);
 router.post('/appointments/:id/certificate',     c.issueCertificateForAppointment);
@@ -55,5 +60,6 @@ router.get('/pharmacy/bills/:id',                ph.billDetail);
 router.put('/pharmacy/bills/:id',                ph.updateBill);
 router.post('/pharmacy/bills/:id/mark-paid',     ph.markPaid);
 router.post('/pharmacy/bills/:id/send',          ph.sendBill);
+router.get('/pharmacy/bills/:id/delivery',       ph.billDelivery);
 
 module.exports = router;
