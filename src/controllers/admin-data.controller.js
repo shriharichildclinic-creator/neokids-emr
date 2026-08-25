@@ -49,8 +49,8 @@ async function verifyAdminPassword(req, res) {
 exports.search = asyncHandler(async (req, res) => {
   const type = String(req.query.type || '').toUpperCase();
   const q = String(req.query.q || '').trim();
-  if (!['PATIENT', 'DOCTOR'].includes(type)) {
-    return res.status(400).json({ error: 'type must be PATIENT or DOCTOR' });
+  if (!['PATIENT', 'DOCTOR', 'MEDICAL_CENTRE', 'RECEPTIONIST', 'PHARMACY'].includes(type)) {
+    return res.status(400).json({ error: 'type must be PATIENT, DOCTOR, MEDICAL_CENTRE, RECEPTIONIST or PHARMACY' });
   }
   if (q.length < 2) return res.json([]);
 
@@ -62,6 +62,36 @@ exports.search = asyncHandler(async (req, res) => {
       orderBy: { name: 'asc' }
     });
     return res.json(rows.map(d => ({ ...d, status: d.deletedAt ? 'Deactivated' : 'Active' })));
+  }
+
+  if (type === 'MEDICAL_CENTRE') {
+    const rows = await prisma.medicalCentre.findMany({
+      where: { OR: [{ name: { contains: q } }, { email: { contains: q } }, { phone: { contains: q } }, { city: { contains: q } }] },
+      select: { id: true, name: true, email: true, phone: true, isActive: true },
+      take: 20,
+      orderBy: { name: 'asc' }
+    });
+    return res.json(rows.map(c => ({ ...c, status: c.isActive ? 'Active' : 'Deactivated' })));
+  }
+
+  if (type === 'RECEPTIONIST') {
+    const rows = await prisma.receptionist.findMany({
+      where: { OR: [{ name: { contains: q } }, { email: { contains: q } }, { phone: { contains: q } }] },
+      select: { id: true, name: true, email: true, phone: true, deletedAt: true, status: true },
+      take: 20,
+      orderBy: { name: 'asc' }
+    });
+    return res.json(rows.map(r => ({ ...r, status: r.deletedAt ? 'Deactivated' : r.status })));
+  }
+
+  if (type === 'PHARMACY') {
+    const rows = await prisma.pharmacyUser.findMany({
+      where: { OR: [{ name: { contains: q } }, { email: { contains: q } }, { phone: { contains: q } }] },
+      select: { id: true, name: true, email: true, phone: true, deletedAt: true, status: true },
+      take: 20,
+      orderBy: { name: 'asc' }
+    });
+    return res.json(rows.map(p => ({ ...p, status: p.deletedAt ? 'Deactivated' : p.status })));
   }
 
   const rows = await prisma.patient.findMany({
@@ -216,4 +246,139 @@ exports.purgeDoctor = asyncHandler(async (req, res) => {
   });
 
   res.json({ success: true, message: `Dr. ${doctor.name} and all related records were permanently deleted.` });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// FEATURE ADD: below this line — Medical Centre / Receptionist / Pharmacy
+// User previously had no hard-delete path at all in Data Management (only
+// Patient and Doctor did, above). Same pattern: read-only detail for the
+// confirm screen, password-gated purge, audit-logged before the rows go.
+//
+// Unlike Patient/Doctor, most of what references these three is
+// onDelete:SetNull in the schema (Appointment.medicalCentreId,
+// ConsultationInvoice.medicalCentreId, PharmacyUser.medicalCentreId,
+// PharmacyItem.medicalCentreId, PharmacyBill.medicalCentreId, and
+// ConsultationInvoice.receptionistId) — so deleting a centre, receptionist,
+// or pharmacy user does NOT cascade away appointments/invoices/bills tied
+// to it; that history survives with the reference cleared. Only
+// ReceptionistAssignment and PharmacyUserDoctor are onDelete:Cascade, which
+// is exactly the "assignment" data that should disappear with the staff
+// member — there's no separate deleteMany needed for those.
+// ─────────────────────────────────────────────────────────────────────
+
+exports.medicalCentreDetail = asyncHandler(async (req, res) => {
+  const centre = await prisma.medicalCentre.findUnique({ where: { id: req.params.id } });
+  if (!centre) return res.status(404).json({ error: 'Medical centre not found' });
+
+  const [assignmentCount, appointmentCount, invoiceCount, pharmacyUserCount, pharmacyBillCount] = await Promise.all([
+    prisma.receptionistAssignment.count({ where: { medicalCentreId: centre.id } }),
+    prisma.appointment.count({ where: { medicalCentreId: centre.id } }),
+    prisma.consultationInvoice.count({ where: { medicalCentreId: centre.id } }),
+    prisma.pharmacyUser.count({ where: { medicalCentreId: centre.id } }),
+    prisma.pharmacyBill.count({ where: { medicalCentreId: centre.id } })
+  ]);
+
+  res.json({
+    centre: { ...centre, status: centre.isActive ? 'Active' : 'Deactivated' },
+    counts: { assignments: assignmentCount, appointments: appointmentCount, invoices: invoiceCount, pharmacyUsers: pharmacyUserCount, pharmacyBills: pharmacyBillCount }
+  });
+});
+
+exports.receptionistDetail = asyncHandler(async (req, res) => {
+  const receptionist = await prisma.receptionist.findUnique({ where: { id: req.params.id } });
+  if (!receptionist) return res.status(404).json({ error: 'Receptionist not found' });
+
+  const [assignmentCount, invoiceCount, registrationCount] = await Promise.all([
+    prisma.receptionistAssignment.count({ where: { receptionistId: receptionist.id } }),
+    prisma.consultationInvoice.count({ where: { receptionistId: receptionist.id } }),
+    prisma.patientRegistration.count({ where: { receptionistId: receptionist.id } })
+  ]);
+
+  const { passwordHash, ...safe } = receptionist;
+  res.json({
+    receptionist: { ...safe, status: receptionist.deletedAt ? 'Deactivated' : receptionist.status },
+    counts: { assignments: assignmentCount, invoices: invoiceCount, registrations: registrationCount }
+  });
+});
+
+exports.pharmacyUserDetail = asyncHandler(async (req, res) => {
+  const pharmacyUser = await prisma.pharmacyUser.findUnique({
+    where: { id: req.params.id },
+    include: { medicalCentre: { select: { name: true } } }
+  });
+  if (!pharmacyUser) return res.status(404).json({ error: 'Pharmacy user not found' });
+
+  const [doctorCount, billCount, registrationCount] = await Promise.all([
+    prisma.pharmacyUserDoctor.count({ where: { pharmacyUserId: pharmacyUser.id } }),
+    prisma.pharmacyBill.count({ where: { createdById: pharmacyUser.id, createdByRole: 'PHARMACY' } }),
+    prisma.patientRegistration.count({ where: { pharmacyUserId: pharmacyUser.id } })
+  ]);
+
+  const { passwordHash, ...safe } = pharmacyUser;
+  res.json({
+    pharmacyUser: { ...safe, status: pharmacyUser.deletedAt ? 'Deactivated' : pharmacyUser.status },
+    counts: { doctorAssignments: doctorCount, bills: billCount, registrations: registrationCount }
+  });
+});
+
+exports.purgeMedicalCentre = asyncHandler(async (req, res) => {
+  if (!(await verifyAdminPassword(req, res))) return;
+  const centre = await prisma.medicalCentre.findUnique({ where: { id: req.params.id } });
+  if (!centre) return res.status(404).json({ error: 'Medical centre not found' });
+
+  // No transaction of manual deleteMany calls needed beyond the row itself —
+  // ReceptionistAssignment cascades automatically, and every other
+  // reference (Appointment, ConsultationInvoice, PharmacyUser, PharmacyItem,
+  // PharmacyBill) is onDelete:SetNull, so a single delete is enough and
+  // can't be interrupted by a partial manual cleanup.
+  await prisma.medicalCentre.delete({ where: { id: centre.id } });
+
+  await audit.log({
+    actor: adminActor(req),
+    action: 'MEDICAL_CENTRE_PERMANENTLY_DELETED',
+    entityType: 'MEDICAL_CENTRE',
+    entityId: centre.id,
+    summary: `Permanently deleted medical centre ${centre.name}`,
+    meta: { name: centre.name, city: centre.city, reason: req.body && req.body.reason }
+  });
+
+  res.json({ success: true, message: `${centre.name} was permanently deleted.` });
+});
+
+exports.purgeReceptionist = asyncHandler(async (req, res) => {
+  if (!(await verifyAdminPassword(req, res))) return;
+  const receptionist = await prisma.receptionist.findUnique({ where: { id: req.params.id } });
+  if (!receptionist) return res.status(404).json({ error: 'Receptionist not found' });
+
+  await prisma.receptionist.delete({ where: { id: receptionist.id } });
+
+  await audit.log({
+    actor: adminActor(req),
+    action: 'RECEPTIONIST_PERMANENTLY_DELETED',
+    entityType: 'RECEPTIONIST',
+    entityId: receptionist.id,
+    summary: `Permanently deleted receptionist ${receptionist.name} (${receptionist.email})`,
+    meta: { name: receptionist.name, email: receptionist.email, phone: receptionist.phone, reason: req.body && req.body.reason }
+  });
+
+  res.json({ success: true, message: `${receptionist.name} was permanently deleted.` });
+});
+
+exports.purgePharmacyUser = asyncHandler(async (req, res) => {
+  if (!(await verifyAdminPassword(req, res))) return;
+  const pharmacyUser = await prisma.pharmacyUser.findUnique({ where: { id: req.params.id } });
+  if (!pharmacyUser) return res.status(404).json({ error: 'Pharmacy user not found' });
+
+  await prisma.pharmacyUser.delete({ where: { id: pharmacyUser.id } });
+
+  await audit.log({
+    actor: adminActor(req),
+    action: 'PHARMACY_USER_PERMANENTLY_DELETED',
+    entityType: 'PHARMACY_USER',
+    entityId: pharmacyUser.id,
+    summary: `Permanently deleted pharmacy user ${pharmacyUser.name} (${pharmacyUser.email})`,
+    meta: { name: pharmacyUser.name, email: pharmacyUser.email, phone: pharmacyUser.phone, reason: req.body && req.body.reason }
+  });
+
+  res.json({ success: true, message: `${pharmacyUser.name} was permanently deleted.` });
 });

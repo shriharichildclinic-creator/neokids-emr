@@ -91,6 +91,21 @@ exports.deleteCentre = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Medical centre deactivated' });
 });
 
+// FEATURE ADD: deleteCentre above only ever set isActive:false — there was
+// no route back to Active once a centre had been deactivated, so an
+// accidental deactivation (or a clinic that reopens) was permanent in
+// practice even though the model only ever intended isActive as a toggle.
+exports.activateCentre = asyncHandler(async (req, res) => {
+  const existing = await prisma.medicalCentre.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: 'Medical centre not found' });
+  const updated = await prisma.medicalCentre.update({
+    where: { id: req.params.id },
+    data: { isActive: true }
+  });
+  await audit.log({ actor: adminActor(req), action: 'CENTRE_ACTIVATED', entityType: 'MEDICAL_CENTRE', entityId: updated.id, summary: `Activated clinic ${updated.name}` });
+  res.json({ success: true, message: 'Medical centre activated' });
+});
+
 // ═══════════════ RECEPTIONISTS ═══════════════
 exports.createReceptionist = asyncHandler(async (req, res) => {
   const parsed = createReceptionistSchema.safeParse(req.body);

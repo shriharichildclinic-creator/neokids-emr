@@ -228,7 +228,7 @@ exports.stats = asyncHandler(async (req, res) => {
   });
 });
 
-// ─── Overall clinic revenue (online + in-person, combined) ───
+// ─── In-person clinic revenue (reception scope only) ───
 //
 // `stats` above only ever answers "today". Reception previously had no
 // month/overall view, so the only cash figures a receptionist could see
@@ -240,16 +240,20 @@ exports.stats = asyncHandler(async (req, res) => {
 // different tables inevitably drift apart, which is exactly the "all
 // different figures everywhere" symptom.
 //
-// BUG FIX (panel said "Overall", data was cash-only): this endpoint used
-// to call ONLY revenue.service.getCashCollectedTotal(), which is
-// deliberately restricted to in-person cash (it deliberately excludes any
-// appointment with a cashfreeOrderId). But the panel this feeds is titled
-// "Overall clinic revenue" — a receptionist whose doctors mostly do paid
-// online consults would see that headline number sitting near zero, with
-// every online rupee silently missing. It now calls
-// getOverallClinicRevenue(), which adds the Cashfree-collected total to
-// the cash total, so "Overall" actually means overall. The online/cash
-// split is still returned separately so the breakdown table isn't lost.
+// SCOPE FIX (Platform-Wide Analytics Audit): this endpoint previously
+// called getOverallClinicRevenue(), which folds in every Cashfree/online
+// consultation on top of in-person cash, and the panel showed an "Online"
+// column. Receptionists only manage in-person/clinic-cash workflow — they
+// never touch a teleconsultation or its payment — so a reception-facing
+// revenue figure that silently includes online income is out of scope,
+// not just mislabeled. This now calls getCashCollectedTotal() and reports
+// ONLY its `offlineCash` / `offlineConsultations` fields — the same
+// "in-person cash only" figures a doctor's own Earnings page shows for
+// themselves — so reception numbers can never disagree with what the
+// doctor sees for their own in-person visits. (Any teleconsultation paid
+// in cash after the fact still shows up in the DOCTOR's and ADMIN's
+// revenue figures via that same function's `onlineCashCollected` field —
+// it's just correctly excluded from the receptionist's clinic-cash view.)
 exports.revenue = asyncHandler(async (req, res) => {
   const doctorIds = await staffAccess.getDoctorIds(req.user.id);
   const now = new Date();
@@ -258,10 +262,10 @@ exports.revenue = asyncHandler(async (req, res) => {
   if (month < 1 || month > 12) return res.status(400).json({ error: 'Invalid month (1-12)' });
 
   if (!doctorIds.length) {
-    return res.json({ period: { year, month }, totalRevenue: 0, totalOnline: 0, totalCash: 0, consultations: 0, byDoctor: [] });
+    return res.json({ period: { year, month }, totalRevenue: 0, consultations: 0, byDoctor: [] });
   }
 
-  const overall = await revenueSvc.getOverallClinicRevenue({ doctorId: { in: doctorIds }, year, month });
+  const overall = await revenueSvc.getCashCollectedTotal({ doctorId: { in: doctorIds }, year, month });
 
   // Per-doctor breakdown, each computed with the exact same function a
   // doctor would call for themselves — so any one row here is guaranteed
@@ -271,16 +275,20 @@ exports.revenue = asyncHandler(async (req, res) => {
     select: { id: true, name: true }
   });
   const byDoctor = await Promise.all(doctors.map(async d => {
-    const row = await revenueSvc.getOverallClinicRevenue({ doctorId: d.id, year, month });
-    return { doctorId: d.id, doctorName: d.name, ...row };
+    const row = await revenueSvc.getCashCollectedTotal({ doctorId: d.id, year, month });
+    return {
+      doctorId: d.id,
+      doctorName: d.name,
+      totalRevenue: row.offlineCash,
+      consultations: row.offlineConsultations
+    };
   }));
 
   res.json({
     period: { year, month },
-    totalRevenue: overall.totalRevenue,
-    totalOnline: overall.totalOnline,
-    totalCash: overall.totalCash,
-    consultations: overall.consultations,
+    // In-person cash collected only — see scope note above.
+    totalRevenue: overall.offlineCash,
+    consultations: overall.offlineConsultations,
     byDoctor
   });
 });
@@ -781,6 +789,14 @@ exports.generateInvoice = asyncHandler(async (req, res) => {
   const result = await consultInvoiceSvc.issueInvoiceForAppointment(appt, actorOf(req, me), {
     amount, paymentMethod: d.paymentMethod, notes: d.notes
   });
+  // DEFENSIVE: result.invoice should always be set here (issueInvoiceForAppointment
+  // either returns a real invoice or throws), but this used to be reached with
+  // invoice: null on a rare race outcome and crash reading .id off it, which is
+  // what reception saw as "Internal Server Error". Never let a missing invoice
+  // crash the request again — surface it as a normal retryable error instead.
+  if (!result.invoice) {
+    return res.status(409).json({ error: 'Could not confirm the invoice — please try again.' });
+  }
   if (result.skipped) {
     // Someone else (another reception tab, or the doctor tapping "mark
     // paid" at the same moment) won the race and already created it.

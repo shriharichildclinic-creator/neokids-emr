@@ -166,16 +166,23 @@
 /* Mobile: fixed-position dropdown so it never gets clipped by a scrolling
    card list, matching the doctor portal's mobile behaviour exactly. */
 @media (max-width:640px){
+  /* BUG FIX ("buttons go out of box on mobile"): this was a single-row
+     grid (grid-auto-flow:column, grid-auto-columns:max-content), which by
+     design never wraps — each button keeps its full natural width and the
+     row just grows past the card's right/bottom edge once there are 3+
+     buttons (Mark arrived / Invoice / Mark as paid), clipping the last
+     one(s). Flex + flex-wrap lets the buttons drop to a second line
+     instead of overflowing the card on narrow phone screens. */
   .np-appt__actions{
-    display:grid;
-    grid-auto-flow:column;
-    grid-auto-columns:max-content;
-    justify-content:end;
-    align-items:start;
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+    align-items:center;
     gap:.5rem;
     min-width:0;
+    max-width:100%;
   }
-  .np-appt__actions .np-btn{ justify-content:center; min-width:0; }
+  .np-appt__actions .np-btn{ justify-content:center; min-width:0; flex:0 1 auto; }
   .np-overflow-trigger{ width:36px; height:36px; border-radius:10px; }
   .np-overflow-menu{
     min-width:200px;

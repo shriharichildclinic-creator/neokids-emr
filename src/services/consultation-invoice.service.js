@@ -42,34 +42,51 @@ async function issueInvoiceForAppointment(appt, actor, opts = {}) {
     return { skipped: true, reason: 'ALREADY_INVOICED', invoice: existing };
   }
 
-  const invoiceNumber = await staffDocs.nextInvoiceNumber();
   const amount = (opts.amount !== undefined && opts.amount !== null) ? opts.amount : Number(appt.feeAtBooking);
+  const baseData = {
+    appointmentId: appt.id,
+    doctorId: appt.doctorId,
+    patientId: appt.patientId,
+    receptionistId: actor.role === 'RECEPTIONIST' ? actor.id : null,
+    medicalCentreId: appt.medicalCentreId,
+    amount,
+    status: 'PAID',
+    paymentMethod: opts.paymentMethod || 'CASH',
+    notes: opts.notes || (actor.role === 'DOCTOR' ? `Marked paid by Dr. ${actor.name || ''}`.trim() : null)
+  };
+
   let invoice;
-  try {
-    invoice = await prisma.consultationInvoice.create({
-      data: {
-        invoiceNumber,
-        appointmentId: appt.id,
-        doctorId: appt.doctorId,
-        patientId: appt.patientId,
-        receptionistId: actor.role === 'RECEPTIONIST' ? actor.id : null,
-        medicalCentreId: appt.medicalCentreId,
-        amount,
-        status: 'PAID',
-        paymentMethod: opts.paymentMethod || 'CASH',
-        notes: opts.notes || (actor.role === 'DOCTOR' ? `Marked paid by Dr. ${actor.name || ''}`.trim() : null)
+  // Up to 3 attempts: a P2002 on invoiceNumber (see nextInvoiceNumber's
+  // comment — a deleted invoice can leave the "highest number in use"
+  // check briefly stale under concurrent writes) just means someone else's
+  // insert claimed that number a moment ago, so we ask for a fresh one and
+  // retry rather than failing the whole request.
+  for (let attempt = 0; attempt < 3 && !invoice; attempt++) {
+    const invoiceNumber = await staffDocs.nextInvoiceNumber();
+    try {
+      invoice = await prisma.consultationInvoice.create({ data: { ...baseData, invoiceNumber } });
+    } catch (e) {
+      if (e && e.code === 'P2002') {
+        const target = String((e.meta && e.meta.target) || '');
+        if (target.includes('appointmentId')) {
+          // Race: two calls (e.g. doctor and reception tapping "mark paid"
+          // within the same instant) both passed the existence check
+          // above. The unique constraint on appointmentId lets only one
+          // insert win; the loser just reports the winner's invoice back
+          // rather than erroring.
+          const race = await prisma.consultationInvoice.findUnique({ where: { appointmentId: appt.id } });
+          return { skipped: true, reason: 'ALREADY_INVOICED', invoice: race };
+        }
+        if (target.includes('invoiceNumber')) {
+          // Number collision — loop around and generate another one.
+          continue;
+        }
       }
-    });
-  } catch (e) {
-    // Race: two calls (e.g. doctor and reception tapping "mark paid" within
-    // the same instant) both passed the existence check above. The unique
-    // constraint on appointmentId lets only one insert win; the loser just
-    // reports the winner's invoice back rather than erroring.
-    if (e && e.code === 'P2002') {
-      const race = await prisma.consultationInvoice.findUnique({ where: { appointmentId: appt.id } });
-      return { skipped: true, reason: 'ALREADY_INVOICED', invoice: race };
+      throw e;
     }
-    throw e;
+  }
+  if (!invoice) {
+    throw new Error('Could not allocate a unique invoice number after multiple attempts — please try again.');
   }
 
   const stored = await staffDocs.generateAndStoreInvoicePdf(invoice.id, { id: actor.id, role: actor.role });

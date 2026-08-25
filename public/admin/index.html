@@ -240,7 +240,7 @@
           <div id="dashSecondGrid" class="np-dash-second">
             <div class="np-panel">
               <div class="np-panel__head">
-                <div style="flex:1">
+                <div>
                   <div class="np-panel__title">Appointments — last 7 days</div>
                   <div class="np-panel__subtitle">Daily volume (all statuses)</div>
                 </div>
@@ -251,7 +251,7 @@
             </div>
             <div class="np-panel">
               <div class="np-panel__head">
-                <div style="flex:1">
+                <div>
                   <div class="np-panel__title">Recent appointments</div>
                   <div class="np-panel__subtitle">Latest 10 bookings across the platform</div>
                 </div>
@@ -265,7 +265,7 @@
 <section id="onboardingView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1"><div class="np-panel__title">Getting Started</div><div class="np-panel__subtitle">A quick tour of the admin portal</div></div>
+              <div><div class="np-panel__title">Getting Started</div><div class="np-panel__subtitle">A quick tour of the admin portal</div></div>
             </div>
             <div class="np-panel__body" id="onboardingMount"></div>
           </div>
@@ -274,7 +274,7 @@
 <section id="doctorsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1">
+              <div>
                 <div class="np-panel__title">Doctors <span id="docCountBadge" class="np-badge np-badge--blue" style="margin-left:.4rem; vertical-align:middle;"></span></div>
                 <div class="np-panel__subtitle">Manage platform doctors, fees, and availability</div>
               </div>
@@ -304,7 +304,7 @@
 <section id="apptsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1">
+              <div>
                 <div class="np-panel__title">All appointments</div>
                 <div class="np-panel__subtitle">Search, filter, and drill into every booking</div>
               </div>
@@ -356,7 +356,7 @@
 <section id="certsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1">
+              <div>
                 <div class="np-panel__title">Medical Certificates</div>
                 <div class="np-panel__subtitle">Every certificate issued across all doctors</div>
               </div>
@@ -371,7 +371,7 @@
 <section id="revenueView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1">
+              <div>
                 <div class="np-panel__title">Revenue Reports</div>
                 <div class="np-panel__subtitle">Monthly aggregation · Cashfree-processed payments only (cash excluded)</div>
               </div>
@@ -442,7 +442,7 @@
 <section id="settlementsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1">
+              <div>
                 <div class="np-panel__title">Doctor Settlements</div>
                 <div class="np-panel__subtitle">Frozen monthly totals · record payouts · generate invoices</div>
               </div>
@@ -501,7 +501,7 @@
 <section id="invoicesView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1">
+              <div>
                 <div class="np-panel__title">Settlement Invoices</div>
                 <div class="np-panel__subtitle">PDF invoices issued for paid doctor settlements</div>
               </div>
@@ -542,7 +542,7 @@
 <section id="notifView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1">
+              <div>
                 <div class="np-panel__title">Notification Logs</div>
                 <div class="np-panel__subtitle">WhatsApp &amp; email deliveries — filter by template, status, channel, date</div>
               </div>
@@ -599,8 +599,8 @@
           <div class="np-panel" style="border-color:#FCA5A5;">
             <div class="np-panel__head">
               <div>
-                <div class="np-panel__title">Permanently delete a doctor or patient</div>
-                <div class="np-panel__subtitle">Irreversible. Deletes the record and every appointment, prescription, certificate and invoice attached to it. Use this to remove mock/test data or to fulfil a data-deletion request — not for normal deactivation.</div>
+                <div class="np-panel__title">Permanently delete a record</div>
+                <div class="np-panel__subtitle">Irreversible. Deletes the record and, for patients/doctors, every appointment, prescription, certificate and invoice attached to it. Use this to remove mock/test data or to fulfil a data-deletion request — not for normal deactivation.</div>
               </div>
             </div>
             <div class="np-panel__body">
@@ -608,6 +608,9 @@
                 <select id="dmType" class="np-select" style="max-width:160px;">
                   <option value="PATIENT">Patient</option>
                   <option value="DOCTOR">Doctor</option>
+                  <option value="MEDICAL_CENTRE">Medical centre</option>
+                  <option value="RECEPTIONIST">Receptionist</option>
+                  <option value="PHARMACY">Pharmacy user</option>
                 </select>
                 <input id="dmSearch" type="search" class="np-input" style="flex:1;min-width:220px;" placeholder="Search name, phone or email…"/>
               </div>
@@ -693,7 +696,7 @@
 <section id="centresView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1"><div class="np-panel__title">Medical Centres</div><div class="np-panel__subtitle">Clinics & branches — used for receptionist/pharmacy assignment</div></div>
+              <div><div class="np-panel__title">Medical Centres</div><div class="np-panel__subtitle">Clinics & branches — used for receptionist/pharmacy assignment</div></div>
               <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="openCentreModal()">+ Add Centre</button>
             </div>
             <div class="np-panel__body"><div id="centresList"></div></div>
@@ -703,7 +706,7 @@
         <section id="receptionistsView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1"><div class="np-panel__title">Receptionists</div><div class="np-panel__subtitle">Front-desk accounts — created & managed by Admin only</div></div>
+              <div><div class="np-panel__title">Receptionists</div><div class="np-panel__subtitle">Front-desk accounts — created & managed by Admin only</div></div>
               <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="openReceptionistModal()">+ Add Receptionist</button>
             </div>
             <div class="np-panel__body"><div id="receptionistsList"></div></div>
@@ -713,7 +716,7 @@
         <section id="pharmUsersView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1"><div class="np-panel__title">Pharmacy Users</div><div class="np-panel__subtitle">Medical-store accounts — separate from receptionist permissions</div></div>
+              <div><div class="np-panel__title">Pharmacy Users</div><div class="np-panel__subtitle">Medical-store accounts — separate from receptionist permissions</div></div>
               <button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="openPharmUserModal()">+ Add Pharmacy User</button>
             </div>
             <div class="np-panel__body"><div id="pharmUsersList"></div></div>
@@ -723,7 +726,7 @@
         <section id="recInvoicesView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1"><div class="np-panel__title">Reception Consultation Invoices</div><div class="np-panel__subtitle">Invoices generated at clinic front desks</div></div>
+              <div><div class="np-panel__title">Reception Consultation Invoices</div><div class="np-panel__subtitle">Invoices generated at clinic front desks</div></div>
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="loadRecInvoices()">Refresh</button>
             </div>
             <div class="np-panel__body">
@@ -752,7 +755,7 @@
         <section id="onlineInvoicesView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1"><div class="np-panel__title">Online Booking Invoices</div><div class="np-panel__subtitle">Invoices from NeoKidsPro patient online bookings</div></div>
+              <div><div class="np-panel__title">Online Booking Invoices</div><div class="np-panel__subtitle">Invoices from NeoKidsPro patient online bookings</div></div>
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="loadOnlineInvoices()">Refresh</button>
             </div>
             <div class="np-panel__body">
@@ -780,7 +783,7 @@
         <section id="auditView" class="tab-pane hidden">
           <div class="np-panel">
             <div class="np-panel__head">
-              <div style="flex:1"><div class="np-panel__title">Staff Audit Trail</div><div class="np-panel__subtitle">Who created appointments, registered patients, generated invoices & modified records</div></div>
+              <div><div class="np-panel__title">Staff Audit Trail</div><div class="np-panel__subtitle">Who created appointments, registered patients, generated invoices & modified records</div></div>
               <button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="loadAudit()">Refresh</button>
             </div>
             <div class="np-panel__body">

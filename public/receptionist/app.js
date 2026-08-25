@@ -231,7 +231,7 @@ function apptActionsHtml(a){
     // Send here; only a disabled state until the PDF actually exists.
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
   } else if(a.status!=='CANCELLED'){
-    btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}')">Invoice</button>`);
+    btns.push(`<button class="np-btn np-btn--sm" onclick="genInvoice('${a.id}','${a.patient.phone||''}','${esc(a.patient.email||'')}')">Invoice</button>`);
   }
   if(__me.canIssueCertificates && a.status!=='CANCELLED'){
     btns.push(`<button class="np-btn np-btn--sm np-btn--ghost" onclick="openCertModal('${a.id}')">Certificate</button>`);
@@ -287,7 +287,7 @@ function apptCard(a){
     // See apptActionsHtml above for why this branch exists.
     primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" disabled title="Paid online — invoice PDF is still being generated, check back shortly">Paid online</button>`);
   } else if(a.status!=='CANCELLED'){
-    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="genInvoice('${a.id}')">Invoice</button>`);
+    primary.push(`<button class="np-btn np-btn--ghost np-btn--sm" type="button" onclick="genInvoice('${a.id}','${p.phone||''}','${esc(p.email||'')}')">Invoice</button>`);
   }
   if(a.paymentStatus==='CASH_PENDING' && a.status!=='CANCELLED'){
     primary.push(`<button class="np-btn np-btn--primary np-btn--sm" type="button" onclick="markAppointmentPaid('${a.id}')">Mark as paid</button>`);
@@ -555,12 +555,21 @@ function populateRevenuePeriodSelects(){
   }
 }
 
-// Overall clinic revenue for the selected month — pulled from
+// In-person clinic revenue for the selected month — pulled from
 // /receptionist/revenue, which calls the exact same
 // revenue.service.getCashCollectedTotal() function a doctor's own
 // Earnings page calls for themselves (just widened across every doctor
-// assigned to this receptionist). Same function + same filters means
-// this can never drift from what each doctor individually sees.
+// assigned to this receptionist), reading only its in-person figures.
+// Same function + same filters means this can never drift from what each
+// doctor individually sees for their own in-person visits.
+//
+// SCOPE FIX (Platform-Wide Analytics Audit): this panel used to also
+// render an "Online" split, pulled in via getOverallClinicRevenue() on
+// the backend. Reception only manages in-person appointments and clinic
+// cash — a teleconsultation and its payment are never a reception
+// workflow step — so online revenue has no place in this panel. The
+// endpoint now returns in-person cash only; there is no online split to
+// render any more.
 async function loadClinicRevenue(){
   populateRevenuePeriodSelects();
   const year = $('#revYear') ? $('#revYear').value : undefined;
@@ -570,24 +579,15 @@ async function loadClinicRevenue(){
   if (month) q.set('month', month);
   try{
     const r = await api('/receptionist/revenue?' + q.toString());
-    // BUG FIX: this panel is titled "Overall clinic revenue" but used to
-    // render totalCash (in-person only), silently dropping every online/
-    // Cashfree rupee from a number labeled "Overall". The endpoint now
-    // returns totalRevenue = totalOnline + totalCash; render that, and
-    // keep the split visible so online vs cash is still easy to see.
     setText('revTotalCash', inr(r.totalRevenue || 0));
     setText('revConsultations', r.consultations || 0);
-    setText('revOnlineSplit', inr(r.totalOnline || 0));
-    setText('revCashSplit', inr(r.totalCash || 0));
     const rows = Array.isArray(r.byDoctor) ? r.byDoctor : [];
     $('#revByDoctorTbody').innerHTML = rows.length ? rows.map(d => `
       <tr>
         <td data-label="Doctor">Dr. ${esc(d.doctorName)}</td>
         <td data-label="Consultations">${d.consultations || 0}</td>
-        <td data-label="Online" style="text-align:right">${inr(d.totalOnline || 0)}</td>
-        <td data-label="Cash" style="text-align:right">${inr(d.totalCash || 0)}</td>
         <td data-label="Total" style="text-align:right;font-weight:600;">${inr(d.totalRevenue || 0)}</td>
-      </tr>`).join('') : `<tr><td colspan="5" class="np-empty"><div>No revenue collected this period</div></td></tr>`;
+      </tr>`).join('') : `<tr><td colspan="3" class="np-empty"><div>No in-person revenue collected this period</div></td></tr>`;
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -691,7 +691,20 @@ function cancelAppt(id){
   </div></div>`;
   $('#cancelForm').addEventListener('submit',async e=>{e.preventDefault(); const raw=Object.fromEntries(new FormData(e.target).entries()); if(!raw.reason||raw.reason.trim().length<3){toast('Reason required (min 3 chars)','error');return;} try{ await api('/receptionist/appointments/'+id+'/cancel',{method:'POST',body:JSON.stringify({reason:raw.reason})}); toast('Cancelled'); closeModal(); loadAppointments(); loadDashboard(); }catch(err){toast(err.message,'error');} });
 }
-async function genInvoice(id){ try{ const r=await api('/receptionist/appointments/'+id+'/invoice',{method:'POST',body:JSON.stringify({})}); toast(r.existing?'Invoice already exists':'Invoice generated'); refreshAfterMutation(['apptsView','dashView','invoicesView']); }catch(e){toast(e.message,'error');} }
+// BUG FIX ("clicking Invoice does nothing"): this used to just toast
+// "Invoice generated" and leave it there — reception had to notice the
+// card had re-rendered and click "Invoice" a *second* time to reach the
+// Send options. Now it goes straight into the same View/Download/Print/
+// Send actions modal the second click used to require, in one action.
+async function genInvoice(id, phone, email){
+  try{
+    const r = await api('/receptionist/appointments/'+id+'/invoice',{method:'POST',body:JSON.stringify({})});
+    refreshAfterMutation(['apptsView','dashView','invoicesView']);
+    if(r.existing) toast('Invoice already exists');
+    const pdfUrl = r.pdfUrl || (r.invoice && r.invoice.pdfUrl) || '';
+    if(r.invoice && r.invoice.id) openInvoiceActions(r.invoice.id, pdfUrl, phone||'', email||'');
+  }catch(e){ toast(e.message,'error'); }
+}
 
 // Patients
 let __patientQuery='';

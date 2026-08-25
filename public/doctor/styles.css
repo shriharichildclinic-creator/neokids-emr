@@ -523,11 +523,33 @@ html,body{
   width:38px; height:38px; border-radius: 11px;
   display:inline-flex; align-items:center; justify-content:center;
   color:#fff;
+  flex-shrink:0;
   background: linear-gradient(135deg, #89BCBD, #6FAAAB);
   box-shadow: 0 5px 12px -4px rgba(137,188,189,.45);
 }
 .np-setting-card__title{ font-weight:700; color: var(--np-ink); }
 .np-setting-card__sub{ font-size:.78rem; color: var(--np-muted); margin-top:.1rem; }
+
+/* BUG FIX (Availability card squished on mobile): the head used to have a
+   THIRD flex child — #availModeNotice ("Online only" / "In-person only" /
+   etc) — sitting right next to the icon and title/sub block, all fighting
+   for the same row with no flex-basis. Under flex's default shrink:1, that
+   squashed the fixed-width icon down below its own box and crushed the
+   title/subtitle into a narrow column, exactly the "icon stretched,
+   description beside the heading" bug. #availModeNotice now lives outside
+   .np-setting-card__head entirely (see doctor/index.html) as its own
+   full-width line below it, so the head only ever has two children: the
+   icon (flex-shrink:0 above, so it can never be squeezed) and the title/
+   sub block, which is free to take the rest of the row at any width. */
+#availModeNotice{
+  font-size:.8rem;
+  margin: -.5rem 0 1rem;
+}
+@media (max-width: 420px){
+  /* Belt-and-braces for very narrow phones: let the head itself wrap so
+     a long title/subtitle never has to compress below a readable width. */
+  .np-setting-card__head{ flex-wrap:wrap; row-gap:.4rem; }
+}
 
 .np-modal{
   position:fixed; inset:0; z-index:100;
@@ -1151,18 +1173,23 @@ html[data-theme="dark"] .np-password-toggle:hover{ background: rgba(148,163,184,
   min-width:0;
 }
 .np-appt__body{ min-width:0; }
+/* BUG FIX: same overflow bug as reception's appt-card.css (single-row grid
+   that never wraps, so 3+ action buttons run off the card edge on phone
+   widths) — fixed here too since reception's version was ported from this
+   file. Flex + flex-wrap lets buttons drop to a second line instead. */
 .np-appt__actions{
-  display:grid;
-  grid-auto-flow:column;
-  grid-auto-columns:max-content;
-  justify-content:end;
-  align-items:start;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:center;
   gap:.5rem;
   min-width:0;
+  max-width:100%;
 }
 .np-appt__actions .np-btn{
   justify-content:center;
   min-width:0;
+  flex:0 1 auto;
 }
 .np-overflow{
   position:relative;

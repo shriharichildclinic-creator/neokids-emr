@@ -198,6 +198,24 @@ img.np-profile__avatar{ width:100%; height:100%; object-fit:cover; }
 }
 .np-panel__title{ font-weight:700; color:var(--np-ink); font-size:1rem; }
 .np-panel__subtitle{ font-size:.82rem; color:var(--np-muted); margin-top:.1rem; }
+/* MOBILE ANALYTICS FIX (Platform-Wide Analytics Audit): every panel head's
+   title/subtitle wrapper used to be `<div style="flex:1">` — an inline
+   style, so it always won the cascade over any stylesheet rule for the
+   same `flex` property, including the max-width:720px rule below that's
+   specifically meant to force this div onto its own full-width row on
+   phones (flex:1 1 100%). With the inline style still winning at 0%
+   flex-basis, the div never claimed a forced full row; instead it just
+   flex-shrank (min-width:0) down to near-zero width to make room for
+   sibling controls with flex-shrink:0 (buttons, and — worse — a PAIR of
+   month/year selects, e.g. Reception's clinic-revenue panel), crushing
+   the title/subtitle into a column too narrow for even one word,
+   producing exactly the vertical single-word-per-line wrapping seen on
+   every panel head with two side-by-side selects on mobile. The markup
+   now emits a plain `<div>` (no inline style) for this wrapper across
+   every panel in every app (admin/doctor/pharmacy/receptionist), and
+   `flex:1` moves here as a real stylesheet rule so the max-width:720px
+   override two rules down can finally win at that breakpoint as intended. */
+.np-panel__head > div:first-child{ flex:1; min-width:0; }
 .np-panel__body{ padding:.5rem 1.25rem 1.25rem; }
 /* Pharmacy Prescriptions/Bills tabs read as merged with their header since
    .np-panel__head carries no divider anywhere in the app — scoped here

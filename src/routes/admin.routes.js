@@ -38,6 +38,12 @@ router.get('/data-management/patients/:id', dataMgmt.patientDetail);
 router.get('/data-management/doctors/:id', dataMgmt.doctorDetail);
 router.delete('/data-management/patients/:id', dataMgmt.purgePatient);
 router.delete('/data-management/doctors/:id', dataMgmt.purgeDoctor);
+router.get('/data-management/medical-centres/:id', dataMgmt.medicalCentreDetail);
+router.get('/data-management/receptionists/:id', dataMgmt.receptionistDetail);
+router.get('/data-management/pharmacy-users/:id', dataMgmt.pharmacyUserDetail);
+router.delete('/data-management/medical-centres/:id', dataMgmt.purgeMedicalCentre);
+router.delete('/data-management/receptionists/:id', dataMgmt.purgeReceptionist);
+router.delete('/data-management/pharmacy-users/:id', dataMgmt.purgePharmacyUser);
 
 // Doctors
 router.post('/doctors', c.createDoctor);
@@ -82,6 +88,7 @@ router.post('/medical-centres',       clinic.createCentre);
 router.get('/medical-centres',        clinic.listCentres);
 router.put('/medical-centres/:id',    clinic.updateCentre);
 router.delete('/medical-centres/:id', clinic.deleteCentre);
+router.post('/medical-centres/:id/activate', clinic.activateCentre);
 
 // v4.0.0 — Receptionists (created by Admin only; no self-registration)
 router.post('/receptionists',       clinic.createReceptionist);

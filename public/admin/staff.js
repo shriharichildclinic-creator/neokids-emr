@@ -108,7 +108,7 @@ function renderCentresTable(){
       <td data-label="Contact" class="np-mut" style="font-size:.82rem">${esc([c.phone, c.email].filter(Boolean).join(' · ') || '—')}</td>
       <td data-label="Staff / Appts" class="np-mut" style="font-size:.82rem">${(c._count && c._count.receptionistAssignments) || 0} reception · ${(c._count && c._count.appointments) || 0} appts</td>
       <td data-label="Status">${c.isActive ? '<span class="np-badge np-badge--green"><span class="np-badge__dot"></span>Active</span>' : '<span class="np-badge np-badge--slate"><span class="np-badge__dot"></span>Inactive</span>'}</td>
-      <td data-label="Actions" style="text-align:right"><div style="display:flex;flex-wrap:wrap;gap:.4rem;justify-content:flex-end"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : ''}</div></td>
+      <td data-label="Actions" style="text-align:right"><div style="display:flex;flex-wrap:wrap;gap:.4rem;justify-content:flex-end"><button class="np-btn np-btn--sm" onclick="openCentreModal('${c.id}')">Edit</button> ${c.isActive ? `<button class="np-btn np-btn--ghost np-btn--sm np-btn--danger" onclick="deactivateCentre('${c.id}')">Deactivate</button>` : `<button class="np-btn np-btn--ghost np-btn--sm" onclick="activateCentre('${c.id}')">Activate</button>`}</div></td>
     </tr>`).join('') + '</tbody></table></div>'
     : '<div class="np-empty"><div class="np-empty__title">No medical centres yet</div><div class="np-empty__sub">Create your first clinic to assign receptionists.</div></div>';
 }
@@ -170,6 +170,21 @@ async function deactivateCentre(id){
   } catch(e){ toast(e.message, 'error'); }
 }
 window.deactivateCentre = deactivateCentre;
+
+// FEATURE ADD: deactivateCentre only ever had a one-way DELETE (isActive:
+// false) — there was no way back to Active from this screen once a centre
+// had been deactivated. Mirrors deactivateCentre's shape, just the reverse
+// call and no danger styling since it isn't a destructive action.
+async function activateCentre(id){
+  const c = __centres.find(x => x.id === id);
+  try {
+    await api('/admin/medical-centres/' + id + '/activate', { method:'POST' });
+    if (c) c.isActive = true;
+    renderCentresTable();
+    toast('Centre activated');
+  } catch(e){ toast(e.message, 'error'); }
+}
+window.activateCentre = activateCentre;
 
 // ─────────── Receptionists ───────────
 function renderReceptionistsTable(){

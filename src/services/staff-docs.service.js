@@ -10,16 +10,37 @@ async function logNotif(data) {
   catch (e) { logger.error('staff-doc notif log failed', e); }
 }
 
+// BUG FIX (Internal Server Error on Invoice): these used to be a plain row
+// COUNT for the year (`INV-C-<year>-<count+1>`). Deleting a patient/doctor
+// cascades a consultationInvoice.deleteMany(), which shrinks the count but
+// leaves the surviving invoices' numbers untouched — so a later count-based
+// number can land on one that's still in use, hit the unique constraint on
+// invoiceNumber, and crash (see issueInvoiceForAppointment's retry, and the
+// P2002 handling there, for the other half of this fix). Deriving the next
+// number from the highest one actually in use for the year means a deletion
+// can never leave a gap that collides later, count-based or not.
 async function nextInvoiceNumber() {
   const yr = new Date().getUTCFullYear();
-  const count = await prisma.consultationInvoice.count();
-  return `INV-C-${yr}-${String(count + 1).padStart(5, '0')}`;
+  const prefix = `INV-C-${yr}-`;
+  const last = await prisma.consultationInvoice.findFirst({
+    where: { invoiceNumber: { startsWith: prefix } },
+    orderBy: { invoiceNumber: 'desc' },
+    select: { invoiceNumber: true }
+  });
+  const lastN = last ? parseInt(last.invoiceNumber.slice(prefix.length), 10) || 0 : 0;
+  return `${prefix}${String(lastN + 1).padStart(5, '0')}`;
 }
 
 async function nextBillNumber() {
   const yr = new Date().getUTCFullYear();
-  const count = await prisma.pharmacyBill.count();
-  return `PHB-${yr}-${String(count + 1).padStart(5, '0')}`;
+  const prefix = `PHB-${yr}-`;
+  const last = await prisma.pharmacyBill.findFirst({
+    where: { billNumber: { startsWith: prefix } },
+    orderBy: { billNumber: 'desc' },
+    select: { billNumber: true }
+  });
+  const lastN = last ? parseInt(last.billNumber.slice(prefix.length), 10) || 0 : 0;
+  return `${prefix}${String(lastN + 1).padStart(5, '0')}`;
 }
 
 async function generateAndStoreInvoicePdf(invoiceId, user) {

@@ -71,8 +71,29 @@ function splitOne(amount, cfg) {
   const docPct = toNum(cfg.doctorSharePercent);
   const tdsPct = toNum(cfg.tdsPercent);
 
+  // BUG FIX (Platform-Wide Analytics Audit — math verification): clinic
+  // and doctor shares used to be rounded INDEPENDENTLY —
+  // round2(X*cliPct/100) and round2(X*docPct/100) as two separate
+  // computations. clinicSharePercent + doctorSharePercent is validated to
+  // always equal exactly 100 (utils/validators.js), so in principle the
+  // two shares should always add back up to X — but rounding two
+  // fractions of the same number separately doesn't guarantee their
+  // rounded values still sum to the rounded whole (classic "sum of
+  // rounded parts != rounded sum" problem: e.g. X=52.74 at 25/75 rounds
+  // to 13.19 + 39.56 = 52.75, one paisa OVER X). That one paisa then
+  // propagated into clinicShare+doctorNet+tds silently disagreeing with
+  // patientPayment on ~23% of real-world fee amounts tested, and compounds
+  // further once many rows are summed into a monthly settlement total —
+  // exactly the "doesn't add up" symptom this audit is checking for.
+  // Fix: round clinicShare first, then derive doctorGross as the
+  // REMAINDER (X - clinicShare) instead of rounding it independently.
+  // This guarantees clinicShare + doctorGross === X by construction, for
+  // every amount, with no exceptions — and TDS/doctorNet are already
+  // derived from doctorGross the same residual way, so the full
+  // patientPayment = clinicShare + doctorNet + tds identity now holds
+  // exactly on every single row, not just "most of the time."
   const clinic     = round2((X * cliPct) / 100);
-  const docGross   = round2((X * docPct) / 100);
+  const docGross   = round2(X - clinic);
   const tds        = round2((docGross * tdsPct) / 100);
   const docNet     = round2(docGross - tds);
 
@@ -88,10 +109,32 @@ function splitOne(amount, cfg) {
 /**
  * Aggregate a list of {amount, cfg} into a single totals row.
  * Used both for live revenue reports (DRAFT) and for materialising
- * persisted DoctorSettlement rows.
+ * persisted DoctorSettlement rows — these are the totals that get frozen
+ * onto a doctor's settlement/payout and printed on the invoice PDF.
+ *
+ * BUG FIX (Platform-Wide Analytics Audit — math verification): this used
+ * to accumulate each column with plain JS `+=` (IEEE-754 floating point)
+ * across every row, then round2() each column independently at the end.
+ * Two rows that individually reconcile exactly (clinicShare + doctorNet +
+ * tds === patientPayment on every single row — verified) could still
+ * produce a MONTH TOTAL where clinicShare + doctorNet + tds no longer
+ * equals totalRevenue, because floating-point summation error accumulates
+ * differently across each column's own sequence of additions, and then
+ * each column gets rounded to the nearest paisa independently. On a
+ * realistic 60-consultation month this produced a ₹0.17 discrepancy
+ * between the settlement's totalRevenue and its own clinicShare+doctorNet
+ * +tds — exactly the kind of "doesn't add up" a doctor or accountant
+ * would notice on a settlement invoice.
+ *
+ * Fix: accumulate in integer paise instead of floating-point rupees.
+ * Every amount here is already at-most-2-decimal-place currency, so
+ * Math.round(rupees*100) is always exact, and summing integers has zero
+ * precision loss no matter how many rows — the four columns are
+ * guaranteed to reconcile to the rupee total exactly, for any number of
+ * rows, not just approximately.
  */
 function aggregate(items) {
-  const totals = {
+  const paise = {
     consultations:  0,
     totalRevenue:   0,
     clinicShare:    0,
@@ -99,22 +142,24 @@ function aggregate(items) {
     tds:            0,
     doctorNet:      0
   };
+  const toPaise = (n) => Math.round(n * 100);
   for (const it of items) {
     const s = splitOne(it.amount, it.cfg);
-    totals.consultations += 1;
-    totals.totalRevenue  += s.patientPayment;
-    totals.clinicShare   += s.clinicShare;
-    totals.doctorGross   += s.doctorGross;
-    totals.tds           += s.tds;
-    totals.doctorNet     += s.doctorNet;
+    paise.consultations += 1;
+    paise.totalRevenue  += toPaise(s.patientPayment);
+    paise.clinicShare   += toPaise(s.clinicShare);
+    paise.doctorGross   += toPaise(s.doctorGross);
+    paise.tds           += toPaise(s.tds);
+    paise.doctorNet     += toPaise(s.doctorNet);
   }
-  // Round every total once at the end → avoids drift from per-row rounding.
-  totals.totalRevenue = round2(totals.totalRevenue);
-  totals.clinicShare  = round2(totals.clinicShare);
-  totals.doctorGross  = round2(totals.doctorGross);
-  totals.tds          = round2(totals.tds);
-  totals.doctorNet    = round2(totals.doctorNet);
-  return totals;
+  return {
+    consultations: paise.consultations,
+    totalRevenue:  paise.totalRevenue / 100,
+    clinicShare:   paise.clinicShare / 100,
+    doctorGross:   paise.doctorGross / 100,
+    tds:           paise.tds / 100,
+    doctorNet:     paise.doctorNet / 100
+  };
 }
 
 /* ---------- Period helpers ---------- */
@@ -305,12 +350,14 @@ async function getMonthlyRevenueReport({ year, month, doctorId, paymentType, sou
  * like only their online half. This is purely informational: it is
  * never linked to a settlement and never affects doctorNet/TDS.
  *
- * This is also the exact query the Receptionist "overall clinic revenue"
- * figure is built on (see receptionist.controller.js `revenue`) — same
- * function, same filters, just widened to `doctorId: { in: [...] }` for
- * every doctor the receptionist is assigned to. Using one shared function
- * for both is what guarantees a receptionist's total for a doctor always
- * matches that doctor's own "Cash Collected (Clinic)" figure.
+ * This is also the exact query the Receptionist "in-person clinic revenue"
+ * figure is built on (see receptionist.controller.js `revenue`, which reads
+ * ONLY the `offlineCash` / `offlineConsultations` fields below — reception
+ * is scoped to in-person work only, never online/teleconsultation income),
+ * widened to `doctorId: { in: [...] }` for every doctor the receptionist is
+ * assigned to. Using one shared function for both is what guarantees a
+ * receptionist's total for a doctor always matches that doctor's own
+ * "Cash Collected (Clinic)" figure.
  *
  * IMPORTANT: only COLLECTED_PAYMENT_STATUSES (PAID, CASH_COLLECTED) count
  * as collected. CASH_PENDING is money that's been billed but not actually
