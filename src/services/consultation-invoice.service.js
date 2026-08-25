@@ -102,7 +102,15 @@ async function issueInvoiceForAppointment(appt, actor, opts = {}) {
 
   await audit.log({
     actor, action: 'INVOICE_GENERATED', entityType: 'CONSULTATION_INVOICE', entityId: invoice.id,
-    summary: `Generated invoice ${invoiceNumber} (₹${Number(amount).toFixed(2)}) for ${appt.patient.name}`,
+    // BUG FIX: `invoiceNumber` was declared with `const` inside the retry
+    // `for` loop above and only exists in that loop's block scope — every
+    // successful invoice creation reached this line AFTER the loop had
+    // already exited, threw "invoiceNumber is not defined", and turned
+    // into a 500 on every caller: reception's "Mark as paid" button, the
+    // "Invoice" button (genInvoice), and doctor mark-paid all route
+    // through this function. Use the invoice's own number instead of the
+    // now-out-of-scope loop variable.
+    summary: `Generated invoice ${invoice.invoiceNumber} (₹${Number(amount).toFixed(2)}) for ${appt.patient.name}`,
     medicalCentreId: appt.medicalCentreId, doctorId: appt.doctorId
   });
 
