@@ -317,6 +317,14 @@ async function getMonthlyRevenueReport({ year, month, doctorId, paymentType, sou
  * handed over yet — counting it here previously made both dashboards show
  * uncollected cash as if it were already in hand, and inflated whichever
  * side happened to have more pending invoices at the moment of viewing.
+ *
+ * Deliberately has NO `status` filter. A cancelled-but-not-yet-refunded
+ * visit already has real money sitting with the clinic — its paymentStatus
+ * stays PAID/CASH_COLLECTED right up until an explicit refund flips it to
+ * REFUNDED (see admin.controller.js refund flow), so excluding CANCELLED
+ * rows here would drop already-collected cash from this total. Gating on
+ * status also wrongly hid every CONFIRMED-but-paid online booking (paid at
+ * booking time, before the consult happens) from this same figure.
  */
 async function getCashCollectedTotal({ doctorId, year, month }) {
   const { start, end } = monthRange(year, month);
@@ -325,7 +333,6 @@ async function getCashCollectedTotal({ doctorId, year, month }) {
     _count: { _all: true },
     where: {
       doctorId,
-      status: { in: ['CONFIRMED', 'COMPLETED'] },
       paymentStatus: { in: COLLECTED_PAYMENT_STATUSES },
       date: { gte: start, lt: end }
     }

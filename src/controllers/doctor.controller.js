@@ -841,15 +841,32 @@ exports.stats = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { doctorId, status: 'COMPLETED' } }),
     prisma.appointment.count({ where: { doctorId, status: 'COMPLETED', consultationType: 'ONLINE'  } }),
     prisma.appointment.count({ where: { doctorId, status: 'COMPLETED', consultationType: 'OFFLINE' } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: { in: COLLECTED } } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: { in: COLLECTED } } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: { in: PENDING } } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: { in: PENDING } } }),
+    // Revenue = money actually collected, keyed on paymentStatus alone —
+    // NOT gated on appointment status. A paid online booking is usually
+    // still CONFIRMED (not COMPLETED) until the consult happens, and a
+    // cancelled-but-not-yet-refunded visit keeps its PAID/CASH_COLLECTED
+    // payment status too. Filtering these aggregates to status:'COMPLETED'
+    // silently dropped both cases from every revenue figure on the
+    // dashboard. paymentStatus flips to REFUNDED on refund, so a refunded
+    // appointment is naturally excluded here without needing a status
+    // check at all.
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, consultationType: 'ONLINE',  paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, consultationType: 'OFFLINE', paymentStatus: { in: COLLECTED } } }),
+    // Pending (billed, not yet received) still excludes cancelled visits —
+    // once a visit is cancelled nobody is going to hand over that cash, so
+    // it shouldn't linger in the clinic's "still owed" figure.
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, consultationType: 'ONLINE',  status: { not: 'CANCELLED' }, paymentStatus: { in: PENDING } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { doctorId, consultationType: 'OFFLINE', status: { not: 'CANCELLED' }, paymentStatus: { in: PENDING } } }),
     prisma.appointment.count({ where: { doctorId, status: 'COMPLETED' } }),
     prisma.appointment.count({ where: { doctorId, status: 'CANCELLED' } }),
     prisma.appointment.count({ where: { doctorId, date: yesterday, status: { not: 'CANCELLED' } } }),
+    // Includes CANCELLED rows too — a cancelled-but-not-refunded row still
+    // needs to contribute its collected amount to the weekly revenue trend
+    // below. The accumulate step (not this query) is what keeps CANCELLED
+    // rows out of the *appointment volume* counters while still crediting
+    // their revenue.
     prisma.appointment.findMany({
-      where: { doctorId, date: { gte: last14 }, status: { not: 'CANCELLED' } },
+      where: { doctorId, date: { gte: last14 } },
       select: { date: true, status: true, paymentStatus: true, feeAtBooking: true }
     }),
     prisma.appointment.count({ where: { doctorId, date: { gte: last30 }, status: { not: 'CANCELLED' } } }),
@@ -872,9 +889,20 @@ exports.stats = asyncHandler(async (req, res) => {
       rows: fortnightRows,
       dateOf: (row) => row.date,
       accumulate: (bucket, row) => {
-        bucket.appointments += 1;
-        const amount = COLLECTED.includes(row.paymentStatus) ? Number(row.feeAtBooking || 0) : 0;
-        if (row.status === 'COMPLETED') { bucket.completed += 1; bucket.revenue += amount; }
+        // Appointment-volume counters intentionally exclude cancelled
+        // visits (nothing to show up for), but revenue does not — a
+        // cancelled-but-not-yet-refunded row already collected real
+        // money and must still count towards the day's total. Gating
+        // revenue on status==='COMPLETED' (the old behaviour) silently
+        // dropped every CONFIRMED-but-paid online booking and every
+        // cancelled-but-paid visit from this chart.
+        if (row.status !== 'CANCELLED') {
+          bucket.appointments += 1;
+          if (row.status === 'COMPLETED') bucket.completed += 1;
+        }
+        if (COLLECTED.includes(row.paymentStatus)) {
+          bucket.revenue += Number(row.feeAtBooking || 0);
+        }
       }
     }],
     weekFields: ['appointments', 'revenue']

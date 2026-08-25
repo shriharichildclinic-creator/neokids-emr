@@ -385,14 +385,15 @@ exports.doctorInsights = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { doctorId: id, consultationType: 'OFFLINE' } }),
     // "Revenue" = actually collected (PAID / CASH_COLLECTED) — matches the
     // definition used on the admin dashboard and the doctor's own earnings
-    // view. Cash still owed (CASH_PENDING) is not counted as revenue.
+    // view. Cash still owed (CASH_PENDING) is not counted as revenue. Not
+    // gated on status:'COMPLETED' — see the analytics() note above for why.
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { doctorId: id, status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
+      where: { doctorId: id, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { doctorId: id, status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
+      where: { doctorId: id, date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.count({ where: { doctorId: id, date: { gte: last30 } } }),
     prisma.appointment.findMany({
@@ -588,10 +589,16 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { status: 'CONFIRMED' } }),
     // "Revenue" = collected only, matching revenueBySource.totalCollected
     // below — CASH_PENDING is billed but not yet received, so it must
-    // never be blended into the headline revenue figure.
+    // never be blended into the headline revenue figure. Deliberately NOT
+    // gated on status:'COMPLETED' — a paid online booking is usually still
+    // CONFIRMED (not yet consulted), and a cancelled-but-not-yet-refunded
+    // visit keeps its PAID/CASH_COLLECTED status too; both had already
+    // handed over real money. paymentStatus flips to REFUNDED on refund,
+    // so a refunded appointment is naturally excluded without a status
+    // check at all.
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { status: 'COMPLETED', paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
+      where: { paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.appointment.count({ where: { date: today } }),
     prisma.appointment.count({ where: { date: yesterday } }),
@@ -601,7 +608,7 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { consultationType: 'OFFLINE' } }),
     prisma.appointment.aggregate({
       _sum: { feeAtBooking: true },
-      where: { status: 'COMPLETED', date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
+      where: { date: { gte: last30 }, paymentStatus: { in: COLLECTED_PAYMENT_STATUSES } }
     }),
     prisma.notificationLog.count().catch(() => 0),
     prisma.notificationLog.count({ where: { status: 'FAILED' } }).catch(() => 0)
@@ -621,16 +628,19 @@ exports.analytics = asyncHandler(async (req, res) => {
   // below — money actually collected — or the dashboard ends up showing
   // two different numbers both labeled "revenue". Billed-but-uncollected
   // (CASH_PENDING) is tracked separately as `pending`, never folded in.
+  // Not gated on status==='COMPLETED': a CONFIRMED-but-paid online booking
+  // and a cancelled-but-not-yet-refunded visit both already collected real
+  // money and must still show up in the day's revenue bar. `completed`
+  // stays its own counter, tied to status, since that's a visit-volume
+  // metric rather than a money metric.
   raw.forEach(r => {
     const k = new Date(r.date).toISOString().slice(0,10);
     if (!daily[k]) return;
     daily[k].total++;
-    if (r.status === 'COMPLETED') {
-      daily[k].completed++;
-      const amount = Number(r.feeAtBooking || 0);
-      if (COLLECTED_PAYMENT_STATUSES.includes(r.paymentStatus)) daily[k].revenue += amount;
-      else if (PENDING_PAYMENT_STATUSES.includes(r.paymentStatus)) daily[k].pending += amount;
-    }
+    if (r.status === 'COMPLETED') daily[k].completed++;
+    const amount = Number(r.feeAtBooking || 0);
+    if (COLLECTED_PAYMENT_STATUSES.includes(r.paymentStatus)) daily[k].revenue += amount;
+    else if (r.status !== 'CANCELLED' && PENDING_PAYMENT_STATUSES.includes(r.paymentStatus)) daily[k].pending += amount;
   });
 
   // Revenue by source, split into collected vs pending. Consultation revenue
@@ -644,10 +654,10 @@ exports.analytics = asyncHandler(async (req, res) => {
     pharmacyPaidAgg, pharmacyDraftAgg,
     outstandingInvoices
   ] = await Promise.all([
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: { in: COLLECTED } } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: { in: COLLECTED } } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'ONLINE',  paymentStatus: 'CASH_PENDING' } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { status: 'COMPLETED', consultationType: 'OFFLINE', paymentStatus: 'CASH_PENDING' } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { consultationType: 'ONLINE',  paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { consultationType: 'OFFLINE', paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { consultationType: 'ONLINE',  status: { not: 'CANCELLED' }, paymentStatus: 'CASH_PENDING' } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { consultationType: 'OFFLINE', status: { not: 'CANCELLED' }, paymentStatus: 'CASH_PENDING' } }),
     prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { status: 'PAID' } }).catch(() => ({ _sum: { total: 0 } })),
     prisma.pharmacyBill.aggregate({ _sum: { total: true }, where: { status: 'DRAFT' } }).catch(() => ({ _sum: { total: 0 } })),
     prisma.consultationInvoice.count({ where: { status: 'PENDING' } }).catch(() => 0)
@@ -680,8 +690,8 @@ exports.analytics = asyncHandler(async (req, res) => {
     prisma.appointment.count({ where: { source: 'NEOKIDSPRO' } }),
     prisma.appointment.count({ where: { source: { in: RECEPTION_SOURCES } } }),
     prisma.appointment.count({ where: { source: 'MANUAL' } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: 'NEOKIDSPRO', status: 'COMPLETED', paymentStatus: { in: COLLECTED } } }),
-    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: { in: RECEPTION_SOURCES }, status: 'COMPLETED', paymentStatus: { in: COLLECTED } } })
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: 'NEOKIDSPRO', paymentStatus: { in: COLLECTED } } }),
+    prisma.appointment.aggregate({ _sum: { feeAtBooking: true }, where: { source: { in: RECEPTION_SOURCES }, paymentStatus: { in: COLLECTED } } })
   ]);
   const bookingSource = {
     website:   { count: websiteCount,   revenue: Number(websiteRevenueAgg._sum.feeAtBooking || 0) },
